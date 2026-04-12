@@ -1,0 +1,185 @@
+
+OPPONENT AI CARD PICKER — PATCH INSTRUCTIONS
+═════════════════════════════════════════════════════════════
+
+STEP 1: Add new skill cards to SKILL_CARDS dict (after line ~55)
+────────────────────────────────────────────────────────────────
+Insert before the closing brace of SKILL_CARDS = {...}:
+
+    "metronome":{"name":"Metronome","category":"Possession","rarity":"Uncommon",
+        "effect_type":"phase_floor","phase":"build_up","target":"self","floor_pct":0.80,
+        "description":"Build-Up never drops below 80% of base"},
+    "dictate_the_tempo":{"name":"Dictate the Tempo","category":"Possession","rarity":"Uncommon",
+        "effect_type":"phase_multiplier","phase":"pressing","target":"opponent","value":0.80,
+        "description":"Opponent Pressing reduced 20%"},
+    "hunters":{"name":"Hunters","category":"Pressing","rarity":"Uncommon",
+        "effect_type":"possession_suppress_chances","opponent_possession_threshold":0.40,"chance_reduction":1,
+        "description":"Opponent possession <40% → -1 chance roll"},
+    "counterpunch":{"name":"Counterpunch","category":"Pressing","rarity":"Rare",
+        "effect_type":"press_win_bonus_chance",
+        "description":"Win Pressing phase → auto Counter chance"},
+    "transition_master":{"name":"Transition Master","category":"Creation","rarity":"Uncommon",
+        "effect_type":"chance_type_upgrade","chance_type":"Counter",
+        "description":"Counter chances upgraded one tier"},
+    "no_time_on_the_ball":{"name":"No Time on the Ball","category":"Pressing","rarity":"Uncommon",
+        "effect_type":"phase_flat_reduction","phase":"build_up","target":"opponent","value":8,
+        "description":"Opponent Build-Up -8 flat each turn"},
+    "wide_overload":{"name":"Wide Overload","category":"Creation","rarity":"Common",
+        "effect_type":"chance_type_upgrade","chance_type":"Cross",
+        "description":"Cross chances upgraded one tier"},
+    "compact_shape":{"name":"Compact Shape","category":"Defensive","rarity":"Uncommon",
+        "effect_type":"phase_floor","phase":"structure","target":"self","floor_pct":0.50,
+        "description":"Structure never drops below 50% of base"},
+    "shot_blocker":{"name":"Shot Blocker","category":"Defensive","rarity":"Uncommon",
+        "effect_type":"per_turn_downgrade","uses_per_turn":1,
+        "description":"Once per turn: reduce one chance quality by one tier"},
+
+
+STEP 2: Add opponent AI system (after SKILL_CARDS dict, before STATE = {})
+─────────────────────────────────────────────────────────────────────────────
+
+ARCHETYPES = {
+    "Defensive":  {"priority":["the_wall","compact_shape","shot_blocker","press_fanatic","hunters"]},
+    "Balanced":   {"priority":["the_conductor","press_fanatic","the_wall","killer_instinct"]},
+    "Possession": {"priority":["the_conductor","patience_is_a_virtue","metronome","dictate_the_tempo"]},
+    "Counter":    {"priority":["press_fanatic","hunters","counterpunch","transition_master","no_time_on_the_ball"]},
+    "Attacking":  {"priority":["the_opener","killer_instinct","surgical","wide_overload","clinical"]},
+}
+
+TEAM_ARCHETYPES = {
+    "Dynamo FC":"Counter","United SC":"Balanced","City Athletic":"Attacking",
+    "Rovers FC":"Defensive","Albion FC":"Possession","Palace Town":"Balanced",
+    "The Wanderers":"Counter","Harbour FC":"Defensive","Valley United":"Attacking",
+}
+
+def generate_opponent_loadout(opponent_name, table_position, is_home=False):
+    archetype = TEAM_ARCHETYPES.get(opponent_name, "Balanced")
+    priority  = ARCHETYPES[archetype]["priority"]
+
+    if table_position <= 3:
+        card_count, allow_rare = 4, True
+    elif table_position <= 7:
+        card_count, allow_rare = 3, random.random() < 0.5
+    else:
+        card_count, allow_rare = 2, False
+
+    if is_home:
+        card_count += 1
+
+    picked = {}
+    for card_id in priority:
+        if len(picked) >= card_count:
+            break
+        card = SKILL_CARDS.get(card_id)
+        if not card:
+            continue
+        if card.get("rarity") == "Rare" and not allow_rare:
+            continue
+        picked[card_id] = copy.deepcopy(card)
+
+    if len(picked) < card_count:
+        fallback = [cid for cid in SKILL_CARDS if cid not in picked]
+        random.shuffle(fallback)
+        for cid in fallback:
+            if len(picked) >= card_count:
+                break
+            card = SKILL_CARDS[cid]
+            if card.get("rarity") != "Rare" or allow_rare:
+                picked[cid] = copy.deepcopy(card)
+
+    return picked
+
+
+STEP 3: Update init_table() to include archetype field
+───────────────────────────────────────────────────────
+
+Change:
+    return [{"name":t,"p":0,"w":0,"d":0,"l":0,"gf":0,"ga":0,"pts":0} for t in teams]
+
+To:
+    return [{"name":t,"p":0,"w":0,"d":0,"l":0,"gf":0,"ga":0,"pts":0,"archetype":TEAM_ARCHETYPES.get(t,"Balanced")} for t in teams]
+
+
+STEP 4: Update /api/start_match endpoint
+──────────────────────────────────────────
+
+Replace the entire function with:
+
+@app.route("/api/start_match", methods=["POST"])
+def api_start_match():
+    _, away = make_squads()
+    matchday = STATE["season"]["matchday"]
+    table    = sorted(STATE["season"]["table"], key=lambda x: (-x["pts"], x["gf"]-x["ga"]))
+    opp_rows = [t for t in table if t["name"] != STATE["squad_name"]]
+    opp_idx  = (matchday - 1) % len(opp_rows)
+    opp      = opp_rows[opp_idx]
+    away["name"] = opp["name"]
+
+    pos = next((i+1 for i,t in enumerate(table) if t["name"]==opp["name"]), 5)
+    away_cards = generate_opponent_loadout(opp["name"], pos, is_home=False)
+
+    STATE["match"] = {
+        "opponent": away,
+        "opponent_cards": away_cards,
+        "opponent_archetype": opp.get("archetype","Balanced"),
+        "score":    {"home": 0, "away": 0},
+        "turn":     0,
+        "log":      [],
+        "complete": False,
+        "card_state": {"clinical": False, "lms": False},
+    }
+    STATE["phase"] = "in_match"
+    return jsonify({"ok": True, "opponent": away["name"],
+                    "opponent_cards": [c["name"] for c in away_cards.values()],
+                    "opponent_archetype": STATE["match"]["opponent_archetype"],
+                    "state": get_client_state()})
+
+
+STEP 5: Update resolve_turn() signature
+────────────────────────────────────────
+
+Change:
+    def resolve_turn(match_state, home_players, away_players, home_cards, turn_num):
+
+To:
+    def resolve_turn(match_state, home_players, away_players, home_cards, away_cards, turn_num):
+
+Then update all phase calculations to use away_cards:
+- Change: abu = amods_fn(ps(away_players,0),"build_up","self",{},ssa,t)
+  To:     abu = amods_fn(ps(away_players,0),"build_up","self",away_cards,ssa,t)
+
+- Similar for: ares, afin (use away_cards instead of {})
+
+
+STEP 6: Update /api/resolve_turn call to resolve_turn()
+────────────────────────────────────────────────────────
+
+Change:
+    turn_result = resolve_turn(m, STATE["squad"], m["opponent"]["players"], STATE["cards"], m["turn"])
+
+To:
+    turn_result = resolve_turn(m, STATE["squad"], m["opponent"]["players"], 
+                               STATE["cards"], m.get("opponent_cards", {}), m["turn"])
+
+
+STEP 7: Update get_client_state() return dict
+───────────────────────────────────────────────
+
+In the "match" section, add:
+    "opponent_cards": [c["name"] for c in m.get("opponent_cards",{}).values()] if m else [],
+    "opponent_archetype": m.get("opponent_archetype","") if m else "",
+
+
+STEP 8: Update counterpunch card trigger logic in resolve_turn()
+──────────────────────────────────────────────────────────────────
+
+After calculating hn and an, add:
+
+    # Counterpunch trigger for away team
+    if any(c.get("effect_type")=="press_win_bonus_chance" for c in away_cards.values()) and hps>abu:
+        an+=1
+        events.append({"type":"card_trigger","text":"⚡ Counterpunch (away)","team":"away"})
+
+
+DONE! The opponent AI is now functional.
+═══════════════════════════════════════════════════════════════

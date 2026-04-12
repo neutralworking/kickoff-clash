@@ -1,0 +1,235 @@
+@import "tailwindcss";
+
+@theme inline {
+  --felt: #0b1a10;
+  --felt-light: #122118;
+  --leather: #1a1510;
+  --leather-light: #241e16;
+  --amber: #e8621a;
+  --amber-glow: rgba(232, 98, 26, 0.4);
+  --amber-soft: #c4530f;
+  --gold: #d4a035;
+  --gold-glow: rgba(212, 160, 53, 0.35);
+  --pitch-green: #2d8a4e;
+  --pitch-dark: #1a5c33;
+  --pitch-light: #3ba55d;
+  --danger: #c0392b;
+  --cream: #f5f0e0;
+  --cream-soft: #d9d0b8;
+  --dust: #9a8b73;
+  --ink: #5c5040;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+
+  /* Font variables set by next/font in layout.tsx via CSS custom properties */
+  /* --font-display, --font-body, --font-flavour are injected as class variables */
+}
+
+body {
+  background: var(--felt);
+  color: var(--cream);
+  font-family: var(--font-body);
+}
+
+/* Phase Visual Differentiation */
+
+.phase-setup {
+  background: linear-gradient(135deg, #0b1a10 0%, #0f1e14 30%, #0b1a10 60%, #111d15 100%);
+  background-size: 400% 400%;
+  animation: setupGradient 12s ease infinite;
+}
+
+@keyframes setupGradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.phase-match {
+  background: linear-gradient(180deg, rgba(45,138,78,0.18) 0%, transparent 30%, var(--felt) 100%);
+}
+
+.phase-match .commentary-feed {
+  background: rgba(11,26,16,0.8);
+  border-left: 3px solid var(--pitch-green);
+}
+
+.phase-shop {
+  background: linear-gradient(180deg, rgba(212,160,53,0.12) 0%, transparent 25%, var(--felt) 100%);
+}
+
+.phase-postmatch {
+  background: radial-gradient(ellipse at center top, rgba(232,98,26,0.08) 0%, transparent 50%, var(--felt) 100%);
+}
+
+/* Goal commentary styling */
+.commentary-goal-yours {
+  color: var(--pitch-light) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+
+.commentary-goal-opponent {
+  color: var(--danger) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+
+/* Card fan animation */
+@keyframes pulseButton {
+  0%, 100% { box-shadow: 0 0 10px var(--amber-glow); }
+  50% { box-shadow: 0 0 25px var(--amber-glow), 0 0 50px rgba(232,98,26,0.2); }
+}
+
+.advance-btn-pulse {
+  animation: pulseButton 1.5s ease-in-out infinite;
+}
+
+/* Sub card styling */
+.sub-card {
+  background: linear-gradient(135deg, rgba(45,138,78,0.15) 0%, rgba(45,138,78,0.05) 100%) !important;
+  border-color: var(--pitch-green) !important;
+}
+
+/* Phase transition fade */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.phase-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Card reveal phase background */
+.phase-reveal {
+  background: radial-gradient(ellipse at 50% 40%, rgba(212,160,53,0.08) 0%, transparent 50%, var(--felt) 100%);
+}
+
+/* 3D card flip system */
+.card-flip {
+  perspective: 800px;
+  width: 130px;
+  height: 170px;
+}
+
+.card-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.5s ease-out;
+  transform-style: preserve-3d;
+}
+
+.card-flip-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.card-flip-front,
+.card-flip-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border-radius: 10px;
+}
+
+.card-flip-front {
+  transform: rotateY(180deg);
+}
+
+.card-flip-back {
+  background: linear-gradient(135deg, #241e16 0%, #1a1510 40%, #0f120a 100%);
+  border: 2px solid var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Rarity screen flash */
+@keyframes rarityFlashEpic {
+  0% { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+
+@keyframes rarityFlashLegendary {
+  0% { opacity: 0.6; transform: scale(1.02); }
+  50% { opacity: 0.3; }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+/* Card settle from center to row */
+@keyframes settleToRow {
+  from { transform: scale(1) translateY(0); opacity: 1; }
+  to { transform: scale(0.55) translateY(10px); opacity: 0.9; }
+}
+
+/* Pack opening tear */
+@keyframes packTear {
+  0% { transform: scale(1); opacity: 1; }
+  40% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1.5) translateY(-30px); opacity: 0; }
+}
+
+/* PostMatch score pop */
+@keyframes scorePop {
+  0% { transform: scale(0); opacity: 0; }
+  70% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.score-pop {
+  animation: scorePop 0.4s ease-out forwards;
+}
+
+/* Card appear in reveal */
+@keyframes cardAppear {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.card-appear {
+  animation: cardAppear 0.3s ease-out forwards;
+}
+
+/* ---------------------------------------------------------------------------
+   Card hand fan layout
+   --------------------------------------------------------------------------- */
+
+.card-hand {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  perspective: 800px;
+  padding: 6px 12px 4px;
+  min-height: 120px;
+}
+
+.card-hand-slot {
+  flex-shrink: 0;
+  transform-origin: bottom center;
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hover lift — desktop only */
+@media (hover: hover) {
+  .card-hand-slot:not(.card-hand-selected):hover {
+    transform: translateY(-12px) scale(1.04) rotate(0deg) !important;
+    z-index: 30 !important;
+  }
+}
+
+/* Selected lift */
+.card-hand-selected {
+  transform: translateY(-28px) scale(1.08) rotate(0deg) !important;
+  z-index: 50 !important;
+  filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.5));
+}
+
+/* Desktop: scale up cards */
+@media (min-width: 768px) {
+  .card-hand {
+    min-height: 140px;
+  }
+}
