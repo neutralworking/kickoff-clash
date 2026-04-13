@@ -83,6 +83,17 @@ export default function ShopPhase({
   const unownedFormations = ALL_FORMATIONS.filter(
     f => !state.ownedFormations.includes(f.id)
   );
+  const trainableCards = [...state.deck]
+    .map((card) => ({
+      card,
+      applied: state.trainingApplied[card.id] ?? 0,
+    }))
+    .sort((a, b) => {
+      const aMax = a.applied >= TRAINING_MAX ? 1 : 0;
+      const bMax = b.applied >= TRAINING_MAX ? 1 : 0;
+      if (aMax !== bMax) return aMax - bMax;
+      return b.card.power - a.card.power;
+    });
 
   return (
     <div className="phase-shop max-w-2xl mx-auto p-4 space-y-5 overflow-y-auto max-h-screen">
@@ -161,6 +172,63 @@ export default function ShopPhase({
         </Section>
       )}
 
+      {/* Featured actions */}
+      {!showCardPick && (
+        <Section title="Do Something Useful">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <FeatureCard
+              title="Buy Prospects"
+              subtitle={`${academy.playersOffered} academy players waiting`}
+              accent="var(--pitch-green)"
+              active
+            >
+              <div className="text-[11px]" style={{ color: 'var(--cream-soft)' }}>
+                Academy players are purchaseable here right now.
+              </div>
+              <div className="text-[10px] mt-1" style={{ color: 'var(--gold)' }}>
+                {academy.cost === 0 ? 'Each prospect is FREE' : `Each prospect costs £${academy.cost.toLocaleString()}`}
+              </div>
+            </FeatureCard>
+
+            <FeatureCard
+              title="Train Core"
+              subtitle={`${trainableCards.filter(({ applied }) => applied < TRAINING_MAX).length} players can still improve`}
+              accent="var(--amber)"
+              active={state.deck.length > 0}
+            >
+              <div className="text-[11px]" style={{ color: 'var(--cream-soft)' }}>
+                Spend £{TRAINING_COST.toLocaleString()} for +{TRAINING_INCREMENT} power, up to +{TRAINING_MAX}.
+              </div>
+              <button
+                onClick={() => {
+                  setTrainMode(true);
+                  setSellMode(false);
+                }}
+                className="mt-2 px-3 py-1 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase"
+                style={{
+                  background: 'rgba(232,98,26,0.16)',
+                  color: 'var(--cream)',
+                  border: '1px solid rgba(232,98,26,0.35)',
+                }}
+              >
+                Open Training
+              </button>
+            </FeatureCard>
+
+            <FeatureCard
+              title="Change Shape"
+              subtitle={`${state.tacticsDeck.length} tactics, ${unownedFormations.length} formations left`}
+              accent="var(--gold)"
+              active
+            >
+              <div className="text-[11px]" style={{ color: 'var(--cream-soft)' }}>
+                Add systems, not just bodies.
+              </div>
+            </FeatureCard>
+          </div>
+        </Section>
+      )}
+
       {/* Card Pick Modal */}
       {showCardPick && (
         <div
@@ -221,6 +289,101 @@ export default function ShopPhase({
           </div>
         </Section>
       )}
+
+      {/* Academy */}
+      <Section title={`Academy (Tier ${state.academyTier} — ${academy.name})`}>
+        <div
+          className="rounded-[var(--radius)] p-3 mb-3"
+          style={{
+            background: 'linear-gradient(135deg, rgba(45,138,78,0.16), rgba(0,0,0,0.08))',
+            border: '1px solid rgba(59,165,93,0.22)',
+          }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)' }}>
+                Prospect intake
+              </div>
+              <div className="text-[10px] mt-1 leading-snug" style={{ color: 'var(--dust)' }}>
+                Cheap depth, durability variance, and a route to train hidden value into your squad.
+              </div>
+              <div className="text-[10px] mt-1" style={{ color: 'var(--gold)' }}>
+                Cost per player: {academy.cost === 0 ? 'FREE' : `£${academy.cost.toLocaleString()}`}
+              </div>
+            </div>
+            {state.academyTier < 4 && (
+              <button
+                disabled={state.cash < ACADEMY_UPGRADE_COST}
+                onClick={onUpgradeAcademy}
+                className="px-3 py-2 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase transition-all"
+                style={{
+                  background:
+                    state.cash >= ACADEMY_UPGRADE_COST
+                      ? 'rgba(212,160,53,0.15)'
+                      : 'var(--leather)',
+                  color:
+                    state.cash >= ACADEMY_UPGRADE_COST
+                      ? 'var(--gold)'
+                      : 'var(--ink)',
+                  border: `1px solid ${
+                    state.cash >= ACADEMY_UPGRADE_COST
+                      ? 'rgba(212,160,53,0.3)'
+                      : 'rgba(154,139,115,0.15)'
+                  }`,
+                  cursor: state.cash >= ACADEMY_UPGRADE_COST ? 'pointer' : 'not-allowed',
+                  flexShrink: 0,
+                }}
+              >
+                Upgrade
+                <div style={{ fontSize: 9, marginTop: 2 }}>
+                  £{ACADEMY_UPGRADE_COST.toLocaleString()}
+                </div>
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-3 overflow-x-auto pb-1">
+          {academyCards.map(card => (
+            <div
+              key={card.id}
+              className="text-center shrink-0 rounded-[var(--radius)] p-2"
+              style={{
+                background: 'rgba(0,0,0,0.12)',
+                border: '1px solid rgba(59,165,93,0.14)',
+              }}
+            >
+              <PlayerCard
+                card={card}
+                onClick={() => {
+                  if (academy.cost === 0 || state.cash >= academy.cost) {
+                    onBuyAcademy(card);
+                  }
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (academy.cost === 0 || state.cash >= academy.cost) {
+                    onBuyAcademy(card);
+                  }
+                }}
+                disabled={academy.cost > 0 && state.cash < academy.cost}
+                className="mt-2 w-full px-2 py-2 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase transition-all"
+                style={{
+                  background: academy.cost === 0 || state.cash >= academy.cost ? 'rgba(59,165,93,0.16)' : 'rgba(0,0,0,0.16)',
+                  color: academy.cost === 0 || state.cash >= academy.cost ? 'var(--cream)' : 'var(--ink)',
+                  border: `1px solid ${academy.cost === 0 || state.cash >= academy.cost ? 'rgba(59,165,93,0.35)' : 'rgba(154,139,115,0.12)'}`,
+                  cursor: academy.cost === 0 || state.cash >= academy.cost ? 'pointer' : 'not-allowed',
+                }}
+              >
+                Sign
+                <div style={{ fontSize: 9, marginTop: 2 }}>
+                  {academy.cost === 0 ? 'FREE' : `£${academy.cost.toLocaleString()}`}
+                </div>
+              </button>
+            </div>
+          ))}
+        </div>
+      </Section>
 
       {/* Tactic Pack */}
       <Section title="Tactical Intelligence">
@@ -303,62 +466,9 @@ export default function ShopPhase({
         )}
       </Section>
 
-      {/* Academy */}
-      <Section title={`Academy (Tier ${state.academyTier} \u2014 ${academy.name})`}>
-        <div className="flex items-center justify-between mb-3">
-          <div />
-          {state.academyTier < 4 && (
-            <button
-              disabled={state.cash < ACADEMY_UPGRADE_COST}
-              onClick={onUpgradeAcademy}
-              className="px-3 py-1 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase transition-all"
-              style={{
-                background:
-                  state.cash >= ACADEMY_UPGRADE_COST
-                    ? 'rgba(212,160,53,0.15)'
-                    : 'var(--leather)',
-                color:
-                  state.cash >= ACADEMY_UPGRADE_COST
-                    ? 'var(--gold)'
-                    : 'var(--ink)',
-                border: `1px solid ${
-                  state.cash >= ACADEMY_UPGRADE_COST
-                    ? 'rgba(212,160,53,0.3)'
-                    : 'rgba(154,139,115,0.15)'
-                }`,
-                cursor: state.cash >= ACADEMY_UPGRADE_COST ? 'pointer' : 'not-allowed',
-              }}
-            >
-              Upgrade {'\u00a3'}{ACADEMY_UPGRADE_COST.toLocaleString()}
-            </button>
-          )}
-        </div>
-        <div className="flex gap-3 justify-center">
-          {academyCards.map(card => (
-            <div key={card.id} className="text-center">
-              <PlayerCard
-                card={card}
-                size="mini"
-                onClick={() => {
-                  if (academy.cost === 0 || state.cash >= academy.cost) {
-                    onBuyAcademy(card);
-                  }
-                }}
-              />
-              <div
-                className="text-[10px] font-bold mt-1"
-                style={{ color: 'var(--gold)' }}
-              >
-                {academy.cost === 0 ? 'FREE' : `\u00a3${academy.cost.toLocaleString()}`}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Section>
-
       {/* Training */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
+      <Section title="Training Ground">
+        <div className="flex items-center justify-between mb-3">
           <button
             onClick={() => {
               setTrainMode(!trainMode);
@@ -367,48 +477,66 @@ export default function ShopPhase({
             className="text-sm font-bold uppercase tracking-[0.15em] transition-colors"
             style={{ color: trainMode ? 'var(--amber)' : 'var(--dust)' }}
           >
-            {trainMode ? '\u2716 Cancel Training' : '\ud83c\udfd8\ufe0f Train Players'}
+            {trainMode ? '\u2716 Close Training' : '\ud83c\udfd8\ufe0f Open Training'}
           </button>
-          {trainMode && (
-            <div className="text-[9px]" style={{ color: 'var(--dust)' }}>
-              +{TRAINING_INCREMENT} power — {'\u00a3'}{TRAINING_COST.toLocaleString()} each
-            </div>
-          )}
         </div>
-        {trainMode && (
-          <div className="flex flex-wrap gap-2 justify-center">
-            {state.deck.map(card => {
-              const applied = state.trainingApplied[card.id] ?? 0;
+        <div
+          className="rounded-[var(--radius)] p-3"
+          style={{
+            background: 'linear-gradient(135deg, rgba(232,98,26,0.12), rgba(0,0,0,0.08))',
+            border: '1px solid rgba(232,98,26,0.16)',
+          }}
+        >
+          <div className="text-[10px] leading-snug mb-3" style={{ color: 'var(--dust)' }}>
+            Training is available now. Upgrade key players by +{TRAINING_INCREMENT} each session for £{TRAINING_COST.toLocaleString()}, up to +{TRAINING_MAX}.
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {trainableCards.map(({ card, applied }) => {
               const isMax = applied >= TRAINING_MAX;
               const canAfford = state.cash >= TRAINING_COST;
               return (
-                <div key={card.id} className="relative text-center">
+                <div
+                  key={card.id}
+                  className="relative text-center shrink-0 rounded-[var(--radius)] p-2"
+                  style={{
+                    background: 'rgba(0,0,0,0.12)',
+                    border: '1px solid rgba(232,98,26,0.12)',
+                  }}
+                >
                   <PlayerCard
                     card={card}
-                    size="mini"
                     onClick={() => {
                       if (!isMax && canAfford) {
                         onTrainPlayer(card.id);
                       }
                     }}
                   />
-                  {/* Training badge */}
                   <div
-                    className="absolute top-0 right-0 text-[8px] font-bold px-1 rounded-bl"
+                    className="mt-2 text-[10px] font-bold"
                     style={{
-                      background: isMax ? 'var(--amber)' : 'var(--gold)',
-                      color: 'var(--felt)',
-                      opacity: (!isMax && !canAfford) ? 0.4 : 1,
+                      color: isMax ? 'var(--amber)' : 'var(--gold)',
                     }}
                   >
                     {isMax ? 'MAX' : applied > 0 ? `+${applied}` : '+0'}
                   </div>
-                  {isMax && (
-                    <div
-                      className="absolute inset-0 rounded flex items-end justify-center pb-1"
-                      style={{ background: 'rgba(0,0,0,0.3)' }}
-                    />
-                  )}
+                  <button
+                    onClick={() => {
+                      if (!isMax && canAfford) {
+                        onTrainPlayer(card.id);
+                      }
+                    }}
+                    disabled={isMax || !canAfford}
+                    className="mt-2 w-full px-2 py-2 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase transition-all"
+                    style={{
+                      background: !isMax && canAfford ? 'rgba(232,98,26,0.16)' : 'rgba(0,0,0,0.16)',
+                      color: !isMax && canAfford ? 'var(--cream)' : 'var(--ink)',
+                      border: `1px solid ${!isMax && canAfford ? 'rgba(232,98,26,0.35)' : 'rgba(154,139,115,0.12)'}`,
+                      cursor: !isMax && canAfford ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {isMax ? 'Finished' : 'Train'}
+                    {!isMax && <div style={{ fontSize: 9, marginTop: 2 }}>£{TRAINING_COST.toLocaleString()}</div>}
+                  </button>
                 </div>
               );
             })}
@@ -418,11 +546,11 @@ export default function ShopPhase({
               </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      </Section>
 
       {/* Sell Cards */}
-      <div className="space-y-2">
+      <Section title="Asset Management">
         <button
           onClick={() => {
             setSellMode(!sellMode);
@@ -434,7 +562,7 @@ export default function ShopPhase({
           {sellMode ? '\u2716 Cancel Selling' : '\uD83D\uDCB0 Sell Cards'}
         </button>
         {sellMode && (
-          <div className="flex flex-wrap gap-2 justify-center">
+          <div className="flex flex-wrap gap-2 justify-center mt-3">
             {state.deck.map(card => (
               <PlayerCard
                 key={card.id}
@@ -455,7 +583,7 @@ export default function ShopPhase({
             )}
           </div>
         )}
-      </div>
+      </Section>
 
       {/* Next Match */}
       <div className="flex justify-center pt-4 pb-8">
@@ -515,6 +643,39 @@ function StatChip({ label, value }: { label: string; value: string }) {
       >
         {value}
       </span>
+    </div>
+  );
+}
+
+function FeatureCard({
+  title,
+  subtitle,
+  accent,
+  active,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  accent: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="rounded-[var(--radius)] p-3"
+      style={{
+        background: 'var(--leather-light)',
+        border: `1px solid ${active ? accent : 'rgba(154,139,115,0.12)'}`,
+        boxShadow: active ? `inset 0 0 0 1px color-mix(in srgb, ${accent} 25%, transparent)` : undefined,
+      }}
+    >
+      <div className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)' }}>
+        {title}
+      </div>
+      <div className="text-[10px] mt-1 mb-2" style={{ color: 'var(--dust)' }}>
+        {subtitle}
+      </div>
+      {children}
     </div>
   );
 }
