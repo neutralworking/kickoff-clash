@@ -68,6 +68,8 @@ export interface CascadeLine {
 export interface AttackDefenceSplit {
   attackScore: number;
   defenceScore: number;
+  chanceCreation: number;
+  shotQuality: number;
   attackBreakdown: CascadeLine[];
   defenceBreakdown: CascadeLine[];
   attackSynergies: Connection[];
@@ -82,7 +84,11 @@ export interface IncrementResult {
   split: AttackDefenceSplit;
   opponentAttack: number;
   opponentDefence: number;
+  yourChanceVolume: number;
+  yourChanceQuality: number;
   yourGoalChance: number;
+  opponentChanceVolume: number;
+  opponentChanceQuality: number;
   opponentGoalChance: number;
   yourScored: boolean;
   opponentScored: boolean;
@@ -148,6 +154,79 @@ function getDualRole(card: Card): { attackWhenDefending: number; defenceWhenAtta
 
 function isEngine(card: Card): boolean {
   return card.archetype === 'Engine';
+}
+
+function getChanceProfile(card: Card): { creation: number; finishing: number } {
+  let creation = 0.28;
+  let finishing = 0.28;
+
+  switch (card.archetype) {
+    case 'Creator':
+      creation = 0.85;
+      finishing = 0.38;
+      break;
+    case 'Controller':
+      creation = 0.78;
+      finishing = 0.22;
+      break;
+    case 'Passer':
+      creation = 0.72;
+      finishing = 0.24;
+      break;
+    case 'Dribbler':
+      creation = 0.60;
+      finishing = 0.58;
+      break;
+    case 'Sprinter':
+      creation = 0.42;
+      finishing = 0.52;
+      break;
+    case 'Striker':
+      creation = 0.34;
+      finishing = 0.86;
+      break;
+    case 'Target':
+      creation = 0.26;
+      finishing = 0.78;
+      break;
+    case 'Powerhouse':
+      creation = 0.24;
+      finishing = 0.66;
+      break;
+    case 'Engine':
+      creation = 0.48;
+      finishing = 0.30;
+      break;
+    case 'Commander':
+      creation = 0.34;
+      finishing = 0.34;
+      break;
+  }
+
+  switch (card.tacticalRole) {
+    case 'Regista':
+    case 'Enganche':
+    case 'Trequartista':
+    case 'Fantasista':
+      creation += 0.12;
+      break;
+    case 'Winger':
+    case 'Inverted Winger':
+    case 'Extremo':
+      creation += 0.08;
+      finishing += 0.08;
+      break;
+    case 'Poacher':
+    case 'Prima Punta':
+    case 'Seconda Punta':
+      finishing += 0.12;
+      break;
+  }
+
+  return {
+    creation: clamp(creation, 0.12, 1.0),
+    finishing: clamp(finishing, 0.12, 1.0),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -326,8 +405,8 @@ export function evaluateSplit(
     baseDefence += power;
   }
 
-  attackBreakdown.push({ label: 'Base power', value: baseAttack, type: 'base' });
-  defenceBreakdown.push({ label: 'Base power', value: baseDefence, type: 'base' });
+  attackBreakdown.push({ label: 'Forward commitment', value: baseAttack, type: 'base' });
+  defenceBreakdown.push({ label: 'Back-line shape', value: baseDefence, type: 'base' });
 
   // --- Dual-role contributions ---
   let dualAttack = 0;
@@ -364,10 +443,10 @@ export function evaluateSplit(
   }
 
   if (dualAttack > 0) {
-    attackBreakdown.push({ label: 'Dual-role contribution', value: dualAttack, type: 'dual-role' });
+    attackBreakdown.push({ label: 'Support from deep', value: dualAttack, type: 'dual-role' });
   }
   if (dualDefence > 0) {
-    defenceBreakdown.push({ label: 'Dual-role contribution', value: dualDefence, type: 'dual-role' });
+    defenceBreakdown.push({ label: 'Recovery cover', value: dualDefence, type: 'dual-role' });
   }
 
   // --- Positional synergies ---
@@ -379,13 +458,13 @@ export function evaluateSplit(
   let synergyAttack = 0;
   for (const syn of attackSynergies) {
     synergyAttack += syn.bonus;
-    attackBreakdown.push({ label: syn.name, value: syn.bonus, type: 'synergy' });
+    attackBreakdown.push({ label: `${syn.name} combo`, value: syn.bonus, type: 'synergy' });
   }
 
   let synergyDefence = 0;
   for (const syn of defenceSynergies) {
     synergyDefence += syn.bonus;
-    defenceBreakdown.push({ label: syn.name, value: syn.bonus, type: 'synergy' });
+    defenceBreakdown.push({ label: `${syn.name} screen`, value: syn.bonus, type: 'synergy' });
   }
 
   let crossAttack = 0;
@@ -394,10 +473,10 @@ export function evaluateSplit(
     crossAttack += syn.attackBonus;
     crossDefence += syn.defenceBonus;
     if (syn.attackBonus > 0) {
-      attackBreakdown.push({ label: `${syn.name} (cross)`, value: syn.attackBonus, type: 'synergy' });
+      attackBreakdown.push({ label: `${syn.name} release`, value: syn.attackBonus, type: 'synergy' });
     }
     if (syn.defenceBonus > 0) {
-      defenceBreakdown.push({ label: `${syn.name} (cross)`, value: syn.defenceBonus, type: 'synergy' });
+      defenceBreakdown.push({ label: `${syn.name} cover`, value: syn.defenceBonus, type: 'synergy' });
     }
   }
 
@@ -411,7 +490,7 @@ export function evaluateSplit(
       : attackers.filter((c) => style.bonusArchetypes.includes(c.archetype)).length;
     styleAttack = Math.round(baseAttack * style.multiplier * matchingCount);
     if (styleAttack > 0) {
-      attackBreakdown.push({ label: `${style.name} bonus`, value: styleAttack, type: 'style' });
+      attackBreakdown.push({ label: `${style.name} pattern`, value: styleAttack, type: 'style' });
     }
   }
 
@@ -421,7 +500,7 @@ export function evaluateSplit(
     const weaknessCount = attackers.filter((c) => c.archetype === opponentWeakness).length;
     if (weaknessCount >= 2) {
       weaknessBonus = Math.round(baseAttack * 0.15);
-      attackBreakdown.push({ label: 'Weakness exploited', value: weaknessBonus, type: 'ability' });
+      attackBreakdown.push({ label: 'Picked on their weak side', value: weaknessBonus, type: 'ability' });
     }
   }
 
@@ -432,7 +511,7 @@ export function evaluateSplit(
     tacticBonus += slot.compute(xi, state.currentIncrement);
   }
   if (tacticBonus > 0) {
-    attackBreakdown.push({ label: 'Tactics', value: tacticBonus, type: 'tactic' });
+    attackBreakdown.push({ label: 'Playbook edge', value: tacticBonus, type: 'tactic' });
   }
 
   // --- Manager bonus (full XI, Phase 1) ---
@@ -442,30 +521,70 @@ export function evaluateSplit(
     managerBonus += applyJoker(joker, xi, allConnections);
   }
   if (managerBonus > 0) {
-    attackBreakdown.push({ label: 'Manager', value: managerBonus, type: 'manager' });
+    attackBreakdown.push({ label: 'Touchline edge', value: managerBonus, type: 'manager' });
   }
 
   // --- Subtotals before personality ---
   let attackTotal = baseAttack + dualAttack + synergyAttack + crossAttack + styleAttack + weaknessBonus + tacticBonus + managerBonus;
   let defenceTotal = baseDefence + dualDefence + synergyDefence + crossDefence;
+  const attackerPowerPool = attackers.reduce((sum, card) => sum + card.power, 0);
+  let baseCreation = 0;
+  let baseFinishing = 0;
+  for (const card of attackers) {
+    const profile = getChanceProfile(card);
+    baseCreation += Math.round(card.power * profile.creation);
+    baseFinishing += Math.round(card.power * profile.finishing);
+  }
+  const chemistryDensity = attackerPowerPool > 0
+    ? (synergyAttack + crossAttack) / attackerPowerPool
+    : 0;
+  const compactAttackMultiplier = attackers.length > 0 && attackers.length <= 3
+    ? 1 + Math.min(0.55, chemistryDensity * 1.4 + attackSynergies.length * 0.10 + crossSynergies.length * 0.06)
+    : 1 + Math.min(0.18, chemistryDensity * 0.45);
+
+  let chanceCreation = Math.round(
+    (baseCreation + Math.round(dualAttack * 0.75) + Math.round(styleAttack * 0.45) + Math.round(tacticBonus * 0.55) + Math.round(managerBonus * 0.35))
+      * compactAttackMultiplier,
+  );
+  let shotQuality = Math.round(
+    (baseFinishing + Math.round(synergyAttack * 0.95) + Math.round(crossAttack * 0.55) + Math.round(weaknessBonus * 0.90) + Math.round(tacticBonus * 0.35))
+      * compactAttackMultiplier,
+  );
+
+  if (chanceCreation > 0) {
+    attackBreakdown.push({
+      label: attackers.length <= 3 && compactAttackMultiplier > 1.08 ? 'Compact move clicked' : 'Chance patterns',
+      value: chanceCreation,
+      type: 'ability',
+    });
+  }
+  if (shotQuality > 0) {
+    attackBreakdown.push({ label: 'Final-ball threat', value: shotQuality, type: 'ability' });
+  }
 
   // --- Personality multipliers (applied last) ---
   const personalityAttackBonus = Math.round(attackTotal * (personalityBonus.attackMod - 1));
   const personalityDefenceBonus = Math.round(defenceTotal * (personalityBonus.defenceMod - 1));
+  const personalityCreationBonus = Math.round(chanceCreation * (personalityBonus.attackMod - 1));
+  const personalityFinishingBonus = Math.round(shotQuality * (personalityBonus.attackMod - 1));
 
   if (personalityAttackBonus !== 0 && personalityBonus.label) {
-    attackBreakdown.push({ label: personalityBonus.label, value: personalityAttackBonus, type: 'personality' });
+    attackBreakdown.push({ label: `Dressing room edge`, value: personalityAttackBonus, type: 'personality' });
   }
   if (personalityDefenceBonus !== 0 && personalityBonus.label) {
-    defenceBreakdown.push({ label: personalityBonus.label, value: personalityDefenceBonus, type: 'personality' });
+    defenceBreakdown.push({ label: `Dressing room edge`, value: personalityDefenceBonus, type: 'personality' });
   }
 
   attackTotal += personalityAttackBonus;
   defenceTotal += personalityDefenceBonus;
+  chanceCreation += personalityCreationBonus;
+  shotQuality += personalityFinishingBonus;
 
   return {
     attackScore: Math.max(0, attackTotal),
     defenceScore: Math.max(0, defenceTotal),
+    chanceCreation: Math.max(0, chanceCreation),
+    shotQuality: Math.max(0, shotQuality),
     attackBreakdown,
     defenceBreakdown,
     attackSynergies,
@@ -489,16 +608,35 @@ export function resolveIncrement(
 ): IncrementResult {
   const minute = INCREMENT_MINUTES[state.currentIncrement];
 
-  // Goal chances
-  const attackRatio = opponentDefence > 0 ? split.attackScore / opponentDefence : 2.0;
-  let yourGoalChance = clamp(0.08 + (attackRatio - 1.0) * 0.20, 0.03, 0.45);
+  // Chance model: build chances, then turn them into shots worth scoring from.
+  const pressureRatio = opponentDefence > 0 ? split.attackScore / opponentDefence : 2.0;
+  const creationRatio = opponentDefence > 0 ? split.chanceCreation / (opponentDefence * 0.8) : 2.0;
+  const finishingRatio = opponentDefence > 0 ? split.shotQuality / (opponentDefence * 0.68) : 2.0;
 
-  const theirAttackRatio = split.defenceScore > 0 ? opponentAttack / split.defenceScore : 2.0;
-  let opponentGoalChance = clamp(0.08 + (theirAttackRatio - 1.0) * 0.20, 0.03, 0.35);
+  let yourChanceVolume = clamp(
+    0.08 + (creationRatio - 0.7) * 0.28 + (pressureRatio - 1.0) * 0.10,
+    0.04,
+    0.72,
+  );
+  let yourChanceQuality = clamp(
+    0.16 + (finishingRatio - 0.6) * 0.26 + (pressureRatio - 1.0) * 0.08,
+    0.08,
+    0.78,
+  );
+  let yourGoalChance = clamp(yourChanceVolume * yourChanceQuality * 1.18, 0.02, 0.52);
+
+  const theirPressureRatio = split.defenceScore > 0 ? opponentAttack / split.defenceScore : 2.0;
+  let opponentChanceVolume = clamp(0.08 + (theirPressureRatio - 0.72) * 0.25, 0.04, 0.60);
+  let opponentChanceQuality = clamp(0.17 + (theirPressureRatio - 0.72) * 0.18, 0.10, 0.62);
+  let opponentGoalChance = clamp(opponentChanceVolume * opponentChanceQuality * 1.10, 0.02, 0.40);
 
   // 90th minute drama
   if (state.currentIncrement === 4) {
+    yourChanceVolume *= 1.18;
+    yourChanceQuality *= 1.08;
     yourGoalChance *= 1.3;
+    opponentChanceVolume *= 1.15;
+    opponentChanceQuality *= 1.05;
     opponentGoalChance *= 1.3;
   }
 
@@ -533,7 +671,11 @@ export function resolveIncrement(
     split,
     opponentAttack,
     opponentDefence,
+    yourChanceVolume,
+    yourChanceQuality,
     yourGoalChance,
+    opponentChanceVolume,
+    opponentChanceQuality,
     opponentGoalChance,
     yourScored,
     opponentScored,

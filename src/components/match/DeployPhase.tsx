@@ -170,6 +170,9 @@ export default function DeployPhase({
             <div style={{ marginTop: 6, fontSize: 9, color: 'var(--cream-soft, #d9d0b8)' }}>
               Chemistry {attackChemistry > 0 ? `+${attackChemistry}` : 'quiet'}
             </div>
+            <div style={{ marginTop: 2, fontSize: 9, color: 'var(--cream-soft, #d9d0b8)' }}>
+              Create {split.chanceCreation} | Finish {split.shotQuality}
+            </div>
           </div>
         </div>
       </div>

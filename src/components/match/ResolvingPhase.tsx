@@ -30,9 +30,11 @@ export default function ResolvingPhase({ result, onComplete }: ResolvingPhasePro
 
   const allLines = [
     ...result.split.defenceBreakdown.map((l) => ({ ...l, side: 'defence' as const })),
-    { label: `Defence Total: ${result.split.defenceScore}`, value: result.split.defenceScore, type: 'base' as const, side: 'defence' as const },
+    { label: `Defence Power: ${result.split.defenceScore}`, value: result.split.defenceScore, type: 'base' as const, side: 'defence' as const },
     ...result.split.attackBreakdown.map((l) => ({ ...l, side: 'attack' as const })),
-    { label: `Attack Total: ${result.split.attackScore}`, value: result.split.attackScore, type: 'base' as const, side: 'attack' as const },
+    { label: `Attack Power: ${result.split.attackScore}`, value: result.split.attackScore, type: 'base' as const, side: 'attack' as const },
+    { label: `Chance Creation: ${result.split.chanceCreation}`, value: result.split.chanceCreation, type: 'ability' as const, side: 'attack' as const },
+    { label: `Shot Quality: ${result.split.shotQuality}`, value: result.split.shotQuality, type: 'ability' as const, side: 'attack' as const },
   ];
 
   useEffect(() => {
@@ -76,7 +78,11 @@ export default function ResolvingPhase({ result, onComplete }: ResolvingPhasePro
         }}
       >
         {allLines.map((line, i) => {
-          const isTotal = line.label.includes('Total');
+          const isTotal =
+            line.label.startsWith('Defence Power')
+            || line.label.startsWith('Attack Power')
+            || line.label.startsWith('Chance Creation')
+            || line.label.startsWith('Shot Quality');
           const sideColor = line.side === 'attack' ? '#fbbf24' : '#60a5fa';
           return (
             <div
@@ -107,9 +113,18 @@ export default function ResolvingPhase({ result, onComplete }: ResolvingPhasePro
         {/* Goal chances */}
         {visibleLines >= allLines.length && (
           <div style={{ marginTop: 8, fontSize: 11, color: 'var(--dust, #8a7560)' }}>
-            <span>Concede chance: {Math.round(result.opponentGoalChance * 100)}%</span>
+            <span>Their build: {Math.round(result.opponentChanceVolume * 100)}%</span>
             <span style={{ margin: '0 8px' }}>|</span>
-            <span>Goal chance: {Math.round(result.yourGoalChance * 100)}%</span>
+            <span>Their finish: {Math.round(result.opponentChanceQuality * 100)}%</span>
+          </div>
+        )}
+        {visibleLines >= allLines.length && (
+          <div style={{ marginTop: 4, fontSize: 11, color: 'var(--dust, #8a7560)' }}>
+            <span>Your build: {Math.round(result.yourChanceVolume * 100)}%</span>
+            <span style={{ margin: '0 8px' }}>|</span>
+            <span>Your finish: {Math.round(result.yourChanceQuality * 100)}%</span>
+            <span style={{ margin: '0 8px' }}>|</span>
+            <span>Goal swing: {Math.round(result.yourGoalChance * 100)}%</span>
           </div>
         )}
 
