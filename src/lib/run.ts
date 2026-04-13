@@ -8,8 +8,6 @@
 import {
   Card, SlottedCard, Durability, PlayingStyle,
   PLAYING_STYLES, DURABILITY_WEIGHTS, SHATTER_CHANCE, INJURY_CHANCE,
-  MatchState, RoundResult,
-  calculateXIStrength, resolveRound, createMatchState, advanceMatchState,
   seededRandom,
 } from './scoring';
 import { ActionCard, ALL_ACTION_CARDS, getActionCardsByType } from './actions';
@@ -758,139 +756,6 @@ export function startMatch(state: RunState): { state: RunState; handState: HandS
   };
 }
 
-// @deprecated — replaced by hand evaluation system (evaluateHand + resolveMatch from hand.ts)
-/*
-export function playRound(
-  state: RunState,
-  playedCards: ActionCard[],
-  weaknessArchetype?: string,
-): { state: RunState; result: RoundResult } {
-  if (!state.matchState) {
-    throw new Error('No active match state');
-  }
-
-  const ms = state.matchState;
-  const seed = ms.matchSeed * 100 + ms.round * 10 +
-    playedCards.reduce((sum, c) => sum + c.id.charCodeAt(0), 0);
-
-  const result = resolveRound(ms, playedCards, seed, weaknessArchetype);
-
-  // Calculate action result for state update
-  const actionResult = {
-    nextRoundYourMod: 0,
-    persistentOpponentMod: 0,
-    persistentYourMod: 0,
-    redCardPenalty: 0,
-  };
-
-  // Gather persistent effects from played cards
-  for (const ac of playedCards) {
-    if (ac.effect.yourNextRoundMod) actionResult.nextRoundYourMod += ac.effect.yourNextRoundMod;
-    if (ac.effect.opponentRestOfMatchMod) actionResult.persistentOpponentMod += ac.effect.opponentRestOfMatchMod;
-    if (ac.effect.yourRestOfMatchMod) actionResult.persistentYourMod += ac.effect.yourRestOfMatchMod;
-    if (ac.effect.riskChance && ac.effect.riskPenalty) {
-      if (seededRandom(seed + ac.id.charCodeAt(0) * 3) < ac.effect.riskChance) {
-        actionResult.redCardPenalty += ac.effect.riskPenalty;
-      }
-    }
-  }
-
-  // Advance match state
-  const newMatchState = advanceMatchState(ms, result, playedCards, actionResult);
-
-  // Check if match is over (5 rounds played)
-  const matchOver = ms.round >= 5;
-
-  return {
-    state: {
-      ...state,
-      matchState: matchOver ? null : newMatchState,
-      status: matchOver ? 'postmatch' : 'playing',
-    },
-    result,
-  };
-}
-*/
-
-// @deprecated — replaced by resolveMatch from hand.ts
-/*
-export function finalizeMatch(state: RunState, matchState: MatchState): {
-  state: RunState;
-  matchResult: MatchResult;
-  durabilityResult: DurabilityResult;
-} {
-  const opponent = getOpponent(state.round);
-
-  // Determine match result
-  const yourGoals = matchState.yourGoals;
-  const opponentGoals = matchState.opponentGoals;
-  const resultType: 'win' | 'draw' | 'loss' =
-    yourGoals > opponentGoals ? 'win' :
-    yourGoals === opponentGoals ? 'draw' : 'loss';
-
-  const newWins = state.wins + (resultType === 'win' ? 1 : 0);
-  const newLosses = state.losses + (resultType === 'loss' ? 1 : 0);
-  const reachedMatch5 = state.round >= 5;
-  const wonRun = reachedMatch5 && resultType === 'win' && newWins >= 5;
-  const newStadiumTier = getStadiumTier(newWins, reachedMatch5, wonRun);
-
-  // Calculate attendance and revenue
-  const connections = findConnections(matchState.xi);
-  const attendanceResult = calculateAttendance(
-    matchState.xi,
-    connections,
-    yourGoals,
-    opponentGoals,
-    matchState.fanAccumulator,
-    newStadiumTier,
-    state.ticketPriceBonus,
-  );
-
-  // Run durability checks
-  const durSeed = state.seed + state.round * 2000;
-  const durabilityResult = postMatchDurabilityCheck(matchState.xi, durSeed);
-
-  // Apply durability results to deck
-  const newDeck = applyDurabilityResults(state.deck, durabilityResult);
-
-  const matchResult: MatchResult = {
-    round: state.round,
-    opponentName: opponent.name,
-    yourGoals,
-    opponentGoals,
-    attendance: attendanceResult.attendance,
-    revenue: attendanceResult.revenue,
-    result: resultType,
-    synergiesTriggered: connections.map(c => c.name),
-    shattered: durabilityResult.shattered.map(c => c.name),
-    injured: durabilityResult.injured.map(c => c.name),
-    promoted: durabilityResult.promoted.map(c => c.name),
-  };
-
-  // Determine new status
-  let newStatus: RunState['status'] = 'shop';
-  if (newLosses >= 3) newStatus = 'lost';
-  else if (reachedMatch5 && wonRun) newStatus = 'won';
-  else if (reachedMatch5) newStatus = 'lost';
-
-  return {
-    state: {
-      ...state,
-      deck: newDeck,
-      wins: newWins,
-      losses: newLosses,
-      stadiumTier: newStadiumTier,
-      cash: state.cash + attendanceResult.revenue,
-      status: newStatus,
-      matchHistory: [...state.matchHistory, matchResult],
-      matchState: null,
-    },
-    matchResult,
-    durabilityResult,
-  };
-}
-*/
-
 /**
  * Advance to next match round
  */
@@ -1110,7 +975,7 @@ export function buyTacticPack(state: RunState, seed: number): RunState | null {
 
 // Re-export commonly used types and constants
 export { PLAYING_STYLES, SHOP_ITEMS };
-export type { Card, SlottedCard, PlayingStyle, ShopItem, ActionCard, MatchState, RoundResult, Durability };
+export type { Card, SlottedCard, PlayingStyle, ShopItem, ActionCard, Durability };
 export type { HandState, JokerCard, TacticCard };
 
 // ---------------------------------------------------------------------------
