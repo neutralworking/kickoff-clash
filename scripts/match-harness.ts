@@ -22,6 +22,7 @@ import {
   resolveIncrement,
   advanceIncrement,
   getMatchResult,
+  type MatchV5State,
 } from '../src/lib/match-v5';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -76,7 +77,7 @@ const slots = createEmptySlots();
 
 // Simulate 5 increments. Deterministic attacker choice:
 // top 4 power in XI each increment (4-3-3 maxAttackers=5, we use 4).
-function pickAttackers(state: typeof state): number[] {
+function pickAttackers(state: MatchV5State): number[] {
   return [...state.xi]
     .filter(c => !c.injured)
     .sort((a, b) => b.power - a.power)
