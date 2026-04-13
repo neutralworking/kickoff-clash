@@ -7,6 +7,8 @@ interface TitleScreenProps {
 }
 
 export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: TitleScreenProps) {
+  const canonicalUrl = 'https://kickoff.neutralworking.com';
+
   return (
     <div
       className="flex flex-col items-center justify-center min-h-screen text-center px-6"
@@ -70,6 +72,28 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
             Continue Run
           </button>
         )}
+      </div>
+
+      <div
+        className="mt-8 rounded-[var(--radius)] px-4 py-3"
+        style={{
+          background: 'rgba(0,0,0,0.14)',
+          border: '1px solid rgba(212,160,53,0.14)',
+        }}
+      >
+        <div
+          className="text-[10px] uppercase tracking-[0.18em]"
+          style={{ color: 'var(--dust)' }}
+        >
+          Canonical Home
+        </div>
+        <a
+          href={canonicalUrl}
+          className="text-sm underline underline-offset-4"
+          style={{ color: 'var(--gold)' }}
+        >
+          kickoff.neutralworking.com
+        </a>
       </div>
     </div>
   );

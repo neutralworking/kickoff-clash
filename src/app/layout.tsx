@@ -23,7 +23,18 @@ const playfairDisplay = Playfair_Display({
 
 export const metadata: Metadata = {
   title: "Kickoff Clash",
-  description: "The football card game powered by Chief Scout",
+  description: "A football season deckbuilder at kickoff.neutralworking.com",
+  metadataBase: new URL("https://kickoff.neutralworking.com"),
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "Kickoff Clash",
+    description: "Build your squad. Play your cards. Win the season.",
+    url: "https://kickoff.neutralworking.com",
+    siteName: "Kickoff Clash",
+    type: "website",
+  },
 };
 
 export const viewport = {
