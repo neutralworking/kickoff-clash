@@ -6,7 +6,6 @@ import type { RunState, MatchResult, DurabilityResult } from '../lib/run';
 import {
   createRun,
   getOpponent,
-  getOpponentBuild,
   postMatchDurabilityCheck,
   applyDurabilityResults,
   addCardToDeck,
@@ -22,8 +21,8 @@ import type { JokerCard } from '../lib/jokers';
 import { rehydrateJokers } from '../lib/jokers';
 import type { PackType } from '../lib/packs';
 import { openPack } from '../lib/packs';
-import { getTacticById, rehydrateTacticSlots } from '../lib/tactics';
-import { calculateAttendance, getTransferFee } from '../lib/economy';
+import { getTacticById } from '../lib/tactics';
+import { calculateAttendance, getStadiumTier } from '../lib/economy';
 import { findConnections } from '../lib/chemistry';
 import type { PackContents } from '../lib/packs';
 import TitleScreen from './TitleScreen';
@@ -67,8 +66,19 @@ function deserializeRun(json: string): RunState | null {
   try {
     const parsed = JSON.parse(json) as SerializedRunState;
     const { jokerIds, tacticIds, ...rest } = parsed;
+    const seasonPoints =
+      typeof (rest as Partial<RunState>).seasonPoints === 'number'
+        ? (rest as Partial<RunState>).seasonPoints
+        : 0;
+    const boardTargetPoints =
+      typeof (rest as Partial<RunState>).boardTargetPoints === 'number'
+        ? (rest as Partial<RunState>).boardTargetPoints
+        : 10;
+
     return {
       ...rest,
+      seasonPoints,
+      boardTargetPoints,
       jokers: rehydrateJokers(jokerIds ?? []),
       tacticsDeck: (tacticIds ?? []).map(id => getTacticById(id)).filter((t): t is NonNullable<typeof t> => t !== undefined),
     } as RunState;
@@ -110,6 +120,8 @@ function saveHistory(state: RunState): void {
       status: state.status,
       wins: state.wins,
       losses: state.losses,
+      seasonPoints: state.seasonPoints,
+      boardTargetPoints: state.boardTargetPoints,
       cash: state.cash,
       rounds: state.round,
       matchHistory: state.matchHistory,
@@ -148,10 +160,11 @@ export default function GameShell() {
   const [pendingStyle, setPendingStyle] = useState<string | null>(null);
   const [pendingSeed, setPendingSeed] = useState<number>(0);
 
-  // Check for existing run on mount
+  // Check for existing run on mount without reading localStorage during render.
   useEffect(() => {
-    const existing = loadRun();
-    setHasExistingRun(existing !== null);
+    setTimeout(() => {
+      setHasExistingRun(loadRun() !== null);
+    }, 0);
   }, []);
 
   // Persist state after every change
@@ -229,6 +242,8 @@ export default function GameShell() {
       opponentName: getOpponent(runState.round).name,
       yourGoals: result.yourGoals,
       opponentGoals: result.opponentGoals,
+      pointsEarned: result.result === 'win' ? 3 : result.result === 'draw' ? 1 : 0,
+      seasonPoints: runState.seasonPoints + (result.result === 'win' ? 3 : result.result === 'draw' ? 1 : 0),
       attendance: attendance.attendance,
       revenue: attendance.revenue,
       result: result.result,
@@ -244,13 +259,23 @@ export default function GameShell() {
     // Update wins/losses
     const wins = runState.wins + (result.result === 'win' ? 1 : 0);
     const losses = runState.losses + (result.result === 'loss' ? 1 : 0);
+    const pointsEarned = result.result === 'win' ? 3 : result.result === 'draw' ? 1 : 0;
+    const seasonPoints = runState.seasonPoints + pointsEarned;
+    const reachedFinalFixture = runState.round >= MAX_ROUNDS;
+    const stadiumTier = getStadiumTier(
+      wins,
+      reachedFinalFixture,
+      reachedFinalFixture && seasonPoints >= runState.boardTargetPoints,
+    );
 
     const newState: RunState = {
       ...runState,
       deck: updatedDeck,
       cash: runState.cash + attendance.revenue,
+      stadiumTier,
       wins,
       losses,
+      seasonPoints,
       round: runState.round,
       matchHistory: [...runState.matchHistory, matchResult],
     };
@@ -273,7 +298,12 @@ export default function GameShell() {
       clearRun();
       setPhase('end');
     } else if (runState.round >= MAX_ROUNDS) {
-      const ended = { ...runState, status: 'won' as const };
+      const status: RunState['status'] =
+        runState.seasonPoints >= runState.boardTargetPoints ? 'won' : 'lost';
+      const ended = {
+        ...runState,
+        status,
+      };
       setRunState(ended);
       saveHistory(ended);
       clearRun();

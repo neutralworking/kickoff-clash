@@ -115,6 +115,7 @@ export default function ShopPhase({
         </div>
         {/* Quick stats row */}
         <div className="flex flex-wrap gap-x-4 gap-y-1">
+          <StatChip label="Points" value={`${state.seasonPoints}/${state.boardTargetPoints}`} />
           <StatChip label="Deck" value={`${state.deck.length} cards`} />
           <StatChip label="Tactics" value={`${state.tacticsDeck.length} cards`} />
           <StatChip

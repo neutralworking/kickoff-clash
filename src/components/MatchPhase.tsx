@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import type { RunState } from '../lib/run';
+import { getOpponent, getOpponentBuild } from '../lib/run';
 import type { HandState } from '../lib/hand';
 import { rollXI, INCREMENT_MINUTES } from '../lib/hand';
-import { getFormation, type Formation } from '../lib/formations';
-import type { JokerCard as JokerCardType } from '../lib/jokers';
+import { getFormation } from '../lib/formations';
 import type { MatchV5State, IncrementResult } from '../lib/match-v5';
 import {
   initMatch,
@@ -18,6 +18,8 @@ import {
   discardFromBench,
   getMatchResult,
 } from '../lib/match-v5';
+import type { TacticSlots } from '../lib/tactics';
+import { canDeploy, createEmptySlots, deployTactic, removeTactic } from '../lib/tactics';
 import MatchScorebar from './match/MatchScorebar';
 import DeployPhase from './match/DeployPhase';
 import ResolvingPhase from './match/ResolvingPhase';
@@ -40,35 +42,19 @@ interface MatchPhaseProps {
 type MatchSubPhase = 'planning' | 'resolving' | 'between' | 'halftime' | 'finished';
 
 // ---------------------------------------------------------------------------
-// Opponent names
-// ---------------------------------------------------------------------------
-
-const OPPONENT_NAMES = [
-  'Dynamo Midtable', 'FC Relegation', 'Sporting Vibes',
-  'Real Farmacia', 'Inter Naptime', 'Borussia Teeth',
-  'Red Star Sofa', 'Ajax Dishwash', 'Porto Nap',
-];
-
-function getOpponentName(seed: number): string {
-  return OPPONENT_NAMES[Math.abs(seed) % OPPONENT_NAMES.length];
-}
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProps) {
   const formation = getFormation(runState.activeFormation);
-  const seedRef = useRef(runState.seed + runState.round * 1000);
-  const opponentName = getOpponentName(seedRef.current);
-
-  // Opponent data from runState (if available) or defaults
-  const opponentStyle = 'Balanced';
-  const opponentWeakness = '';
+  const matchSeed = runState.seed + runState.round * 1000;
+  const opponent = getOpponent(runState.round);
+  const opponentBuild = getOpponentBuild(runState.round);
+  const [tacticSlots, setTacticSlots] = useState<TacticSlots>(() => createEmptySlots());
 
   // Core state
   const [matchState, setMatchState] = useState<MatchV5State>(() => {
-    const hand = rollXI(runState.deck, formation, seedRef.current);
+    const hand = rollXI(runState.deck, formation, matchSeed);
     return initMatch(
       hand.xi,
       hand.bench,
@@ -76,10 +62,10 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       formation,
       runState.playingStyle,
       runState.jokers,
-      seedRef.current,
+      matchSeed,
       runState.round,
-      opponentStyle,
-      opponentWeakness,
+      opponent.style,
+      opponentBuild.weaknessArchetype,
     );
   });
 
@@ -112,10 +98,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
 
   // ---- Kick Off: evaluate and resolve ----
   const handleKickOff = useCallback(() => {
-    const split = evaluateSplit(matchState, runState.jokers, matchState.formation
-      ? { slots: [null, null, null] } // tactic slots from hand state - simplified for v5
-      : { slots: [null, null, null] },
-    );
+    const split = evaluateSplit(matchState, runState.jokers, tacticSlots);
 
     const { attack: oppAtk, defence: oppDef } = getOpponentBaselines(
       matchState.opponentRound,
@@ -124,12 +107,12 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       matchState,
     );
 
-    const seed = seedRef.current + matchState.currentIncrement * 113;
+    const seed = matchSeed + matchState.currentIncrement * 113;
     const result = resolveIncrement(matchState, split, oppAtk, oppDef, seed);
 
     setCurrentResult(result);
     setSubPhase('resolving');
-  }, [matchState, runState.jokers]);
+  }, [matchSeed, matchState, runState.jokers, tacticSlots]);
 
   // ---- After resolution animation completes ----
   const handleResolveComplete = useCallback(() => {
@@ -186,6 +169,38 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     setSubPhase('planning');
   }, []);
 
+  const handleToggleTactic = useCallback((tacticId: string) => {
+    const tactic = runState.tacticsDeck.find((card) => card.id === tacticId);
+    if (!tactic) return;
+
+    setTacticSlots((prev) => {
+      const existingIndex = prev.slots.findIndex((slot) => slot?.id === tactic.id);
+      if (existingIndex !== -1) {
+        return removeTactic(prev, existingIndex);
+      }
+
+      const deployResult = canDeploy(prev, tactic);
+      if (!deployResult.canDeploy) {
+        return prev;
+      }
+
+      const nextSlots = [...prev.slots];
+      if (deployResult.wouldRemove) {
+        const removeIndex = nextSlots.findIndex((slot) => slot?.id === deployResult.wouldRemove);
+        if (removeIndex !== -1) {
+          nextSlots[removeIndex] = null;
+        }
+      }
+
+      const freeIndex = nextSlots.findIndex((slot) => slot === null);
+      if (freeIndex === -1) {
+        return prev;
+      }
+
+      return deployTactic({ slots: nextSlots }, tactic, freeIndex);
+    });
+  }, [runState.tacticsDeck]);
+
   // ---- Finished: return result to GameShell ----
   const handleMatchFinished = useCallback(() => {
     const result = getMatchResult(matchState);
@@ -200,7 +215,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
         remainingDeck: matchState.remainingDeck,
         subsRemaining: matchState.subsRemaining,
         subsUsed: matchState.subsUsed,
-        tacticSlots: { slots: [null, null, null] },
+        tacticSlots,
         currentIncrement: matchState.currentIncrement,
         isFirstHalf: matchState.isFirstHalf,
         scores: [],
@@ -208,7 +223,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
         opponentGoals: matchState.opponentGoals,
       },
     });
-  }, [matchState, onMatchComplete]);
+  }, [matchState, onMatchComplete, tacticSlots]);
 
   // ---- Render ----
   return (
@@ -270,8 +285,13 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
         yourGoals={matchState.yourGoals}
         opponentGoals={matchState.opponentGoals}
         minute={nextMinute}
-        opponentName={opponentName}
+        opponentName={opponentBuild.name}
         round={runState.round}
+        seasonPoints={runState.seasonPoints}
+        boardTargetPoints={runState.boardTargetPoints}
+        opponentStyle={opponentBuild.style}
+        opponentWeakness={opponentBuild.weakness}
+        starPlayer={opponentBuild.starPlayer.name}
         subPhase={subPhase}
       />
 
@@ -281,8 +301,11 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
           matchState={matchState}
           formation={matchState.formation}
           jokers={runState.jokers}
-          tacticSlots={{ slots: [null, null, null] }}
+          tacticSlots={tacticSlots}
+          availableTactics={runState.tacticsDeck}
+          opponentBuild={opponentBuild}
           onToggleAttacker={handleToggleAttacker}
+          onToggleTactic={handleToggleTactic}
           onKickOff={handleKickOff}
         />
       )}
@@ -299,9 +322,12 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
           matchState={matchState}
           ownedFormations={runState.ownedFormations}
           isHalftime={subPhase === 'halftime'}
+          tacticSlots={tacticSlots}
+          availableTactics={runState.tacticsDeck}
           onSub={handleSub}
           onDiscard={handleDiscard}
           onFormationChange={handleFormationChange}
+          onToggleTactic={handleToggleTactic}
           onContinue={handleContinue}
         />
       )}

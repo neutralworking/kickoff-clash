@@ -46,6 +46,8 @@ export interface RunState {
   ticketPriceBonus: number;
   academyTier: number;
   round: number;       // match number (1-5)
+  seasonPoints: number;
+  boardTargetPoints: number;
   wins: number;
   losses: number;
   status: 'title' | 'packSelect' | 'setup' | 'match' | 'postmatch' | 'shop' | 'won' | 'lost';
@@ -59,6 +61,8 @@ export interface MatchResult {
   opponentName: string;
   yourGoals: number;
   opponentGoals: number;
+  pointsEarned: number;
+  seasonPoints: number;
   attendance: number;
   revenue: number;
   result: 'win' | 'draw' | 'loss';
@@ -707,12 +711,21 @@ export function generateStarterActionDeck(seed: number): ActionCard[] {
 export function createRun(packContents: PackContents, style: string, seed?: number): RunState {
   const runSeed = seed ?? Math.floor(Math.random() * 1000000);
   const ownedFormations = packContents.formations.map(f => f.id);
+  const seenIds = new Set(packContents.players.map(card => card.id));
+  const reservePool = seededShuffle(
+    ALL_CARDS.filter(card => !seenIds.has(card.id)),
+    runSeed + 404,
+  );
+  const reserveFillers = packContents.players.length < 11
+    ? reservePool.slice(0, 11 - packContents.players.length)
+    : [];
+  const startingDeck = [...packContents.players, ...reserveFillers];
 
   return {
     formation: ownedFormations[0] ?? '4-3-3',
     playingStyle: style,
-    deck: packContents.players,
-    bench: [...packContents.players],
+    deck: startingDeck,
+    bench: [...startingDeck],
     jokers: packContents.managers,
     ownedFormations,
     tacticsDeck: packContents.tactics,
@@ -723,6 +736,8 @@ export function createRun(packContents: PackContents, style: string, seed?: numb
     ticketPriceBonus: 0,
     academyTier: 1,
     round: 1,
+    seasonPoints: 0,
+    boardTargetPoints: 10,
     wins: 0,
     losses: 0,
     status: 'match',

@@ -6,6 +6,11 @@ interface MatchScorebarProps {
   minute: number;
   opponentName: string;
   round: number;
+  seasonPoints: number;
+  boardTargetPoints: number;
+  opponentStyle: string;
+  opponentWeakness: string;
+  starPlayer: string;
   subPhase: string;
 }
 
@@ -15,6 +20,11 @@ export default function MatchScorebar({
   minute,
   opponentName,
   round,
+  seasonPoints,
+  boardTargetPoints,
+  opponentStyle,
+  opponentWeakness,
+  starPlayer,
   subPhase,
 }: MatchScorebarProps) {
   return (
@@ -70,12 +80,26 @@ export default function MatchScorebar({
           {minute}&apos;
         </span>
       </div>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 2 }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
         <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
           vs {opponentName}
         </span>
         <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-          Round {round}/5
+          Fixture {round}/5
+        </span>
+        <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
+          Points {seasonPoints}/{boardTargetPoints}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
+          Style: {opponentStyle}
+        </span>
+        <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
+          Weakness: {opponentWeakness}
+        </span>
+        <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
+          Star: {starPlayer}
         </span>
       </div>
     </div>

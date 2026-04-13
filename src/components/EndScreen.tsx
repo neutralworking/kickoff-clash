@@ -32,7 +32,7 @@ export default function EndScreen({ state, onNewRun }: EndScreenProps) {
             textShadow: headlineGlow,
           }}
         >
-          {won ? 'CHAMPIONS!' : 'RELEGATED!'}
+          {won ? 'TARGET MET' : 'SACKED'}
         </div>
       </div>
       <p
@@ -44,8 +44,8 @@ export default function EndScreen({ state, onNewRun }: EndScreenProps) {
         }}
       >
         {won
-          ? 'You conquered all five opponents!'
-          : `You suffered ${state.losses} defeat${state.losses !== 1 ? 's' : ''}.`}
+          ? `Board target hit: ${state.seasonPoints}/${state.boardTargetPoints} points.`
+          : `Season ended at ${state.seasonPoints}/${state.boardTargetPoints} points with ${state.losses} defeat${state.losses !== 1 ? 's' : ''}.`}
       </p>
 
       {/* Match record pips */}
@@ -83,6 +83,7 @@ export default function EndScreen({ state, onNewRun }: EndScreenProps) {
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3 max-w-sm w-full mb-10">
         <StatBox label="Matches Won" value={state.wins.toString()} color="var(--pitch-light)" />
+        <StatBox label="Season Points" value={state.seasonPoints.toString()} color="var(--pitch-light)" />
         <StatBox label="Total Goals" value={totalGoals.toString()} color="var(--cream)" />
         <StatBox label="Revenue" value={`\u00a3${totalRevenue.toLocaleString()}`} color="var(--gold)" />
         <StatBox label="Final Cash" value={`\u00a3${state.cash.toLocaleString()}`} color="var(--gold)" />

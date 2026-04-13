@@ -5,8 +5,8 @@ import type { MatchV5State, AttackDefenceSplit } from '../../lib/match-v5';
 import { evaluateSplit } from '../../lib/match-v5';
 import type { Formation } from '../../lib/formations';
 import type { JokerCard } from '../../lib/jokers';
-import type { TacticSlots } from '../../lib/tactics';
-import type { Card } from '../../lib/scoring';
+import type { TacticCard, TacticSlots } from '../../lib/tactics';
+import type { OpponentBuild } from '../../lib/run';
 import PlayerCard from '../PlayerCard';
 import CardHand from '../CardHand';
 import SynergyPreview from './SynergyPreview';
@@ -16,7 +16,10 @@ interface DeployPhaseProps {
   formation: Formation;
   jokers: JokerCard[];
   tacticSlots: TacticSlots;
+  availableTactics: TacticCard[];
+  opponentBuild: OpponentBuild;
   onToggleAttacker: (cardId: number) => void;
+  onToggleTactic: (tacticId: string) => void;
   onKickOff: () => void;
 }
 
@@ -25,7 +28,10 @@ export default function DeployPhase({
   formation,
   jokers,
   tacticSlots,
+  availableTactics,
+  opponentBuild,
   onToggleAttacker,
+  onToggleTactic,
   onKickOff,
 }: DeployPhaseProps) {
   // Live preview: evaluate current split
@@ -108,6 +114,70 @@ export default function DeployPhase({
             {split.defenceScore}
           </span>
         </div>
+      </div>
+
+      {/* Matchup + tactics */}
+      <div
+        style={{
+          padding: '4px 10px 6px',
+          display: 'grid',
+          gap: 6,
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            display: 'grid',
+            gap: 2,
+            padding: '8px 10px',
+            borderRadius: 8,
+            background: 'rgba(0,0,0,0.18)',
+            border: '1px solid rgba(245,158,11,0.12)',
+          }}
+        >
+          <div style={{ fontSize: 10, color: 'var(--cream, #f5f0e8)', fontWeight: 700 }}>
+            {opponentBuild.name} | {opponentBuild.style}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
+            Weakness: {opponentBuild.weakness}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
+            Star: {opponentBuild.starPlayer.name} | {opponentBuild.starAbility}
+          </div>
+        </div>
+
+        {availableTactics.length > 0 && (
+          <div style={{ display: 'grid', gap: 4 }}>
+            <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', textAlign: 'center' }}>
+              Match Plan
+            </div>
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+              {availableTactics.map((tactic) => {
+                const active = tacticSlots.slots.some((slot) => slot?.id === tactic.id);
+                return (
+                  <button
+                    key={tactic.id}
+                    onClick={() => onToggleTactic(tactic.id)}
+                    style={{
+                      minWidth: 120,
+                      padding: '7px 8px',
+                      textAlign: 'left',
+                      borderRadius: 8,
+                      border: `1px solid ${active ? 'rgba(245,158,11,0.45)' : 'rgba(138,117,96,0.22)'}`,
+                      background: active ? 'rgba(245,158,11,0.15)' : 'rgba(0,0,0,0.12)',
+                      color: active ? 'var(--cream, #f5f0e8)' : 'var(--dust, #8a7560)',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <div style={{ fontSize: 10, fontWeight: 700 }}>{tactic.name}</div>
+                    <div style={{ fontSize: 9, lineHeight: 1.25, marginTop: 2 }}>{tactic.effect}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Attack hand */}

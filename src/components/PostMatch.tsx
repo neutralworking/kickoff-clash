@@ -9,6 +9,8 @@ interface PostMatchProps {
     yourGoals: number;
     opponentGoals: number;
     result: 'win' | 'draw' | 'loss';
+    pointsEarned: number;
+    seasonPoints: number;
     attendance: number;
     revenue: number;
   };
@@ -117,6 +119,7 @@ export default function PostMatch({ matchResult, durabilityResult, onContinue }:
         }}
       >
         <div className="flex gap-3 justify-center flex-wrap">
+          <StatBox label="Points" value={`+${matchResult.pointsEarned} (${matchResult.seasonPoints})`} color="var(--pitch-light)" />
           <StatBox label="Revenue" value={`\u00a3${matchResult.revenue.toLocaleString()}`} color="var(--gold)" />
           <StatBox label="Attendance" value={matchResult.attendance.toLocaleString()} color="var(--cream)" />
         </div>

@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import type { MatchV5State } from '../../lib/match-v5';
 import { ALL_FORMATIONS } from '../../lib/formations';
+import type { TacticCard, TacticSlots } from '../../lib/tactics';
 import PlayerCard from '../PlayerCard';
 import CardHand from '../CardHand';
 
@@ -10,9 +11,12 @@ interface BetweenPhaseProps {
   matchState: MatchV5State;
   ownedFormations: string[];
   isHalftime: boolean;
+  tacticSlots: TacticSlots;
+  availableTactics: TacticCard[];
   onSub: (xiCardId: number, benchCardId: number) => void;
   onDiscard: (benchCardIds: number[]) => void;
   onFormationChange: (formationId: string) => void;
+  onToggleTactic: (tacticId: string) => void;
   onContinue: () => void;
 }
 
@@ -20,9 +24,12 @@ export default function BetweenPhase({
   matchState,
   ownedFormations,
   isHalftime,
+  tacticSlots,
+  availableTactics,
   onSub,
   onDiscard,
   onFormationChange,
+  onToggleTactic,
   onContinue,
 }: BetweenPhaseProps) {
   const [selectedBenchId, setSelectedBenchId] = useState<number | null>(null);
@@ -191,37 +198,67 @@ export default function BetweenPhase({
 
       {/* Formation change (halftime only) */}
       {isHalftime && (
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <span style={{ fontSize: 11, color: 'var(--dust, #8a7560)' }}>Formation:</span>
-          <select
-            value={matchState.formation.id}
-            onChange={(e) => onFormationChange(e.target.value)}
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div
             style={{
-              background: 'var(--leather, #3d2b1f)',
-              color: 'var(--cream, #f5f0e8)',
-              border: '1px solid var(--dust, #8a7560)',
-              borderRadius: 4,
-              padding: '3px 6px',
-              fontSize: 12,
-              fontFamily: 'var(--font-body, sans-serif)',
+              display: 'flex',
+              gap: 8,
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            {ownedFormations.map((fId) => {
-              const f = ALL_FORMATIONS.find((fm) => fm.id === fId);
-              return f ? (
-                <option key={fId} value={fId}>
-                  {f.name} (max {f.maxAttackers} atk)
-                </option>
-              ) : null;
-            })}
-          </select>
+            <span style={{ fontSize: 11, color: 'var(--dust, #8a7560)' }}>Formation:</span>
+            <select
+              value={matchState.formation.id}
+              onChange={(e) => onFormationChange(e.target.value)}
+              style={{
+                background: 'var(--leather, #3d2b1f)',
+                color: 'var(--cream, #f5f0e8)',
+                border: '1px solid var(--dust, #8a7560)',
+                borderRadius: 4,
+                padding: '3px 6px',
+                fontSize: 12,
+                fontFamily: 'var(--font-body, sans-serif)',
+              }}
+            >
+              {ownedFormations.map((fId) => {
+                const f = ALL_FORMATIONS.find((fm) => fm.id === fId);
+                return f ? (
+                  <option key={fId} value={fId}>
+                    {f.name} (max {f.maxAttackers} atk)
+                  </option>
+                ) : null;
+              })}
+            </select>
+          </div>
+
+          {availableTactics.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '0 8px' }}>
+              {availableTactics.map((tactic) => {
+                const active = tacticSlots.slots.some((slot) => slot?.id === tactic.id);
+                return (
+                  <button
+                    key={tactic.id}
+                    onClick={() => onToggleTactic(tactic.id)}
+                    style={{
+                      minWidth: 116,
+                      padding: '6px 8px',
+                      textAlign: 'left',
+                      borderRadius: 8,
+                      border: `1px solid ${active ? 'rgba(245,158,11,0.4)' : 'rgba(138,117,96,0.2)'}`,
+                      background: active ? 'rgba(245,158,11,0.15)' : 'rgba(0,0,0,0.12)',
+                      color: active ? 'var(--cream, #f5f0e8)' : 'var(--dust, #8a7560)',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <div style={{ fontSize: 10, fontWeight: 700 }}>{tactic.name}</div>
+                    <div style={{ fontSize: 9, marginTop: 2, lineHeight: 1.2 }}>{tactic.effect}</div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
