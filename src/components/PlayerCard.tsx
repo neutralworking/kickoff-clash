@@ -210,10 +210,15 @@ export default function PlayerCard({
         style={{ flex: 1 }}
       >
         <span
-          className="w-full truncate font-bold leading-tight"
+          className="w-full font-bold leading-tight"
           style={{
             color: '#f5f0e0',
             fontSize: isHand ? 10 : isMini ? 9 : 13,
+            display: isDetailedHand ? '-webkit-box' : 'block',
+            WebkitLineClamp: isDetailedHand ? 2 : undefined,
+            WebkitBoxOrient: isDetailedHand ? 'vertical' : undefined,
+            overflow: 'hidden',
+            minHeight: isDetailedHand ? 24 : undefined,
           }}
         >
           {card.name}

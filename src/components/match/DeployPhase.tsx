@@ -8,8 +8,7 @@ import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard, TacticSlots } from '../../lib/tactics';
 import type { OpponentBuild } from '../../lib/run';
 import PlayerCard from '../PlayerCard';
-import CardHand from '../CardHand';
-import SynergyPreview from './SynergyPreview';
+import TacticCardComp from '../TacticCard';
 
 interface DeployPhaseProps {
   matchState: MatchV5State;
@@ -55,6 +54,11 @@ export default function DeployPhase({
   );
   const defenceMargin = split.defenceScore - opponentBaseline.attack;
   const attackMargin = split.attackScore - opponentBaseline.defence;
+  const attackChemistry = split.attackSynergies.reduce((sum, syn) => sum + syn.bonus, 0)
+    + split.crossSynergies.reduce((sum, syn) => sum + syn.attackBonus, 0);
+  const defenceChemistry = split.defenceSynergies.reduce((sum, syn) => sum + syn.bonus, 0)
+    + split.crossSynergies.reduce((sum, syn) => sum + syn.defenceBonus, 0);
+  const openingDraw = matchState.currentIncrement === 0 && matchState.scores.length === 0;
 
   // Sort attackers by power desc to determine which are diminished
   const sortedAttackerIds = useMemo(() => {
@@ -70,17 +74,10 @@ export default function DeployPhase({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      {/* Synergy preview — compact */}
-      <SynergyPreview
-        attackSynergies={split.attackSynergies}
-        defenceSynergies={split.defenceSynergies}
-        crossSynergies={split.crossSynergies}
-      />
-
       {/* Round target preview */}
       <div
         style={{
-          padding: '4px 10px 6px',
+          padding: '8px 10px 6px',
           flexShrink: 0,
         }}
       >
@@ -95,12 +92,13 @@ export default function DeployPhase({
             style={{
               padding: '10px 12px',
               borderRadius: 10,
-              background: 'rgba(96,165,250,0.12)',
+              background: 'linear-gradient(180deg, rgba(96,165,250,0.18), rgba(15,23,42,0.35))',
               border: '1px solid rgba(96,165,250,0.28)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
             }}
           >
             <div style={{ fontSize: 9, color: '#93c5fd', fontWeight: 700, letterSpacing: 0.6 }}>
-              DEFENCE CHECK
+              DEFENCE POWER
             </div>
             <div
               style={{
@@ -121,11 +119,14 @@ export default function DeployPhase({
                 {split.defenceScore}
               </span>
               <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-                beat {opponentBaseline.attack}
+                target {opponentBaseline.attack}
               </span>
             </div>
             <div style={{ marginTop: 4, fontSize: 10, color: defenceMargin >= 0 ? '#86efac' : '#fca5a5' }}>
-              {defenceMargin >= 0 ? `+${defenceMargin} above expected press` : `${defenceMargin} below expected press`}
+              {defenceMargin >= 0 ? `+${defenceMargin} over their pressure` : `${defenceMargin} under their pressure`}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 9, color: 'var(--cream-soft, #d9d0b8)' }}>
+              Chemistry {defenceChemistry > 0 ? `+${defenceChemistry}` : 'quiet'}
             </div>
           </div>
 
@@ -133,12 +134,13 @@ export default function DeployPhase({
             style={{
               padding: '10px 12px',
               borderRadius: 10,
-              background: 'rgba(251,191,36,0.12)',
+              background: 'linear-gradient(180deg, rgba(251,191,36,0.18), rgba(69,26,3,0.32))',
               border: '1px solid rgba(251,191,36,0.28)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
             }}
           >
             <div style={{ fontSize: 9, color: '#fcd34d', fontWeight: 700, letterSpacing: 0.6 }}>
-              ATTACK CHECK
+              ATTACK POWER
             </div>
             <div
               style={{
@@ -159,11 +161,14 @@ export default function DeployPhase({
                 {split.attackScore}
               </span>
               <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-                beat {opponentBaseline.defence}
+                target {opponentBaseline.defence}
               </span>
             </div>
             <div style={{ marginTop: 4, fontSize: 10, color: attackMargin >= 0 ? '#86efac' : '#fca5a5' }}>
-              {attackMargin >= 0 ? `+${attackMargin} above expected block` : `${attackMargin} below expected block`}
+              {attackMargin >= 0 ? `+${attackMargin} over their block` : `${attackMargin} under their block`}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 9, color: 'var(--cream-soft, #d9d0b8)' }}>
+              Chemistry {attackChemistry > 0 ? `+${attackChemistry}` : 'quiet'}
             </div>
           </div>
         </div>
@@ -184,12 +189,12 @@ export default function DeployPhase({
             gap: 2,
             padding: '8px 10px',
             borderRadius: 8,
-            background: 'rgba(0,0,0,0.18)',
-            border: '1px solid rgba(245,158,11,0.12)',
+            background: 'linear-gradient(135deg, rgba(0,0,0,0.2), rgba(232,98,26,0.08))',
+            border: '1px solid rgba(245,158,11,0.14)',
           }}
         >
           <div style={{ fontSize: 10, color: 'var(--cream, #f5f0e8)', fontWeight: 700 }}>
-            {opponentBuild.name} | {opponentBuild.style}
+            Matchup | {opponentBuild.name} | {opponentBuild.style}
           </div>
           <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', lineHeight: 1.35 }}>
             Target their {opponentBuild.weakness} weakness. Watch {opponentBuild.starPlayer.name} for {opponentBuild.starAbility.toLowerCase()}.
@@ -210,31 +215,26 @@ export default function DeployPhase({
 
         {availableTactics.length > 0 && (
           <div style={{ display: 'grid', gap: 4 }}>
-            <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', textAlign: 'center' }}>
-              Match Plan
+            <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', textAlign: 'center', letterSpacing: 0.6 }}>
+              PLAYBOOK
             </div>
-            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '2px 0 4px' }}>
               {availableTactics.map((tactic) => {
                 const active = tacticSlots.slots.some((slot) => slot?.id === tactic.id);
                 return (
-                  <button
+                  <div
                     key={tactic.id}
-                    onClick={() => onToggleTactic(tactic.id)}
                     style={{
-                      minWidth: 120,
-                      padding: '7px 8px',
-                      textAlign: 'left',
-                      borderRadius: 8,
-                      border: `1px solid ${active ? 'rgba(245,158,11,0.45)' : 'rgba(138,117,96,0.22)'}`,
-                      background: active ? 'rgba(245,158,11,0.15)' : 'rgba(0,0,0,0.12)',
-                      color: active ? 'var(--cream, #f5f0e8)' : 'var(--dust, #8a7560)',
-                      cursor: 'pointer',
                       flexShrink: 0,
                     }}
                   >
-                    <div style={{ fontSize: 10, fontWeight: 700 }}>{tactic.name}</div>
-                    <div style={{ fontSize: 9, lineHeight: 1.25, marginTop: 2 }}>{tactic.effect}</div>
-                  </button>
+                    <TacticCardComp
+                      tactic={tactic}
+                      compact
+                      deployed={active}
+                      onClick={() => onToggleTactic(tactic.id)}
+                    />
+                  </div>
                 );
               })}
             </div>
@@ -242,26 +242,30 @@ export default function DeployPhase({
         )}
       </div>
 
-      {/* Attack hand */}
-      <CardHand
-        cardCount={attackers.length}
-        cardWidth={108}
-        maxSpreadDeg={attackers.length > 5 ? 20 : 14}
-        label="Attack"
-        labelColor="#fbbf24"
-      >
-        {attackers.map((card) => (
-          <PlayerCard
-            key={card.id}
-            card={card}
-            size="hand"
-            assignment="attacking"
-            showHandDetails
-            diminished={sortedAttackerIds.has(card.id)}
-            onClick={() => onToggleAttacker(card.id)}
-          />
-        ))}
-      </CardHand>
+      {/* Attack lane */}
+      <div style={{ flexShrink: 0 }}>
+        <div style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#fbbf24', letterSpacing: 1, padding: '2px 0 6px' }}>
+          ATTACK LINE
+        </div>
+        <div className="match-card-rail">
+          {attackers.map((card, index) => (
+            <div
+              key={card.id}
+              className={`match-card-rail-card${openingDraw ? ' match-card-deal' : ''}`}
+              style={openingDraw ? { animationDelay: `${index * 70}ms` } : undefined}
+            >
+              <PlayerCard
+                card={card}
+                size="hand"
+                assignment="attacking"
+                showHandDetails
+                diminished={sortedAttackerIds.has(card.id)}
+                onClick={() => onToggleAttacker(card.id)}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Pitch line */}
       <div
@@ -273,26 +277,60 @@ export default function DeployPhase({
         }}
       />
 
-      {/* Defence hand */}
-      <CardHand
-        cardCount={defenders.length}
-        cardWidth={108}
-        maxSpreadDeg={defenders.length > 5 ? 20 : 14}
-        label="Defend"
-        labelColor="#60a5fa"
-      >
-        {defenders.map((card) => (
-          <PlayerCard
-            key={card.id}
-            card={card}
-            size="hand"
-            assignment="defending"
-            showHandDetails
-            onClick={card.injured ? undefined : () => onToggleAttacker(card.id)}
-            dimmed={!!card.injured}
-          />
-        ))}
-      </CardHand>
+      {/* Defence lane */}
+      <div style={{ flexShrink: 0 }}>
+        <div style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#60a5fa', letterSpacing: 1, padding: '4px 0 6px' }}>
+          DEFENCE LINE
+        </div>
+        <div className="match-card-rail">
+          {defenders.map((card, index) => (
+            <div
+              key={card.id}
+              className={`match-card-rail-card${openingDraw ? ' match-card-deal' : ''}`}
+              style={openingDraw ? { animationDelay: `${(attackers.length + index) * 70}ms` } : undefined}
+            >
+              <PlayerCard
+                card={card}
+                size="hand"
+                assignment="defending"
+                showHandDetails
+                onClick={card.injured ? undefined : () => onToggleAttacker(card.id)}
+                dimmed={!!card.injured}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Bench preview */}
+      <div style={{ padding: '2px 10px 0', display: 'grid', gap: 6, flexShrink: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--cream, #f5f0e8)', letterSpacing: 0.6 }}>
+            BENCH
+          </span>
+          <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
+            {matchState.subsRemaining} subs | {matchState.discardsRemaining} redraws
+          </span>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            overflowX: 'auto',
+            paddingBottom: 4,
+          }}
+        >
+          {matchState.bench.map((card, index) => (
+            <div
+              key={card.id}
+              className={openingDraw ? 'match-card-deal' : undefined}
+              style={openingDraw ? { animationDelay: `${(attackers.length + defenders.length + index) * 70}ms` } : undefined}
+            >
+              <PlayerCard card={card} size="pill" dimmed={!!card.injured} />
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Kick Off button — pinned at bottom */}
       <div

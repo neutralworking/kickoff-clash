@@ -35,44 +35,58 @@ export default function BetweenPhase({
   const [selectedBenchId, setSelectedBenchId] = useState<number | null>(null);
   const [selectedXiId, setSelectedXiId] = useState<number | null>(null);
   const [markedForDiscard, setMarkedForDiscard] = useState<Set<number>>(new Set());
+  const [benchMode, setBenchMode] = useState<'sub' | 'discard'>('sub');
 
   const handleBenchTap = useCallback(
     (cardId: number) => {
+      if (benchMode === 'discard') {
+        setSelectedBenchId(null);
+        setSelectedXiId(null);
+        setMarkedForDiscard((prev) => {
+          const next = new Set(prev);
+          if (next.has(cardId)) {
+            next.delete(cardId);
+          } else {
+            next.add(cardId);
+          }
+          return next;
+        });
+        return;
+      }
+
       // If an XI card is selected, make a sub
       if (selectedXiId !== null) {
         onSub(selectedXiId, cardId);
         setSelectedXiId(null);
         setSelectedBenchId(null);
+        setMarkedForDiscard(new Set());
         return;
       }
 
-      // Toggle discard mark
-      setMarkedForDiscard((prev) => {
-        const next = new Set(prev);
-        if (next.has(cardId)) {
-          next.delete(cardId);
-        } else {
-          next.add(cardId);
-        }
-        return next;
-      });
-      setSelectedBenchId(cardId);
+      setMarkedForDiscard(new Set());
+      setSelectedBenchId((prev) => (prev === cardId ? null : cardId));
     },
-    [selectedXiId, onSub],
+    [benchMode, selectedXiId, onSub],
   );
 
   const handleXiTap = useCallback(
     (cardId: number) => {
+      if (benchMode === 'discard') {
+        setSelectedXiId(null);
+        return;
+      }
+
       // If a bench card is selected, make a sub
       if (selectedBenchId !== null) {
         onSub(cardId, selectedBenchId);
         setSelectedBenchId(null);
         setSelectedXiId(null);
+        setMarkedForDiscard(new Set());
         return;
       }
       setSelectedXiId(selectedXiId === cardId ? null : cardId);
     },
-    [selectedBenchId, selectedXiId, onSub],
+    [benchMode, selectedBenchId, selectedXiId, onSub],
   );
 
   const handleConfirmDiscard = useCallback(() => {
@@ -107,12 +121,51 @@ export default function BetweenPhase({
         <div style={{ fontSize: 11, color: 'var(--dust, #8a7560)', marginTop: 2 }}>
           Subs: {matchState.subsRemaining} | Discards: {matchState.discardsRemaining} | Deck: {matchState.remainingDeck.length}
         </div>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 8 }}>
+          <button
+            onClick={() => {
+              setBenchMode('sub');
+              setMarkedForDiscard(new Set());
+            }}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 999,
+              border: benchMode === 'sub' ? '1px solid rgba(232,98,26,0.55)' : '1px solid rgba(154,139,115,0.25)',
+              background: benchMode === 'sub' ? 'rgba(232,98,26,0.18)' : 'rgba(0,0,0,0.16)',
+              color: benchMode === 'sub' ? 'var(--cream, #f5f0e8)' : 'var(--dust, #8a7560)',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Sub Mode
+          </button>
+          <button
+            onClick={() => {
+              setBenchMode('discard');
+              setSelectedBenchId(null);
+              setSelectedXiId(null);
+            }}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 999,
+              border: benchMode === 'discard' ? '1px solid rgba(239,68,68,0.55)' : '1px solid rgba(154,139,115,0.25)',
+              background: benchMode === 'discard' ? 'rgba(239,68,68,0.16)' : 'rgba(0,0,0,0.16)',
+              color: benchMode === 'discard' ? '#fecaca' : 'var(--dust, #8a7560)',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Redraw Mode
+          </button>
+        </div>
       </div>
 
       {/* XI cards — hand fan */}
       <div>
         <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', marginBottom: 2, textAlign: 'center' }}>
-          XI — tap to select for sub
+          XI — {benchMode === 'sub' ? 'tap to choose who comes off' : 'view only while marking redraws'}
         </div>
         <CardHand
           cardCount={matchState.xi.length}
@@ -136,7 +189,7 @@ export default function BetweenPhase({
       {/* Bench */}
       <div>
         <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', marginBottom: 2, textAlign: 'center' }}>
-          Bench — tap to sub or mark for discard
+          Bench — {benchMode === 'sub' ? 'tap to bring on a substitute' : 'tap cards to throw back and redraw'}
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', padding: '0 8px' }}>
           {matchState.bench.map((card) => (

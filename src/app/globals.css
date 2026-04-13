@@ -201,8 +201,9 @@ body {
   justify-content: center;
   align-items: flex-end;
   perspective: 800px;
-  padding: 6px 12px 4px;
+  padding: 8px 20px 8px;
   min-height: 120px;
+  overflow: visible;
 }
 
 .card-hand-slot {
@@ -231,5 +232,39 @@ body {
 @media (min-width: 768px) {
   .card-hand {
     min-height: 140px;
+  }
+}
+
+.match-card-rail {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 4px 14px 12px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.match-card-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.match-card-rail-card {
+  flex: 0 0 auto;
+  scroll-snap-align: center;
+}
+
+.match-card-deal {
+  opacity: 0;
+  animation: dealIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes dealIn {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
