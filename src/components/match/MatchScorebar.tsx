@@ -8,9 +8,6 @@ interface MatchScorebarProps {
   round: number;
   seasonPoints: number;
   boardTargetPoints: number;
-  opponentStyle: string;
-  opponentWeakness: string;
-  starPlayer: string;
   subPhase: string;
 }
 
@@ -22,9 +19,6 @@ export default function MatchScorebar({
   round,
   seasonPoints,
   boardTargetPoints,
-  opponentStyle,
-  opponentWeakness,
-  starPlayer,
   subPhase,
 }: MatchScorebarProps) {
   return (
@@ -89,17 +83,6 @@ export default function MatchScorebar({
         </span>
         <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
           Points {seasonPoints}/{boardTargetPoints}
-        </span>
-      </div>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-          Style: {opponentStyle}
-        </span>
-        <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-          Weakness: {opponentWeakness}
-        </span>
-        <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-          Star: {starPlayer}
         </span>
       </div>
     </div>

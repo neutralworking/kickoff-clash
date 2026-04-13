@@ -289,9 +289,6 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
         round={runState.round}
         seasonPoints={runState.seasonPoints}
         boardTargetPoints={runState.boardTargetPoints}
-        opponentStyle={opponentBuild.style}
-        opponentWeakness={opponentBuild.weakness}
-        starPlayer={opponentBuild.starPlayer.name}
         subPhase={subPhase}
       />
 

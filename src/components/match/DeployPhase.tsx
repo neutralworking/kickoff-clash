@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import type { MatchV5State, AttackDefenceSplit } from '../../lib/match-v5';
-import { evaluateSplit } from '../../lib/match-v5';
+import { evaluateSplit, getOpponentBaselines } from '../../lib/match-v5';
 import type { Formation } from '../../lib/formations';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard, TacticSlots } from '../../lib/tactics';
@@ -44,6 +44,17 @@ export default function DeployPhase({
   const maxAtk = formation.maxAttackers;
   const atkCount = attackerIds.size;
   const overCap = atkCount > maxAtk;
+  const opponentBaseline = useMemo(
+    () => getOpponentBaselines(
+      matchState.opponentRound,
+      matchState.opponentStyle,
+      matchState.currentIncrement,
+      matchState,
+    ),
+    [matchState],
+  );
+  const defenceMargin = split.defenceScore - opponentBaseline.attack;
+  const attackMargin = split.attackScore - opponentBaseline.defence;
 
   // Sort attackers by power desc to determine which are diminished
   const sortedAttackerIds = useMemo(() => {
@@ -66,53 +77,95 @@ export default function DeployPhase({
         crossSynergies={split.crossSynergies}
       />
 
-      {/* Score preview — compact row */}
+      {/* Round target preview */}
       <div
         style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          gap: 16,
-          padding: '2px 10px',
+          padding: '4px 10px 6px',
           flexShrink: 0,
         }}
       >
-        <div style={{ textAlign: 'center' }}>
-          <span style={{ fontSize: 10, color: '#fbbf24', fontWeight: 700 }}>ATK </span>
-          <span
-            style={{
-              fontFamily: 'var(--font-display, sans-serif)',
-              fontSize: 18,
-              color: '#fbbf24',
-            }}
-          >
-            {split.attackScore}
-          </span>
-        </div>
-
         <div
           style={{
-            fontSize: 10,
-            color: overCap ? '#ef4444' : 'var(--dust, #8a7560)',
-            fontWeight: overCap ? 700 : 400,
-            textAlign: 'center',
+            display: 'grid',
+            gap: 6,
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
           }}
         >
-          {atkCount}/{maxAtk} atk
-          {overCap && <span style={{ fontSize: 9, color: '#ef4444' }}> dim!</span>}
-        </div>
-
-        <div style={{ textAlign: 'center' }}>
-          <span style={{ fontSize: 10, color: '#60a5fa', fontWeight: 700 }}>DEF </span>
-          <span
+          <div
             style={{
-              fontFamily: 'var(--font-display, sans-serif)',
-              fontSize: 18,
-              color: '#60a5fa',
+              padding: '10px 12px',
+              borderRadius: 10,
+              background: 'rgba(96,165,250,0.12)',
+              border: '1px solid rgba(96,165,250,0.28)',
             }}
           >
-            {split.defenceScore}
-          </span>
+            <div style={{ fontSize: 9, color: '#93c5fd', fontWeight: 700, letterSpacing: 0.6 }}>
+              DEFENCE CHECK
+            </div>
+            <div
+              style={{
+                marginTop: 3,
+                display: 'flex',
+                alignItems: 'baseline',
+                justifyContent: 'space-between',
+                gap: 10,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: 'var(--font-display, sans-serif)',
+                  fontSize: 20,
+                  color: '#dbeafe',
+                }}
+              >
+                {split.defenceScore}
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
+                beat {opponentBaseline.attack}
+              </span>
+            </div>
+            <div style={{ marginTop: 4, fontSize: 10, color: defenceMargin >= 0 ? '#86efac' : '#fca5a5' }}>
+              {defenceMargin >= 0 ? `+${defenceMargin} above expected press` : `${defenceMargin} below expected press`}
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: 10,
+              background: 'rgba(251,191,36,0.12)',
+              border: '1px solid rgba(251,191,36,0.28)',
+            }}
+          >
+            <div style={{ fontSize: 9, color: '#fcd34d', fontWeight: 700, letterSpacing: 0.6 }}>
+              ATTACK CHECK
+            </div>
+            <div
+              style={{
+                marginTop: 3,
+                display: 'flex',
+                alignItems: 'baseline',
+                justifyContent: 'space-between',
+                gap: 10,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: 'var(--font-display, sans-serif)',
+                  fontSize: 20,
+                  color: '#fde68a',
+                }}
+              >
+                {split.attackScore}
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
+                beat {opponentBaseline.defence}
+              </span>
+            </div>
+            <div style={{ marginTop: 4, fontSize: 10, color: attackMargin >= 0 ? '#86efac' : '#fca5a5' }}>
+              {attackMargin >= 0 ? `+${attackMargin} above expected block` : `${attackMargin} below expected block`}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -138,12 +191,21 @@ export default function DeployPhase({
           <div style={{ fontSize: 10, color: 'var(--cream, #f5f0e8)', fontWeight: 700 }}>
             {opponentBuild.name} | {opponentBuild.style}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-            Weakness: {opponentBuild.weakness}
+          <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', lineHeight: 1.35 }}>
+            Target their {opponentBuild.weakness} weakness. Watch {opponentBuild.starPlayer.name} for {opponentBuild.starAbility.toLowerCase()}.
           </div>
-          <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-            Star: {opponentBuild.starPlayer.name} | {opponentBuild.starAbility}
-          </div>
+        </div>
+
+        <div
+          style={{
+            fontSize: 10,
+            color: overCap ? '#ef4444' : 'var(--dust, #8a7560)',
+            fontWeight: overCap ? 700 : 500,
+            textAlign: 'center',
+          }}
+        >
+          {atkCount}/{maxAtk} committed forward
+          {overCap && ' | extra attackers are halved'}
         </div>
 
         {availableTactics.length > 0 && (
@@ -183,8 +245,8 @@ export default function DeployPhase({
       {/* Attack hand */}
       <CardHand
         cardCount={attackers.length}
-        cardWidth={82}
-        maxSpreadDeg={attackers.length > 5 ? 22 : 16}
+        cardWidth={108}
+        maxSpreadDeg={attackers.length > 5 ? 20 : 14}
         label="Attack"
         labelColor="#fbbf24"
       >
@@ -194,6 +256,7 @@ export default function DeployPhase({
             card={card}
             size="hand"
             assignment="attacking"
+            showHandDetails
             diminished={sortedAttackerIds.has(card.id)}
             onClick={() => onToggleAttacker(card.id)}
           />
@@ -213,8 +276,8 @@ export default function DeployPhase({
       {/* Defence hand */}
       <CardHand
         cardCount={defenders.length}
-        cardWidth={82}
-        maxSpreadDeg={defenders.length > 5 ? 22 : 16}
+        cardWidth={108}
+        maxSpreadDeg={defenders.length > 5 ? 20 : 14}
         label="Defend"
         labelColor="#60a5fa"
       >
@@ -224,6 +287,7 @@ export default function DeployPhase({
             card={card}
             size="hand"
             assignment="defending"
+            showHandDetails
             onClick={card.injured ? undefined : () => onToggleAttacker(card.id)}
             dimmed={!!card.injured}
           />

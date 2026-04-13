@@ -29,10 +29,10 @@ export default function ResolvingPhase({ result, onComplete }: ResolvingPhasePro
   const [showEvent, setShowEvent] = useState(false);
 
   const allLines = [
-    ...result.split.attackBreakdown.map((l) => ({ ...l, side: 'attack' as const })),
-    { label: `Attack Total: ${result.split.attackScore}`, value: result.split.attackScore, type: 'base' as const, side: 'attack' as const },
     ...result.split.defenceBreakdown.map((l) => ({ ...l, side: 'defence' as const })),
     { label: `Defence Total: ${result.split.defenceScore}`, value: result.split.defenceScore, type: 'base' as const, side: 'defence' as const },
+    ...result.split.attackBreakdown.map((l) => ({ ...l, side: 'attack' as const })),
+    { label: `Attack Total: ${result.split.attackScore}`, value: result.split.attackScore, type: 'base' as const, side: 'attack' as const },
   ];
 
   useEffect(() => {
@@ -107,9 +107,9 @@ export default function ResolvingPhase({ result, onComplete }: ResolvingPhasePro
         {/* Goal chances */}
         {visibleLines >= allLines.length && (
           <div style={{ marginTop: 8, fontSize: 11, color: 'var(--dust, #8a7560)' }}>
-            <span>Goal chance: {Math.round(result.yourGoalChance * 100)}%</span>
-            <span style={{ margin: '0 8px' }}>|</span>
             <span>Concede chance: {Math.round(result.opponentGoalChance * 100)}%</span>
+            <span style={{ margin: '0 8px' }}>|</span>
+            <span>Goal chance: {Math.round(result.yourGoalChance * 100)}%</span>
           </div>
         )}
 

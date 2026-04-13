@@ -46,6 +46,7 @@ interface PlayerCardProps {
   showSellPrice?: boolean;
   assignment?: 'attacking' | 'defending' | null; // v5 attack/defend state
   diminished?: boolean; // beyond soft cap (50% power)
+  showHandDetails?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,7 @@ export default function PlayerCard({
   showSellPrice = false,
   assignment = null,
   diminished = false,
+  showHandDetails = false,
 }: PlayerCardProps) {
   const rarityColor = RARITY_COLORS[card.rarity] ?? RARITY_COLORS.Common;
   const rarityGlow = RARITY_GLOW[card.rarity] ?? RARITY_GLOW.Common;
@@ -121,8 +123,9 @@ export default function PlayerCard({
   // ---- Shared card dimensions ----
   const isHand = size === 'hand';
   const isMini = size === 'mini' || isHand;
-  const w = isHand ? 82 : size === 'mini' ? 72 : 130;
-  const h = isHand ? 112 : size === 'mini' ? 98 : 170;
+  const isDetailedHand = isHand && showHandDetails;
+  const w = isDetailedHand ? 108 : isHand ? 82 : size === 'mini' ? 72 : 130;
+  const h = isDetailedHand ? 154 : isHand ? 112 : size === 'mini' ? 98 : 170;
 
   // v5 assignment styling
   const isAttacking = assignment === 'attacking';
@@ -216,6 +219,38 @@ export default function PlayerCard({
           {card.name}
         </span>
 
+        {isDetailedHand && (
+          <span
+            className="mt-1 rounded-full px-2 py-0.5 font-bold uppercase"
+            style={{
+              background: 'rgba(245,240,224,0.1)',
+              color: '#d8c6ac',
+              fontSize: 8,
+              letterSpacing: 0.4,
+              maxWidth: '100%',
+            }}
+          >
+            {card.tacticalRole ?? card.archetype}
+          </span>
+        )}
+
+        {isDetailedHand && (
+          <span
+            className="mt-1 w-full px-1 leading-tight"
+            style={{
+              color: '#f5f0e0',
+              fontSize: 8.5,
+              minHeight: 20,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}
+          >
+            {card.abilityName ?? card.abilityText ?? 'No signature skill'}
+          </span>
+        )}
+
         {!isMini && card.abilityName && (
           <span
             className="mt-0.5 w-full truncate leading-tight"
@@ -237,6 +272,21 @@ export default function PlayerCard({
         <span style={{ fontSize: isMini ? 10 : 14, lineHeight: 1 }}>
           {durabilityBadge}
         </span>
+
+        {isDetailedHand && (
+          <span
+            className="rounded-full px-1.5 py-0.5 font-bold"
+            style={{
+              fontSize: 8,
+              lineHeight: 1,
+              color: '#f5f0e0',
+              background: assignment === 'defending' ? 'rgba(96,165,250,0.2)' : 'rgba(251,191,36,0.2)',
+              border: `1px solid ${assignment === 'defending' ? 'rgba(96,165,250,0.45)' : 'rgba(251,191,36,0.45)'}`,
+            }}
+          >
+            {assignment === 'defending' ? 'DEF' : 'ATK'}
+          </span>
+        )}
 
         {(isHand || !isMini) && (
           <span style={{ fontSize: isHand ? 12 : 14, lineHeight: 1, opacity: 0.7 }}>
