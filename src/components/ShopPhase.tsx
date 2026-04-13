@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Card } from '../lib/scoring';
 import { seededRandom } from '../lib/scoring';
 import type { RunState } from '../lib/run';
@@ -12,6 +12,7 @@ import {
 import type { JokerCard as JokerCardType } from '../lib/jokers';
 import { getShopJokers } from '../lib/jokers';
 import { ALL_FORMATIONS } from '../lib/formations';
+import type { OpponentBuild } from '../lib/run';
 import PlayerCard from './PlayerCard';
 import JokerCard from './JokerCard';
 
@@ -25,6 +26,10 @@ interface ShopPhaseProps {
   onBuyTacticPack: () => void;
   onBuyFormation: (formationId: string) => void;
   onTrainPlayer: (cardId: number) => void;
+  onRerollShop: () => boolean;
+  onHealPlayer: (cardId: number) => boolean;
+  onScoutOpponent: () => boolean;
+  scoutedOpponent: OpponentBuild | null;
   onNext: () => void;
   shopSeed: number;
 }
@@ -48,12 +53,26 @@ export default function ShopPhase({
   onBuyTacticPack,
   onBuyFormation,
   onTrainPlayer,
+  onRerollShop,
+  onHealPlayer,
+  onScoutOpponent,
+  scoutedOpponent,
   onNext,
   shopSeed,
 }: ShopPhaseProps) {
-  const [shopCards] = useState(() => getShopCards(shopSeed, false));
-  const [rareCards] = useState(() => getShopCards(shopSeed + 1, true));
-  const [shopJokers] = useState(() => getShopJokers(shopSeed + 2, 3));
+  const [rerollCount, setRerollCount] = useState(0);
+  const shopCards = useMemo(
+    () => getShopCards(shopSeed + rerollCount * 17, false),
+    [shopSeed, rerollCount],
+  );
+  const rareCards = useMemo(
+    () => getShopCards(shopSeed + 1 + rerollCount * 17, true),
+    [shopSeed, rerollCount],
+  );
+  const shopJokers = useMemo(
+    () => getShopJokers(shopSeed + 2 + rerollCount * 17, 3),
+    [shopSeed, rerollCount],
+  );
   const [showCardPick, setShowCardPick] = useState<'normal' | 'rare' | null>(null);
   const [sellMode, setSellMode] = useState(false);
   const [trainMode, setTrainMode] = useState(false);
@@ -94,6 +113,7 @@ export default function ShopPhase({
       if (aMax !== bMax) return aMax - bMax;
       return b.card.power - a.card.power;
     });
+  const injuredCards = state.deck.filter((card) => card.injured);
 
   return (
     <div className="phase-shop max-w-2xl mx-auto p-4 space-y-5 overflow-y-auto max-h-screen">
@@ -228,6 +248,100 @@ export default function ShopPhase({
           </div>
         </Section>
       )}
+
+      <Section title="Utility Room">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <FeatureCard
+            title="Reroll Market"
+            subtitle="Refresh transfer and joker offers"
+            accent="var(--gold)"
+            active={state.cash >= 8000}
+          >
+            <div className="text-[11px]" style={{ color: 'var(--cream-soft)' }}>
+              Burn cash to hunt for a better tactical fit.
+            </div>
+            <button
+              onClick={() => {
+                if (onRerollShop()) {
+                  setRerollCount((prev) => prev + 1);
+                  setShowCardPick(null);
+                }
+              }}
+              disabled={state.cash < 8000}
+              className="mt-2 px-3 py-2 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase"
+              style={{
+                background: state.cash >= 8000 ? 'rgba(212,160,53,0.16)' : 'rgba(0,0,0,0.16)',
+                color: state.cash >= 8000 ? 'var(--cream)' : 'var(--ink)',
+                border: `1px solid ${state.cash >= 8000 ? 'rgba(212,160,53,0.35)' : 'rgba(154,139,115,0.12)'}`,
+                cursor: state.cash >= 8000 ? 'pointer' : 'not-allowed',
+              }}
+            >
+              Reroll
+              <div style={{ fontSize: 9, marginTop: 2 }}>£8,000</div>
+            </button>
+          </FeatureCard>
+
+          <FeatureCard
+            title="Medical Room"
+            subtitle={injuredCards.length > 0 ? `${injuredCards.length} injured player${injuredCards.length > 1 ? 's' : ''}` : 'Squad fully fit'}
+            accent="var(--danger)"
+            active={injuredCards.length > 0 && state.cash >= 12000}
+          >
+            <div className="text-[11px]" style={{ color: 'var(--cream-soft)' }}>
+              Restore one injured player before the next fixture.
+            </div>
+            {injuredCards.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {injuredCards.slice(0, 3).map((card) => (
+                  <button
+                    key={card.id}
+                    onClick={() => onHealPlayer(card.id)}
+                    className="px-2 py-1 rounded-[var(--radius-sm)] text-[10px] font-bold"
+                    style={{
+                      background: state.cash >= 12000 ? 'rgba(192,57,43,0.16)' : 'rgba(0,0,0,0.16)',
+                      color: state.cash >= 12000 ? 'var(--cream)' : 'var(--ink)',
+                      border: `1px solid ${state.cash >= 12000 ? 'rgba(192,57,43,0.35)' : 'rgba(154,139,115,0.12)'}`,
+                    }}
+                  >
+                    Heal {card.name}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </FeatureCard>
+
+          <FeatureCard
+            title="Scout Report"
+            subtitle={scoutedOpponent ? `Report ready on ${scoutedOpponent.name}` : 'Reveal next opponent plan'}
+            accent="var(--pitch-light)"
+            active={!scoutedOpponent && state.cash >= 10000}
+          >
+            <div className="text-[11px]" style={{ color: 'var(--cream-soft)' }}>
+              Buy intel before you shape the squad.
+            </div>
+            {!scoutedOpponent ? (
+              <button
+                onClick={onScoutOpponent}
+                disabled={state.cash < 10000}
+                className="mt-2 px-3 py-2 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase"
+                style={{
+                  background: state.cash >= 10000 ? 'rgba(59,165,93,0.16)' : 'rgba(0,0,0,0.16)',
+                  color: state.cash >= 10000 ? 'var(--cream)' : 'var(--ink)',
+                  border: `1px solid ${state.cash >= 10000 ? 'rgba(59,165,93,0.35)' : 'rgba(154,139,115,0.12)'}`,
+                  cursor: state.cash >= 10000 ? 'pointer' : 'not-allowed',
+                }}
+              >
+                Scout
+                <div style={{ fontSize: 9, marginTop: 2 }}>£10,000</div>
+              </button>
+            ) : (
+              <div className="mt-2 text-[10px] leading-snug" style={{ color: 'var(--dust)' }}>
+                {scoutedOpponent.style}. Weakness: {scoutedOpponent.weakness}. Star: {scoutedOpponent.starPlayer.name}.
+              </div>
+            )}
+          </FeatureCard>
+        </div>
+      </Section>
 
       {/* Card Pick Modal */}
       {showCardPick && (

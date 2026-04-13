@@ -45,6 +45,7 @@ export interface RunState {
   stadiumTier: number;
   ticketPriceBonus: number;
   academyTier: number;
+  scoutedOpponentRound: number | null;
   round: number;       // match number (1-5)
   seasonPoints: number;
   boardTargetPoints: number;
@@ -735,6 +736,7 @@ export function createRun(packContents: PackContents, style: string, seed?: numb
     stadiumTier: 1,
     ticketPriceBonus: 0,
     academyTier: 1,
+    scoutedOpponentRound: null,
     round: 1,
     seasonPoints: 0,
     boardTargetPoints: 10,
@@ -825,9 +827,25 @@ export function buyShopItem(state: RunState, item: ShopItem): RunState | null {
 
   if (item.id === 'food_upgrade') {
     newState.ticketPriceBonus += 5;
+  } else if (item.id === 'scout_report') {
+    newState.scoutedOpponentRound = Math.min(state.round + 1, OPPONENTS.length);
   }
 
   return newState;
+}
+
+export function healInjuredCard(state: RunState, cardId: number): RunState | null {
+  const HEAL_COST = 12000;
+  if (state.cash < HEAL_COST) return null;
+
+  const card = state.deck.find((c) => c.id === cardId);
+  if (!card?.injured) return null;
+
+  return {
+    ...state,
+    cash: state.cash - HEAL_COST,
+    deck: state.deck.map((c) => (c.id === cardId ? { ...c, injured: false } : c)),
+  };
 }
 
 /**

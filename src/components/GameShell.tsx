@@ -6,6 +6,7 @@ import type { RunState, MatchResult, DurabilityResult } from '../lib/run';
 import {
   createRun,
   getOpponent,
+  getOpponentBuild,
   postMatchDurabilityCheck,
   applyDurabilityResults,
   addCardToDeck,
@@ -15,7 +16,10 @@ import {
   applyTraining,
   buyFormation,
   buyTacticPack,
+  buyShopItem,
+  healInjuredCard,
 } from '../lib/run';
+import { getShopItem } from '../lib/economy';
 import type { HandState } from '../lib/hand';
 import type { JokerCard } from '../lib/jokers';
 import { rehydrateJokers } from '../lib/jokers';
@@ -374,6 +378,37 @@ export default function GameShell() {
     if (result) { setRunState(result); saveRun(result); }
   }, [runState]);
 
+  const handleRerollShop = useCallback(() => {
+    if (!runState) return false;
+    const item = getShopItem('reroll');
+    if (!item) return false;
+    const result = buyShopItem(runState, item);
+    if (!result) return false;
+    setRunState(result);
+    saveRun(result);
+    return true;
+  }, [runState]);
+
+  const handleHealPlayer = useCallback((cardId: number) => {
+    if (!runState) return false;
+    const result = healInjuredCard(runState, cardId);
+    if (!result) return false;
+    setRunState(result);
+    saveRun(result);
+    return true;
+  }, [runState]);
+
+  const handleScoutOpponent = useCallback(() => {
+    if (!runState) return false;
+    const item = getShopItem('scout_report');
+    if (!item) return false;
+    const result = buyShopItem(runState, item);
+    if (!result) return false;
+    setRunState(result);
+    saveRun(result);
+    return true;
+  }, [runState]);
+
   const handleShopNext = useCallback(() => {
     if (!runState) return;
     const newState = { ...runState, round: runState.round + 1 };
@@ -450,6 +485,14 @@ export default function GameShell() {
             onBuyTacticPack={handleBuyTacticPack}
             onBuyFormation={handleBuyFormation}
             onTrainPlayer={handleTrainPlayer}
+            onRerollShop={handleRerollShop}
+            onHealPlayer={handleHealPlayer}
+            onScoutOpponent={handleScoutOpponent}
+            scoutedOpponent={
+              runState.scoutedOpponentRound === runState.round + 1
+                ? getOpponentBuild(runState.round + 1)
+                : null
+            }
             onNext={handleShopNext}
             shopSeed={shopSeed}
           />
