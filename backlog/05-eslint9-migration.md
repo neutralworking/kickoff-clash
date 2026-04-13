@@ -24,11 +24,19 @@ The repo has `eslint-config-next` in devDeps but no flat config. This means:
 
 ## Acceptance criteria
 
-- [ ] `eslint.config.js` (or `.mjs`) exists at repo root.
-- [ ] Uses the official Next.js 16 ESLint 9 flat config pattern — follow the current Next.js docs, do not invent a custom config.
-- [ ] `npm run lint` exits cleanly (exit code 0 allowed to have warnings; exit code 1 only on errors).
-- [ ] Confirm lint is actually running by introducing a deliberate violation in a throwaway file (e.g. `const unused = 1;`), running `npm run lint`, seeing the warning, then deleting the throwaway. **Do not commit the violation.**
-- [ ] Any existing violations discovered are reported in the task close-out — **do NOT fix them** in this task. That's a separate cleanup.
+- [x] `eslint.config.js` (or `.mjs`) exists at repo root.
+- [x] Uses the official Next.js 16 ESLint 9 flat config pattern — follow the current Next.js docs, do not invent a custom config.
+- [x] `npm run lint` exits cleanly (exit code 0 allowed to have warnings; exit code 1 only on errors).
+- [x] Confirm lint is actually running by introducing a deliberate violation in a throwaway file (e.g. `const unused = 1;`), running `npm run lint`, seeing the warning, then deleting the throwaway. **Do not commit the violation.**
+- [x] Any existing violations discovered are reported in the task close-out — **do NOT fix them** in this task. That's a separate cleanup.
+
+## Close-out — existing violations (3 errors, NOT fixed)
+
+1. `src/components/GameShell.tsx:155` — `react-hooks/set-state-in-effect`: `setHasExistingRun()` called synchronously inside `useEffect` body.
+2. `src/components/MatchPhase.tsx:56-70` — `react-hooks/refs`: `seedRef.current` accessed inside `useState` initialiser (render phase).
+3. `src/components/PhaseTransition.tsx:15` — `react-hooks/set-state-in-effect`: `setVisible(false)` called synchronously inside `useEffect` body.
+
+These should be addressed in a dedicated cleanup task — do not bundle into unrelated tasks.
 
 ## Boundaries
 
