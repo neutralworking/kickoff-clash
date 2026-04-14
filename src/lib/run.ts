@@ -799,11 +799,15 @@ export function getShopCards(seed: number, rareOnly: boolean = false): Card[] {
  * Add a card to the deck
  */
 export function addCardToDeck(state: RunState, card: Card): RunState {
-  const newCard = { ...card, id: state.seed + state.deck.length * 100 + Date.now() % 10000 };
+  const newCard = { ...card, id: createOwnedCardId(state, card.id) };
   return {
     ...state,
     deck: [...state.deck, newCard],
   };
+}
+
+function createOwnedCardId(state: RunState, sourceId: number): number {
+  return state.seed + state.deck.length * 100 + sourceId + Date.now() % 100000;
 }
 
 /**
@@ -868,11 +872,12 @@ export function upgradeAcademy(state: RunState): RunState | null {
 export function buyAcademyPlayer(state: RunState, card: Card): RunState | null {
   const academy = getAcademyTier(state.academyTier);
   if (state.cash < academy.cost) return null;
+  const signedCard = { ...card, id: createOwnedCardId(state, card.id) };
 
   return {
     ...state,
     cash: state.cash - academy.cost,
-    deck: [...state.deck, card],
+    deck: [...state.deck, signedCard],
   };
 }
 

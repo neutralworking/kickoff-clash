@@ -97,6 +97,22 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     [],
   );
 
+  const handleReorderAttackers = useCallback((draggedId: number, targetId: number) => {
+    if (draggedId === targetId) return;
+
+    setMatchState((prev: MatchV5State) => {
+      const nextOrder = [...prev.attackerOrder];
+      const fromIndex = nextOrder.indexOf(draggedId);
+      const toIndex = nextOrder.indexOf(targetId);
+
+      if (fromIndex === -1 || toIndex === -1) return prev;
+
+      nextOrder.splice(fromIndex, 1);
+      nextOrder.splice(toIndex, 0, draggedId);
+      return commitAttackers(prev, nextOrder);
+    });
+  }, []);
+
   // ---- Kick Off: evaluate and resolve ----
   const handleKickOff = useCallback(() => {
     const split = evaluateSplit(matchState, runState.jokers, tacticSlots);
@@ -303,6 +319,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
           availableTactics={runState.tacticsDeck}
           opponentBuild={opponentBuild}
           onToggleAttacker={handleToggleAttacker}
+          onReorderAttackers={handleReorderAttackers}
           onToggleTactic={handleToggleTactic}
           onKickOff={handleKickOff}
         />

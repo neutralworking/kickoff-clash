@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { MatchV5State, AttackDefenceSplit } from '../../lib/match-v5';
 import { evaluateSplit, getOpponentBaselines } from '../../lib/match-v5';
 import type { Formation } from '../../lib/formations';
@@ -18,6 +18,7 @@ interface DeployPhaseProps {
   availableTactics: TacticCard[];
   opponentBuild: OpponentBuild;
   onToggleAttacker: (cardId: number) => void;
+  onReorderAttackers: (draggedId: number, targetId: number) => void;
   onToggleTactic: (tacticId: string) => void;
   onKickOff: () => void;
 }
@@ -30,9 +31,11 @@ export default function DeployPhase({
   availableTactics,
   opponentBuild,
   onToggleAttacker,
+  onReorderAttackers,
   onToggleTactic,
   onKickOff,
 }: DeployPhaseProps) {
+  const [draggedAttackerId, setDraggedAttackerId] = useState<number | null>(null);
   // Live preview: evaluate current split
   const split: AttackDefenceSplit = useMemo(
     () => evaluateSplit(matchState, jokers, tacticSlots),
@@ -74,6 +77,7 @@ export default function DeployPhase({
     .filter((card): card is NonNullable<typeof card> => !!card);
   const defenders = xi.filter((c) => !attackerIds.has(c.id));
   const finisher = attackers.at(-1) ?? null;
+  const unavailableCount = xi.filter((card) => card.injured).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
@@ -245,6 +249,13 @@ export default function DeployPhase({
               Finish through {finisher.name}
             </div>
           )}
+          <div style={{ fontSize: 10, color: unavailableCount > 0 ? '#fca5a5' : 'var(--dust, #8a7560)' }}>
+            {draggedAttackerId !== null
+              ? 'Drag an attacker onto another card to reorder the play.'
+              : unavailableCount > 0
+                ? `${unavailableCount} injured player${unavailableCount > 1 ? 's are' : ' is'} unavailable for this move.`
+                : 'Tap defenders to commit them forward. Drag attackers to change the order of the play.'}
+          </div>
         </div>
 
         {availableTactics.length > 0 && (
@@ -293,8 +304,26 @@ export default function DeployPhase({
                 size="hand"
                 assignment="attacking"
                 showHandDetails
+                draggable
                 playOrderLabel={index === attackers.length - 1 ? `F${index + 1}` : `${index + 1}`}
                 diminished={sortedAttackerIds.has(card.id)}
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', String(card.id));
+                  setDraggedAttackerId(card.id);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const draggedId = Number(event.dataTransfer.getData('text/plain'));
+                  if (Number.isFinite(draggedId)) {
+                    onReorderAttackers(draggedId, card.id);
+                  }
+                  setDraggedAttackerId(null);
+                }}
                 onClick={() => onToggleAttacker(card.id)}
               />
             </div>
@@ -331,7 +360,6 @@ export default function DeployPhase({
                 showHandDetails
                 playOrderLabel={null}
                 onClick={card.injured ? undefined : () => onToggleAttacker(card.id)}
-                dimmed={!!card.injured}
               />
             </div>
           ))}
@@ -362,7 +390,7 @@ export default function DeployPhase({
               className={openingDraw ? 'match-card-deal' : undefined}
               style={openingDraw ? { animationDelay: `${(attackers.length + defenders.length + index) * 70}ms` } : undefined}
             >
-              <PlayerCard card={card} size="pill" dimmed={!!card.injured} />
+              <PlayerCard card={card} size="pill" />
             </div>
           ))}
         </div>

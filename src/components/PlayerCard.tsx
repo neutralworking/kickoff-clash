@@ -41,6 +41,10 @@ interface PlayerCardProps {
   card: Card;
   size?: 'full' | 'mini' | 'pill' | 'hand';
   onClick?: () => void;
+  onDragStart?: React.DragEventHandler<HTMLDivElement>;
+  onDragOver?: React.DragEventHandler<HTMLDivElement>;
+  onDrop?: React.DragEventHandler<HTMLDivElement>;
+  draggable?: boolean;
   selected?: boolean;
   dimmed?: boolean;
   showSellPrice?: boolean;
@@ -58,6 +62,10 @@ export default function PlayerCard({
   card,
   size = 'full',
   onClick,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  draggable = false,
   selected = false,
   dimmed = false,
   showSellPrice = false,
@@ -159,6 +167,10 @@ export default function PlayerCard({
   return (
     <div
       onClick={isInjured && isAttacking ? undefined : onClick}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      draggable={draggable}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       className="relative flex flex-col justify-between overflow-hidden transition-all duration-150"
@@ -173,9 +185,10 @@ export default function PlayerCard({
         borderBottom: assignment ? `1px solid ${borderColor}` : undefined,
         borderRadius: 10,
         boxShadow: assignmentShadow,
-        opacity: dimmed ? 0.3 : isInjured ? 0.6 : 1,
+        opacity: dimmed ? 0.5 : 1,
+        filter: isInjured ? 'saturate(0.72)' : undefined,
         transform: assignmentTransform,
-        cursor: onClick && !(isInjured && isAttacking) ? 'pointer' : 'default',
+        cursor: onClick && !(isInjured && isAttacking) ? 'pointer' : draggable ? 'grab' : 'default',
       }}
     >
       {/* ---- Top row: position badge + power ---- */}
@@ -315,18 +328,33 @@ export default function PlayerCard({
       {isInjured && assignment !== null && (
         <div
           className="absolute inset-0 flex items-center justify-center rounded-[8px]"
-          style={{ background: 'rgba(239,68,68,0.2)', pointerEvents: 'none' }}
+          style={{ background: 'rgba(56,16,16,0.26)', pointerEvents: 'none' }}
         >
-          <span
-            className="rounded px-1.5 py-0.5 font-black uppercase"
-            style={{
-              background: 'rgba(239,68,68,0.85)',
-              color: '#fff',
-              fontSize: isMini ? 8 : 11,
-            }}
-          >
-            Injured
-          </span>
+          <div style={{ display: 'grid', gap: 4, textAlign: 'center' }}>
+            <span
+              className="rounded px-1.5 py-0.5 font-black uppercase"
+              style={{
+                background: 'rgba(239,68,68,0.9)',
+                color: '#fff',
+                fontSize: isMini ? 8 : 11,
+              }}
+            >
+              Injured
+            </span>
+            {isHand && (
+              <span
+                style={{
+                  color: '#fee2e2',
+                  fontSize: 8,
+                  fontWeight: 700,
+                  letterSpacing: 0.4,
+                  textTransform: 'uppercase',
+                }}
+              >
+                unavailable
+              </span>
+            )}
+          </div>
         </div>
       )}
 
