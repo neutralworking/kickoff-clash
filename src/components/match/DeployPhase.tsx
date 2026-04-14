@@ -39,7 +39,7 @@ export default function DeployPhase({
     [matchState, jokers, tacticSlots],
   );
 
-  const { xi, attackerIds } = matchState;
+  const { xi, attackerIds, attackerOrder } = matchState;
   const maxAtk = formation.maxAttackers;
   const atkCount = attackerIds.size;
   const overCap = atkCount > maxAtk;
@@ -69,8 +69,11 @@ export default function DeployPhase({
   }, [xi, attackerIds, maxAtk]);
 
   // Group XI into attackers (top) and defenders (bottom)
-  const attackers = xi.filter((c) => attackerIds.has(c.id));
+  const attackers = attackerOrder
+    .map((id) => xi.find((c) => c.id === id))
+    .filter((card): card is NonNullable<typeof card> => !!card);
   const defenders = xi.filter((c) => !attackerIds.has(c.id));
+  const finisher = attackers.at(-1) ?? null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
@@ -216,6 +219,34 @@ export default function DeployPhase({
           {overCap && ' | extra attackers are halved'}
         </div>
 
+        <div
+          style={{
+            padding: '8px 10px',
+            borderRadius: 8,
+            background: 'rgba(0,0,0,0.18)',
+            border: '1px solid rgba(245,158,11,0.12)',
+            display: 'grid',
+            gap: 3,
+          }}
+        >
+          <div style={{ fontSize: 10, color: 'var(--cream, #f5f0e8)', fontWeight: 700 }}>
+            Play Call | {split.playName}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', lineHeight: 1.35 }}>
+            {split.playSummary}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
+            {attackers.length > 0
+              ? `Sequence: ${attackers.map((card, index) => `${index + 1}.${card.name}`).join(' -> ')}`
+              : 'Select the cards for your move. Last card selected becomes the finisher.'}
+          </div>
+          {finisher && (
+            <div style={{ fontSize: 10, color: '#fde68a', fontWeight: 700 }}>
+              Finish through {finisher.name}
+            </div>
+          )}
+        </div>
+
         {availableTactics.length > 0 && (
           <div style={{ display: 'grid', gap: 4 }}>
             <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', textAlign: 'center', letterSpacing: 0.6 }}>
@@ -262,6 +293,7 @@ export default function DeployPhase({
                 size="hand"
                 assignment="attacking"
                 showHandDetails
+                playOrderLabel={index === attackers.length - 1 ? `F${index + 1}` : `${index + 1}`}
                 diminished={sortedAttackerIds.has(card.id)}
                 onClick={() => onToggleAttacker(card.id)}
               />
@@ -297,6 +329,7 @@ export default function DeployPhase({
                 size="hand"
                 assignment="defending"
                 showHandDetails
+                playOrderLabel={null}
                 onClick={card.injured ? undefined : () => onToggleAttacker(card.id)}
                 dimmed={!!card.injured}
               />

@@ -42,6 +42,7 @@ export interface MatchV5State {
   bench: Card[];
   remainingDeck: Card[];
   attackerIds: Set<number>;   // card IDs committed to attack this increment
+  attackerOrder: number[];    // ordered sequence for the attacking play; last card is the finisher
   subsRemaining: number;
   discardsRemaining: number;
   subsUsed: { outId: number; inId: number; minute: number }[];
@@ -70,6 +71,9 @@ export interface AttackDefenceSplit {
   defenceScore: number;
   chanceCreation: number;
   shotQuality: number;
+  playName: string;
+  playSummary: string;
+  finisherId: number | null;
   attackBreakdown: CascadeLine[];
   defenceBreakdown: CascadeLine[];
   attackSynergies: Connection[];
@@ -154,6 +158,115 @@ function getDualRole(card: Card): { attackWhenDefending: number; defenceWhenAtta
 
 function isEngine(card: Card): boolean {
   return card.archetype === 'Engine';
+}
+
+function isWideCard(card: Card): boolean {
+  return ['WF', 'WM', 'WD'].includes(card.position)
+    || ['Winger', 'Inverted Winger', 'Extremo', 'Lateral', 'Fluidificante', 'Tornante'].includes(card.tacticalRole ?? '');
+}
+
+function isPlaymaker(card: Card): boolean {
+  return ['Creator', 'Controller', 'Passer'].includes(card.archetype)
+    || ['Regista', 'Enganche', 'Trequartista', 'Fantasista', 'Metodista'].includes(card.tacticalRole ?? '');
+}
+
+function isFinisher(card: Card): boolean {
+  return ['Striker', 'Target', 'Dribbler', 'Powerhouse'].includes(card.archetype)
+    || ['Poacher', 'Prima Punta', 'Seconda Punta'].includes(card.tacticalRole ?? '');
+}
+
+function inferPlayPattern(
+  orderedAttackers: Card[],
+  defenders: Card[],
+  tacticSlots: TacticSlots,
+  playingStyle: string,
+): { name: string; summary: string; creationBonus: number; qualityBonus: number; attackBonus: number; defenceBonus: number } {
+  if (orderedAttackers.length === 0) {
+    return {
+      name: 'Hold Shape',
+      summary: 'Protect the structure and wait for the next opening.',
+      creationBonus: 0,
+      qualityBonus: 0,
+      attackBonus: 0,
+      defenceBonus: 24,
+    };
+  }
+
+  const tacticIds = tacticSlots.slots.filter(Boolean).map((t) => t!.id);
+  const finisher = orderedAttackers[orderedAttackers.length - 1];
+  const opener = orderedAttackers[0];
+  const playmakers = orderedAttackers.filter(isPlaymaker).length;
+  const wideCount = orderedAttackers.filter(isWideCard).length;
+  const finishers = orderedAttackers.filter(isFinisher).length;
+  const defendersHolding = defenders.length;
+
+  if (
+    orderedAttackers.length <= 2
+    && opener.position === 'GK'
+    && (finisher.archetype === 'Sprinter' || finisher.position === 'CF')
+  ) {
+    return {
+      name: 'Route One',
+      summary: `${opener.name} goes long early and ${finisher.name} attacks the space behind.`,
+      creationBonus: 42 + (tacticIds.includes('counter_attack') ? 18 : 0),
+      qualityBonus: 50 + (tacticIds.includes('set_piece') ? 10 : 0),
+      attackBonus: 34,
+      defenceBonus: -12,
+    };
+  }
+
+  if (wideCount >= 2 && playmakers >= 1 && finishers >= 1) {
+    return {
+      name: 'Wing Overload',
+      summary: `Stretch them wide, feed the flanks, and finish through ${finisher.name}.`,
+      creationBonus: 46 + (tacticIds.includes('wing_play') ? 22 : 0),
+      qualityBonus: 34 + (orderedAttackers.some((c) => c.archetype === 'Engine') ? 12 : 0),
+      attackBonus: 30,
+      defenceBonus: defendersHolding >= 4 ? 10 : -10,
+    };
+  }
+
+  if ((playingStyle === 'Tiki-Taka' || tacticIds.includes('possession') || tacticIds.includes('narrow')) && orderedAttackers.length >= 5 && playmakers >= 2) {
+    return {
+      name: 'Tiki-Taka',
+      summary: `Short combinations pull them apart before ${finisher.name} gets the final touch.`,
+      creationBonus: 58,
+      qualityBonus: 28,
+      attackBonus: 36,
+      defenceBonus: defendersHolding >= 4 ? 18 : 6,
+    };
+  }
+
+  if (orderedAttackers.length >= 6 && defendersHolding >= 4) {
+    return {
+      name: 'Death by a Thousand Cuts',
+      summary: `Sustain pressure with runners everywhere while the rest hold the counter shape.`,
+      creationBonus: 62,
+      qualityBonus: 24,
+      attackBonus: 38,
+      defenceBonus: 16,
+    };
+  }
+
+  if (tacticIds.includes('counter_attack') && defendersHolding >= 5 && finishers >= 1) {
+    return {
+      name: 'Counter Trap',
+      summary: `Absorb, spring out, and release ${finisher.name} into the break.`,
+      creationBonus: 34,
+      qualityBonus: 40,
+      attackBonus: 24,
+      defenceBonus: 26,
+    };
+  }
+
+  return {
+    name: 'Pattern Play',
+    summary: `${opener.name} starts the move and ${finisher.name} is the intended end point.`,
+    creationBonus: 18 + playmakers * 10,
+    qualityBonus: 18 + finishers * 10,
+    attackBonus: 18,
+    defenceBonus: defendersHolding >= 4 ? 8 : 0,
+  };
 }
 
 function getChanceProfile(card: Card): { creation: number; finishing: number } {
@@ -314,6 +427,7 @@ export function initMatch(
     bench,
     remainingDeck,
     attackerIds: new Set(),
+    attackerOrder: [],
     subsRemaining: 5,
     discardsRemaining: 3 + getExtraDiscards(jokers),
     subsUsed: [],
@@ -338,16 +452,16 @@ export function initMatch(
 
 export function commitAttackers(state: MatchV5State, cardIds: number[]): MatchV5State {
   const xiIds = new Set(state.xi.map((c) => c.id));
-  const validIds = new Set<number>();
+  const validOrder: number[] = [];
 
   for (const id of cardIds) {
     if (!xiIds.has(id)) continue;
     const card = state.xi.find((c) => c.id === id);
     if (card?.injured) continue; // injured cards cannot attack
-    validIds.add(id);
+    if (!validOrder.includes(id)) validOrder.push(id);
   }
 
-  return { ...state, attackerIds: validIds };
+  return { ...state, attackerIds: new Set(validOrder), attackerOrder: validOrder };
 }
 
 // ---------------------------------------------------------------------------
@@ -362,6 +476,10 @@ export function evaluateSplit(
   const { xi, formation, playingStyle, personalityBonus, opponentWeakness } = state;
   const maxAtk = formation.maxAttackers;
 
+  const orderedAttackers = state.attackerOrder
+    .map((id) => xi.find((card) => card.id === id))
+    .filter((card): card is Card => !!card);
+
   // Partition into attackers and defenders
   const attackers: Card[] = [];
   const defenders: Card[] = [];
@@ -372,6 +490,7 @@ export function evaluateSplit(
       defenders.push(card);
     }
   }
+  const playPattern = inferPlayPattern(orderedAttackers, defenders, tacticSlots, playingStyle);
 
   const attackBreakdown: CascadeLine[] = [];
   const defenceBreakdown: CascadeLine[] = [];
@@ -526,7 +645,7 @@ export function evaluateSplit(
 
   // --- Subtotals before personality ---
   let attackTotal = baseAttack + dualAttack + synergyAttack + crossAttack + styleAttack + weaknessBonus + tacticBonus + managerBonus;
-  let defenceTotal = baseDefence + dualDefence + synergyDefence + crossDefence;
+  let defenceTotal = baseDefence + dualDefence + synergyDefence + crossDefence + playPattern.defenceBonus;
   const attackerPowerPool = attackers.reduce((sum, card) => sum + card.power, 0);
   let baseCreation = 0;
   let baseFinishing = 0;
@@ -550,6 +669,16 @@ export function evaluateSplit(
     (baseFinishing + Math.round(synergyAttack * 0.95) + Math.round(crossAttack * 0.55) + Math.round(weaknessBonus * 0.90) + Math.round(tacticBonus * 0.35))
       * compactAttackMultiplier,
   );
+  attackTotal += playPattern.attackBonus;
+  chanceCreation += playPattern.creationBonus;
+  shotQuality += playPattern.qualityBonus;
+
+  if (playPattern.attackBonus !== 0) {
+    attackBreakdown.push({ label: playPattern.name, value: playPattern.attackBonus, type: 'tactic' });
+  }
+  if (playPattern.defenceBonus > 0) {
+    defenceBreakdown.push({ label: `${playPattern.name} rest defence`, value: playPattern.defenceBonus, type: 'tactic' });
+  }
 
   if (chanceCreation > 0) {
     attackBreakdown.push({
@@ -585,6 +714,9 @@ export function evaluateSplit(
     defenceScore: Math.max(0, defenceTotal),
     chanceCreation: Math.max(0, chanceCreation),
     shotQuality: Math.max(0, shotQuality),
+    playName: playPattern.name,
+    playSummary: playPattern.summary,
+    finisherId: orderedAttackers.at(-1)?.id ?? null,
     attackBreakdown,
     defenceBreakdown,
     attackSynergies,
@@ -718,7 +850,7 @@ export function getOpponentBaselines(
       break;
     case 'Adaptive': {
       // Mirror player's split ratio
-      const atkCount = state.attackerIds.size;
+      const atkCount = state.attackerOrder.length;
       const totalCards = state.xi.length;
       const atkRatio = totalCards > 0 ? atkCount / totalCards : 0.5;
       // Opponent attacks heavier when player defends heavier
@@ -771,6 +903,7 @@ export function advanceIncrement(state: MatchV5State, result: IncrementResult): 
     currentIncrement: nextIncrement,
     isFirstHalf,
     attackerIds: new Set(), // clear for next increment
+    attackerOrder: [],
   };
 }
 
@@ -791,11 +924,14 @@ export function makeSub(state: MatchV5State, xiCardId: number, benchCardId: numb
   const minute = INCREMENT_MINUTES[state.currentIncrement] ?? 90;
   const newXi = state.xi.map((c) => (c.id === xiCardId ? benchCard : c));
   const newBench = state.bench.filter((c) => c.id !== benchCardId);
+  const newAttackerOrder = state.attackerOrder.filter((id) => id !== xiCardId);
 
   return {
     ...state,
     xi: newXi,
     bench: newBench,
+    attackerIds: new Set(newAttackerOrder),
+    attackerOrder: newAttackerOrder,
     subsRemaining: state.subsRemaining - 1,
     subsUsed: [...state.subsUsed, { outId: xiCardId, inId: benchCardId, minute }],
   };

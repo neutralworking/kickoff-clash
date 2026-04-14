@@ -81,16 +81,17 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
   const handleToggleAttacker = useCallback(
     (cardId: number) => {
       setMatchState((prev: MatchV5State) => {
-        const newIds = new Set(prev.attackerIds);
-        if (newIds.has(cardId)) {
-          newIds.delete(cardId);
+        const nextOrder = [...prev.attackerOrder];
+        const existingIndex = nextOrder.indexOf(cardId);
+        if (existingIndex !== -1) {
+          nextOrder.splice(existingIndex, 1);
         } else {
           // Check if card is injured
           const card = prev.xi.find((c) => c.id === cardId);
           if (card?.injured) return prev;
-          newIds.add(cardId);
+          nextOrder.push(cardId);
         }
-        return commitAttackers(prev, Array.from(newIds));
+        return commitAttackers(prev, nextOrder);
       });
     },
     [],

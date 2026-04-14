@@ -47,6 +47,7 @@ interface PlayerCardProps {
   assignment?: 'attacking' | 'defending' | null; // v5 attack/defend state
   diminished?: boolean; // beyond soft cap (50% power)
   showHandDetails?: boolean;
+  playOrderLabel?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +64,7 @@ export default function PlayerCard({
   assignment = null,
   diminished = false,
   showHandDetails = false,
+  playOrderLabel = null,
 }: PlayerCardProps) {
   const rarityColor = RARITY_COLORS[card.rarity] ?? RARITY_COLORS.Common;
   const rarityGlow = RARITY_GLOW[card.rarity] ?? RARITY_GLOW.Common;
@@ -345,6 +347,27 @@ export default function PlayerCard({
           }}
         >
           50%
+        </div>
+      )}
+
+      {playOrderLabel && (
+        <div
+          className="absolute flex items-center justify-center rounded-full"
+          style={{
+            top: isMini ? 2 : 4,
+            left: isMini ? 2 : 4,
+            minWidth: isMini ? 18 : 24,
+            height: isMini ? 18 : 24,
+            padding: '0 5px',
+            background: 'rgba(26,26,26,0.82)',
+            color: '#f5f0e0',
+            fontSize: isMini ? 7 : 9,
+            fontWeight: 900,
+            pointerEvents: 'none',
+            border: '1px solid rgba(245,240,224,0.18)',
+          }}
+        >
+          {playOrderLabel}
         </div>
       )}
 
