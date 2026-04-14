@@ -98,21 +98,30 @@ export default function BetweenPhase({
 
   return (
     <div
+      className="between-shell"
       style={{
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        padding: '8px 10px',
-        gap: 8,
+        padding: '14px',
+        gap: 12,
         minHeight: 0,
       }}
     >
       {/* Header */}
-      <div style={{ textAlign: 'center' }}>
+      <div
+        style={{
+          textAlign: 'center',
+          padding: '14px',
+          borderRadius: 16,
+          background: 'linear-gradient(180deg, rgba(18,26,20,0.88), rgba(10,16,12,0.92))',
+          border: '1px solid rgba(245,158,11,0.12)',
+        }}
+      >
         <span
           style={{
             fontFamily: 'var(--font-display, sans-serif)',
-            fontSize: 18,
+            fontSize: 22,
             color: 'var(--amber, #f59e0b)',
           }}
         >
@@ -162,38 +171,48 @@ export default function BetweenPhase({
         </div>
       </div>
 
-      {/* XI cards — hand fan */}
-      <div>
-        <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', marginBottom: 2, textAlign: 'center' }}>
+      <div className="between-grid" style={{ display: 'grid', gap: 12, flex: 1, minHeight: 0 }}>
+      <div
+        style={{
+          padding: '12px',
+          borderRadius: 16,
+          background: 'linear-gradient(180deg, rgba(16,23,18,0.88), rgba(10,16,12,0.94))',
+          border: '1px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', marginBottom: 8, textAlign: 'center', letterSpacing: 0.6 }}>
           XI — {benchMode === 'sub' ? 'tap to choose who comes off' : 'view only while marking redraws'}
         </div>
-        <CardHand
-          cardCount={matchState.xi.length}
-          cardWidth={72}
-          maxSpreadDeg={matchState.xi.length > 8 ? 22 : 16}
-          selectedIndex={selectedXiId !== null ? matchState.xi.findIndex(c => c.id === selectedXiId) : null}
-        >
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 8 }}>
           {matchState.xi.map((card) => (
-            <PlayerCard
-              key={card.id}
-              card={card}
-              size="mini"
-              onClick={() => handleXiTap(card.id)}
-              selected={selectedXiId === card.id}
-              dimmed={!!card.injured}
-            />
+            <div key={card.id} style={{ display: 'flex', justifyContent: 'center' }}>
+              <PlayerCard
+                card={card}
+                size="mini"
+                onClick={() => handleXiTap(card.id)}
+                selected={selectedXiId === card.id}
+                dimmed={!!card.injured}
+              />
+            </div>
           ))}
-        </CardHand>
+        </div>
       </div>
 
       {/* Bench */}
-      <div>
-        <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', marginBottom: 2, textAlign: 'center' }}>
+      <div
+        style={{
+          padding: '12px',
+          borderRadius: 16,
+          background: 'linear-gradient(180deg, rgba(16,23,18,0.88), rgba(10,16,12,0.94))',
+          border: '1px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', marginBottom: 8, textAlign: 'center', letterSpacing: 0.6 }}>
           Bench — {benchMode === 'sub' ? 'tap to bring on a substitute' : 'tap cards to throw back and redraw'}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', padding: '0 8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 8 }}>
           {matchState.bench.map((card) => (
-            <div key={card.id} style={{ position: 'relative' }}>
+            <div key={card.id} style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
               <PlayerCard
                 card={card}
                 size="mini"
@@ -248,10 +267,20 @@ export default function BetweenPhase({
           </button>
         )}
       </div>
+      </div>
 
       {/* Formation change (halftime only) */}
       {isHalftime && (
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div
+          style={{
+            display: 'grid',
+            gap: 8,
+            padding: '12px',
+            borderRadius: 16,
+            background: 'linear-gradient(180deg, rgba(16,23,18,0.88), rgba(10,16,12,0.94))',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
           <div
             style={{
               display: 'flex',
@@ -320,17 +349,16 @@ export default function BetweenPhase({
         onClick={onContinue}
         style={{
           width: '100%',
-          maxWidth: 320,
           margin: '0 auto',
-          padding: '12px 0',
-          borderRadius: 8,
+          padding: '14px 0',
+          borderRadius: 14,
           border: 'none',
           background: 'linear-gradient(135deg, #f59e0b, #d97706)',
           color: '#1a1a1a',
           fontFamily: 'var(--font-display, sans-serif)',
-          fontSize: 16,
+          fontSize: 18,
           cursor: 'pointer',
-          boxShadow: '0 4px 12px rgba(245,158,11,0.4)',
+          boxShadow: '0 10px 24px rgba(245,158,11,0.28)',
           flexShrink: 0,
         }}
       >

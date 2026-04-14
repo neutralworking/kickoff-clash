@@ -42,8 +42,14 @@ interface PlayerCardProps {
   size?: 'full' | 'mini' | 'pill' | 'hand';
   onClick?: () => void;
   onDragStart?: React.DragEventHandler<HTMLDivElement>;
+  onDragEnter?: React.DragEventHandler<HTMLDivElement>;
   onDragOver?: React.DragEventHandler<HTMLDivElement>;
   onDrop?: React.DragEventHandler<HTMLDivElement>;
+  onDragEnd?: React.DragEventHandler<HTMLDivElement>;
+  onMouseDown?: React.MouseEventHandler<HTMLDivElement>;
+  onMouseUp?: React.MouseEventHandler<HTMLDivElement>;
+  onPointerDown?: React.PointerEventHandler<HTMLDivElement>;
+  onPointerUp?: React.PointerEventHandler<HTMLDivElement>;
   draggable?: boolean;
   selected?: boolean;
   dimmed?: boolean;
@@ -63,8 +69,14 @@ export default function PlayerCard({
   size = 'full',
   onClick,
   onDragStart,
+  onDragEnter,
   onDragOver,
   onDrop,
+  onDragEnd,
+  onMouseDown,
+  onMouseUp,
+  onPointerDown,
+  onPointerUp,
   draggable = false,
   selected = false,
   dimmed = false,
@@ -168,8 +180,14 @@ export default function PlayerCard({
     <div
       onClick={isInjured && isAttacking ? undefined : onClick}
       onDragStart={onDragStart}
+      onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      onMouseDown={onMouseDown}
+      onMouseUp={onMouseUp}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
       draggable={draggable}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}

@@ -23,21 +23,51 @@ export default function MatchScorebar({
 }: MatchScorebarProps) {
   return (
     <div
+      className="match-scorebar"
       style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        padding: '4px 12px',
-        background: 'linear-gradient(135deg, var(--leather, #3d2b1f), #2a1e15)',
-        borderBottom: '1px solid rgba(245,158,11,0.2)',
+        padding: '10px 16px 8px',
+        background: 'linear-gradient(180deg, rgba(26,21,16,0.98), rgba(22,17,13,0.92))',
+        borderBottom: '1px solid rgba(245,158,11,0.16)',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.24)',
         flexShrink: 0,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div
+        style={{
+          width: '100%',
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 800,
+              color: 'var(--cream, #f5f0e8)',
+              letterSpacing: 0.8,
+              textTransform: 'uppercase',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            vs {opponentName}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', marginTop: 3 }}>
+            Fixture {round}/5
+          </div>
+        </div>
+
         <span
           style={{
             fontFamily: 'var(--font-display, sans-serif)',
-            fontSize: 28,
+            fontSize: 32,
             color: 'var(--cream, #f5f0e8)',
             lineHeight: 1,
           }}
@@ -73,16 +103,55 @@ export default function MatchScorebar({
         >
           {minute}&apos;
         </span>
+        <div style={{ minWidth: 0, textAlign: 'right' }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 800,
+              color: 'var(--cream, #f5f0e8)',
+              letterSpacing: 0.8,
+              textTransform: 'uppercase',
+            }}
+          >
+            Season Race
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--dust, #8a7560)', marginTop: 3 }}>
+            Points {seasonPoints}/{boardTargetPoints}
+          </div>
+        </div>
       </div>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-          vs {opponentName}
+      <div
+        style={{
+          width: '100%',
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+          marginTop: 8,
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+        }}
+      >
+        <span
+          style={{
+            fontSize: 10,
+            color: 'var(--dust, #8a7560)',
+            padding: '4px 8px',
+            borderRadius: 999,
+            background: 'rgba(255,255,255,0.04)',
+          }}
+        >
+          Live tactical window
         </span>
-        <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-          Fixture {round}/5
-        </span>
-        <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-          Points {seasonPoints}/{boardTargetPoints}
+        <span
+          style={{
+            fontSize: 10,
+            color: 'var(--dust, #8a7560)',
+            padding: '4px 8px',
+            borderRadius: 999,
+            background: 'rgba(255,255,255,0.04)',
+          }}
+        >
+          {subPhase === 'planning' ? 'Set the move' : subPhase}
         </span>
       </div>
     </div>

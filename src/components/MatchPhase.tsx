@@ -245,9 +245,9 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
   // ---- Render ----
   return (
     <div
+      className="match-shell"
       style={{
-        maxWidth: 720,
-        margin: '0 auto',
+        width: '100%',
         height: '100dvh',
         display: 'flex',
         flexDirection: 'column',
@@ -260,10 +260,11 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     >
       {/* Joker row — compact inline pills to save vertical space */}
       <div
+        className="match-joker-row"
         style={{
           display: 'flex',
           gap: 6,
-          padding: '4px 10px',
+          padding: '8px 14px 6px',
           background: 'rgba(0,0,0,0.25)',
           alignItems: 'center',
           overflowX: 'auto',
