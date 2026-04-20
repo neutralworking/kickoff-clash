@@ -1,22 +1,7 @@
 'use client';
 
 import type { TacticCard as TacticCardType } from '../lib/tactics';
-
-// ---------------------------------------------------------------------------
-// Category colour palette + icons
-// ---------------------------------------------------------------------------
-
-const CATEGORY_COLORS: Record<TacticCardType['category'], string> = {
-  attacking:  '#c0392b',
-  defensive:  '#2c6fbb',
-  specialist: '#d4a035',
-};
-
-const CATEGORY_ICONS: Record<TacticCardType['category'], string> = {
-  attacking:  '\u2694',  // crossed swords
-  defensive:  '\u{1F6E1}',  // shield
-  specialist: '\u2728',  // sparkles
-};
+import { TACTIC_CATEGORY } from './theme';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -31,7 +16,7 @@ interface TacticCardProps {
 }
 
 // ---------------------------------------------------------------------------
-// Component — portrait card (3:4 ratio)
+// Component — v2 Balatro-style tactic card
 // ---------------------------------------------------------------------------
 
 export default function TacticCard({
@@ -41,95 +26,132 @@ export default function TacticCard({
   contradicted = false,
   compact = false,
 }: TacticCardProps) {
-  const accent = CATEGORY_COLORS[tactic.category];
-  const icon = CATEGORY_ICONS[tactic.category];
+  const cat = TACTIC_CATEGORY[tactic.category] ?? TACTIC_CATEGORY.specialist;
 
-  const w = compact ? 80 : 96;
-  const h = compact ? 106 : 128;
+  const w = compact ? 80 : 120;
+  const h = compact ? 112 : 170;
+  const pad = compact ? 6 : 10;
+  const nameF = compact ? 10 : 13;
+  const effF = compact ? 7 : 9;
+  const flavF = compact ? 8 : 10;
 
   return (
     <div
       onClick={onClick}
       role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
       style={{
         position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
         width: w,
         height: h,
-        borderRadius: 10,
-        border: `2px solid ${accent}`,
-        background: 'linear-gradient(160deg, var(--leather-light, #241e16), var(--leather, #1a1510))',
-        padding: compact ? '6px 6px 4px' : '8px 8px 6px',
-        cursor: onClick ? 'pointer' : 'default',
-        userSelect: 'none',
-        boxSizing: 'border-box',
+        borderRadius: 'var(--r-card)',
+        background: cat.bg,
+        border: `3px solid ${cat.color}`,
         boxShadow: deployed
-          ? `0 0 0 2px var(--amber, #f59e0b), 0 0 10px var(--amber-glow, rgba(232,98,26,0.4))`
-          : `0 0 6px ${accent}40, 0 4px 10px rgba(0,0,0,0.5)`,
-        opacity: contradicted ? 0.45 : 1,
-        transition: 'box-shadow 0.15s ease, opacity 0.15s ease',
+          ? `var(--shadow-card-lift), 0 0 24px ${cat.color}aa`
+          : `var(--shadow-card), 0 0 12px ${cat.color}55`,
         overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: pad,
+        color: 'var(--cream)',
+        boxSizing: 'border-box',
+        fontFamily: 'var(--font-body)',
+        cursor: onClick ? 'pointer' : 'default',
+        transform: deployed ? 'translateY(-6px)' : undefined,
+        transition: 'transform 0.15s, box-shadow 0.15s',
+        opacity: contradicted ? 0.45 : 1,
       }}
     >
-      {/* Category icon — top center */}
+      {/* Category symbol */}
       <div
         style={{
           textAlign: 'center',
-          fontSize: compact ? 16 : 20,
+          fontSize: h * 0.3,
+          color: cat.color,
           lineHeight: 1,
-          opacity: 0.6,
+          marginTop: pad * 0.2,
         }}
       >
-        {icon}
+        {cat.icon}
       </div>
 
-      {/* Name — center */}
+      {/* Name */}
       <div
         style={{
-          fontFamily: 'var(--font-display, sans-serif)',
-          fontSize: compact ? 9 : 11,
-          color: 'var(--cream, #f5f0e8)',
-          lineHeight: 1.2,
+          fontFamily: 'var(--font-display)',
+          fontSize: nameF,
+          letterSpacing: '0.04em',
           textAlign: 'center',
-          overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
+          textTransform: 'uppercase',
+          marginTop: pad * 0.3,
         }}
       >
         {tactic.name}
       </div>
 
-      {/* Effect — bottom */}
+      {/* Effect */}
       <div
         style={{
-          fontFamily: 'var(--font-body, sans-serif)',
-          fontSize: compact ? 7 : 8,
-          color: 'var(--dust, #8a7560)',
-          lineHeight: 1.2,
+          fontSize: effF,
+          color: cat.color,
           textAlign: 'center',
-          overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
+          marginTop: pad * 0.3,
+          lineHeight: 1.25,
+          fontWeight: 600,
         }}
       >
         {tactic.effect}
       </div>
 
-      {/* Bottom accent bar */}
+      {/* Flavour quote */}
+      {!compact && tactic.flavour && (
+        <div
+          className="flavour"
+          style={{
+            fontSize: flavF,
+            color: 'var(--dust)',
+            textAlign: 'center',
+            marginTop: 'auto',
+            paddingTop: pad * 0.3,
+            lineHeight: 1.15,
+          }}
+        >
+          &ldquo;{tactic.flavour}&rdquo;
+        </div>
+      )}
+
+      {/* Bottom accent stripe */}
       <div
         style={{
           position: 'absolute',
-          bottom: 0,
           left: 0,
           right: 0,
-          height: 2.5,
-          background: accent,
+          bottom: 0,
+          height: 3,
+          background: cat.color,
         }}
       />
+
+      {/* ACTIVE badge */}
+      {deployed && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            background: 'var(--gold-hi)',
+            color: '#1a1008',
+            padding: '2px 6px',
+            borderRadius: 3,
+            fontFamily: 'var(--font-arcade)',
+            fontSize: 8,
+            letterSpacing: '0.1em',
+          }}
+        >
+          ACTIVE
+        </div>
+      )}
 
       {/* Contradicted overlay */}
       {contradicted && (
@@ -140,40 +162,22 @@ export default function TacticCard({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            borderRadius: 8,
+            borderRadius: 'var(--r-card)',
             background: 'rgba(180, 30, 30, 0.25)',
             pointerEvents: 'none',
           }}
         >
           <span
             style={{
-              fontFamily: 'var(--font-display, sans-serif)',
+              fontFamily: 'var(--font-display)',
               fontSize: 28,
-              color: 'var(--danger, #ef4444)',
+              color: 'var(--danger)',
               lineHeight: 1,
-              opacity: 0.75,
+              opacity: 0.85,
             }}
           >
             ✕
           </span>
-        </div>
-      )}
-
-      {/* Deployed badge */}
-      {deployed && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 4,
-            right: 4,
-            fontFamily: 'var(--font-body, sans-serif)',
-            fontSize: 7,
-            color: 'var(--amber, #f59e0b)',
-            fontWeight: 700,
-            letterSpacing: '0.05em',
-          }}
-        >
-          ACTIVE
         </div>
       )}
     </div>

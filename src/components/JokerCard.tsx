@@ -3,24 +3,14 @@
 import type { JokerCard as JokerCardType } from '../lib/jokers';
 
 // ---------------------------------------------------------------------------
-// Rarity styling
+// Rarity styling (v2 — manager rarities are 3-tier: common/uncommon/rare)
 // ---------------------------------------------------------------------------
 
 const RARITY_BORDER: Record<string, string> = {
-  common: '#71717a',
-  uncommon: '#4a9eff',
-  rare: '#d4a035',
+  common: '#b6a68a',
+  uncommon: '#3aa0ff',
+  rare: '#b06cff',
 };
-
-const RARITY_GLOW: Record<string, string> = {
-  common: '0 0 6px rgba(113,113,122,0.3)',
-  uncommon: '0 0 10px rgba(74,158,255,0.4)',
-  rare: '0 0 14px rgba(212,160,53,0.5)',
-};
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
 
 interface JokerCardProps {
   joker: JokerCardType;
@@ -29,15 +19,18 @@ interface JokerCardProps {
 }
 
 // ---------------------------------------------------------------------------
-// Component — portrait card (3:4 ratio)
+// Component — v2 Balatro-style joker card
 // ---------------------------------------------------------------------------
 
 export default function JokerCard({ joker, onClick, compact = false }: JokerCardProps) {
-  const borderColor = RARITY_BORDER[joker.rarity] ?? RARITY_BORDER.common;
-  const glow = RARITY_GLOW[joker.rarity] ?? RARITY_GLOW.common;
-
-  const w = compact ? 80 : 96;
-  const h = compact ? 106 : 128;
+  const rarityColor = RARITY_BORDER[joker.rarity] ?? RARITY_BORDER.common;
+  const w = compact ? 80 : 120;
+  const h = compact ? 112 : 170;
+  const pad = compact ? 6 : 10;
+  const nameF = compact ? 10 : 13;
+  const effF = compact ? 7 : 9;
+  const flavF = compact ? 8 : 10;
+  const monogram = joker.name.split(' ').map(w => w[0]).slice(0, 2).join('');
 
   return (
     <div
@@ -46,45 +39,62 @@ export default function JokerCard({ joker, onClick, compact = false }: JokerCard
       tabIndex={onClick ? 0 : undefined}
       style={{
         position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         width: w,
         height: h,
-        background: 'linear-gradient(160deg, var(--leather-light, #241e16), var(--leather, #1a1510))',
-        border: `2px solid ${borderColor}`,
-        borderRadius: 10,
-        boxShadow: `${glow}, 0 4px 10px rgba(0,0,0,0.5)`,
-        cursor: onClick ? 'pointer' : 'default',
-        padding: compact ? '6px 6px 4px' : '8px 8px 6px',
+        borderRadius: 'var(--r-card)',
+        background: 'linear-gradient(160deg, #3a2818 0%, #1a1008 100%)',
+        border: `3px solid ${rarityColor}`,
+        boxShadow: `var(--shadow-card), 0 0 18px ${rarityColor}66`,
         overflow: 'hidden',
-        transition: 'all 0.15s ease',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: pad,
+        color: 'var(--cream)',
+        fontFamily: 'var(--font-body)',
+        boxSizing: 'border-box',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'transform 0.15s',
       }}
     >
-      {/* Manager icon */}
+      {/* Foil sheen */}
+      <div className="foil-overlay" style={{ opacity: 0.1 }} />
+
+      {/* Portrait — manager monogram with radial glow */}
       <div
         style={{
-          fontSize: compact ? 18 : 22,
-          lineHeight: 1,
-          opacity: 0.7,
+          flex: '0 0 auto',
+          height: h * 0.44,
+          background: `radial-gradient(circle at 50% 35%, ${rarityColor}44 0%, transparent 70%)`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 'var(--r-sm)',
+          marginBottom: pad * 0.4,
+          border: '1px solid rgba(255,255,255,0.06)',
         }}
       >
-        {'\u{1F454}'} {/* necktie — manager */}
+        <span
+          style={{
+            fontFamily: 'var(--font-arcade)',
+            fontSize: h * 0.28,
+            color: rarityColor,
+            textShadow: '0 2px 0 #000',
+          }}
+        >
+          {monogram}
+        </span>
       </div>
 
       {/* Name */}
       <div
         style={{
-          fontFamily: 'var(--font-display, sans-serif)',
-          fontSize: compact ? 9 : 11,
-          color: 'var(--cream, #f5f0e8)',
+          fontFamily: 'var(--font-display)',
+          fontSize: nameF,
+          letterSpacing: '0.03em',
           textAlign: 'center',
-          lineHeight: 1.2,
-          overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
+          color: 'var(--cream)',
+          textTransform: 'uppercase',
+          lineHeight: 1.05,
         }}
       >
         {joker.name}
@@ -93,29 +103,43 @@ export default function JokerCard({ joker, onClick, compact = false }: JokerCard
       {/* Effect */}
       <div
         style={{
-          fontFamily: 'var(--font-body, sans-serif)',
-          fontSize: compact ? 7 : 8,
-          color: 'var(--dust, #8a7560)',
+          fontSize: effF,
+          color: 'var(--amber-hi)',
           textAlign: 'center',
-          lineHeight: 1.2,
-          overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
+          marginTop: pad * 0.3,
+          lineHeight: 1.25,
+          fontWeight: 600,
         }}
       >
         {joker.effect}
       </div>
 
-      {/* Bottom rarity bar */}
+      {/* Flavour */}
+      {!compact && joker.flavour && (
+        <div
+          className="flavour"
+          style={{
+            fontSize: flavF,
+            color: 'var(--dust)',
+            textAlign: 'center',
+            marginTop: 'auto',
+            paddingTop: pad * 0.3,
+            lineHeight: 1.15,
+          }}
+        >
+          &ldquo;{joker.flavour}&rdquo;
+        </div>
+      )}
+
+      {/* Rarity bar */}
       <div
         style={{
           position: 'absolute',
-          bottom: 0,
           left: 0,
           right: 0,
-          height: 2.5,
-          background: borderColor,
+          bottom: 0,
+          height: 3,
+          background: rarityColor,
         }}
       />
     </div>

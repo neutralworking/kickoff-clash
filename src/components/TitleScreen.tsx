@@ -11,86 +11,111 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
 
   return (
     <div
-      className="flex flex-col items-center justify-center min-h-screen text-center px-6"
-      style={{ background: 'var(--felt)' }}
+      className="flex flex-col items-center justify-center min-h-screen text-center px-6 py-10"
+      style={{ position: 'relative' }}
     >
-      {/* Title */}
-      <div className="mb-4">
+      {/* Wordmark — KICKOFF (red) over CLASH (cream), heavy drop shadow */}
+      <div className="mb-2">
         <h1
-          className="text-7xl tracking-tight uppercase leading-none"
-          style={{ fontFamily: 'var(--font-display)' }}
+          className="display"
+          style={{
+            fontSize: 'clamp(72px, 17vw, 160px)',
+            color: 'var(--clash-red-hi)',
+            textShadow: '6px 6px 0 rgba(0,0,0,0.6)',
+            lineHeight: 0.85,
+          }}
         >
-          <span style={{ color: 'var(--amber)' }}>KICKOFF</span>
+          KICKOFF
         </h1>
         <h1
-          className="text-7xl tracking-tight uppercase leading-none mt-1"
-          style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)' }}
+          className="display"
+          style={{
+            fontSize: 'clamp(72px, 17vw, 160px)',
+            color: 'var(--cream)',
+            textShadow: '6px 6px 0 rgba(0,0,0,0.6)',
+            lineHeight: 0.85,
+            marginTop: -8,
+          }}
         >
           CLASH
         </h1>
       </div>
 
-      {/* Tagline */}
+      {/* Tagline — Caveat flavour quote */}
       <p
-        className="text-base mb-12"
+        className="flavour"
         style={{
-          fontFamily: 'var(--font-flavour)',
-          fontStyle: 'italic',
-          color: 'var(--dust)',
+          fontSize: 'clamp(20px, 3vw, 28px)',
+          color: 'var(--amber-hi)',
+          marginTop: 18,
+          maxWidth: 720,
         }}
       >
         Build your squad. Play your cards. Win the season.
       </p>
 
-      {/* Buttons */}
-      <div className="flex flex-col gap-3 w-full max-w-xs">
+      {/* Buttons — chunky drop-shadow Balatro-style */}
+      <div className="flex flex-col gap-4 w-full max-w-sm" style={{ marginTop: 36 }}>
         <button
           onClick={onNewRun}
-          className="w-full py-4 rounded-[var(--radius)] text-lg font-bold uppercase tracking-wide transition-all hover:brightness-110 hover:scale-[1.03] active:scale-95"
+          className="w-full transition-all hover:brightness-110 active:translate-y-1 active:shadow-none"
           style={{
-            fontFamily: 'var(--font-display)',
-            background: `linear-gradient(135deg, var(--amber), var(--amber-soft))`,
-            color: 'var(--cream)',
-            boxShadow: '0 4px 20px var(--amber-glow)',
+            padding: '18px 56px',
+            border: 'none',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-arcade)',
+            fontSize: 'clamp(22px, 3vw, 32px)',
+            letterSpacing: '0.1em',
+            color: '#1a0f08',
+            background: 'linear-gradient(180deg, var(--gold-hi), var(--amber))',
+            borderRadius: 'var(--r-lg)',
+            boxShadow: '0 8px 0 rgba(0,0,0,0.5), 0 0 40px var(--gold-glow)',
           }}
         >
-          New Season
+          ▶ NEW SEASON
         </button>
 
         {hasExistingRun && onContinue && (
           <button
             onClick={onContinue}
-            className="w-full py-4 rounded-[var(--radius)] text-lg font-bold uppercase tracking-wide transition-all hover:brightness-110 hover:scale-[1.03] active:scale-95"
+            className="w-full transition-all hover:brightness-110 active:translate-y-1 active:shadow-none"
             style={{
-              fontFamily: 'var(--font-display)',
-              background: 'var(--leather)',
-              color: 'var(--gold)',
+              padding: '14px 40px',
               border: '2px solid var(--gold)',
-              boxShadow: '0 4px 16px var(--gold-glow)',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-arcade)',
+              fontSize: 'clamp(16px, 2.2vw, 22px)',
+              letterSpacing: '0.1em',
+              color: 'var(--cream)',
+              background: 'rgba(212,160,53,0.15)',
+              borderRadius: 'var(--r)',
+              boxShadow: '0 6px 0 rgba(0,0,0,0.5)',
             }}
           >
-            Continue Run
+            CONTINUE RUN
           </button>
         )}
       </div>
 
+      {/* Canonical home — small chip, low chrome */}
       <div
-        className="mt-8 rounded-[var(--radius)] px-4 py-3"
+        className="mt-10 px-4 py-3"
         style={{
-          background: 'rgba(0,0,0,0.14)',
-          border: '1px solid rgba(212,160,53,0.14)',
+          background: 'rgba(0,0,0,0.35)',
+          border: '1px solid rgba(245,197,66,0.18)',
+          borderRadius: 'var(--r-sm)',
         }}
       >
         <div
-          className="text-[10px] uppercase tracking-[0.18em]"
-          style={{ color: 'var(--dust)' }}
+          className="text-[10px] uppercase"
+          style={{ color: 'var(--dust)', letterSpacing: '0.2em' }}
         >
           Canonical Home
         </div>
         <a
           href={canonicalUrl}
           className="text-sm underline underline-offset-4"
-          style={{ color: 'var(--gold)' }}
+          style={{ color: 'var(--gold-hi)' }}
         >
           kickoff.neutralworking.com
         </a>

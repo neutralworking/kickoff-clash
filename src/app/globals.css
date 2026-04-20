@@ -1,66 +1,159 @@
 @import "tailwindcss";
 
 @theme inline {
+  /* ===== Legacy v1 tokens (still referenced across components) ===== */
   --felt: #0b1a10;
   --felt-light: #122118;
   --leather: #1a1510;
   --leather-light: #241e16;
-  --amber: #e8621a;
-  --amber-glow: rgba(232, 98, 26, 0.4);
+  --amber: #f59e0b;
+  --amber-glow: rgba(245, 158, 11, 0.4);
   --amber-soft: #c4530f;
   --gold: #d4a035;
-  --gold-glow: rgba(212, 160, 53, 0.35);
+  --gold-glow: rgba(245, 197, 66, 0.45);
   --pitch-green: #2d8a4e;
   --pitch-dark: #1a5c33;
   --pitch-light: #3ba55d;
   --danger: #c0392b;
-  --cream: #f5f0e0;
-  --cream-soft: #d9d0b8;
-  --dust: #9a8b73;
+  --cream: #f4ecd8;
+  --cream-soft: #d8cfb9;
+  --dust: #8a8173;
   --ink: #5c5040;
   --radius: 10px;
   --radius-sm: 6px;
   --radius-lg: 14px;
 
-  /* Font variables set by next/font in layout.tsx via CSS custom properties */
-  /* --font-display, --font-body, --font-flavour are injected as class variables */
+  /* ===== v2 design system tokens (Dugout vibe — game-feel) ===== */
+  /* Type */
+  --font-stat: var(--font-display-stat);
+  --font-arcade: var(--font-display-arcade);
+  --font-mono: var(--font-mono-tech);
+  --font-marker: var(--font-marker-script);
+
+  /* Surfaces */
+  --ink-2: #1a1d22;
+  --ink-3: #252a31;
+  --chalk: #e8ddc0;
+  --felt-deep: #0e2413;
+  --pitch: #2d6b38;
+  --pitch-line: rgba(244, 236, 216, 0.22);
+
+  /* Accent */
+  --clash-red: #e63946;
+  --clash-red-hi: #ff4e5d;
+  --amber-hi: #fbbf24;
+  --gold-hi: #f5c542;
+
+  /* Semantic */
+  --win: #22c55e;
+  --draw: #f59e0b;
+  --loss: #ef4444;
+
+  /* Rarity (v2 Balatro tier) */
+  --r-common: #b6a68a;
+  --r-rare: #3aa0ff;
+  --r-epic: #b06cff;
+  --r-legendary: #ff9a00;
+  --r-legendary-glow: 0 0 24px rgba(255, 154, 0, 0.65), 0 0 48px rgba(255, 154, 0, 0.25);
+
+  /* Position tags */
+  --pos-gk: #f97316;
+  --pos-def: #3b82f6;
+  --pos-mid: #22c55e;
+  --pos-am: #a855f7;
+  --pos-fw: #ef4444;
+
+  /* Joker / manager */
+  --joker-leather: #2a1d14;
+
+  /* Surface vibe — Dugout (committed) */
+  --surface: #0f3320;
+  --surface-2: #0a2416;
+  --surface-edge: #e8ddc0;
+  --surface-ink: #e8ddc0;
+  --surface-grid: rgba(232, 221, 192, 0.16);
+  --paper: #13402a;
+  --stage-bg: linear-gradient(180deg, #050a07 0%, #0a1a10 100%);
+
+  /* Radii */
+  --r-xs: 3px;
+  --r-sm: 6px;
+  --r: 10px;
+  --r-lg: 16px;
+  --r-card: 14px;
+
+  /* Shadows / FX */
+  --shadow-card: 0 6px 0 rgba(0, 0, 0, 0.35), 0 14px 24px rgba(0, 0, 0, 0.55);
+  --shadow-card-lift: 0 10px 0 rgba(0, 0, 0, 0.35), 0 22px 40px rgba(0, 0, 0, 0.65);
+  --shadow-panel: 0 12px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-inset: inset 0 2px 6px rgba(0, 0, 0, 0.45);
+
+  --foil: linear-gradient(135deg,
+    #ff8a8a 0%, #ffd36e 15%, #a6ff7a 30%,
+    #7acfff 45%, #c68aff 60%, #ff8acf 75%,
+    #ffd36e 90%, #ff8a8a 100%);
 }
 
+/* Default surface vibe (Dugout: tactics-board grid over deep pitch) */
 body {
-  background: var(--felt);
+  background: var(--stage-bg);
+  background-image:
+    repeating-linear-gradient(0deg, rgba(232, 221, 192, 0.05) 0 2px, transparent 2px 40px),
+    repeating-linear-gradient(90deg, rgba(232, 221, 192, 0.05) 0 2px, transparent 2px 40px),
+    radial-gradient(ellipse at 50% 50%, #113a24 0%, #08200f 100%);
+  background-attachment: fixed;
   color: var(--cream);
   font-family: var(--font-body);
 }
 
-/* Phase Visual Differentiation */
+/* Phase Visual Differentiation (Dugout-tinted) */
 
 .phase-setup {
-  background: linear-gradient(135deg, #0b1a10 0%, #0f1e14 30%, #0b1a10 60%, #111d15 100%);
-  background-size: 400% 400%;
+  background:
+    repeating-linear-gradient(0deg, rgba(232, 221, 192, 0.05) 0 2px, transparent 2px 40px),
+    repeating-linear-gradient(90deg, rgba(232, 221, 192, 0.05) 0 2px, transparent 2px 40px),
+    linear-gradient(135deg, #0a2416 0%, #0f3320 30%, #08200f 60%, #103626 100%);
+  background-size: 40px 40px, 40px 40px, 400% 400%;
   animation: setupGradient 12s ease infinite;
 }
 
 @keyframes setupGradient {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  0% { background-position: 0 0, 0 0, 0% 50%; }
+  50% { background-position: 0 0, 0 0, 100% 50%; }
+  100% { background-position: 0 0, 0 0, 0% 50%; }
 }
 
 .phase-match {
-  background: linear-gradient(180deg, rgba(45,138,78,0.18) 0%, transparent 30%, var(--felt) 100%);
+  background:
+    repeating-linear-gradient(0deg, rgba(232, 221, 192, 0.06) 0 2px, transparent 2px 40px),
+    repeating-linear-gradient(90deg, rgba(232, 221, 192, 0.06) 0 2px, transparent 2px 40px),
+    radial-gradient(ellipse at 50% 30%, #145236 0%, #08200f 70%);
 }
 
 .phase-match .commentary-feed {
-  background: rgba(11,26,16,0.8);
-  border-left: 3px solid var(--pitch-green);
+  background: rgba(11, 26, 16, 0.8);
+  border-left: 3px solid var(--pitch-light);
 }
 
 .phase-shop {
-  background: linear-gradient(180deg, rgba(212,160,53,0.12) 0%, transparent 25%, var(--felt) 100%);
+  background:
+    repeating-linear-gradient(0deg, rgba(245, 197, 66, 0.05) 0 2px, transparent 2px 40px),
+    repeating-linear-gradient(90deg, rgba(245, 197, 66, 0.05) 0 2px, transparent 2px 40px),
+    linear-gradient(180deg, rgba(245, 197, 66, 0.10) 0%, transparent 25%, #08200f 100%);
 }
 
 .phase-postmatch {
-  background: radial-gradient(ellipse at center top, rgba(232,98,26,0.08) 0%, transparent 50%, var(--felt) 100%);
+  background:
+    repeating-linear-gradient(0deg, rgba(232, 221, 192, 0.05) 0 2px, transparent 2px 40px),
+    repeating-linear-gradient(90deg, rgba(232, 221, 192, 0.05) 0 2px, transparent 2px 40px),
+    radial-gradient(ellipse at center top, rgba(245, 158, 11, 0.18) 0%, transparent 50%, #08200f 100%);
+}
+
+.phase-reveal {
+  background:
+    repeating-linear-gradient(0deg, rgba(232, 221, 192, 0.05) 0 2px, transparent 2px 40px),
+    repeating-linear-gradient(90deg, rgba(232, 221, 192, 0.05) 0 2px, transparent 2px 40px),
+    radial-gradient(ellipse at 50% 40%, rgba(245, 197, 66, 0.10) 0%, transparent 50%, #08200f 100%);
 }
 
 /* Goal commentary styling */
@@ -76,10 +169,10 @@ body {
   font-weight: 700 !important;
 }
 
-/* Card fan animation */
+/* CTA breathing pulse */
 @keyframes pulseButton {
-  0%, 100% { box-shadow: 0 0 10px var(--amber-glow); }
-  50% { box-shadow: 0 0 25px var(--amber-glow), 0 0 50px rgba(232,98,26,0.2); }
+  0%, 100% { box-shadow: 0 8px 0 rgba(0, 0, 0, 0.5), 0 0 24px var(--gold-glow); }
+  50% { box-shadow: 0 8px 0 rgba(0, 0, 0, 0.5), 0 0 40px var(--gold-glow), 0 0 60px rgba(245, 197, 66, 0.25); }
 }
 
 .advance-btn-pulse {
@@ -88,8 +181,8 @@ body {
 
 /* Sub card styling */
 .sub-card {
-  background: linear-gradient(135deg, rgba(45,138,78,0.15) 0%, rgba(45,138,78,0.05) 100%) !important;
-  border-color: var(--pitch-green) !important;
+  background: linear-gradient(135deg, rgba(45, 138, 78, 0.15) 0%, rgba(45, 138, 78, 0.05) 100%) !important;
+  border-color: var(--pitch-light) !important;
 }
 
 /* Phase transition fade */
@@ -102,14 +195,9 @@ body {
   animation: fadeIn 0.3s ease-out forwards;
 }
 
-/* Card reveal phase background */
-.phase-reveal {
-  background: radial-gradient(ellipse at 50% 40%, rgba(212,160,53,0.08) 0%, transparent 50%, var(--felt) 100%);
-}
-
-/* 3D card flip system */
+/* 3D card flip system (Panini front / Top Trumps back) */
 .card-flip {
-  perspective: 800px;
+  perspective: 1000px;
   width: 130px;
   height: 170px;
 }
@@ -118,7 +206,7 @@ body {
   position: relative;
   width: 100%;
   height: 100%;
-  transition: transform 0.5s ease-out;
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   transform-style: preserve-3d;
 }
 
@@ -130,8 +218,9 @@ body {
 .card-flip-back {
   position: absolute;
   inset: 0;
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
-  border-radius: 10px;
+  border-radius: var(--r-card);
 }
 
 .card-flip-front {
@@ -139,14 +228,24 @@ body {
 }
 
 .card-flip-back {
-  background: linear-gradient(135deg, #241e16 0%, #1a1510 40%, #0f120a 100%);
-  border: 2px solid var(--gold);
+  background: linear-gradient(160deg, #3a1218 0%, #1a0608 100%);
+  border: 3px solid var(--clash-red-hi);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Rarity screen flash */
+/* Foil sheen helper */
+.foil-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--foil);
+  opacity: 0.14;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* Rarity flashes */
 @keyframes rarityFlashEpic {
   0% { opacity: 0.5; }
   100% { opacity: 0; }
@@ -158,13 +257,11 @@ body {
   100% { opacity: 0; transform: scale(1); }
 }
 
-/* Card settle from center to row */
 @keyframes settleToRow {
   from { transform: scale(1) translateY(0); opacity: 1; }
   to { transform: scale(0.55) translateY(10px); opacity: 0.9; }
 }
 
-/* Pack opening tear */
 @keyframes packTear {
   0% { transform: scale(1); opacity: 1; }
   40% { transform: scale(1.1); opacity: 1; }
@@ -179,10 +276,11 @@ body {
 }
 
 .score-pop {
+  font-family: var(--font-arcade);
+  letter-spacing: 0.02em;
   animation: scorePop 0.4s ease-out forwards;
 }
 
-/* Card appear in reveal */
 @keyframes cardAppear {
   from { transform: scale(0.8); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
@@ -190,6 +288,40 @@ body {
 
 .card-appear {
   animation: cardAppear 0.3s ease-out forwards;
+}
+
+/* Semantic typography hooks */
+h1.display, .display {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: -0.005em;
+  line-height: 0.92;
+  margin: 0;
+}
+
+.stat-number {
+  font-family: var(--font-stat);
+  line-height: 1;
+}
+
+.flavour {
+  font-family: var(--font-flavour);
+  font-style: italic;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.marker {
+  font-family: var(--font-marker);
+}
+
+.paper-card {
+  background: var(--paper);
+  color: var(--surface-ink);
+  box-shadow: var(--shadow-card);
+  border-radius: var(--r-card);
 }
 
 /* ---------------------------------------------------------------------------
@@ -213,7 +345,6 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Hover lift — desktop only */
 @media (hover: hover) {
   .card-hand-slot:not(.card-hand-selected):hover {
     transform: translateY(-12px) scale(1.04) rotate(0deg) !important;
@@ -221,14 +352,12 @@ body {
   }
 }
 
-/* Selected lift */
 .card-hand-selected {
   transform: translateY(-28px) scale(1.08) rotate(0deg) !important;
   z-index: 50 !important;
-  filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.5));
+  filter: drop-shadow(0 0 8px rgba(245, 197, 66, 0.55));
 }
 
-/* Desktop: scale up cards */
 @media (min-width: 768px) {
   .card-hand {
     min-height: 140px;
