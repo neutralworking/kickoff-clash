@@ -199,6 +199,11 @@ interface CardScoreState {
 /**
  * Apply role abilities to card score states.
  * Returns effects log for commentary.
+ *
+ * @deprecated Superseded by `ROLE_TRANSFORMS` (role-transforms.ts), which expresses
+ * every role as palette verbs dispatched in `evaluateSplit` (match-v5.ts). Retained
+ * only for the legacy `evaluateLineup` path still re-exported by run.ts. New role
+ * behaviour goes in `ROLE_TRANSFORMS`, not here.
  */
 function applyRoleAbilities(
   cards: SlottedCard[],

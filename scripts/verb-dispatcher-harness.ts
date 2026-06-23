@@ -136,7 +136,7 @@ console.log('\n3. Verb-level checks');
 {
   const base: Record<ZoneName, number> = { attack: 1000, defence: 1000, creation: 400, finishing: 400 };
   const mk = (over: Partial<DispatchCard>): DispatchCard => ({
-    id: 1, power: 80, archetype: 'Creator', team: 'player', side: 'attack', isWide: true,
+    id: 1, power: 80, archetype: 'Creator', position: 'WF', team: 'player', side: 'attack', isWide: true,
     emit: { attack: 80, defence: 0, creation: 50, finishing: 50 }, traits: [], ...over,
   });
 
@@ -163,6 +163,22 @@ console.log('\n3. Verb-level checks');
   const strongLine = ldRes.log.find((l) => l.note.includes('(#2)'));
   check('amplify-inverse-power lifts the weak card far more than the strong', !!weakLine && !!strongLine && weakLine.value > strongLine.value * 4, `weak=${weakLine?.value} strong=${strongLine?.value}`);
   check('amplify-inverse-power curve = amount×(1−power/100)', Math.abs(ldRes.zones.attack - 222.5) < 1e-9, `attack=${ldRes.zones.attack}`);
+
+  // archetype-criterion targeting hits only matching cards (e.g. Metodista → Controllers).
+  const tempo = [{ name: 'Tempo', verb: 'amplify' as const, params: { amount: 0.10 }, scope: 'global' as const, target: { kind: 'criterion' as const, criterion: 'archetype' as const, archetype: 'Controller' as const } }];
+  const ctrl = mk({ id: 1, archetype: 'Controller', side: 'defence', emit: { attack: 0, defence: 100, creation: 0, finishing: 0 }, traits: tempo });
+  const striker = mk({ id: 2, archetype: 'Striker', side: 'attack', emit: { attack: 100, defence: 0, creation: 0, finishing: 0 }, traits: [] });
+  const tempoRes = dispatchTraits([ctrl, striker], { attack: 100, defence: 100, creation: 0, finishing: 0 }, SEED, 0);
+  check('archetype criterion targets only matching archetype', Math.abs(tempoRes.zones.defence - 110) < 1e-9 && tempoRes.zones.attack === 100, `def=${tempoRes.zones.defence} atk=${tempoRes.zones.attack}`);
+
+  // chance gate is deterministic and respects the probability band.
+  const treq = (id: number) => mk({ id, traits: ROLE_TRANSFORMS['Trequartista'] });
+  const ids = Array.from({ length: 200 }, (_, i) => i + 1);
+  const fired = (inc: number) => ids.filter((id) => dispatchTraits([treq(id)], { attack: 1000, defence: 0, creation: 0, finishing: 0 }, SEED, inc).zones.attack > 1000).length;
+  const rateA = fired(0);
+  const rateB = fired(0);
+  check('chance gate is deterministic (identical fire-set on repeat)', rateA === rateB, `${rateA} == ${rateB}`);
+  check('chance gate ~30% fire rate over 200 cards', rateA > 200 * 0.2 && rateA < 200 * 0.4, `${rateA}/200 fired`);
 
   // priority escape hatch: a p1 amplify sees a p0 generate's result.
   const stacked = mk({ traits: [

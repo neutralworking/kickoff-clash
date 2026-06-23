@@ -87,13 +87,14 @@ export type CriterionName =
   | 'lowest-power'
   | 'highest-power'
   | 'attackers'
-  | 'defenders';
+  | 'defenders'
+  | 'archetype';
 
 export type TraitTarget =
   | { kind: 'zone'; zone: ZoneName }
   | { kind: 'self' }
-  | { kind: 'criterion'; criterion: CriterionName; zone?: ZoneName }
-  | { kind: 'enemyCard'; criterion?: CriterionName; zone?: ZoneName };
+  | { kind: 'criterion'; criterion: CriterionName; archetype?: string; zone?: ZoneName }
+  | { kind: 'enemyCard'; criterion?: CriterionName; archetype?: string; zone?: ZoneName };
 
 /** Conditions are data, not closures, so a record stays fully declarative. */
 export type TraitCondition =
@@ -101,7 +102,8 @@ export type TraitCondition =
   | { kind: 'is-attacking' }
   | { kind: 'is-defending' }
   | { kind: 'in-wide-slot' }
-  | { kind: 'archetype'; archetype: string };
+  | { kind: 'in-position'; positions: string[] }
+  | { kind: 'archetype'; archetype?: string; anyOf?: string[] };
 
 export interface TraitRecord {
   name: string;
@@ -126,6 +128,7 @@ export interface DispatchCard {
   power: number;
   archetype: string;
   tacticalRole?: string;
+  position: string;
   team: 'player' | 'opponent';
   side: 'attack' | 'defence';
   isWide: boolean;
@@ -174,6 +177,13 @@ export function traitRng(seed: number, increment: number, cardId: number, salt =
   return seededRandom(mixed);
 }
 
+/** Stable integer salt from a trait name (order-independent RNG keying). */
+function nameSalt(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
 // ---------------------------------------------------------------------------
 // FieldState helpers
 // ---------------------------------------------------------------------------
@@ -220,7 +230,11 @@ function conditionHolds(condition: TraitCondition | undefined, owner: DispatchCa
     case 'is-attacking': return owner.side === 'attack';
     case 'is-defending': return owner.side === 'defence';
     case 'in-wide-slot': return owner.isWide;
-    case 'archetype': return owner.archetype === condition.archetype;
+    case 'in-position': return condition.positions.includes(owner.position);
+    case 'archetype':
+      return condition.anyOf
+        ? condition.anyOf.includes(owner.archetype)
+        : owner.archetype === condition.archetype;
     default: return true;
   }
 }
@@ -245,18 +259,21 @@ function resolveTargetCards(ctx: VerbContext): DispatchCard[] {
     case 'self':
       return [owner];
     case 'criterion':
-      return pickByCriterion(team, record.target.criterion);
+      return pickByCriterion(team, record.target);
     case 'enemyCard':
-      return pickByCriterion(enemies, record.target.criterion);
+      return pickByCriterion(enemies, record.target);
     case 'zone':
     default:
       return [];
   }
 }
 
-function pickByCriterion(cards: DispatchCard[], criterion: CriterionName | undefined): DispatchCard[] {
+function pickByCriterion(
+  cards: DispatchCard[],
+  target: { criterion?: CriterionName; archetype?: string },
+): DispatchCard[] {
   if (cards.length === 0) return [];
-  switch (criterion) {
+  switch (target.criterion) {
     case 'lowest-power':
       return [[...cards].sort((a, b) => a.power - b.power || a.id - b.id)[0]];
     case 'highest-power':
@@ -265,6 +282,8 @@ function pickByCriterion(cards: DispatchCard[], criterion: CriterionName | undef
       return cards.filter((c) => c.side === 'attack');
     case 'defenders':
       return cards.filter((c) => c.side === 'defence');
+    case 'archetype':
+      return cards.filter((c) => c.archetype === target.archetype);
     case 'all-teammates':
     case undefined:
     default:
@@ -409,9 +428,6 @@ export function dispatchTraits(
   seed: number,
   increment: number,
 ): DispatchResult {
-  void seed;
-  void increment; // reserved for verbs that roll RNG; the v1 records are deterministic.
-
   const field = emptyField({ ...baseZones });
   const log: TraitLogLine[] = [];
 
@@ -439,6 +455,12 @@ export function dispatchTraits(
 
       for (const { record, owner } of inPhase) {
         if ((record.priority ?? 0) !== priority) continue;
+        // Probabilistic records (e.g. Trequartista) roll a seeded gate. The salt
+        // is name-derived so the roll is stable regardless of iteration order.
+        if (record.params.chance !== undefined) {
+          const roll = traitRng(seed, increment, owner.id, nameSalt(record.name));
+          if (roll >= record.params.chance) continue;
+        }
         const team = owner.team === 'player' ? playerTeam : opponentTeam;
         const enemies = owner.team === 'player' ? opponentTeam : playerTeam;
         VERBS[record.verb]({ record, owner, team, enemies, snapshot, pool, log });

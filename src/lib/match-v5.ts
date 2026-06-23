@@ -566,6 +566,7 @@ export function evaluateSplit(
     power: card.power,
     archetype: card.archetype,
     tacticalRole: card.tacticalRole,
+    position: card.position,
     team: 'player',
     side: state.attackerIds.has(card.id) ? 'attack' : 'defence',
     isWide: isWideCard(card),
