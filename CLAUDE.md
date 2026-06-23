@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Required first read
+
+The Kickoff Clash match-engine redesign is specified in `docs/`. **Read `docs/KICKOFF_CLASH_DESIGN.md` first** — it is the index, has **precedence**, and resolves cross-doc drift (notably the superseded `MATCH_ENGINE_V1 §6` and the Player/Tactical/Manager naming). It orders the four companion specs:
+
+- `docs/ARCHETYPES_V1.md` — verb palette + 11 emergent identities + counter-web
+- `docs/CARDS_V1.md` — player model, `TraitRecord`, chemistry, 500-card authoring
+- `docs/MATCH_ENGINE_V1.md` — increment loop, zonal field, xG→Poisson, dispatcher
+- `docs/ECONOMY_V1.md` — three card layers, revenue, run loop
+
+Build order is in `DESIGN §8`; step 1 (verb dispatcher + `TraitRecord` runtime) is implemented in `src/lib/verbs.ts` + `src/lib/role-transforms.ts`, wired into `evaluateSplit`. `MATCH_ENGINE_V5.md` (repo root) describes the **current** live engine that the redesign is migrating from.
+
 ## Commands
 
 ```bash

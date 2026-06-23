@@ -25,6 +25,9 @@ import {
   generateInjuryText,
 } from './hand';
 import type { MatchEvent } from './hand';
+import type { DispatchCard, ZoneName } from './verbs';
+import { dispatchTraits, ZONES } from './verbs';
+import { traitsForCard } from './role-transforms';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,6 +84,10 @@ export interface AttackDefenceSplit {
   crossSynergies: CrossSynergy[];
   attackerCount: number;
   maxAttackers: number;
+  /** Opponent goal-chance reduction produced by `deny` verbs (Volante). 0 = none. */
+  opponentDenial: number;
+  /** Outcome-spread shaping for the xG step (dampen/amplify-variance). 0 = neutral. */
+  varianceFactor: number;
 }
 
 export interface IncrementResult {
@@ -495,7 +502,12 @@ export function evaluateSplit(
   const attackBreakdown: CascadeLine[] = [];
   const defenceBreakdown: CascadeLine[] = [];
 
-  // --- Base power ---
+  // --- Base power (per-card emission into the four proto-zones) ---
+  // Each card's emission feeds the verb dispatcher (MATCH_ENGINE §7: base emit
+  // snapshot → transforms → contest), then the transformed field flows on.
+  const emit = new Map<number, Record<ZoneName, number>>();
+  const zeroEmit = (): Record<ZoneName, number> => ({ attack: 0, defence: 0, creation: 0, finishing: 0 });
+
   // Sort attackers by power descending — weakest get diminished if over cap
   const sortedAttackers = [...attackers].sort((a, b) => b.power - a.power);
   let baseAttack = 0;
@@ -512,6 +524,9 @@ export function evaluateSplit(
     }
 
     baseAttack += power;
+    const e = emit.get(card.id) ?? zeroEmit();
+    e.attack = power;
+    emit.set(card.id, e);
   }
 
   let baseDefence = 0;
@@ -522,10 +537,74 @@ export function evaluateSplit(
     // Engine: 70% to assigned side
     if (isEngine(card)) power = Math.round(power * 0.70);
     baseDefence += power;
+    const e = emit.get(card.id) ?? zeroEmit();
+    e.defence = power;
+    emit.set(card.id, e);
+  }
+
+  // Chance creation / finishing emission (per attacker via getChanceProfile).
+  let baseCreation = 0;
+  let baseFinishing = 0;
+  for (const card of attackers) {
+    const profile = getChanceProfile(card);
+    const creation = Math.round(card.power * profile.creation);
+    const finishing = Math.round(card.power * profile.finishing);
+    baseCreation += creation;
+    baseFinishing += finishing;
+    const e = emit.get(card.id) ?? zeroEmit();
+    e.creation = creation;
+    e.finishing = finishing;
+    emit.set(card.id, e);
   }
 
   attackBreakdown.push({ label: 'Forward commitment', value: baseAttack, type: 'base' });
   defenceBreakdown.push({ label: 'Back-line shape', value: baseDefence, type: 'base' });
+
+  // --- Verb dispatcher: migrated roles + new transforms reshape the field ---
+  const dispatchCards: DispatchCard[] = xi.map((card) => ({
+    id: card.id,
+    power: card.power,
+    archetype: card.archetype,
+    tacticalRole: card.tacticalRole,
+    team: 'player',
+    side: state.attackerIds.has(card.id) ? 'attack' : 'defence',
+    isWide: isWideCard(card),
+    emit: emit.get(card.id) ?? zeroEmit(),
+    traits: traitsForCard(card),
+  }));
+
+  const baseField = { attack: baseAttack, defence: baseDefence, creation: baseCreation, finishing: baseFinishing };
+  const dispatched = dispatchTraits(dispatchCards, baseField, state.seed, state.currentIncrement);
+
+  // Adopt the transformed field; surface non-trivial shifts as cascade lines.
+  const transformLabels: Record<ZoneName, Set<string>> = {
+    attack: new Set(), defence: new Set(), creation: new Set(), finishing: new Set(),
+  };
+  for (const line of dispatched.log) {
+    if (line.zone) transformLabels[line.zone].add(line.trait);
+  }
+  const zoneDelta: Record<ZoneName, number> = zeroEmit();
+  for (const z of ZONES) {
+    const next = Math.max(0, Math.round(dispatched.zones[z]));
+    zoneDelta[z] = next - baseField[z];
+  }
+  baseAttack = Math.max(0, baseAttack + zoneDelta.attack);
+  baseDefence = Math.max(0, baseDefence + zoneDelta.defence);
+  baseCreation = Math.max(0, baseCreation + zoneDelta.creation);
+  baseFinishing = Math.max(0, baseFinishing + zoneDelta.finishing);
+
+  if (zoneDelta.attack !== 0) {
+    attackBreakdown.push({ label: `${[...transformLabels.attack].join(' + ') || 'Verb dispatcher'}`, value: zoneDelta.attack, type: 'ability' });
+  }
+  if (zoneDelta.defence !== 0) {
+    defenceBreakdown.push({ label: `${[...transformLabels.defence].join(' + ') || 'Verb dispatcher'}`, value: zoneDelta.defence, type: 'ability' });
+  }
+  if (zoneDelta.creation !== 0) {
+    attackBreakdown.push({ label: `${[...transformLabels.creation].join(' + ') || 'Verb dispatcher'} (creation)`, value: zoneDelta.creation, type: 'ability' });
+  }
+  if (zoneDelta.finishing !== 0) {
+    attackBreakdown.push({ label: `${[...transformLabels.finishing].join(' + ') || 'Verb dispatcher'} (finishing)`, value: zoneDelta.finishing, type: 'ability' });
+  }
 
   // --- Dual-role contributions ---
   let dualAttack = 0;
@@ -647,13 +726,6 @@ export function evaluateSplit(
   let attackTotal = baseAttack + dualAttack + synergyAttack + crossAttack + styleAttack + weaknessBonus + tacticBonus + managerBonus;
   let defenceTotal = baseDefence + dualDefence + synergyDefence + crossDefence + playPattern.defenceBonus;
   const attackerPowerPool = attackers.reduce((sum, card) => sum + card.power, 0);
-  let baseCreation = 0;
-  let baseFinishing = 0;
-  for (const card of attackers) {
-    const profile = getChanceProfile(card);
-    baseCreation += Math.round(card.power * profile.creation);
-    baseFinishing += Math.round(card.power * profile.finishing);
-  }
   const chemistryDensity = attackerPowerPool > 0
     ? (synergyAttack + crossAttack) / attackerPowerPool
     : 0;
@@ -724,6 +796,8 @@ export function evaluateSplit(
     crossSynergies,
     attackerCount: attackers.length,
     maxAttackers: maxAtk,
+    opponentDenial: dispatched.opponentDenial,
+    varianceFactor: dispatched.variance,
   };
 }
 
@@ -762,6 +836,11 @@ export function resolveIncrement(
   let opponentChanceQuality = clamp(0.17 + (theirPressureRatio - 0.72) * 0.18, 0.10, 0.62);
   let opponentGoalChance = clamp(opponentChanceVolume * opponentChanceQuality * 1.10, 0.02, 0.40);
 
+  // `deny` verbs (Volante) suppress the opponent's conversion. Capped so a stack
+  // of denials can never fully shut out the opponent. Neutral when no deny fired.
+  const denial = clamp(split.opponentDenial ?? 0, 0, 0.5);
+  opponentGoalChance *= 1 - denial;
+
   // 90th minute drama
   if (state.currentIncrement === 4) {
     yourChanceVolume *= 1.18;
@@ -772,8 +851,11 @@ export function resolveIncrement(
     opponentGoalChance *= 1.3;
   }
 
-  // Seeded random for deterministic results
-  const yourRoll = seededRandom(seed * 71 + state.currentIncrement * 13 + 1);
+  // Seeded random for deterministic results. Variance verbs shape the spread of
+  // your roll around its mean (forward hook for the xG→Poisson step; neutral at 0).
+  const variance = split.varianceFactor ?? 0;
+  const shapeRoll = (r: number) => (variance === 0 ? r : clamp(0.5 + (r - 0.5) * (1 + variance), 0, 0.9999));
+  const yourRoll = shapeRoll(seededRandom(seed * 71 + state.currentIncrement * 13 + 1));
   const theirRoll = seededRandom(seed * 83 + state.currentIncrement * 17 + 2);
 
   const yourScored = yourRoll < yourGoalChance;
