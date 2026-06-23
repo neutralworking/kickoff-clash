@@ -14,16 +14,11 @@ import {
   resolveIncrement,
   getOpponentBaselines,
   advanceIncrement,
-  makeSub,
-  discardFromBench,
   getMatchResult,
 } from '../lib/match-v5';
 import type { TacticSlots } from '../lib/tactics';
 import { canDeploy, createEmptySlots, deployTactic, removeTactic } from '../lib/tactics';
-import MatchScorebar from './match/MatchScorebar';
 import PitchMatchView from './match/PitchMatchView';
-import ResolvingPhase from './match/ResolvingPhase';
-import BetweenPhase from './match/BetweenPhase';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -140,36 +135,6 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     }
   }, [matchState, currentResult]);
 
-  // ---- Sub ----
-  const handleSub = useCallback(
-    (xiCardId: number, benchCardId: number) => {
-      setMatchState((prev: MatchV5State) => makeSub(prev, xiCardId, benchCardId));
-    },
-    [],
-  );
-
-  // ---- Discard ----
-  const handleDiscard = useCallback(
-    (benchCardIds: number[]) => {
-      setMatchState((prev: MatchV5State) => discardFromBench(prev, benchCardIds));
-    },
-    [],
-  );
-
-  // ---- Formation change (halftime) ----
-  const handleFormationChange = useCallback(
-    (formationId: string) => {
-      const newFormation = getFormation(formationId);
-      setMatchState((prev: MatchV5State) => ({ ...prev, formation: newFormation }));
-    },
-    [],
-  );
-
-  // ---- Continue from between/halftime ----
-  const handleContinue = useCallback(() => {
-    setSubPhase('planning');
-  }, []);
-
   const handleToggleTactic = useCallback((tacticId: string) => {
     const tactic = runState.tacticsDeck.find((card) => card.id === tacticId);
     if (!tactic) return;
@@ -242,63 +207,8 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
         overflow: 'hidden',
       }}
     >
-      {/* Generic header — hidden on the planning screen, which owns its own. */}
-      {subPhase !== 'planning' && (<>
-      {/* Joker row — compact inline pills to save vertical space */}
-      <div
-        className="match-joker-row"
-        style={{
-          display: 'flex',
-          gap: 6,
-          padding: '8px 14px 6px',
-          background: 'rgba(0,0,0,0.25)',
-          alignItems: 'center',
-          overflowX: 'auto',
-          flexShrink: 0,
-        }}
-      >
-        <span style={{ fontSize: 9, color: 'var(--dust, #8a7560)', flexShrink: 0 }}>
-          {'\u{1F454}'}
-        </span>
-        {runState.jokers.length === 0 && (
-          <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-            No managers
-          </span>
-        )}
-        {runState.jokers.map((j) => (
-          <span
-            key={j.id}
-            style={{
-              fontSize: 9,
-              color: 'var(--cream, #f5f0e8)',
-              padding: '2px 6px',
-              borderRadius: 4,
-              background: 'rgba(212,160,53,0.12)',
-              border: '1px solid rgba(212,160,53,0.3)',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            {j.name}
-          </span>
-        ))}
-      </div>
-
-      {/* Score bar */}
-      <MatchScorebar
-        yourGoals={matchState.yourGoals}
-        opponentGoals={matchState.opponentGoals}
-        minute={nextMinute}
-        opponentName={opponentBuild.name}
-        round={runState.round}
-        seasonPoints={runState.seasonPoints}
-        boardTargetPoints={runState.boardTargetPoints}
-        subPhase={subPhase}
-      />
-      </>)}
-
-      {/* Main content area by sub-phase */}
-      {subPhase === 'planning' && (
+      {/* One screen for the whole match: plan → resolve → next, on the pitch. */}
+      {subPhase !== 'finished' && (
         <PitchMatchView
           matchState={matchState}
           formation={matchState.formation}
@@ -307,31 +217,11 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
           availableTactics={runState.tacticsDeck}
           opponentBuild={opponentBuild}
           nextMinute={nextMinute}
+          mode={subPhase === 'resolving' ? 'resolve' : 'plan'}
+          currentResult={currentResult}
           onToggleAttacker={handleToggleAttacker}
           onToggleTactic={handleToggleTactic}
-          onKickOff={handleKickOff}
-        />
-      )}
-
-      {subPhase === 'resolving' && currentResult && (
-        <ResolvingPhase
-          result={currentResult}
-          onComplete={handleResolveComplete}
-        />
-      )}
-
-      {(subPhase === 'between' || subPhase === 'halftime') && (
-        <BetweenPhase
-          matchState={matchState}
-          ownedFormations={runState.ownedFormations}
-          isHalftime={subPhase === 'halftime'}
-          tacticSlots={tacticSlots}
-          availableTactics={runState.tacticsDeck}
-          onSub={handleSub}
-          onDiscard={handleDiscard}
-          onFormationChange={handleFormationChange}
-          onToggleTactic={handleToggleTactic}
-          onContinue={handleContinue}
+          onContinue={subPhase === 'resolving' ? handleResolveComplete : handleKickOff}
         />
       )}
 
