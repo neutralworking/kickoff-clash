@@ -98,6 +98,54 @@ const SECONDARY_TO_ARCHETYPE: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Model → tacticalRole mapping
+// ---------------------------------------------------------------------------
+
+// The engine's tactical-role vocabulary lives in getChanceProfile / chemistry
+// ROLE_COMBOS / ROLE_TRANSFORMS. The data's `model` field is the role identity;
+// map it onto that vocabulary. (Previously `tacticalRole` was fed `char.primary`,
+// an archetype tag, so no role logic ever fired.) A few identities depend on
+// where the card plays — see deriveTacticalRole. Tune in the authoring pass (CARDS §6).
+const MODEL_TO_ROLE: Record<string, string> = {
+  // Midfield
+  Regista: 'Regista', Metronome: 'Regista', Lynchpin: 'Metodista',
+  Driver: 'Mezzala', 'Box-To-Box': 'Tuttocampista', Dynamo: 'Tuttocampista',
+  Motor: 'Relayeur', Presser: 'Volante',
+  // Creators / attacking mid
+  Playmaker: 'Enganche', Provider: 'Enganche', Maestro: 'Fantasista',
+  Magician: 'Fantasista', Catalyst: 'Trequartista',
+  // Wide
+  Winger: 'Winger', Wizard: 'Inverted Winger', // inside-forward identity (wide dribbler, cuts in)
+  Fullback: 'Lateral', Wingback: 'Lateral', Cornerback: 'Lateral',
+  Tornate: 'Tornante', Outlet: 'Extremo', Flash: 'Extremo', Rocket: 'Extremo', Marauder: 'Extremo',
+  // Strikers
+  Poacher: 'Poacher', Hitman: 'Poacher', Assassin: 'Poacher', Sniper: 'Poacher',
+  Rifle: 'Poacher', Attacker: 'Poacher',
+  Spearhead: 'Prima Punta', Target: 'Prima Punta', Tower: 'Prima Punta', Presence: 'Prima Punta',
+  // Defenders
+  Anchor: 'Anchor', Libero: 'Libero', Shield: 'Sweeper', Sentinel: 'Sweeper', Sentry: 'Sweeper',
+  Bulwark: 'Zagueiro', Rock: 'Zagueiro',
+  // Goalkeepers
+  Shotstopper: 'Torwart', Wall: 'Torwart', Cat: 'Sweeper Keeper', 'Libero GK': 'Ball-Playing GK',
+};
+
+/**
+ * Resolve a card's tactical role from its data `model` and mapped position.
+ * Position-aware identities are flagged — they are the natural homes for the
+ * step-1 ROLE_TRANSFORMS and are the first dial to turn in authoring.
+ */
+function deriveTacticalRole(model: string, position: string): string | undefined {
+  if (model === 'Trequartista') return position === 'CF' ? 'Falso Nove' : 'Trequartista';
+  if (model === 'Destroyer') return position === 'CM' ? 'Volante' : 'Stopper';
+  if (model === 'Enforcer') return position === 'CD' ? 'Stopper' : 'Volante';
+  if (['Titan', 'Bison', 'Bulldozer', 'Juggernaut', 'Gladiator'].includes(model)) {
+    return position === 'CF' ? 'Prima Punta' : 'Stopper';
+  }
+  // Leader / General carry no distinct tactical role (commander/personality flavour).
+  return MODEL_TO_ROLE[model];
+}
+
+// ---------------------------------------------------------------------------
 // Character → Personality Theme mapping
 // ---------------------------------------------------------------------------
 
@@ -221,7 +269,7 @@ export function transformCharacter(char: KCCharacter, index: number): Card {
     position,
     archetype,
     secondaryArchetype: SECONDARY_TO_ARCHETYPE[char.secondary] ?? MODEL_TO_ARCHETYPE[char.secondary] ?? undefined,
-    tacticalRole: char.primary,
+    tacticalRole: deriveTacticalRole(char.model, position),
     personalityType,
     personalityTheme: theme,
     power: char.level,

@@ -174,5 +174,27 @@ console.log('\n3. Verb-level checks');
   check('priority lets a later sub-pass observe an earlier one', Math.abs(stRes.zones.attack - 200) < 1e-9, `attack=${stRes.zones.attack}`);
 }
 
+// ---------------------------------------------------------------------------
+// 4. Real-data wiring: transform.ts derives roles → dispatcher fires (no stamping)
+// ---------------------------------------------------------------------------
+console.log('\n4. Real-data wiring (roles derived by transform.ts, not stamped)');
+{
+  const pick = (role: string) => cards.find((c) => c.tacticalRole === role);
+  const roled = ['Regista', 'Volante', 'Anchor', 'Inverted Winger', 'Falso Nove'].map(pick);
+  check('all five step-1 roles exist in the transformed pool', roled.every(Boolean), roled.map((c) => c?.tacticalRole).join(', '));
+
+  // A realistic XI: the five roled cards + fillers, attackers = the wide/forward roles.
+  const fillers = cards.filter((c) => !roled.includes(c)).sort((a, b) => b.power - a.power).slice(0, 6);
+  const xi = [...roled.filter((c): c is NonNullable<typeof c> => !!c), ...fillers];
+  const bench = cards.sort((a, b) => b.power - a.power).slice(20, 27);
+  let s = initMatch(xi, bench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter');
+  const atkIds = xi.filter((c) => c.tacticalRole === 'Inverted Winger' || c.tacticalRole === 'Falso Nove' || c.position === 'CF' || c.position === 'WF')
+    .slice(0, 4).map((c) => c.id);
+  s = commitAttackers(s, atkIds);
+  const split = evaluateSplit(s, [], slots);
+  const named = split.attackBreakdown.concat(split.defenceBreakdown).filter((l) => /Cut Inside|Drop Deep|Metronome|The Shield|Vacate/.test(l.label));
+  check('dispatcher fires from transform-derived roles', split.opponentDenial > 0 || named.length > 0, `denial=${split.opponentDenial}, lines=[${named.map((l) => l.label).join('; ')}]`);
+}
+
 console.log(`\n=== ${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} ===\n`);
 process.exit(failures === 0 ? 0 : 1);
