@@ -11,7 +11,7 @@ The Kickoff Clash match-engine redesign is specified in `docs/`. **Read `docs/KI
 - `docs/MATCH_ENGINE_V1.md` — increment loop, zonal field, xG→Poisson, dispatcher
 - `docs/ECONOMY_V1.md` — three card layers, revenue, run loop
 
-Build order is in `DESIGN §8`; step 1 (verb dispatcher + `TraitRecord` runtime) is implemented in `src/lib/verbs.ts` + `src/lib/role-transforms.ts`, wired into `evaluateSplit`. `MATCH_ENGINE_V5.md` (repo root) describes the **current** live engine that the redesign is migrating from.
+Build order is in `DESIGN §8`. Step 1 (verb dispatcher + `TraitRecord` runtime) is in `src/lib/verbs.ts` + `src/lib/role-transforms.ts`, wired into `evaluateSplit`. Step 2 (zonal field + coupled lane contest, §4) is in `src/lib/field.ts`; the contest runs in `resolveIncrement`. Three §4 dials were set with the design owner: **coupled** defence (not independent lanes), convexity **k≈1.1**, and a **gentle** goal model (variance verbs are the opt-in toward Poisson, not the default). `MATCH_ENGINE_V5.md` (repo root) describes the **current** live engine that the redesign is migrating from.
 
 ## Commands
 

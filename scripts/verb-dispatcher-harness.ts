@@ -33,6 +33,7 @@ import {
 } from '../src/lib/match-v5';
 import { dispatchTraits, type DispatchCard, type ZoneName } from '../src/lib/verbs';
 import { ROLE_TRANSFORMS } from '../src/lib/role-transforms';
+import { cellOf, coupledAttackThreat, coupledDefenceThreat, type Lane } from '../src/lib/field';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -210,6 +211,37 @@ console.log('\n4. Real-data wiring (roles derived by transform.ts, not stamped)'
   const split = evaluateSplit(s, [], slots);
   const named = split.attackBreakdown.concat(split.defenceBreakdown).filter((l) => /Cut Inside|Drop Deep|Metronome|The Shield|Vacate/.test(l.label));
   check('dispatcher fires from transform-derived roles', split.opponentDenial > 0 || named.length > 0, `denial=${split.opponentDenial}, lines=[${named.map((l) => l.label).join('; ')}]`);
+}
+
+// ---------------------------------------------------------------------------
+// 5. Zonal field & coupled lane contest (step 2)
+// ---------------------------------------------------------------------------
+console.log('\n5. Zonal field & coupled lane contest');
+{
+  check('cellOf buckets slot x/y into lane×band', cellOf(50, 12) === 'ATT_C' && cellOf(10, 78) === 'DEF_L' && cellOf(50, 50) === 'MID_C');
+
+  const oppDef = 300;
+  const spread: Record<Lane, number> = { L: 100, C: 100, R: 100 };
+  const overload: Record<Lane, number> = { L: 300, C: 0, R: 0 };
+  const spreadThreat = coupledAttackThreat(spread, oppDef);
+  const overloadThreat = coupledAttackThreat(overload, oppDef);
+  check('spread beats pure overload vs a reactive defence (same total push)', spreadThreat > overloadThreat, `spread=${spreadThreat.toFixed(2)} overload=${overloadThreat.toFixed(2)}`);
+
+  const oppAtk = 300;
+  const evenCover: Record<Lane, number> = { L: 100, C: 100, R: 100 };
+  const thinCover: Record<Lane, number> = { L: 300, C: 0, R: 0 };
+  const evenThreat = coupledDefenceThreat(evenCover, oppAtk);
+  const thinThreat = coupledDefenceThreat(thinCover, oppAtk);
+  check('a thin defensive lane leaks more than balanced cover (same total)', thinThreat > evenThreat, `thin=${thinThreat.toFixed(2)} even=${evenThreat.toFixed(2)}`);
+
+  // evaluateSplit now exposes per-lane vectors.
+  const xi = buildRoledXI();
+  const bench = cards.sort((a, b) => b.power - a.power).slice(11, 18);
+  let s = initMatch(xi, bench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter');
+  s = commitAttackers(s, [...s.xi].sort((a, b) => b.power - a.power).slice(0, 4).map((c) => c.id));
+  const split = evaluateSplit(s, [], slots);
+  const lanes = (split.lanePush.L + split.lanePush.C + split.lanePush.R) > 0;
+  check('evaluateSplit emits a per-lane push vector', lanes, `push=${JSON.stringify(Object.fromEntries(['L','C','R'].map((l) => [l, Math.round(split.lanePush[l as Lane])])))}`);
 }
 
 console.log(`\n=== ${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} ===\n`);

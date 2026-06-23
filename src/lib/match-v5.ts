@@ -28,6 +28,8 @@ import type { MatchEvent } from './hand';
 import type { DispatchCard, ZoneName } from './verbs';
 import { dispatchTraits, ZONES } from './verbs';
 import { traitsForCard } from './role-transforms';
+import type { Lane, Cell, PlacedEmission } from './field';
+import { cellOf, computeLaneVectors, coupledAttackThreat, coupledDefenceThreat } from './field';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,6 +90,10 @@ export interface AttackDefenceSplit {
   opponentDenial: number;
   /** Outcome-spread shaping for the xG step (dampen/amplify-variance). 0 = neutral. */
   varianceFactor: number;
+  /** Per-lane attacking threat (zonal field, §4) — consumed by the coupled contest. */
+  lanePush: Record<Lane, number>;
+  /** Per-lane defensive cover (zonal field, §4). */
+  laneCover: Record<Lane, number>;
 }
 
 export interface IncrementResult {
@@ -607,6 +613,24 @@ export function evaluateSplit(
     attackBreakdown.push({ label: `${[...transformLabels.finishing].join(' + ') || 'Verb dispatcher'} (finishing)`, value: zoneDelta.finishing, type: 'ability' });
   }
 
+  // --- Zonal field (§4): place the (dispatcher-adjusted) emission onto lanes ---
+  // Spatial shape comes from each card's formation cell; magnitude tracks the
+  // post-dispatcher attack/defence totals. The coupled lane contest runs downstream
+  // in resolveIncrement (it needs the opponent's defensive budget).
+  const slotCellFor = (card: Card): Cell => {
+    const slot = formation.slots.find((s: FormationSlot) => s.accepts.includes(card.position));
+    return slot ? cellOf(slot.x, slot.y) : 'MID_C';
+  };
+  const preAttackSum = attackers.reduce((s, c) => s + (emit.get(c.id)?.attack ?? 0), 0);
+  const preDefSum = defenders.reduce((s, c) => s + (emit.get(c.id)?.defence ?? 0), 0);
+  const scaleA = preAttackSum > 0 ? baseAttack / preAttackSum : 0;
+  const scaleD = preDefSum > 0 ? baseDefence / preDefSum : 0;
+  const placed: PlacedEmission[] = xi.map((card) => {
+    const e = emit.get(card.id) ?? { attack: 0, defence: 0, creation: 0, finishing: 0 };
+    return { cell: slotCellFor(card), attack: e.attack * scaleA, defence: e.defence * scaleD };
+  });
+  const { push: lanePush, cover: laneCover } = computeLaneVectors(placed);
+
   // --- Dual-role contributions ---
   let dualAttack = 0;
   let dualDefence = 0;
@@ -799,6 +823,8 @@ export function evaluateSplit(
     maxAttackers: maxAtk,
     opponentDenial: dispatched.opponentDenial,
     varianceFactor: dispatched.variance,
+    lanePush,
+    laneCover,
   };
 }
 
@@ -816,7 +842,10 @@ export function resolveIncrement(
   const minute = INCREMENT_MINUTES[state.currentIncrement];
 
   // Chance model: build chances, then turn them into shots worth scoring from.
-  const pressureRatio = opponentDefence > 0 ? split.attackScore / opponentDefence : 2.0;
+  // Pressure now comes from the coupled lane contest (§4): the opponent's finite
+  // defence shifts to cover our heaviest lanes, so overload is met and spread pulls
+  // them thin. creation/finishing stay scalar (chance quality is not yet zonal).
+  const pressureRatio = coupledAttackThreat(split.lanePush, opponentDefence);
   const creationRatio = opponentDefence > 0 ? split.chanceCreation / (opponentDefence * 0.8) : 2.0;
   const finishingRatio = opponentDefence > 0 ? split.shotQuality / (opponentDefence * 0.68) : 2.0;
 
@@ -832,7 +861,7 @@ export function resolveIncrement(
   );
   let yourGoalChance = clamp(yourChanceVolume * yourChanceQuality * 1.18, 0.02, 0.52);
 
-  const theirPressureRatio = split.defenceScore > 0 ? opponentAttack / split.defenceScore : 2.0;
+  const theirPressureRatio = coupledDefenceThreat(split.laneCover, opponentAttack);
   let opponentChanceVolume = clamp(0.08 + (theirPressureRatio - 0.72) * 0.25, 0.04, 0.60);
   let opponentChanceQuality = clamp(0.17 + (theirPressureRatio - 0.72) * 0.18, 0.10, 0.62);
   let opponentGoalChance = clamp(opponentChanceVolume * opponentChanceQuality * 1.10, 0.02, 0.40);
