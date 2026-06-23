@@ -21,7 +21,7 @@ import {
 import type { TacticSlots } from '../lib/tactics';
 import { canDeploy, createEmptySlots, deployTactic, removeTactic } from '../lib/tactics';
 import MatchScorebar from './match/MatchScorebar';
-import DeployPhase from './match/DeployPhase';
+import PitchMatchView from './match/PitchMatchView';
 import ResolvingPhase from './match/ResolvingPhase';
 import BetweenPhase from './match/BetweenPhase';
 
@@ -96,22 +96,6 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     },
     [],
   );
-
-  const handleReorderAttackers = useCallback((draggedId: number, targetId: number) => {
-    if (draggedId === targetId) return;
-
-    setMatchState((prev: MatchV5State) => {
-      const nextOrder = [...prev.attackerOrder];
-      const fromIndex = nextOrder.indexOf(draggedId);
-      const toIndex = nextOrder.indexOf(targetId);
-
-      if (fromIndex === -1 || toIndex === -1) return prev;
-
-      nextOrder.splice(fromIndex, 1);
-      nextOrder.splice(toIndex, 0, draggedId);
-      return commitAttackers(prev, nextOrder);
-    });
-  }, []);
 
   // ---- Kick Off: evaluate and resolve ----
   const handleKickOff = useCallback(() => {
@@ -258,6 +242,8 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
         overflow: 'hidden',
       }}
     >
+      {/* Generic header — hidden on the planning screen, which owns its own. */}
+      {subPhase !== 'planning' && (<>
       {/* Joker row — compact inline pills to save vertical space */}
       <div
         className="match-joker-row"
@@ -309,18 +295,19 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
         boardTargetPoints={runState.boardTargetPoints}
         subPhase={subPhase}
       />
+      </>)}
 
       {/* Main content area by sub-phase */}
       {subPhase === 'planning' && (
-        <DeployPhase
+        <PitchMatchView
           matchState={matchState}
           formation={matchState.formation}
           jokers={runState.jokers}
           tacticSlots={tacticSlots}
           availableTactics={runState.tacticsDeck}
           opponentBuild={opponentBuild}
+          nextMinute={nextMinute}
           onToggleAttacker={handleToggleAttacker}
-          onReorderAttackers={handleReorderAttackers}
           onToggleTactic={handleToggleTactic}
           onKickOff={handleKickOff}
         />
