@@ -18,7 +18,6 @@ import {
   initMatch,
   commitAttackers,
   evaluateSplit,
-  getOpponentBaselines,
   resolveIncrement,
   advanceIncrement,
   getMatchResult,
@@ -90,13 +89,12 @@ for (let i = 0; i < 5; i++) {
   state = commitAttackers(state, attackerIds);
 
   const split = evaluateSplit(state, [], slots);
-  const opp = getOpponentBaselines(1, 'Balanced', i, state);
-  const result = resolveIncrement(state, split, opp.attack, opp.defence, SEED);
+  const result = resolveIncrement(state, split, SEED);
 
   console.log(`\n--- Increment ${i + 1} (${result.minute}') ---`);
   console.log(`  Committed ${attackerIds.length} attackers; XI injured=${state.xi.filter(c => c.injured).length}`);
   console.log(`  Your attack:   ${split.attackScore}  | Your defence:   ${split.defenceScore}`);
-  console.log(`  Opp baselines: atk=${opp.attack} def=${opp.defence}`);
+  console.log(`  Opp XI field:  atk=${result.opponentAttack} def=${result.opponentDefence}`);
   console.log(`  Goal chances:  you=${(result.yourGoalChance * 100).toFixed(1)}% them=${(result.opponentGoalChance * 100).toFixed(1)}%`);
   console.log(`  ${result.event.text}`);
   console.log(`  Synergies: atk=${split.attackSynergies.length} def=${split.defenceSynergies.length} cross=${split.crossSynergies.length}`);

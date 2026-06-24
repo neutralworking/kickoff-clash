@@ -53,38 +53,40 @@ export function laneOf(cell: Cell): Lane {
 const total = (r: Record<Lane, number>): number => r.L + r.C + r.R;
 
 /**
- * Our attacking threat vs a finite, *reactive* opponent defensive budget.
- * The opponent splits `oppDefence` across lanes: an even third plus a reactive
- * shift toward the lanes we load heaviest. So pure overload is covered, while a
- * spread pulls them thin — and stretching them wide opens the rest.
+ * Your attacking threat vs the opponent's *positioned* per-lane cover. Now that the
+ * opponent is a real XI (step 4), the base cover per lane comes from its actual
+ * shape; on top of that the defender — the reactive AI — shifts a mobile fraction
+ * (`oppReact`) toward whichever lanes you load heaviest. So overloading a lane the
+ * opponent left structurally thin is rewarded, but a predictable overload gets met.
  * Returns a pressure ratio (~1.0 when evenly matched), averaged over lanes.
  */
-export function coupledAttackThreat(push: Record<Lane, number>, oppDefence: number): number {
+export function attackVsCover(push: Record<Lane, number>, cover: Record<Lane, number>): number {
   const { k, oppReact } = FIELD_CONST;
-  const sum = total(push) || 1;
+  const pushSum = total(push) || 1;
+  const coverSum = total(cover);
   let acc = 0;
   for (const lane of LANES) {
-    const share = push[lane] / sum;
-    const cover = Math.max(1, oppDefence * ((1 - oppReact) / 3 + oppReact * share));
-    acc += Math.pow(push[lane] / cover, k);
+    const base = cover[lane] * (1 - oppReact);
+    const reactive = coverSum * oppReact * (push[lane] / pushSum);
+    const eff = Math.max(1, base + reactive);
+    acc += Math.pow(push[lane] / eff, k);
   }
   return acc / LANES.length;
 }
 
 /**
- * The opponent's threat against us. They attack evenly (baseline opponent has no
- * lane intent yet — opponent XIs arrive in step 4); our cover varies by lane, so a
- * lane we stripped to commit attackers forward is the one that gets punished.
+ * The opponent's positioned per-lane push vs your cover. You committed your shape,
+ * so you can't read them mid-increment — but most of your cover is a mobile reserve
+ * (`coverPool`) shared across lanes, so a lane you stripped still has some backup
+ * while a genuinely thin lane leaks more.
  */
-export function coupledDefenceThreat(cover: Record<Lane, number>, oppAttack: number): number {
+export function pushVsReserveCover(push: Record<Lane, number>, cover: Record<Lane, number>): number {
   const { k, coverPool } = FIELD_CONST;
-  // Coupling: most of our cover is a shared/mobile reserve, so a lane stripped to
-  // push attackers forward still has backup — but a genuinely thin lane leaks more.
   const reserve = (total(cover) * coverPool) / LANES.length;
   let acc = 0;
   for (const lane of LANES) {
-    const effCover = cover[lane] * (1 - coverPool) + reserve;
-    acc += Math.pow(oppAttack / LANES.length / Math.max(1, effCover), k);
+    const eff = cover[lane] * (1 - coverPool) + reserve;
+    acc += Math.pow(push[lane] / Math.max(1, eff), k);
   }
   return acc / LANES.length;
 }

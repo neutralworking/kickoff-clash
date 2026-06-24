@@ -11,7 +11,6 @@ import {
   initMatch,
   evaluateSplit,
   resolveIncrement,
-  getOpponentBaselines,
   advanceIncrement,
   makeSub,
   getMatchResult,
@@ -87,16 +86,8 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
   // ---- Kick Off: evaluate and resolve ----
   const handleKickOff = useCallback(() => {
     const split = evaluateSplit(matchState, runState.jokers, tacticSlots);
-
-    const { attack: oppAtk, defence: oppDef } = getOpponentBaselines(
-      matchState.opponentRound,
-      matchState.opponentStyle,
-      matchState.currentIncrement,
-      matchState,
-    );
-
     const seed = matchSeed + matchState.currentIncrement * 113;
-    const result = resolveIncrement(matchState, split, oppAtk, oppDef, seed);
+    const result = resolveIncrement(matchState, split, seed);
 
     setCurrentResult(result);
     setSubPhase('resolving');

@@ -27,15 +27,16 @@ import {
   initMatch,
   commitAttackers,
   evaluateSplit,
-  getOpponentBaselines,
   resolveIncrement,
   advanceIncrement,
   getMatchResult,
+  computeSideField,
   type MatchV5State,
 } from '../src/lib/match-v5';
+import { generateOpponentXI } from '../src/lib/opponent';
 import { dispatchTraits, buildBaseCells, type DispatchCard } from '../src/lib/verbs';
 import { ROLE_TRANSFORMS } from '../src/lib/role-transforms';
-import { CELLS, cellOf, bandOf, coupledAttackThreat, coupledDefenceThreat, type Band, type Lane } from '../src/lib/field';
+import { CELLS, cellOf, bandOf, attackVsCover, pushVsReserveCover, type Band, type Lane } from '../src/lib/field';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -74,8 +75,7 @@ function runMatch(xi: Card[]): MatchV5State {
     const attackerIds = [...state.xi].filter((c) => !c.injured).sort((a, b) => b.power - a.power).slice(0, 4).map((c) => c.id);
     state = commitAttackers(state, attackerIds);
     const split = evaluateSplit(state, [], slots);
-    const opp = getOpponentBaselines(1, 'Balanced', i, state);
-    const result = resolveIncrement(state, split, opp.attack, opp.defence, SEED);
+    const result = resolveIncrement(state, split, SEED);
     state = advanceIncrement(state, result);
   }
   return state;
@@ -237,22 +237,23 @@ console.log('\n4. Real-data wiring (roles derived by transform.ts, not stamped)'
 // ---------------------------------------------------------------------------
 // 5. Zonal field & coupled lane contest (step 2)
 // ---------------------------------------------------------------------------
-console.log('\n5. Zonal field & coupled lane contest');
+console.log('\n5. Zonal field & mirror lane contest');
 {
   check('cellOf buckets slot x/y into lane×band', cellOf(50, 12) === 'ATT_C' && cellOf(10, 78) === 'DEF_L' && cellOf(50, 50) === 'MID_C');
 
-  const oppDef = 300;
+  // Your push vs the opponent's positioned (here even) cover, defender reacting.
+  const evenCover: Record<Lane, number> = { L: 100, C: 100, R: 100 };
   const spread: Record<Lane, number> = { L: 100, C: 100, R: 100 };
   const overload: Record<Lane, number> = { L: 300, C: 0, R: 0 };
-  const spreadThreat = coupledAttackThreat(spread, oppDef);
-  const overloadThreat = coupledAttackThreat(overload, oppDef);
+  const spreadThreat = attackVsCover(spread, evenCover);
+  const overloadThreat = attackVsCover(overload, evenCover);
   check('spread beats pure overload vs a reactive defence (same total push)', spreadThreat > overloadThreat, `spread=${spreadThreat.toFixed(2)} overload=${overloadThreat.toFixed(2)}`);
 
-  const oppAtk = 300;
-  const evenCover: Record<Lane, number> = { L: 100, C: 100, R: 100 };
+  // Opponent's even push vs your cover: a thin defensive lane leaks more.
+  const oppPush: Record<Lane, number> = { L: 100, C: 100, R: 100 };
   const thinCover: Record<Lane, number> = { L: 300, C: 0, R: 0 };
-  const evenThreat = coupledDefenceThreat(evenCover, oppAtk);
-  const thinThreat = coupledDefenceThreat(thinCover, oppAtk);
+  const evenThreat = pushVsReserveCover(oppPush, evenCover);
+  const thinThreat = pushVsReserveCover(oppPush, thinCover);
   check('a thin defensive lane leaks more than balanced cover (same total)', thinThreat > evenThreat, `thin=${thinThreat.toFixed(2)} even=${evenThreat.toFixed(2)}`);
 
   // evaluateSplit now exposes per-lane vectors.
@@ -298,6 +299,39 @@ console.log('\n6. Tactical cards + Manager as squad records');
   const realDef = mk6({ id: 3, power: 70, archetype: 'Cover', cell: 'DEF_C', side: 'defence', emit: { attack: 0, defence: 100, creation: 0, finishing: 0 }, traits: ROLE_TRANSFORMS['Anchor'] });
   const shieldRes = dispatchTraits([realDef], SEED, 0, { playerSquadTraits: highLine });
   check('squad source is excluded from criterion targeting (Anchor shields the real card)', Math.abs(shieldRes.zones.defence - 130) < 1e-9, `defence 100 → ${shieldRes.zones.defence}`);
+}
+
+// ---------------------------------------------------------------------------
+// 7. Opponent as a real positioned XI through the dispatcher (step 4)
+// ---------------------------------------------------------------------------
+console.log('\n7. Opponent as a real positioned XI');
+{
+  const r1 = generateOpponentXI(1, 'Balanced', SEED);
+  const r5 = generateOpponentXI(5, 'Attacking', SEED);
+  check('opponent XI has 11 positioned cards', r1.xi.length === 11 && r1.formation.slots.length === 11);
+  check('opponent cards carry tactical roles (verbs fire through the dispatcher)', r1.xi.filter((c) => c.tacticalRole).length >= 9, `${r1.xi.filter((c) => c.tacticalRole).length}/11 roled`);
+
+  const avg = (xi: Card[]) => xi.reduce((s, c) => s + c.power, 0) / xi.length;
+  check('round budget scales opponent power (R5 > R1)', avg(r5.xi) > avg(r1.xi), `R1 avg=${avg(r1.xi).toFixed(0)} R5 avg=${avg(r5.xi).toFixed(0)}`);
+
+  const r1b = generateOpponentXI(1, 'Balanced', SEED);
+  check('opponent generation is deterministic', JSON.stringify(r1.xi) === JSON.stringify(r1b.xi));
+
+  // The opponent side runs through the same field path and emits real lane vectors.
+  const oppField = computeSideField(r1.xi, r1.formation, SEED + 7777, 0);
+  const push = oppField.lanePush.L + oppField.lanePush.C + oppField.lanePush.R;
+  const cover = oppField.laneCover.L + oppField.laneCover.C + oppField.laneCover.R;
+  check('opponent computeSideField emits lane push + cover', push > 0 && cover > 0, `push=${push.toFixed(0)} cover=${cover.toFixed(0)} def=${oppField.defenceScore}`);
+
+  // Difficulty curve: the round budget scales the opponent's raw attacking threat
+  // (measured at the source, not the clamped goal chance, which saturates against a
+  // top-tier test XI's defence).
+  const r5b = generateOpponentXI(5, 'Attacking', SEED);
+  const f1 = computeSideField(r1.xi, r1.formation, SEED + 7777, 0);
+  const f5 = computeSideField(r5b.xi, r5b.formation, SEED + 7777, 0);
+  check('round budget scales the opponent\'s attacking threat (R5 > R1)',
+    f5.chanceCreation > f1.chanceCreation && f5.attackScore > f1.attackScore,
+    `R1 atk=${f1.attackScore} cre=${f1.chanceCreation}; R5 atk=${f5.attackScore} cre=${f5.chanceCreation}`);
 }
 
 console.log(`\n=== ${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} ===\n`);

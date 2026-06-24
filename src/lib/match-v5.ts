@@ -26,11 +26,12 @@ import {
   generateInjuryText,
 } from './hand';
 import type { MatchEvent } from './hand';
-import type { DispatchCard, ZoneName } from './verbs';
+import type { DispatchCard, ZoneName, TraitRecord } from './verbs';
 import { dispatchTraits } from './verbs';
 import { traitsForCard } from './role-transforms';
 import type { Lane, Cell, Band } from './field';
-import { CELLS, cellOf, bandOf, coupledAttackThreat, coupledDefenceThreat } from './field';
+import { CELLS, cellOf, bandOf, attackVsCover, pushVsReserveCover } from './field';
+import { generateOpponentXI } from './opponent';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,6 +64,8 @@ export interface MatchV5State {
   opponentRound: number;      // 1–5 (for baseline lookup)
   opponentStyle: string;      // Passive | Balanced | Attacking | Counter | Adaptive
   opponentWeakness: string;   // archetype the opponent is weak to
+  opponentXI: Card[];         // the opponent's positioned side (step 4)
+  opponentFormation: Formation;
   seed: number;
 }
 
@@ -127,7 +130,9 @@ export interface MatchV5Result {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Opponent attack/defence baselines by round (1-indexed) */
+/** Opponent attack/defence baselines by round (1-indexed). Legacy scalar curve —
+ *  superseded by the generated opponent XI (opponent.ts) for the contest; retained
+ *  for `getOpponentBaselines` callers/back-compat. */
 const OPPONENT_BASELINES: { attack: number; defence: number }[] = [
   { attack: 400, defence: 450 },   // Match 1
   { attack: 550, defence: 600 },   // Match 2
@@ -135,6 +140,21 @@ const OPPONENT_BASELINES: { attack: number; defence: number }[] = [
   { attack: 850, defence: 900 },   // Match 4
   { attack: 1000, defence: 1050 }, // Match 5
 ];
+
+// --- Positioning-model band weights (DESIGN §1/§4; §7 dials) ---
+// Attack/defence emission split by band (a midfielder contributes to both);
+// creation/finishing chance-mix projected by band (§4: ATT≈finishing, MID≈creation).
+const BAND_ATK: Record<Band, number> = { ATT: 1.0, MID: 0.55, DEF: 0.18 };
+const BAND_DEF: Record<Band, number> = { ATT: 0.12, MID: 0.55, DEF: 1.0 };
+const CREATION_BAND: Record<Band, number> = { ATT: 0.7, MID: 1.0, DEF: 0.4 };
+const FINISHING_BAND: Record<Band, number> = { ATT: 1.0, MID: 0.5, DEF: 0.1 };
+const zeroEmit = (): Record<ZoneName, number> => ({ attack: 0, defence: 0, creation: 0, finishing: 0 });
+
+/** Opponent attacking-output multiplier — stands in for the synergy/style/personality
+ *  cascade the lean opponent side path skips, AND for the player's own inflated
+ *  defence it attacks into, so a comparably-powered opponent is a real threat.
+ *  (DESIGN §7 difficulty dial; calibrated against the deck-strength sweep.) */
+const OPP_COHESION = 2.5;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -412,6 +432,13 @@ export function initMatch(
   opponentStyle: string,
   opponentWeakness: string,
 ): MatchV5State {
+  // The opponent is now a real positioned side (step 4), generated deterministically
+  // from the round budget + style. It plays through the same dispatcher as you do.
+  const { xi: opponentXI, formation: opponentFormation } = generateOpponentXI(
+    opponentRound,
+    opponentStyle,
+    seed,
+  );
   return {
     xi,
     bench,
@@ -432,6 +459,8 @@ export function initMatch(
     opponentRound,
     opponentStyle,
     opponentWeakness,
+    opponentXI,
+    opponentFormation,
     seed,
   };
 }
@@ -455,6 +484,88 @@ export function commitAttackers(state: MatchV5State, cardIds: number[]): MatchV5
 }
 
 // ---------------------------------------------------------------------------
+// Shared side-field core (used for the opponent; mirrors evaluateSplit's field
+// build without the player-only cascade — synergies/style/personality/playPattern).
+// ---------------------------------------------------------------------------
+
+export interface SideField {
+  lanePush: Record<Lane, number>;
+  laneCover: Record<Lane, number>;
+  attackScore: number;
+  defenceScore: number;
+  chanceCreation: number;
+  shotQuality: number;
+  denial: number;       // conversion suppression this side applies to the other
+  variance: number;
+}
+
+/**
+ * Build a side's field-derived quantities: place each card in its formation cell,
+ * emit by band, dispatch its role + squad records, project the chance mix by band,
+ * and read the per-lane vectors. The same path both XIs run through (§4).
+ */
+export function computeSideField(
+  xi: Card[],
+  formation: Formation,
+  seed: number,
+  increment: number,
+  squadTraits?: TraitRecord[],
+): SideField {
+  const dispatchCards: DispatchCard[] = xi.map((card, i) => {
+    const slot = formation.slots[i] ?? formation.slots[formation.slots.length - 1];
+    const cell = cellOf(slot.x, slot.y);
+    const band = bandOf(cell);
+    const power = card.injured ? Math.round(card.power * 0.5) : card.power;
+    const profile = getChanceProfile(card);
+    const a = Math.round(power * BAND_ATK[band]);
+    const d = Math.round(power * BAND_DEF[band]);
+    const e: Record<ZoneName, number> = {
+      attack: a, defence: d,
+      creation: Math.round(power * profile.creation),
+      finishing: Math.round(power * profile.finishing),
+    };
+    return {
+      id: card.id,
+      power: card.power,
+      archetype: card.archetype,
+      tacticalRole: card.tacticalRole,
+      position: card.position,
+      team: 'player',
+      side: band === 'DEF' ? 'defence' : 'attack',
+      isWide: isWideCard(card),
+      cell,
+      emit: e,
+      traits: traitsForCard(card),
+    };
+  });
+
+  const dispatched = dispatchTraits(
+    dispatchCards,
+    seed,
+    increment,
+    squadTraits && squadTraits.length ? { playerSquadTraits: squadTraits } : undefined,
+  );
+
+  let creationProj = 0;
+  let finishingProj = 0;
+  for (const cell of CELLS) {
+    creationProj += dispatched.cells[cell].creation * CREATION_BAND[bandOf(cell)];
+    finishingProj += dispatched.cells[cell].finishing * FINISHING_BAND[bandOf(cell)];
+  }
+
+  return {
+    lanePush: dispatched.lanePush,
+    laneCover: dispatched.laneCover,
+    attackScore: Math.max(0, Math.round(dispatched.zones.attack)),
+    defenceScore: Math.max(0, Math.round(dispatched.zones.defence)),
+    chanceCreation: Math.max(0, Math.round(creationProj)),
+    shotQuality: Math.max(0, Math.round(finishingProj)),
+    denial: dispatched.opponentDenial,
+    variance: dispatched.variance,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 3. evaluateSplit — the core scoring function
 // ---------------------------------------------------------------------------
 
@@ -473,15 +584,6 @@ export function evaluateSplit(
   // No per-increment commit. Each player's attack/defence emission is set by the
   // band (ATT/MID/DEF) of the formation slot they occupy (xi[i] ↔ slots[i]); the
   // allocation decision is the shape itself. Midfielders contribute to both.
-  const BAND_ATK: Record<Band, number> = { ATT: 1.0, MID: 0.55, DEF: 0.18 };
-  const BAND_DEF: Record<Band, number> = { ATT: 0.12, MID: 0.55, DEF: 1.0 };
-  // Band → chance-mix projection (§4: ATT≈finishing, MID≈creation). creation/finishing
-  // are band-free at emit, so a relocate that moves a card to a new band re-mixes its
-  // chance contribution here — that is how a False 9 "drop deep" trades shots for chances.
-  const CREATION_BAND: Record<Band, number> = { ATT: 0.7, MID: 1.0, DEF: 0.4 };
-  const FINISHING_BAND: Record<Band, number> = { ATT: 1.0, MID: 0.5, DEF: 0.1 };
-  const zeroEmit = (): Record<ZoneName, number> => ({ attack: 0, defence: 0, creation: 0, finishing: 0 });
-
   const emit = new Map<number, Record<ZoneName, number>>();
   const cardCell = new Map<number, Cell>();
   const cardY = new Map<number, number>();
@@ -748,19 +850,38 @@ export function evaluateSplit(
 export function resolveIncrement(
   state: MatchV5State,
   split: AttackDefenceSplit,
-  opponentAttack: number,
-  opponentDefence: number,
   seed: number,
 ): IncrementResult {
   const minute = INCREMENT_MINUTES[state.currentIncrement];
 
-  // Chance model: build chances, then turn them into shots worth scoring from.
-  // Pressure now comes from the coupled lane contest (§4): the opponent's finite
-  // defence shifts to cover our heaviest lanes, so overload is met and spread pulls
-  // them thin. creation/finishing stay scalar (chance quality is not yet zonal).
-  const pressureRatio = coupledAttackThreat(split.lanePush, opponentDefence);
-  const creationRatio = opponentDefence > 0 ? split.chanceCreation / (opponentDefence * 0.8) : 2.0;
-  const finishingRatio = opponentDefence > 0 ? split.shotQuality / (opponentDefence * 0.68) : 2.0;
+  // The opponent is a real positioned side (step 4): its field runs through the same
+  // path, so the contest is a symmetric mirror (§4) — your push vs their cover, and
+  // theirs vs yours — and counters emerge from the verbs both sides emit.
+  const opp = computeSideField(
+    state.opponentXI,
+    state.opponentFormation,
+    state.seed + 7777,
+    state.currentIncrement,
+  );
+
+  // The opponent runs the lean side path (no synergy/style/personality cascade), so
+  // its raw attack reads ~half a comparably-powered player side. OPP_COHESION stands
+  // in for those skipped multipliers — a coordinated team — applied to its *attacking*
+  // output only (its cover stays lean so you can still break it down). §7 dial.
+  const oppPush: Record<Lane, number> = {
+    L: opp.lanePush.L * OPP_COHESION,
+    C: opp.lanePush.C * OPP_COHESION,
+    R: opp.lanePush.R * OPP_COHESION,
+  };
+  const oppCreation = opp.chanceCreation * OPP_COHESION;
+  const oppFinishing = opp.shotQuality * OPP_COHESION;
+
+  // YOUR threat: your lane push vs their positioned cover; your chance quality vs
+  // their defensive score.
+  const pressureRatio = attackVsCover(split.lanePush, opp.laneCover);
+  const oppDef = Math.max(1, opp.defenceScore);
+  const creationRatio = split.chanceCreation / (oppDef * 0.8);
+  const finishingRatio = split.shotQuality / (oppDef * 0.68);
 
   let yourChanceVolume = clamp(
     0.08 + (creationRatio - 0.7) * 0.28 + (pressureRatio - 1.0) * 0.10,
@@ -774,15 +895,30 @@ export function resolveIncrement(
   );
   let yourGoalChance = clamp(yourChanceVolume * yourChanceQuality * 1.18, 0.02, 0.52);
 
-  const theirPressureRatio = coupledDefenceThreat(split.laneCover, opponentAttack);
-  let opponentChanceVolume = clamp(0.08 + (theirPressureRatio - 0.72) * 0.25, 0.04, 0.60);
-  let opponentChanceQuality = clamp(0.17 + (theirPressureRatio - 0.72) * 0.18, 0.10, 0.62);
-  let opponentGoalChance = clamp(opponentChanceVolume * opponentChanceQuality * 1.10, 0.02, 0.40);
+  // THEIR threat: their lane push vs your cover; their chance quality vs your defence.
+  const theirPressureRatio = pushVsReserveCover(oppPush, split.laneCover);
+  const yourDef = Math.max(1, split.defenceScore);
+  const oppCreationRatio = oppCreation / (yourDef * 0.8);
+  const oppFinishingRatio = oppFinishing / (yourDef * 0.68);
 
-  // `deny` verbs (Volante) suppress the opponent's conversion. Capped so a stack
-  // of denials can never fully shut out the opponent. Neutral when no deny fired.
-  const denial = clamp(split.opponentDenial ?? 0, 0, 0.5);
-  opponentGoalChance *= 1 - denial;
+  let opponentChanceVolume = clamp(
+    0.08 + (oppCreationRatio - 0.7) * 0.28 + (theirPressureRatio - 1.0) * 0.10,
+    0.04,
+    0.62,
+  );
+  let opponentChanceQuality = clamp(
+    0.16 + (oppFinishingRatio - 0.6) * 0.26 + (theirPressureRatio - 1.0) * 0.08,
+    0.08,
+    0.64,
+  );
+  let opponentGoalChance = clamp(opponentChanceVolume * opponentChanceQuality * 1.10, 0.02, 0.42);
+
+  // Cross denial: each side's `deny` verbs suppress the other's conversion (capped,
+  // so a stack can never fully shut a side out).
+  const yourDenial = clamp(split.opponentDenial ?? 0, 0, 0.5);   // you → them
+  const theirDenial = clamp(opp.denial ?? 0, 0, 0.5);            // them → you
+  opponentGoalChance *= 1 - yourDenial;
+  yourGoalChance *= 1 - theirDenial;
 
   // 90th minute drama
   if (state.currentIncrement === 4) {
@@ -794,12 +930,12 @@ export function resolveIncrement(
     opponentGoalChance *= 1.3;
   }
 
-  // Seeded random for deterministic results. Variance verbs shape the spread of
-  // your roll around its mean (forward hook for the xG→Poisson step; neutral at 0).
-  const variance = split.varianceFactor ?? 0;
-  const shapeRoll = (r: number) => (variance === 0 ? r : clamp(0.5 + (r - 0.5) * (1 + variance), 0, 0.9999));
-  const yourRoll = shapeRoll(seededRandom(seed * 71 + state.currentIncrement * 13 + 1));
-  const theirRoll = seededRandom(seed * 83 + state.currentIncrement * 17 + 2);
+  // Seeded, deterministic rolls. Variance verbs shape each side's spread around its
+  // mean (forward hook for the xG→Poisson step; neutral at 0).
+  const shapeRoll = (r: number, v: number) =>
+    v === 0 ? r : clamp(0.5 + (r - 0.5) * (1 + v), 0, 0.9999);
+  const yourRoll = shapeRoll(seededRandom(seed * 71 + state.currentIncrement * 13 + 1), split.varianceFactor ?? 0);
+  const theirRoll = shapeRoll(seededRandom(seed * 83 + state.currentIncrement * 17 + 2), opp.variance ?? 0);
 
   const yourScored = yourRoll < yourGoalChance;
   const opponentScored = theirRoll < opponentGoalChance;
@@ -826,8 +962,8 @@ export function resolveIncrement(
   return {
     minute,
     split,
-    opponentAttack,
-    opponentDefence,
+    opponentAttack: opp.attackScore,
+    opponentDefence: opp.defenceScore,
     yourChanceVolume,
     yourChanceQuality,
     yourGoalChance,
