@@ -26,6 +26,9 @@ export type Cell = `${Band}_${Lane}`;
 export const LANES: Lane[] = ['L', 'C', 'R'];
 export const BANDS: Band[] = ['ATT', 'MID', 'DEF'];
 
+/** The 9 field cells in a fixed, band-major order (determinism: stable iteration). */
+export const CELLS: Cell[] = BANDS.flatMap((band) => LANES.map((lane): Cell => `${band}_${lane}`));
+
 /** Tunable contest constants (DESIGN §7 — playtest dials). */
 export const FIELD_CONST = {
   k: 1.1,            // contest convexity (near-linear: balanced shapes stay viable)
@@ -45,35 +48,6 @@ export function bandOf(cell: Cell): Band {
 }
 export function laneOf(cell: Cell): Lane {
   return cell.split('_')[1] as Lane;
-}
-
-export interface PlacedEmission {
-  cell: Cell;
-  attack: number;
-  defence: number;
-}
-
-export interface LaneVectors {
-  push: Record<Lane, number>;   // attacking threat we generate per lane
-  cover: Record<Lane, number>;  // defensive cover we hold per lane
-}
-
-/**
- * Collapse placed per-card emission into per-lane attack push and defensive cover,
- * weighting bands per §4 (front-line attack and rear-line cover count fully;
- * midfield contributes to both at half weight).
- */
-export function computeLaneVectors(placed: PlacedEmission[]): LaneVectors {
-  const push: Record<Lane, number> = { L: 0, C: 0, R: 0 };
-  const cover: Record<Lane, number> = { L: 0, C: 0, R: 0 };
-  // Band weighting now lives in each card's emission (attack vs defence split by
-  // band), so the lane simply sums what's placed in it.
-  for (const p of placed) {
-    const lane = laneOf(p.cell);
-    push[lane] += p.attack;
-    cover[lane] += p.defence;
-  }
-  return { push, cover };
 }
 
 const total = (r: Record<Lane, number>): number => r.L + r.C + r.R;

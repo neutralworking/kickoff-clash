@@ -31,9 +31,9 @@ import {
   getMatchResult,
   type MatchV5State,
 } from '../src/lib/match-v5';
-import { dispatchTraits, type DispatchCard, type ZoneName } from '../src/lib/verbs';
+import { dispatchTraits, buildBaseCells, type DispatchCard } from '../src/lib/verbs';
 import { ROLE_TRANSFORMS } from '../src/lib/role-transforms';
-import { cellOf, coupledAttackThreat, coupledDefenceThreat, type Lane } from '../src/lib/field';
+import { CELLS, cellOf, bandOf, coupledAttackThreat, coupledDefenceThreat, type Band, type Lane } from '../src/lib/field';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -135,29 +135,48 @@ console.log('\n2. Migrated roles + inside-forward + False 9 reshape the field');
 // ---------------------------------------------------------------------------
 console.log('\n3. Verb-level checks');
 {
-  const base: Record<ZoneName, number> = { attack: 1000, defence: 1000, creation: 400, finishing: 400 };
+  // The base field is now the cards' own emission placed in their cells; the
+  // dispatcher builds it internally, so each test just declares a card's cell + emit.
   const mk = (over: Partial<DispatchCard>): DispatchCard => ({
     id: 1, power: 80, archetype: 'Creator', position: 'WF', team: 'player', side: 'attack', isWide: true,
-    emit: { attack: 80, defence: 0, creation: 50, finishing: 50 }, traits: [], ...over,
+    cell: 'ATT_C', emit: { attack: 80, defence: 0, creation: 50, finishing: 50 }, traits: [], ...over,
   });
+  // Band → chance-mix weights, mirroring match-v5's §7 dials (ATT≈finishing, MID≈creation).
+  const CREATION_BAND: Record<Band, number> = { ATT: 0.7, MID: 1.0, DEF: 0.4 };
+  const FINISHING_BAND: Record<Band, number> = { ATT: 1.0, MID: 0.5, DEF: 0.1 };
+  const proj = (cells: Record<string, Record<string, number>>, w: Record<Band, number>, kind: string) =>
+    CELLS.reduce((s, c) => s + cells[c][kind] * w[bandOf(c)], 0);
 
-  // relocate (inside-forward): creation down, finishing up, total conserved.
-  const ifCard = mk({ traits: ROLE_TRANSFORMS['Inverted Winger'] });
-  const ifRes = dispatchTraits([ifCard], { ...base }, SEED, 0);
-  const conserved = Math.abs((ifRes.zones.creation + ifRes.zones.finishing) - (base.creation + base.finishing)) < 1e-9;
-  check('relocate conserves creation+finishing total', conserved);
-  check('relocate moves emission creation→finishing', ifRes.zones.finishing > base.finishing && ifRes.zones.creation < base.creation);
+  // relocate (inside-forward "Cut Inside"): a wide card carries threat into the
+  // central lane (ATT_L → ATT_C). Real lane shift; every kind's total is conserved.
+  const ifCard = mk({ cell: 'ATT_L', side: 'attack', emit: { attack: 100, defence: 0, creation: 40, finishing: 40 }, traits: ROLE_TRANSFORMS['Inverted Winger'] });
+  const ifRes = dispatchTraits([ifCard], SEED, 0);
+  check('Cut Inside moves emission ATT_L → ATT_C', ifRes.cells.ATT_C.attack > 0 && ifRes.cells.ATT_L.attack < 100, `L=${ifRes.cells.ATT_L.attack} C=${ifRes.cells.ATT_C.attack}`);
+  check('relocate conserves total attack across cells', Math.abs(ifRes.zones.attack - 100) < 1e-9, `attack=${ifRes.zones.attack}`);
+  check('Cut Inside loads the centre lane (push moves L → C)', ifRes.lanePush.C > 0 && ifRes.lanePush.L < 100, `push L=${ifRes.lanePush.L} C=${ifRes.lanePush.C}`);
 
-  // amplify (Regista): +5% creation zone.
-  const reg = mk({ traits: ROLE_TRANSFORMS['Regista'] });
-  const regRes = dispatchTraits([reg], { ...base }, SEED, 0);
-  check('Regista amplifies creation by +5%', Math.abs(regRes.zones.creation - base.creation * 1.05) < 1e-9, `${base.creation} → ${regRes.zones.creation}`);
+  // relocate (False 9 "Drop Deep"): the striker drops a band (ATT_C → MID_C). The
+  // band-weighted projection turns that into a finishing→creation trade.
+  const f9 = mk({ cell: 'ATT_C', side: 'attack', emit: { attack: 100, defence: 0, creation: 60, finishing: 60 }, traits: ROLE_TRANSFORMS['Falso Nove'] });
+  const f9base = buildBaseCells([f9]);
+  const f9Res = dispatchTraits([f9], SEED, 0);
+  check('Drop Deep moves emission ATT_C → MID_C', f9Res.cells.MID_C.attack > 0 && f9Res.cells.ATT_C.attack < 100, `ATT_C=${f9Res.cells.ATT_C.attack} MID_C=${f9Res.cells.MID_C.attack}`);
+  check('Drop Deep conserves total attack across cells', Math.abs(f9Res.zones.attack - 100) < 1e-9, `attack=${f9Res.zones.attack}`);
+  check('Drop Deep trades finishing for creation (band projection)',
+    proj(f9Res.cells, FINISHING_BAND, 'finishing') < proj(f9base, FINISHING_BAND, 'finishing') &&
+    proj(f9Res.cells, CREATION_BAND, 'creation') > proj(f9base, CREATION_BAND, 'creation'),
+    `fin ${proj(f9base, FINISHING_BAND, 'finishing').toFixed(0)}→${proj(f9Res.cells, FINISHING_BAND, 'finishing').toFixed(0)}, cre ${proj(f9base, CREATION_BAND, 'creation').toFixed(0)}→${proj(f9Res.cells, CREATION_BAND, 'creation').toFixed(0)}`);
+
+  // amplify (Regista): +5% creation across all cells.
+  const reg = mk({ emit: { attack: 80, defence: 0, creation: 50, finishing: 50 }, traits: ROLE_TRANSFORMS['Regista'] });
+  const regRes = dispatchTraits([reg], SEED, 0);
+  check('Regista amplifies creation by +5%', Math.abs(regRes.zones.creation - 50 * 1.05) < 1e-9, `50 → ${regRes.zones.creation}`);
 
   // amplify-inverse-power lifts a weak card more than a strong one (Strong Leader).
   const leaderTrait = [{ name: 'Leader', verb: 'amplify-inverse-power' as const, params: { amount: 0.5 }, scope: 'global' as const, target: { kind: 'criterion' as const, criterion: 'all-teammates' as const, zone: 'attack' as const } }];
   const weak = mk({ id: 1, power: 60, side: 'attack', emit: { attack: 100, defence: 0, creation: 0, finishing: 0 }, traits: leaderTrait });
   const strong = mk({ id: 2, power: 95, side: 'attack', emit: { attack: 100, defence: 0, creation: 0, finishing: 0 }, traits: [] });
-  const ldRes = dispatchTraits([weak, strong], { attack: 200, defence: 0, creation: 0, finishing: 0 }, SEED, 0);
+  const ldRes = dispatchTraits([weak, strong], SEED, 0);
   // Leader targets all-teammates: weak (p60) gains 0.5*(1-0.60)*100=20; strong
   // (p95) gains 0.5*(1-0.95)*100=2.5; total 200+22.5=222.5. The curve lifts the weak ~8× more.
   const weakLine = ldRes.log.find((l) => l.note.includes('(#1)'));
@@ -167,26 +186,26 @@ console.log('\n3. Verb-level checks');
 
   // archetype-criterion targeting hits only matching cards (e.g. Metodista → Controllers).
   const tempo = [{ name: 'Tempo', verb: 'amplify' as const, params: { amount: 0.10 }, scope: 'global' as const, target: { kind: 'criterion' as const, criterion: 'archetype' as const, archetype: 'Controller' as const } }];
-  const ctrl = mk({ id: 1, archetype: 'Controller', side: 'defence', emit: { attack: 0, defence: 100, creation: 0, finishing: 0 }, traits: tempo });
-  const striker = mk({ id: 2, archetype: 'Striker', side: 'attack', emit: { attack: 100, defence: 0, creation: 0, finishing: 0 }, traits: [] });
-  const tempoRes = dispatchTraits([ctrl, striker], { attack: 100, defence: 100, creation: 0, finishing: 0 }, SEED, 0);
+  const ctrl = mk({ id: 1, archetype: 'Controller', cell: 'MID_C', side: 'defence', emit: { attack: 0, defence: 100, creation: 0, finishing: 0 }, traits: tempo });
+  const striker = mk({ id: 2, archetype: 'Striker', cell: 'ATT_C', side: 'attack', emit: { attack: 100, defence: 0, creation: 0, finishing: 0 }, traits: [] });
+  const tempoRes = dispatchTraits([ctrl, striker], SEED, 0);
   check('archetype criterion targets only matching archetype', Math.abs(tempoRes.zones.defence - 110) < 1e-9 && tempoRes.zones.attack === 100, `def=${tempoRes.zones.defence} atk=${tempoRes.zones.attack}`);
 
   // chance gate is deterministic and respects the probability band.
-  const treq = (id: number) => mk({ id, traits: ROLE_TRANSFORMS['Trequartista'] });
+  const treq = (id: number) => mk({ id, emit: { attack: 80, defence: 0, creation: 0, finishing: 0 }, traits: ROLE_TRANSFORMS['Trequartista'] });
   const ids = Array.from({ length: 200 }, (_, i) => i + 1);
-  const fired = (inc: number) => ids.filter((id) => dispatchTraits([treq(id)], { attack: 1000, defence: 0, creation: 0, finishing: 0 }, SEED, inc).zones.attack > 1000).length;
+  const fired = (inc: number) => ids.filter((id) => dispatchTraits([treq(id)], SEED, inc).zones.attack > 80).length;
   const rateA = fired(0);
   const rateB = fired(0);
   check('chance gate is deterministic (identical fire-set on repeat)', rateA === rateB, `${rateA} == ${rateB}`);
   check('chance gate ~30% fire rate over 200 cards', rateA > 200 * 0.2 && rateA < 200 * 0.4, `${rateA}/200 fired`);
 
   // priority escape hatch: a p1 amplify sees a p0 generate's result.
-  const stacked = mk({ traits: [
+  const stacked = mk({ emit: { attack: 0, defence: 0, creation: 0, finishing: 0 }, traits: [
     { name: 'gen', verb: 'generate', params: { amount: 100 }, scope: 'zone', target: { kind: 'zone', zone: 'attack' }, priority: 0 },
     { name: 'amp', verb: 'amplify', params: { amount: 1.0 }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, priority: 1 },
   ] });
-  const stRes = dispatchTraits([stacked], { attack: 0, defence: 0, creation: 0, finishing: 0 }, SEED, 0);
+  const stRes = dispatchTraits([stacked], SEED, 0);
   // p0: 0+100=100; p1 amplify +100% of snapshot(100) → +100 → 200.
   check('priority lets a later sub-pass observe an earlier one', Math.abs(stRes.zones.attack - 200) < 1e-9, `attack=${stRes.zones.attack}`);
 }

@@ -14,9 +14,11 @@
  * with a flat record and noted (pairing is chemistry's job — ROLE_COMBOS). All of
  * it is tuning-deferred (DESIGN §7).
  *
- * Step-1 zone projection: the full 3×3 cell field is step 2 (MATCH_ENGINE §4).
- * Here zones are the four scoring axes `evaluateSplit` produces, with the band
- * intuition ATT≈finishing, MID≈creation.
+ * `scale`/`deny` records name an emission kind (attack/defence/creation/finishing);
+ * `relocate` records name a destination cell relative to the owner's (`to.lane` /
+ * `to.band`), moving real emission across the 3×3 field (MATCH_ENGINE §4). The band
+ * intuition ATT≈finishing, MID≈creation is applied when cells project to the scalar
+ * chance model, so a drop-deep shift trades finishing for creation on its own.
  */
 
 import type { Card } from './scoring';
@@ -40,15 +42,17 @@ export const ROLE_TRANSFORMS: Record<string, TraitRecord[]> = {
     { name: 'The Shield', verb: 'amplify', params: { amount: 0.30 }, scope: 'global', target: { kind: 'criterion', criterion: 'lowest-power', zone: 'defence' } },
   ],
 
-  // Inside forward @ ATT_L/R, "Cut Inside": relocate wide build-up into the box.
+  // Inside forward @ ATT_L/R, "Cut Inside": carry the wide threat into the central
+  // lane (ATT_L/R → ATT_C). Loads the middle and thins the flank — a real lane shift.
   'Inverted Winger': [
-    { name: 'Cut Inside', verb: 'relocate', params: { fraction: 0.40 }, scope: 'slot', from: 'creation', target: { kind: 'zone', zone: 'finishing' }, condition: { kind: 'is-attacking' } },
+    { name: 'Cut Inside', verb: 'relocate', params: { fraction: 0.40 }, scope: 'slot', target: { kind: 'self' }, to: { lane: 'C' }, condition: { kind: 'is-attacking' } },
   ],
 
-  // False 9 @ ATT_C, "Drop Deep": drop off the front (finishing → creation) and vacate the box.
+  // False 9 @ ATT_C, "Drop Deep": drop off the front into midfield (ATT_C → MID_C).
+  // The band shift trades finishing for creation (§4 ATT≈finishing, MID≈creation) and
+  // empties the box on its own — no separate "vacate" record needed.
   'Falso Nove': [
-    { name: 'Drop Deep', verb: 'relocate', params: { fraction: 0.50 }, scope: 'slot', from: 'finishing', target: { kind: 'zone', zone: 'creation' }, condition: { kind: 'is-attacking' } },
-    { name: 'Vacate the Box', verb: 'amplify', params: { amount: -0.20 }, scope: 'slot', target: { kind: 'zone', zone: 'attack' }, condition: { kind: 'is-attacking' } },
+    { name: 'Drop Deep', verb: 'relocate', params: { fraction: 0.50 }, scope: 'slot', target: { kind: 'self' }, to: { band: 'MID' }, condition: { kind: 'is-attacking' } },
   ],
 
   // ---- Remaining migrated roles ------------------------------------------

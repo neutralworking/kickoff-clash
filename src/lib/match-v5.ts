@@ -26,10 +26,10 @@ import {
 } from './hand';
 import type { MatchEvent } from './hand';
 import type { DispatchCard, ZoneName } from './verbs';
-import { dispatchTraits, ZONES } from './verbs';
+import { dispatchTraits } from './verbs';
 import { traitsForCard } from './role-transforms';
-import type { Lane, Cell, Band, PlacedEmission } from './field';
-import { cellOf, bandOf, computeLaneVectors, coupledAttackThreat, coupledDefenceThreat } from './field';
+import type { Lane, Cell, Band } from './field';
+import { CELLS, cellOf, bandOf, coupledAttackThreat, coupledDefenceThreat } from './field';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -474,6 +474,11 @@ export function evaluateSplit(
   // allocation decision is the shape itself. Midfielders contribute to both.
   const BAND_ATK: Record<Band, number> = { ATT: 1.0, MID: 0.55, DEF: 0.18 };
   const BAND_DEF: Record<Band, number> = { ATT: 0.12, MID: 0.55, DEF: 1.0 };
+  // Band → chance-mix projection (§4: ATT≈finishing, MID≈creation). creation/finishing
+  // are band-free at emit, so a relocate that moves a card to a new band re-mixes its
+  // chance contribution here — that is how a False 9 "drop deep" trades shots for chances.
+  const CREATION_BAND: Record<Band, number> = { ATT: 0.7, MID: 1.0, DEF: 0.4 };
+  const FINISHING_BAND: Record<Band, number> = { ATT: 1.0, MID: 0.5, DEF: 0.1 };
   const zeroEmit = (): Record<ZoneName, number> => ({ attack: 0, defence: 0, creation: 0, finishing: 0 });
 
   const emit = new Map<number, Record<ZoneName, number>>();
@@ -483,8 +488,8 @@ export function evaluateSplit(
   const defenders: Card[] = [];
   let baseAttack = 0;
   let baseDefence = 0;
-  let baseCreation = 0;
-  let baseFinishing = 0;
+  let baseCreationProj = 0;
+  let baseFinishingProj = 0;
 
   xi.forEach((card, i) => {
     const slot = formation.slots[i] ?? formation.slots[formation.slots.length - 1];
@@ -496,11 +501,13 @@ export function evaluateSplit(
     const profile = getChanceProfile(card);
     const a = Math.round(power * BAND_ATK[band]);
     const d = Math.round(power * BAND_DEF[band]);
-    emit.set(card.id, { attack: a, defence: d, creation: Math.round(a * profile.creation), finishing: Math.round(a * profile.finishing) });
+    const cr = Math.round(power * profile.creation);
+    const fn = Math.round(power * profile.finishing);
+    emit.set(card.id, { attack: a, defence: d, creation: cr, finishing: fn });
     baseAttack += a;
     baseDefence += d;
-    baseCreation += Math.round(a * profile.creation);
-    baseFinishing += Math.round(a * profile.finishing);
+    baseCreationProj += cr * CREATION_BAND[band];
+    baseFinishingProj += fn * FINISHING_BAND[band];
     if (band === 'ATT' || band === 'MID') attackers.push(card);
     if (band === 'DEF' || band === 'MID') defenders.push(card);
   });
@@ -522,55 +529,59 @@ export function evaluateSplit(
     team: 'player',
     side: bandOf(cardCell.get(card.id) ?? 'MID_C') === 'DEF' ? 'defence' : 'attack',
     isWide: isWideCard(card),
+    cell: cardCell.get(card.id) ?? 'MID_C',
     emit: emit.get(card.id) ?? zeroEmit(),
     traits: traitsForCard(card),
   }));
 
-  const baseField = { attack: baseAttack, defence: baseDefence, creation: baseCreation, finishing: baseFinishing };
-  const dispatched = dispatchTraits(dispatchCards, baseField, state.seed, state.currentIncrement);
+  const dispatched = dispatchTraits(dispatchCards, state.seed, state.currentIncrement);
 
-  // Adopt the transformed field; surface non-trivial shifts as cascade lines.
+  // Adopt the transformed field. attack/defence are the raw aggregate; creation &
+  // finishing are a band-weighted projection of the transformed cells (§4), so a
+  // relocate that moves a card to a new band re-mixes the chance profile.
+  let finalCreationProj = 0;
+  let finalFinishingProj = 0;
+  for (const cell of CELLS) {
+    finalCreationProj += dispatched.cells[cell].creation * CREATION_BAND[bandOf(cell)];
+    finalFinishingProj += dispatched.cells[cell].finishing * FINISHING_BAND[bandOf(cell)];
+  }
+
   const transformLabels: Record<ZoneName, Set<string>> = {
     attack: new Set(), defence: new Set(), creation: new Set(), finishing: new Set(),
   };
   for (const line of dispatched.log) {
     if (line.zone) transformLabels[line.zone].add(line.trait);
   }
-  const zoneDelta: Record<ZoneName, number> = zeroEmit();
-  for (const z of ZONES) {
-    const next = Math.max(0, Math.round(dispatched.zones[z]));
-    zoneDelta[z] = next - baseField[z];
-  }
-  baseAttack = Math.max(0, baseAttack + zoneDelta.attack);
-  baseDefence = Math.max(0, baseDefence + zoneDelta.defence);
-  baseCreation = Math.max(0, baseCreation + zoneDelta.creation);
-  baseFinishing = Math.max(0, baseFinishing + zoneDelta.finishing);
 
-  if (zoneDelta.attack !== 0) {
-    attackBreakdown.push({ label: `${[...transformLabels.attack].join(' + ') || 'Verb dispatcher'}`, value: zoneDelta.attack, type: 'ability' });
+  const newAttack = Math.max(0, Math.round(dispatched.zones.attack));
+  const newDefence = Math.max(0, Math.round(dispatched.zones.defence));
+  const attackDelta = newAttack - baseAttack;
+  const defenceDelta = newDefence - baseDefence;
+  const creationDelta = Math.round(finalCreationProj - baseCreationProj);
+  const finishingDelta = Math.round(finalFinishingProj - baseFinishingProj);
+  baseAttack = newAttack;
+  baseDefence = newDefence;
+  const baseCreation = Math.max(0, Math.round(finalCreationProj));
+  const baseFinishing = Math.max(0, Math.round(finalFinishingProj));
+
+  if (attackDelta !== 0) {
+    attackBreakdown.push({ label: `${[...transformLabels.attack].join(' + ') || 'Verb dispatcher'}`, value: attackDelta, type: 'ability' });
   }
-  if (zoneDelta.defence !== 0) {
-    defenceBreakdown.push({ label: `${[...transformLabels.defence].join(' + ') || 'Verb dispatcher'}`, value: zoneDelta.defence, type: 'ability' });
+  if (defenceDelta !== 0) {
+    defenceBreakdown.push({ label: `${[...transformLabels.defence].join(' + ') || 'Verb dispatcher'}`, value: defenceDelta, type: 'ability' });
   }
-  if (zoneDelta.creation !== 0) {
-    attackBreakdown.push({ label: `${[...transformLabels.creation].join(' + ') || 'Verb dispatcher'} (creation)`, value: zoneDelta.creation, type: 'ability' });
+  if (creationDelta !== 0) {
+    attackBreakdown.push({ label: `${[...transformLabels.creation].join(' + ') || 'Movement'} (creation)`, value: creationDelta, type: 'ability' });
   }
-  if (zoneDelta.finishing !== 0) {
-    attackBreakdown.push({ label: `${[...transformLabels.finishing].join(' + ') || 'Verb dispatcher'} (finishing)`, value: zoneDelta.finishing, type: 'ability' });
+  if (finishingDelta !== 0) {
+    attackBreakdown.push({ label: `${[...transformLabels.finishing].join(' + ') || 'Movement'} (finishing)`, value: finishingDelta, type: 'ability' });
   }
 
-  // --- Zonal field (§4): place the (dispatcher-adjusted) emission onto lanes ---
-  // Each card sits in its formation cell; magnitude tracks the post-dispatcher
-  // totals. The coupled lane contest runs downstream in resolveIncrement.
-  const preAttackSum = xi.reduce((s, c) => s + (emit.get(c.id)?.attack ?? 0), 0);
-  const preDefSum = xi.reduce((s, c) => s + (emit.get(c.id)?.defence ?? 0), 0);
-  const scaleA = preAttackSum > 0 ? baseAttack / preAttackSum : 0;
-  const scaleD = preDefSum > 0 ? baseDefence / preDefSum : 0;
-  const placed: PlacedEmission[] = xi.map((card) => {
-    const e = emit.get(card.id) ?? zeroEmit();
-    return { cell: cardCell.get(card.id) ?? 'MID_C', attack: e.attack * scaleA, defence: e.defence * scaleD };
-  });
-  const { push: lanePush, cover: laneCover } = computeLaneVectors(placed);
+  // --- Zonal field (§4): the coupled lane contest reads the transformed grid ---
+  // directly from the dispatcher (per-lane attack push & defensive cover). It runs
+  // downstream in resolveIncrement.
+  const lanePush = dispatched.lanePush;
+  const laneCover = dispatched.laneCover;
 
   // Midfield dual-contribution is already captured by the band split, so there is
   // no separate dual-role layer in the positioning model.

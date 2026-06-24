@@ -32,6 +32,8 @@
  */
 
 import { seededRandom } from './scoring';
+import type { Cell, Band, Lane } from './field';
+import { CELLS, bandOf, laneOf } from './field';
 
 // ---------------------------------------------------------------------------
 // Palette (DESIGN §2, ARCHETYPES §1)
@@ -74,9 +76,10 @@ export const PHASE_ORDER: VerbPhase[] = ['relocate', 'scale', 'debuff-opponent',
 // ---------------------------------------------------------------------------
 
 /**
- * Step-1 proto-zones. The full 3×3 cell field is step 2 (MATCH_ENGINE §4); for
- * the spine we project onto the four scoring axes `evaluateSplit` already
- * produces. Band intuition: ATT≈finishing, MID≈creation.
+ * The four emission *kinds* a card contributes. Each of the 9 field cells
+ * (MATCH_ENGINE §4) holds one accumulator per kind, so the field is a 9×4 grid.
+ * Band intuition (§4): ATT≈finishing, MID≈creation — applied when the host
+ * projects cells back onto the scalar chance model, not here.
  */
 export type ZoneName = 'attack' | 'defence' | 'creation' | 'finishing';
 
@@ -113,8 +116,12 @@ export interface TraitRecord {
   scope: 'slot' | 'zone' | 'global';
   target: TraitTarget;
   condition?: TraitCondition;
-  /** Source zone for `relocate` (destination is `target.zone`). */
-  from?: ZoneName;
+  /**
+   * Destination for `relocate`, relative to the owner's own cell. Each axis left
+   * unset keeps the owner's: `{ lane: 'C' }` cuts inside (same band, central lane),
+   * `{ band: 'MID' }` drops deep (same lane, one band back).
+   */
+  to?: { lane?: Lane; band?: Band };
   /** Escape hatch: a higher priority runs in a later sub-pass. Default 0. */
   priority?: number;
 }
@@ -132,14 +139,16 @@ export interface DispatchCard {
   team: 'player' | 'opponent';
   side: 'attack' | 'defence';
   isWide: boolean;
-  /** Base emission into each zone (computed by the host before dispatch). */
+  /** Which of the 9 field cells this card occupies (§4). */
+  cell: Cell;
+  /** Base emission into each kind (computed by the host before dispatch). */
   emit: Record<ZoneName, number>;
   traits: TraitRecord[];
 }
 
 export interface FieldState {
-  /** Absolute zone accumulators (seeded from base emission, transformed in place). */
-  zones: Record<ZoneName, number>;
+  /** 9×4 grid: each cell holds one accumulator per emission kind (§4). */
+  cells: Record<Cell, Record<ZoneName, number>>;
   /** Accumulated denial applied to the opponent (0..1-ish; capped downstream). */
   opponentDenial: number;
   /** Outcome-spread shaping for the xG step; >0 widens, <0 narrows. Neutral at 0. */
@@ -159,7 +168,14 @@ export interface TraitLogLine {
 }
 
 export interface DispatchResult {
+  /** The transformed 9×4 grid. */
+  cells: Record<Cell, Record<ZoneName, number>>;
+  /** Aggregate over all cells, per kind (drives the scalar attack/defence scores). */
   zones: Record<ZoneName, number>;
+  /** Σ attack per lane (the coupled contest's push vector, §4). */
+  lanePush: Record<Lane, number>;
+  /** Σ defence per lane (the coupled contest's cover vector, §4). */
+  laneCover: Record<Lane, number>;
   opponentDenial: number;
   variance: number;
   energy: Map<number, number>;
@@ -192,13 +208,34 @@ function zeroZones(): Record<ZoneName, number> {
   return { attack: 0, defence: 0, creation: 0, finishing: 0 };
 }
 
-function emptyField(zones: Record<ZoneName, number>): FieldState {
-  return { zones, opponentDenial: 0, variance: 0, energy: new Map(), fitness: new Map() };
+function emptyCells(): Record<Cell, Record<ZoneName, number>> {
+  const cells = {} as Record<Cell, Record<ZoneName, number>>;
+  for (const cell of CELLS) cells[cell] = zeroZones();
+  return cells;
+}
+
+function emptyField(cells: Record<Cell, Record<ZoneName, number>>): FieldState {
+  return { cells, opponentDenial: 0, variance: 0, energy: new Map(), fitness: new Map() };
+}
+
+/** Place each card's base emission into the cell it occupies (the pre-transform field). */
+export function buildBaseCells(cards: DispatchCard[]): Record<Cell, Record<ZoneName, number>> {
+  const cells = emptyCells();
+  for (const card of cards) {
+    for (const z of ZONES) cells[card.cell][z] += card.emit[z];
+  }
+  return cells;
+}
+
+function cloneCells(cells: Record<Cell, Record<ZoneName, number>>): Record<Cell, Record<ZoneName, number>> {
+  const out = {} as Record<Cell, Record<ZoneName, number>>;
+  for (const cell of CELLS) out[cell] = { ...cells[cell] };
+  return out;
 }
 
 function cloneField(f: FieldState): FieldState {
   return {
-    zones: { ...f.zones },
+    cells: cloneCells(f.cells),
     opponentDenial: f.opponentDenial,
     variance: f.variance,
     energy: new Map(f.energy),
@@ -212,11 +249,37 @@ function addToMap(map: Map<number, number>, id: number, value: number): void {
 
 /** Fold an additive delta pool into the live field. */
 function foldDelta(field: FieldState, pool: FieldState): void {
-  for (const z of ZONES) field.zones[z] += pool.zones[z];
+  for (const cell of CELLS) {
+    for (const z of ZONES) field.cells[cell][z] += pool.cells[cell][z];
+  }
   field.opponentDenial += pool.opponentDenial;
   field.variance += pool.variance;
   for (const [id, v] of pool.energy) addToMap(field.energy, id, v);
   for (const [id, v] of pool.fitness) addToMap(field.fitness, id, v);
+}
+
+/** Sum a transformed grid back into per-kind totals. */
+function aggregateZones(cells: Record<Cell, Record<ZoneName, number>>): Record<ZoneName, number> {
+  const z = zeroZones();
+  for (const cell of CELLS) {
+    for (const k of ZONES) z[k] += cells[cell][k];
+  }
+  return z;
+}
+
+/** Collapse the grid into per-lane attack push and defensive cover (§4). */
+function laneVectors(cells: Record<Cell, Record<ZoneName, number>>): {
+  push: Record<Lane, number>;
+  cover: Record<Lane, number>;
+} {
+  const push: Record<Lane, number> = { L: 0, C: 0, R: 0 };
+  const cover: Record<Lane, number> = { L: 0, C: 0, R: 0 };
+  for (const cell of CELLS) {
+    const lane = laneOf(cell);
+    push[lane] += cells[cell].attack;
+    cover[lane] += cells[cell].defence;
+  }
+  return { push, cover };
 }
 
 // ---------------------------------------------------------------------------
@@ -303,17 +366,26 @@ function targetZones(target: TraitTarget, card: DispatchCard): ZoneName[] {
 // ---------------------------------------------------------------------------
 
 const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
-  // Move a fraction of the source card's emission from one zone to another.
-  // Conserves total field power (ARCHETYPES §1, MATCH_ENGINE §9 inside-forward/False-9).
+  // Move a fraction of the owner's emission from its own cell to a neighbouring
+  // cell (a real lane/band shift, §4). Conserves every kind's grand total
+  // (ARCHETYPES §1; MATCH_ENGINE §9 inside-forward "cut inside" / False 9 "drop deep").
   relocate(ctx) {
     const { record, owner, pool } = ctx;
-    if (record.target.kind !== 'zone' || !record.from) return;
     const fraction = record.params.fraction ?? 0;
-    const moved = owner.emit[record.from] * fraction;
-    if (moved === 0) return;
-    pool.zones[record.from] -= moved;
-    pool.zones[record.target.zone] += moved;
-    pushLog(ctx, record.target.zone, moved, `relocate ${record.from}→${record.target.zone}`);
+    if (fraction === 0) return;
+    const destBand: Band = record.to?.band ?? bandOf(owner.cell);
+    const destLane: Lane = record.to?.lane ?? laneOf(owner.cell);
+    const dest = `${destBand}_${destLane}` as Cell;
+    if (dest === owner.cell) return; // already there → no-op
+    let moved = false;
+    for (const z of ZONES) {
+      const amt = owner.emit[z] * fraction;
+      if (amt === 0) continue;
+      pool.cells[owner.cell][z] -= amt;
+      pool.cells[dest][z] += amt;
+      moved = true;
+    }
+    if (moved) pushLog(ctx, 'attack', owner.emit.attack * fraction, `relocate ${owner.cell}→${dest}`);
   },
 
   // Scale power in a cell. scope 'global' + zone → whole zone; scope 'slot'/'self' →
@@ -323,15 +395,22 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
     const amount = record.params.amount ?? 0;
 
     if (record.target.kind === 'zone') {
+      const zone = record.target.zone;
       if (record.scope === 'global') {
-        const delta = snapshot.zones[record.target.zone] * amount;
-        pool.zones[record.target.zone] += delta;
-        pushLog(ctx, record.target.zone, delta, `${Math.round(amount * 100)}% zone`);
+        // Scale that kind across every cell, reading the frozen snapshot.
+        let delta = 0;
+        for (const cell of CELLS) {
+          const d = snapshot.cells[cell][zone] * amount;
+          if (d === 0) continue;
+          pool.cells[cell][zone] += d;
+          delta += d;
+        }
+        pushLog(ctx, zone, delta, `${Math.round(amount * 100)}% zone`);
       } else {
-        // own emission into that zone
-        const delta = owner.emit[record.target.zone] * amount;
-        pool.zones[record.target.zone] += delta;
-        pushLog(ctx, record.target.zone, delta, `${Math.round(amount * 100)}% own`);
+        // Own emission into that kind, landing in the owner's own cell.
+        const delta = owner.emit[zone] * amount;
+        pool.cells[owner.cell][zone] += delta;
+        pushLog(ctx, zone, delta, `${Math.round(amount * 100)}% own`);
       }
       return;
     }
@@ -340,7 +419,7 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
     for (const card of cards) {
       for (const zone of targetZones(record.target, card)) {
         const delta = card.emit[zone] * amount;
-        pool.zones[zone] += delta;
+        pool.cells[card.cell][zone] += delta;
         pushLog(ctx, zone, delta, `+${Math.round(amount * 100)}% (#${card.id})`);
       }
     }
@@ -355,7 +434,7 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
       const weight = amount * (1 - card.power / 100);
       for (const zone of targetZones(record.target, card)) {
         const delta = card.emit[zone] * weight;
-        pool.zones[zone] += delta;
+        pool.cells[card.cell][zone] += delta;
         pushLog(ctx, zone, delta, `+${(weight * 100).toFixed(1)}% (#${card.id})`);
       }
     }
@@ -368,12 +447,12 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
     pushLog(ctx, undefined, amount, `deny opponent −${Math.round(amount * 100)}%`);
   },
 
-  // Add flat value to a zone from nothing (e.g. set-piece xG).
+  // Add flat value to a kind from nothing (e.g. set-piece xG), in the owner's cell.
   generate(ctx) {
-    const { record, pool } = ctx;
+    const { record, owner, pool } = ctx;
     if (record.target.kind !== 'zone') return;
     const amount = record.params.amount ?? 0;
-    pool.zones[record.target.zone] += amount;
+    pool.cells[owner.cell][record.target.zone] += amount;
     pushLog(ctx, record.target.zone, amount, `generate +${Math.round(amount)}`);
   },
 
@@ -424,11 +503,11 @@ interface CollectedRecord {
  */
 export function dispatchTraits(
   cards: DispatchCard[],
-  baseZones: Record<ZoneName, number>,
   seed: number,
   increment: number,
 ): DispatchResult {
-  const field = emptyField({ ...baseZones });
+  // The pre-transform field is just every card's emission placed in its cell.
+  const field = emptyField(buildBaseCells(cards));
   const log: TraitLogLine[] = [];
 
   // Stable iteration: cards by id, each card's trait order preserved.
@@ -451,7 +530,7 @@ export function dispatchTraits(
 
     for (const priority of priorities) {
       const snapshot = Object.freeze(cloneField(field));
-      const pool = emptyField(zeroZones());
+      const pool = emptyField(emptyCells());
 
       for (const { record, owner } of inPhase) {
         if ((record.priority ?? 0) !== priority) continue;
@@ -470,8 +549,12 @@ export function dispatchTraits(
     }
   }
 
+  const { push, cover } = laneVectors(field.cells);
   return {
-    zones: field.zones,
+    cells: field.cells,
+    zones: aggregateZones(field.cells),
+    lanePush: push,
+    laneCover: cover,
     opponentDenial: field.opponentDenial,
     variance: field.variance,
     energy: field.energy,
