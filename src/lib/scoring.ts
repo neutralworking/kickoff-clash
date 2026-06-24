@@ -37,6 +37,7 @@ export interface Card {
   durability: Durability;
   phoenixMatchesSurvived?: number;  // tracks for Phoenix promotion
   injured?: boolean;                 // for Fragile cards — miss next match
+  fitness?: number;                  // 1–6 dynamic condition, depletes across increments (MATCH_ENGINE §3.1)
   // Extended fields from kc_characters
   bio?: string;
   tags?: string[];

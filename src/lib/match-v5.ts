@@ -6,7 +6,7 @@
  * Chemistry fires contextually based on card placement.
  */
 
-import type { Card, SlottedCard, PlayingStyle } from './scoring';
+import type { Card, SlottedCard, PlayingStyle, Durability } from './scoring';
 import { seededRandom, PLAYING_STYLES } from './scoring';
 import type { Connection, CrossSynergy } from './chemistry';
 import {
@@ -158,6 +158,25 @@ const zeroEmit = (): Record<ZoneName, number> => ({ attack: 0, defence: 0, creat
  *  defence it attacks into, so a comparably-powered opponent is a real threat.
  *  (DESIGN §7 difficulty dial; calibrated against the deck-strength sweep.) */
 const OPP_COHESION = 2.5;
+
+// --- Fitness (MATCH_ENGINE §3.1; §7 dials) ---
+// Dynamic 1–6 condition. fitnessFactor scales emission: fresh (6) = full, spent (1) =
+// half. Drain per increment = base (durability tier) × involvement (band: attacking /
+// contested lanes burn faster). A titanium back is ~immune (90 minutes); a glass
+// attacker fades fast — rest it in a cold zone or sub it.
+const FITNESS_DRAIN: Record<Durability, number> = {
+  glass: 0.70, fragile: 0.55, phoenix: 0.60, standard: 0.40, iron: 0.28, titanium: 0.06,
+};
+const BAND_INVOLVEMENT: Record<Band, number> = { ATT: 1.2, MID: 0.9, DEF: 0.5 };
+
+function fitnessFactor(fitness: number): number {
+  return 0.52 + 0.08 * clamp(fitness, 1, 6); // 6 → 1.0, 1 → 0.6
+}
+
+/** Starting fitness for a card entering a match: fresh, or low if carrying an injury. */
+function fitnessOf(card: Card): number {
+  return card.fitness ?? (card.injured ? 2 : 6);
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -444,7 +463,9 @@ export function initMatch(
     seed,
   );
   return {
-    xi,
+    // Each starter begins the match fresh (or low if carrying an injury); fitness
+    // then depletes per increment (§3.1).
+    xi: xi.map((c) => ({ ...c, fitness: fitnessOf(c) })),
     bench,
     remainingDeck,
     attackerIds: new Set(),
@@ -520,7 +541,7 @@ export function computeSideField(
     const slot = formation.slots[i] ?? formation.slots[formation.slots.length - 1];
     const cell = cellOf(slot.x, slot.y);
     const band = bandOf(cell);
-    const power = card.injured ? Math.round(card.power * 0.5) : card.power;
+    const power = Math.round(card.power * fitnessFactor(fitnessOf(card)));
     const profile = getChanceProfile(card);
     const a = Math.round(power * BAND_ATK[band]);
     const d = Math.round(power * BAND_DEF[band]);
@@ -605,7 +626,7 @@ export function evaluateSplit(
     const band = bandOf(cell);
     cardCell.set(card.id, cell);
     cardY.set(card.id, slot.y);
-    const power = card.injured ? Math.round(card.power * 0.5) : card.power;
+    const power = Math.round(card.power * fitnessFactor(fitnessOf(card)));
     const profile = getChanceProfile(card);
     const a = Math.round(power * BAND_ATK[band]);
     const d = Math.round(power * BAND_DEF[band]);
@@ -1054,24 +1075,31 @@ export function advanceIncrement(state: MatchV5State, result: IncrementResult): 
   const nextIncrement = state.currentIncrement + 1;
   const isFirstHalf = nextIncrement <= 1;
 
-  // Fatigue check on cards that attacked
-  let newXi = [...state.xi];
+  // Fitness drain (§3.1): every starter loses condition each increment — base by
+  // durability × involvement by band (attacking lanes burn faster). A genuinely spent,
+  // fragile card risks an injury. Cards rested in a cold (DEF) zone fade slower.
+  const newXi = [...state.xi];
   const fatigueSeed = state.seed * 97 + state.currentIncrement * 31;
+  const lastSlot = state.formation.slots[state.formation.slots.length - 1];
 
   for (let i = 0; i < newXi.length; i++) {
     const card = newXi[i];
-    if (!state.attackerIds.has(card.id)) continue;
+    const slot = state.formation.slots[i] ?? lastSlot;
+    const band = bandOf(cellOf(slot.x, slot.y));
+    const drain = (FITNESS_DRAIN[card.durability] ?? 0.5) * BAND_INVOLVEMENT[band];
+    const fitness = clamp((card.fitness ?? 6) - drain, 1, 6);
 
-    let fatigueChance = 0;
-    if (card.durability === 'glass') fatigueChance = 0.15;
-    else if (card.durability === 'phoenix') fatigueChance = 0.12;
-
-    if (fatigueChance > 0) {
-      const roll = seededRandom(fatigueSeed + card.id);
-      if (roll < fatigueChance) {
-        newXi[i] = { ...card, injured: true };
-      }
+    let injured = card.injured;
+    if (!injured && fitness < 2.5) {
+      // tired + fragile → injury risk this increment
+      let risk = 0;
+      if (card.durability === 'glass') risk = 0.15;
+      else if (card.durability === 'phoenix') risk = 0.12;
+      else if (card.durability === 'fragile') risk = 0.10;
+      if (risk > 0 && seededRandom(fatigueSeed + card.id) < risk) injured = true;
     }
+
+    newXi[i] = { ...card, fitness, injured };
   }
 
   return {

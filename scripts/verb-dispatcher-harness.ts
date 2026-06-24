@@ -424,5 +424,47 @@ console.log('\n9. Run-accumulated chemistry');
   check('chemistry is deterministic', evalWith(settled).attackScore === strong.attackScore);
 }
 
+// ---------------------------------------------------------------------------
+// 10. Fitness depletion (MATCH_ENGINE §3.1)
+// ---------------------------------------------------------------------------
+console.log('\n10. Fitness depletion');
+{
+  const base = cards[0];
+  // Synthetic XI of identical cards, so only the variable under test moves.
+  const mkXI = (over: Partial<Card>): Card[] =>
+    Array.from({ length: 11 }, (_, i) => ({ ...base, id: 5000 + i, durability: 'standard', ...over }));
+  const fbench = cards.slice(20, 27);
+  const mkState = (xi: Card[]) => initMatch(xi, fbench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter');
+
+  const fresh = evaluateSplit(mkState(mkXI({})), [], slots);
+  const tired = evaluateSplit(mkState(mkXI({ fitness: 1 })), [], slots);
+  check('a tired XI emits less attack than a fresh one', tired.attackScore < fresh.attackScore, `fresh=${fresh.attackScore} tired=${tired.attackScore}`);
+
+  // One increment: an attacking-lane slot tires faster than a defensive one (same durability).
+  let s = mkState(mkXI({}));
+  s = advanceIncrement(s, resolveIncrement(s, evaluateSplit(s, [], slots), SEED));
+  const attFit = s.xi[9].fitness ?? 6; // 4-3-3 slot[9] = striker (ATT band)
+  const defFit = s.xi[2].fitness ?? 6; // slot[2] = centre-back (DEF band)
+  check('attacking-lane cards tire faster than defenders', attFit < defFit, `ATT=${attFit.toFixed(2)} DEF=${defFit.toFixed(2)}`);
+
+  // Durability: glass drains faster than titanium in the same slot.
+  const oneInc = (dur: Card['durability']) => {
+    let x = mkState(mkXI({ durability: dur }));
+    x = advanceIncrement(x, resolveIncrement(x, evaluateSplit(x, [], slots), SEED));
+    return x.xi[9].fitness ?? 6;
+  };
+  const glass = oneInc('glass');
+  const titanium = oneInc('titanium');
+  check('glass tires faster than titanium', glass < titanium, `glass=${glass.toFixed(2)} titanium=${titanium.toFixed(2)}`);
+
+  // Drain is deterministic across a full match.
+  const run = () => {
+    let x = mkState(mkXI({}));
+    for (let i = 0; i < 5; i++) x = advanceIncrement(x, resolveIncrement(x, evaluateSplit(x, [], slots), SEED + i));
+    return x.xi.map((c) => (c.fitness ?? 6).toFixed(2)).join(',');
+  };
+  check('fitness drain is deterministic', run() === run());
+}
+
 console.log(`\n=== ${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} ===\n`);
 process.exit(failures === 0 ? 0 : 1);
