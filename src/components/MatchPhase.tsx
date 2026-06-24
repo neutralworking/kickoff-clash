@@ -14,6 +14,7 @@ import {
   resolveIncrement,
   getOpponentBaselines,
   advanceIncrement,
+  makeSub,
   getMatchResult,
 } from '../lib/match-v5';
 import type { TacticSlots } from '../lib/tactics';
@@ -135,6 +136,15 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     }
   }, [matchState, currentResult]);
 
+  const handleSub = useCallback((xiCardId: number, benchCardId: number) => {
+    setMatchState((prev: MatchV5State) => makeSub(prev, xiCardId, benchCardId));
+  }, []);
+
+  const handleFormationChange = useCallback((formationId: string) => {
+    const newFormation = getFormation(formationId);
+    setMatchState((prev: MatchV5State) => ({ ...prev, formation: newFormation }));
+  }, []);
+
   const handleToggleTactic = useCallback((tacticId: string) => {
     const tactic = runState.tacticsDeck.find((card) => card.id === tacticId);
     if (!tactic) return;
@@ -215,12 +225,15 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
           jokers={runState.jokers}
           tacticSlots={tacticSlots}
           availableTactics={runState.tacticsDeck}
+          ownedFormations={runState.ownedFormations}
           opponentBuild={opponentBuild}
           nextMinute={nextMinute}
           mode={subPhase === 'resolving' ? 'resolve' : 'plan'}
           currentResult={currentResult}
           onToggleAttacker={handleToggleAttacker}
           onToggleTactic={handleToggleTactic}
+          onSub={handleSub}
+          onFormationChange={handleFormationChange}
           onContinue={subPhase === 'resolving' ? handleResolveComplete : handleKickOff}
         />
       )}
