@@ -60,14 +60,19 @@ const total = (r: Record<Lane, number>): number => r.L + r.C + r.R;
  * opponent left structurally thin is rewarded, but a predictable overload gets met.
  * Returns a pressure ratio (~1.0 when evenly matched), averaged over lanes.
  */
-export function attackVsCover(push: Record<Lane, number>, cover: Record<Lane, number>): number {
-  const { k, oppReact } = FIELD_CONST;
+export function attackVsCover(
+  push: Record<Lane, number>,
+  cover: Record<Lane, number>,
+  reactivity: number = FIELD_CONST.oppReact,
+): number {
+  const { k } = FIELD_CONST;
+  const react = Math.max(0, Math.min(1, reactivity));
   const pushSum = total(push) || 1;
   const coverSum = total(cover);
   let acc = 0;
   for (const lane of LANES) {
-    const base = cover[lane] * (1 - oppReact);
-    const reactive = coverSum * oppReact * (push[lane] / pushSum);
+    const base = cover[lane] * (1 - react);
+    const reactive = coverSum * react * (push[lane] / pushSum);
     const eff = Math.max(1, base + reactive);
     acc += Math.pow(push[lane] / eff, k);
   }

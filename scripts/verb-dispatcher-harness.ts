@@ -33,7 +33,7 @@ import {
   computeSideField,
   type MatchV5State,
 } from '../src/lib/match-v5';
-import { generateOpponentXI } from '../src/lib/opponent';
+import { generateOpponentXI, opponentScaleTraits, counterPush, reactivityFor } from '../src/lib/opponent';
 import { dispatchTraits, buildBaseCells, type DispatchCard } from '../src/lib/verbs';
 import { ROLE_TRANSFORMS } from '../src/lib/role-transforms';
 import { CELLS, cellOf, bandOf, attackVsCover, pushVsReserveCover, type Band, type Lane } from '../src/lib/field';
@@ -332,6 +332,54 @@ console.log('\n7. Opponent as a real positioned XI');
   check('round budget scales the opponent\'s attacking threat (R5 > R1)',
     f5.chanceCreation > f1.chanceCreation && f5.attackScore > f1.attackScore,
     `R1 atk=${f1.attackScore} cre=${f1.chanceCreation}; R5 atk=${f5.attackScore} cre=${f5.chanceCreation}`);
+}
+
+// ---------------------------------------------------------------------------
+// 8. Reactive opponent — scale first, counter second (§8)
+// ---------------------------------------------------------------------------
+console.log('\n8. Reactive opponent — scale first, counter second');
+{
+  // Reactivity ordering: reactive styles read harder than play-your-own-game styles.
+  check('reactive styles counter harder than scale-focused ones',
+    reactivityFor('Adaptive') > reactivityFor('Attacking') && reactivityFor('Counter') > reactivityFor('Balanced'),
+    `Atk=${reactivityFor('Attacking')} Bal=${reactivityFor('Balanced')} Ctr=${reactivityFor('Counter')} Adp=${reactivityFor('Adaptive')}`);
+
+  // SECONDARY (counter): bias push toward your thinnest cover lane, conserving total.
+  const oppPush: Record<Lane, number> = { L: 100, C: 100, R: 100 };
+  const yourCover: Record<Lane, number> = { L: 30, C: 100, R: 100 }; // thin on the left
+  const low = counterPush(oppPush, yourCover, 0.10);
+  const high = counterPush(oppPush, yourCover, 0.70);
+  check('counter shifts push toward your weak lane (more for a reactive side)', high.L > low.L && high.L > high.C, `low.L=${low.L.toFixed(0)} high.L=${high.L.toFixed(0)} high.C=${high.C.toFixed(0)}`);
+  check('counter conserves total push', Math.abs((high.L + high.C + high.R) - 300) < 1e-9);
+
+  // The counter actually raises threat against an exploitable shape (isolated: same
+  // base push + cover, only reactivity varies).
+  const lowThreat = pushVsReserveCover(low, yourCover);
+  const highThreat = pushVsReserveCover(high, yourCover);
+  check('a more reactive opponent generates more threat vs a thin lane', highThreat > lowThreat, `low=${lowThreat.toFixed(2)} high=${highThreat.toFixed(2)}`);
+
+  // Defensive counter: a reactive opponent better covers your overloaded lane.
+  const yourOverload: Record<Lane, number> = { L: 300, C: 0, R: 0 };
+  const oppCover: Record<Lane, number> = { L: 100, C: 100, R: 100 };
+  check('a more reactive opponent better covers your overload', attackVsCover(yourOverload, oppCover, 0.70) < attackVsCover(yourOverload, oppCover, 0.10));
+
+  // PRIMARY (scale): play-to-strengths + build-up that grows across increments.
+  const oxi = generateOpponentXI(3, 'Balanced', SEED).xi;
+  const buildAttack = (inc: number) => opponentScaleTraits(oxi, inc)
+    .filter((r) => r.name === 'Building' && r.target.kind === 'zone' && r.target.zone === 'attack')
+    .reduce((s, r) => s + (r.params.amount ?? 0), 0);
+  check('opponent plays to strengths (amplifies a dominant archetype)', opponentScaleTraits(oxi, 0).some((r) => r.name === 'Play to Strengths'));
+  check('opponent build-up scales across increments', buildAttack(4) > buildAttack(0), `inc0=${buildAttack(0)} inc4=${buildAttack(4).toFixed(2)}`);
+
+  // Determinism through the reactive path.
+  const playerXI = buildRoledXI();
+  const bench = cards.sort((a, b) => b.power - a.power).slice(11, 18);
+  const oppGC = () => {
+    let s = initMatch(playerXI, bench, [], formation, 'tiki-taka', [], SEED, 3, 'Counter', 'Sprinter');
+    s = commitAttackers(s, [...s.xi].sort((a, b) => b.power - a.power).slice(0, 4).map((c) => c.id));
+    return resolveIncrement(s, evaluateSplit(s, [], slots), SEED).opponentGoalChance;
+  };
+  check('reactive-opponent resolution is deterministic', oppGC() === oppGC());
 }
 
 console.log(`\n=== ${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} ===\n`);

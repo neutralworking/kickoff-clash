@@ -31,7 +31,7 @@ import { dispatchTraits } from './verbs';
 import { traitsForCard } from './role-transforms';
 import type { Lane, Cell, Band } from './field';
 import { CELLS, cellOf, bandOf, attackVsCover, pushVsReserveCover } from './field';
-import { generateOpponentXI } from './opponent';
+import { generateOpponentXI, opponentScaleTraits, counterPush, reactivityFor } from './opponent';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -857,28 +857,37 @@ export function resolveIncrement(
   // The opponent is a real positioned side (step 4): its field runs through the same
   // path, so the contest is a symmetric mirror (§4) — your push vs their cover, and
   // theirs vs yours — and counters emerge from the verbs both sides emit.
+  //
+  // Objective hierarchy (§8): PRIMARY — scale its own points (play-to-strengths +
+  // build-up, as squad records); SECONDARY — counter only if it can (reactivity-
+  // weighted shift toward your weakness), low by default, high for reactive styles.
+  const reactivity = reactivityFor(state.opponentStyle);
   const opp = computeSideField(
     state.opponentXI,
     state.opponentFormation,
     state.seed + 7777,
     state.currentIncrement,
+    opponentScaleTraits(state.opponentXI, state.currentIncrement),
   );
 
   // The opponent runs the lean side path (no synergy/style/personality cascade), so
   // its raw attack reads ~half a comparably-powered player side. OPP_COHESION stands
   // in for those skipped multipliers — a coordinated team — applied to its *attacking*
   // output only (its cover stays lean so you can still break it down). §7 dial.
+  // Offensive counter: bias its push toward your thinnest cover lane before scaling.
+  const counteredPush = counterPush(opp.lanePush, split.laneCover, reactivity);
   const oppPush: Record<Lane, number> = {
-    L: opp.lanePush.L * OPP_COHESION,
-    C: opp.lanePush.C * OPP_COHESION,
-    R: opp.lanePush.R * OPP_COHESION,
+    L: counteredPush.L * OPP_COHESION,
+    C: counteredPush.C * OPP_COHESION,
+    R: counteredPush.R * OPP_COHESION,
   };
   const oppCreation = opp.chanceCreation * OPP_COHESION;
   const oppFinishing = opp.shotQuality * OPP_COHESION;
 
   // YOUR threat: your lane push vs their positioned cover; your chance quality vs
-  // their defensive score.
-  const pressureRatio = attackVsCover(split.lanePush, opp.laneCover);
+  // their defensive score. Defensive counter: their cover shifts onto your loaded lane
+  // in proportion to this opponent's reactivity.
+  const pressureRatio = attackVsCover(split.lanePush, opp.laneCover, reactivity);
   const oppDef = Math.max(1, opp.defenceScore);
   const creationRatio = split.chanceCreation / (oppDef * 0.8);
   const finishingRatio = split.shotQuality / (oppDef * 0.68);

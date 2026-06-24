@@ -153,6 +153,14 @@ Determinism: stable iteration, RNG seeded from `(seed, increment, cardId)`.
 * **Archetype = a deterministic reconfiguration policy** (formation + assignment + reactive actions)
   as a function of visible state + style. `opponentStyle` (Passive/Attacking/Counter/Adaptive) is the
   proto-version; archetypes are the richer, named successors.
+* **Objective hierarchy (primary → secondary):** the opponent's first goal is to **scale its own
+  points** — play to its composition's strengths (lean into its strongest lanes/archetypes and build
+  across the increments). Only *then*, and only if it can, does it **counter**: a bounded,
+  opportunistic adjustment to your committed shape (push at your thinnest cover lane, shift its own
+  cover onto your loaded lane). A per-opponent `reactivity` weights how hard it counters — low by
+  default (most sides just play their own game), raised only for reactive styles / AI managers
+  (counter-attacking, adaptive). Counters stay emergent: push/cover redistribution read off your
+  shape, never a hardcoded matchup.
 * **Legibility (layered info economy):** archetype familiarity (across runs) + scouting (spend to
   reveal pre-match) + in-match inference (read their first moves). Not shown free → information is a
   resource axis. Computed blind (without seeing your locked config).

@@ -97,8 +97,12 @@ Both forms exist:
   new xG→Poisson step in `resolveIncrement`.
 * Strong leader generalises `Anchor → The Shield` (scoring.ts, "lowest-power card +30%") from one
   card to a power-weighted curve over all teammates.
-* Opponent AI = play-to-strengths over its composition's verbs + opportunistic counter at two info
-  states (blind config / informed reactive). No authored per-archetype policy.
+* Opponent AI, in priority order: (1) **scale its own points** — play to its composition's
+  strengths (its strongest lanes/archetypes, building across the match); (2) **counter only if it
+  can** — an opportunistic, bounded adjustment to the read of your committed shape. Scaling is the
+  default and the bulk of behaviour; reactivity is the exception, dialled up only for specific
+  styles / AI managers (e.g. a counter-attacking or adaptive manager). Computed at two info states
+  (blind config / informed reactive). No authored per-archetype policy.
 
 ## 6. Open
 
