@@ -77,6 +77,7 @@ function buildRunState(overrides: Partial<RunState> & Pick<RunState, 'deck' | 'p
     status: 'match',
     matchHistory: [],
     modifiers: [],
+    chemistry: {},
     seed: 10101,
     ...overrides,
   };

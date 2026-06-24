@@ -32,6 +32,8 @@ import { traitsForCard } from './role-transforms';
 import type { Lane, Cell, Band } from './field';
 import { CELLS, cellOf, bandOf, attackVsCover, pushVsReserveCover } from './field';
 import { generateOpponentXI, opponentScaleTraits, counterPush, reactivityFor } from './opponent';
+import type { CoAppearance } from './chem';
+import { chemistryRecords } from './chem';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,6 +68,7 @@ export interface MatchV5State {
   opponentWeakness: string;   // archetype the opponent is weak to
   opponentXI: Card[];         // the opponent's positioned side (step 4)
   opponentFormation: Formation;
+  chemistry: CoAppearance;    // run-accumulated pairwise co-appearances (CARDS §5)
   seed: number;
 }
 
@@ -431,6 +434,7 @@ export function initMatch(
   opponentRound: number,
   opponentStyle: string,
   opponentWeakness: string,
+  chemistry: CoAppearance = {},
 ): MatchV5State {
   // The opponent is now a real positioned side (step 4), generated deterministically
   // from the round budget + style. It plays through the same dispatcher as you do.
@@ -461,6 +465,7 @@ export function initMatch(
     opponentWeakness,
     opponentXI,
     opponentFormation,
+    chemistry,
     seed,
   };
 }
@@ -630,13 +635,18 @@ export function evaluateSplit(
     findPositionalConnections(attackerSlotted, defenderSlotted);
   const allConnections: Connection[] = [...attackSynergies, ...defenceSynergies, ...crossSynergies];
 
-  // Tactical cards + Manager → squad-wide records over the same verb palette.
-  const playerSquadTraits = squadTraits(tacticSlots, jokers, {
-    xi,
-    increment: state.currentIncrement,
-    opponentGoals: state.opponentGoals,
-    connections: allConnections,
-  });
+  // Tactical cards + Manager → squad-wide records over the same verb palette, plus
+  // run-accumulated chemistry: connecting pairs emit a zonal bonus scaling with how
+  // settled the partnership is (CARDS §5). Both ride the same squad source.
+  const playerSquadTraits = [
+    ...squadTraits(tacticSlots, jokers, {
+      xi,
+      increment: state.currentIncrement,
+      opponentGoals: state.opponentGoals,
+      connections: allConnections,
+    }),
+    ...chemistryRecords(xi, formation, state.chemistry ?? {}),
+  ];
 
   // --- Verb dispatcher: migrated roles + squad records reshape the field ---
   const dispatchCards: DispatchCard[] = xi.map((card) => ({

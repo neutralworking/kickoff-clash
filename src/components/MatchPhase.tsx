@@ -60,6 +60,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       runState.round,
       opponent.style,
       opponentBuild.weaknessArchetype,
+      runState.chemistry ?? {},
     );
   });
 

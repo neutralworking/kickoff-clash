@@ -26,6 +26,7 @@ import { getExtraDiscards } from './jokers';
 import type { PackContents } from './packs';
 import { ALL_TACTICS, type TacticCard } from './tactics';
 import { getFormation } from './formations';
+import type { CoAppearance } from './chem';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,6 +55,7 @@ export interface RunState {
   status: 'title' | 'packSelect' | 'setup' | 'match' | 'postmatch' | 'shop' | 'won' | 'lost';
   matchHistory: MatchResult[];
   modifiers: unknown[];
+  chemistry: CoAppearance;   // run-accumulated pairwise co-appearances (CARDS §5)
   seed: number;
 }
 
@@ -745,6 +747,7 @@ export function createRun(packContents: PackContents, style: string, seed?: numb
     status: 'match',
     matchHistory: [],
     modifiers: [],
+    chemistry: {},
     seed: runSeed,
   };
 }

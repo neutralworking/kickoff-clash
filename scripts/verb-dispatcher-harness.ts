@@ -34,6 +34,7 @@ import {
   type MatchV5State,
 } from '../src/lib/match-v5';
 import { generateOpponentXI, opponentScaleTraits, counterPush, reactivityFor } from '../src/lib/opponent';
+import { chemistryStrength, accrueMatch, coApp, chemistryRecords } from '../src/lib/chem';
 import { dispatchTraits, buildBaseCells, type DispatchCard } from '../src/lib/verbs';
 import { ROLE_TRANSFORMS } from '../src/lib/role-transforms';
 import { CELLS, cellOf, bandOf, attackVsCover, pushVsReserveCover, type Band, type Lane } from '../src/lib/field';
@@ -380,6 +381,47 @@ console.log('\n8. Reactive opponent — scale first, counter second');
     return resolveIncrement(s, evaluateSplit(s, [], slots), SEED).opponentGoalChance;
   };
   check('reactive-opponent resolution is deterministic', oppGC() === oppGC());
+}
+
+// ---------------------------------------------------------------------------
+// 9. Run-accumulated chemistry (CARDS §5)
+// ---------------------------------------------------------------------------
+console.log('\n9. Run-accumulated chemistry');
+{
+  // Strength curve: more co-appearances → more chemistry; static links give a floor.
+  const s0 = chemistryStrength(0, false, false);
+  const sSettled = chemistryStrength(40, false, false);
+  const sNation = chemistryStrength(0, true, false);
+  check('chemistry strengthens with co-appearances', sSettled > s0 && s0 === 0, `0→${s0.toFixed(2)}, 40→${sSettled.toFixed(2)}`);
+  check('nationality is a static chemistry floor', sNation > 0, `nation@0=${sNation.toFixed(2)}`);
+
+  // Accrual increments every on-pitch pair; accumulates across matches, no decay.
+  const m1 = accrueMatch({}, [1, 2, 3], 5);
+  check('accrueMatch increments on-pitch pairs', coApp(m1, 1, 2) === 5 && coApp(m1, 1, 3) === 5 && coApp(m1, 2, 3) === 5);
+  check('co-appearances accumulate across matches (no decay)', coApp(accrueMatch(m1, [1, 2, 3], 5), 1, 2) === 10);
+
+  // Connection bonus: connecting pairs emit into a cell, scaling with the matrix.
+  const xi = buildRoledXI();
+  const ids = xi.map((c) => c.id);
+  let settled: Record<string, number> = {};
+  for (let k = 0; k < 10; k++) settled = accrueMatch(settled, ids, 5); // 50 co-apps/pair
+  const freshRecs = chemistryRecords(xi, formation, {});
+  const settledRecs = chemistryRecords(xi, formation, settled);
+  const sumAmt = (recs: typeof freshRecs) => recs.reduce((s, r) => s + (r.params.amount ?? 0), 0);
+  check('chemistry emits connection records into cells (generate + to)', settledRecs.length > 0 && settledRecs.every((r) => r.verb === 'generate' && !!r.to), `${settledRecs.length} records`);
+  check('a settled squad has stronger chemistry than a fresh one', sumAmt(settledRecs) > sumAmt(freshRecs), `fresh=${sumAmt(freshRecs).toFixed(0)} settled=${sumAmt(settledRecs).toFixed(0)}`);
+
+  // End-to-end: chemistry lifts the field through the dispatcher, deterministically.
+  const bench = cards.sort((a, b) => b.power - a.power).slice(11, 18);
+  const evalWith = (chem: Record<string, number>) => {
+    let s = initMatch(xi, bench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter', chem);
+    s = commitAttackers(s, ids.slice(0, 4));
+    return evaluateSplit(s, [], slots);
+  };
+  const fresh = evalWith({});
+  const strong = evalWith(settled);
+  check('chemistry lifts attack via the dispatcher', strong.attackScore > fresh.attackScore, `fresh=${fresh.attackScore} settled=${strong.attackScore}`);
+  check('chemistry is deterministic', evalWith(settled).attackScore === strong.attackScore);
 }
 
 console.log(`\n=== ${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} ===\n`);

@@ -461,13 +461,18 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
     pushLog(ctx, undefined, amount, `deny opponent −${Math.round(amount * 100)}%`);
   },
 
-  // Add flat value to a kind from nothing (e.g. set-piece xG), in the owner's cell.
+  // Add flat value to a kind from nothing (e.g. set-piece xG, a chemistry link). Lands
+  // in the owner's cell, or — if `to` is given — an explicit destination cell, so a
+  // squad-source record can deposit into a specific cell (chemistry connecting zones).
   generate(ctx) {
     const { record, owner, pool } = ctx;
     if (record.target.kind !== 'zone') return;
     const amount = record.params.amount ?? 0;
-    pool.cells[owner.cell][record.target.zone] += amount;
-    pushLog(ctx, record.target.zone, amount, `generate +${Math.round(amount)}`);
+    const band: Band = record.to?.band ?? bandOf(owner.cell);
+    const lane: Lane = record.to?.lane ?? laneOf(owner.cell);
+    const dest = `${band}_${lane}` as Cell;
+    pool.cells[dest][record.target.zone] += amount;
+    pushLog(ctx, record.target.zone, amount, `generate +${Math.round(amount)} @${dest}`);
   },
 
   'dampen-variance'(ctx) {

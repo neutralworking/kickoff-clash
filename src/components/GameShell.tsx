@@ -21,6 +21,7 @@ import {
 } from '../lib/run';
 import { getShopItem } from '../lib/economy';
 import type { HandState } from '../lib/hand';
+import { INCREMENT_MINUTES } from '../lib/hand';
 import type { JokerCard } from '../lib/jokers';
 import { rehydrateJokers } from '../lib/jokers';
 import type { PackType } from '../lib/packs';
@@ -28,6 +29,7 @@ import { openPack } from '../lib/packs';
 import { getTacticById } from '../lib/tactics';
 import { calculateAttendance, getStadiumTier } from '../lib/economy';
 import { findConnections } from '../lib/chemistry';
+import { accrueMatch } from '../lib/chem';
 import type { PackContents } from '../lib/packs';
 import TitleScreen from './TitleScreen';
 import SetupPhase from './SetupPhase';
@@ -272,6 +274,15 @@ export default function GameShell() {
       reachedFinalFixture && seasonPoints >= runState.boardTargetPoints,
     );
 
+    // Run-accumulated chemistry: every pair in the final XI co-appeared this match
+    // (CARDS §5; +1 per increment played, ≈ a full match). No decay — churn just
+    // forgoes accumulation.
+    const chemistry = accrueMatch(
+      runState.chemistry ?? {},
+      result.handState.xi.map((c) => c.id),
+      INCREMENT_MINUTES.length,
+    );
+
     const newState: RunState = {
       ...runState,
       deck: updatedDeck,
@@ -282,6 +293,7 @@ export default function GameShell() {
       seasonPoints,
       round: runState.round,
       matchHistory: [...runState.matchHistory, matchResult],
+      chemistry,
     };
 
     setRunState(newState);
