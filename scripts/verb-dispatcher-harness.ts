@@ -19,7 +19,9 @@ import { fileURLToPath } from 'node:url';
 
 import { transformAllCharacters, type KCCharacter } from '../src/lib/transform';
 import { getFormation } from '../src/lib/formations';
-import { createEmptySlots } from '../src/lib/tactics';
+import { createEmptySlots, getTacticById } from '../src/lib/tactics';
+import { getJokerById } from '../src/lib/jokers';
+import { tacticTraits, managerTraits } from '../src/lib/squad-transforms';
 import type { Card } from '../src/lib/scoring';
 import {
   initMatch,
@@ -261,6 +263,41 @@ console.log('\n5. Zonal field & coupled lane contest');
   const split = evaluateSplit(s, [], slots);
   const lanes = (split.lanePush.L + split.lanePush.C + split.lanePush.R) > 0;
   check('evaluateSplit emits a per-lane push vector', lanes, `push=${JSON.stringify(Object.fromEntries(['L','C','R'].map((l) => [l, Math.round(split.lanePush[l as Lane])])))}`);
+}
+
+// ---------------------------------------------------------------------------
+// 6. Tactical cards + Manager dispatch as squad records (step 3)
+// ---------------------------------------------------------------------------
+console.log('\n6. Tactical cards + Manager as squad records');
+{
+  const ctx = { xi: [] as Card[], increment: 0, opponentGoals: 0, connections: [] };
+  const mk6 = (over: Partial<DispatchCard>): DispatchCard => ({
+    id: 1, power: 80, archetype: 'Creator', position: 'CM', team: 'player', side: 'attack',
+    isWide: false, cell: 'ATT_C', emit: { attack: 80, defence: 0, creation: 40, finishing: 40 }, traits: [], ...over,
+  });
+
+  // A defensive tactic now suppresses the opponent for real (was a 0 stub in v5).
+  const lowBlock = tacticTraits(getTacticById('low_block')!, ctx);
+  const lowRes = dispatchTraits([mk6({})], SEED, 0, { playerSquadTraits: lowBlock });
+  check('Low Block deny raises opponentDenial', lowRes.opponentDenial > 0, `denial=${lowRes.opponentDenial}`);
+  check('Low Block debuffs your own attack (−10%)', Math.abs(lowRes.zones.attack - 72) < 1e-9, `attack 80 → ${lowRes.zones.attack}`);
+
+  // An attacking tactic lifts the field +15%.
+  const highLine = tacticTraits(getTacticById('high_line')!, ctx);
+  const highRes = dispatchTraits([mk6({})], SEED, 0, { playerSquadTraits: highLine });
+  check('High Line lifts attack +15%', Math.abs(highRes.zones.attack - 92) < 1e-9, `attack 80 → ${highRes.zones.attack}`);
+
+  // The Manager amplifies its target archetype (Mourinho → Destroyer +20%).
+  const destroyer = mk6({ id: 2, archetype: 'Destroyer', cell: 'DEF_C', side: 'defence', emit: { attack: 0, defence: 100, creation: 0, finishing: 0 } });
+  const mou = managerTraits(getJokerById('the_mourinho')!, ctx);
+  const mouRes = dispatchTraits([destroyer], SEED, 0, { playerSquadTraits: mou });
+  check('Manager (Mourinho) amplifies Destroyers +20%', Math.abs(mouRes.zones.defence - 120) < 1e-9, `defence 100 → ${mouRes.zones.defence}`);
+
+  // The squad source must not be a target itself: Anchor (lowest-power shield)
+  // has to pick the real defender, not the 0-power source carrying the tactics.
+  const realDef = mk6({ id: 3, power: 70, archetype: 'Cover', cell: 'DEF_C', side: 'defence', emit: { attack: 0, defence: 100, creation: 0, finishing: 0 }, traits: ROLE_TRANSFORMS['Anchor'] });
+  const shieldRes = dispatchTraits([realDef], SEED, 0, { playerSquadTraits: highLine });
+  check('squad source is excluded from criterion targeting (Anchor shields the real card)', Math.abs(shieldRes.zones.defence - 130) < 1e-9, `defence 100 → ${shieldRes.zones.defence}`);
 }
 
 console.log(`\n=== ${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} ===\n`);

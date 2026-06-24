@@ -16,8 +16,9 @@ import {
 } from './chemistry';
 import type { Formation, FormationSlot } from './formations';
 import type { JokerCard } from './jokers';
-import { applyJoker, getExtraDiscards } from './jokers';
-import type { TacticCard, TacticSlots } from './tactics';
+import { getExtraDiscards } from './jokers';
+import type { TacticSlots } from './tactics';
+import { squadTraits } from './squad-transforms';
 import {
   INCREMENT_MINUTES,
   generateGoalText,
@@ -519,7 +520,23 @@ export function evaluateSplit(
   attackBreakdown.push({ label: 'Forward shape', value: baseAttack, type: 'base' });
   defenceBreakdown.push({ label: 'Back-line shape', value: baseDefence, type: 'base' });
 
-  // --- Verb dispatcher: migrated roles + new transforms reshape the field ---
+  // Positional synergies are computed up front: the Manager (Chemistry Set) reads
+  // the connection count, so the squad records depend on them before we dispatch.
+  const attackerSlotted = attackers.map((c) => cardToSlotted(c, formation));
+  const defenderSlotted = defenders.map((c) => cardToSlotted(c, formation));
+  const { attackSynergies, defenceSynergies, crossSynergies } =
+    findPositionalConnections(attackerSlotted, defenderSlotted);
+  const allConnections: Connection[] = [...attackSynergies, ...defenceSynergies, ...crossSynergies];
+
+  // Tactical cards + Manager → squad-wide records over the same verb palette.
+  const playerSquadTraits = squadTraits(tacticSlots, jokers, {
+    xi,
+    increment: state.currentIncrement,
+    opponentGoals: state.opponentGoals,
+    connections: allConnections,
+  });
+
+  // --- Verb dispatcher: migrated roles + squad records reshape the field ---
   const dispatchCards: DispatchCard[] = xi.map((card) => ({
     id: card.id,
     power: card.power,
@@ -534,7 +551,7 @@ export function evaluateSplit(
     traits: traitsForCard(card),
   }));
 
-  const dispatched = dispatchTraits(dispatchCards, state.seed, state.currentIncrement);
+  const dispatched = dispatchTraits(dispatchCards, state.seed, state.currentIncrement, { playerSquadTraits });
 
   // Adopt the transformed field. attack/defence are the raw aggregate; creation &
   // finishing are a band-weighted projection of the transformed cells (§4), so a
@@ -588,12 +605,7 @@ export function evaluateSplit(
   const dualAttack = 0;
   const dualDefence = 0;
 
-  // --- Positional synergies ---
-  const attackerSlotted = attackers.map((c) => cardToSlotted(c, formation));
-  const defenderSlotted = defenders.map((c) => cardToSlotted(c, formation));
-  const { attackSynergies, defenceSynergies, crossSynergies } =
-    findPositionalConnections(attackerSlotted, defenderSlotted);
-
+  // --- Positional synergies (computed above; folded into the cascade here) ---
   let synergyAttack = 0;
   for (const syn of attackSynergies) {
     synergyAttack += syn.bonus;
@@ -643,28 +655,12 @@ export function evaluateSplit(
     }
   }
 
-  // --- Tactic bonus (full XI, Phase 1) ---
-  let tacticBonus = 0;
-  for (const slot of tacticSlots.slots) {
-    if (!slot) continue;
-    tacticBonus += slot.compute(xi, state.currentIncrement);
-  }
-  if (tacticBonus > 0) {
-    attackBreakdown.push({ label: 'Playbook edge', value: tacticBonus, type: 'tactic' });
-  }
-
-  // --- Manager bonus (full XI, Phase 1) ---
-  const allConnections: Connection[] = [...attackSynergies, ...defenceSynergies, ...crossSynergies];
-  let managerBonus = 0;
-  for (const joker of jokers) {
-    managerBonus += applyJoker(joker, xi, allConnections);
-  }
-  if (managerBonus > 0) {
-    attackBreakdown.push({ label: 'Touchline edge', value: managerBonus, type: 'manager' });
-  }
+  // Tactical cards + Manager are no longer flat bonuses here — they ran through the
+  // dispatcher (squad records) and are already folded into baseAttack / the chance
+  // mix above, attributed by name in the dispatcher cascade lines.
 
   // --- Subtotals before personality ---
-  let attackTotal = baseAttack + dualAttack + synergyAttack + crossAttack + styleAttack + weaknessBonus + tacticBonus + managerBonus;
+  let attackTotal = baseAttack + dualAttack + synergyAttack + crossAttack + styleAttack + weaknessBonus;
   let defenceTotal = baseDefence + dualDefence + synergyDefence + crossDefence + playPattern.defenceBonus;
   const attackerPowerPool = attackers.reduce((sum, card) => sum + card.power, 0);
   const chemistryDensity = attackerPowerPool > 0
@@ -675,11 +671,11 @@ export function evaluateSplit(
     : 1 + Math.min(0.18, chemistryDensity * 0.45);
 
   let chanceCreation = Math.round(
-    (baseCreation + Math.round(dualAttack * 0.75) + Math.round(styleAttack * 0.45) + Math.round(tacticBonus * 0.55) + Math.round(managerBonus * 0.35))
+    (baseCreation + Math.round(dualAttack * 0.75) + Math.round(styleAttack * 0.45))
       * compactAttackMultiplier,
   );
   let shotQuality = Math.round(
-    (baseFinishing + Math.round(synergyAttack * 0.95) + Math.round(crossAttack * 0.55) + Math.round(weaknessBonus * 0.90) + Math.round(tacticBonus * 0.35))
+    (baseFinishing + Math.round(synergyAttack * 0.95) + Math.round(crossAttack * 0.55) + Math.round(weaknessBonus * 0.90))
       * compactAttackMultiplier,
   );
   attackTotal += playPattern.attackBonus;

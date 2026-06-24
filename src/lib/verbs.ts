@@ -144,6 +144,12 @@ export interface DispatchCard {
   /** Base emission into each kind (computed by the host before dispatch). */
   emit: Record<ZoneName, number>;
   traits: TraitRecord[];
+  /**
+   * Squad-wide effect emitters (Tactical cards, the Manager) ride a synthetic
+   * source: their traits are collected and run, but the source never emits power
+   * and is excluded from criterion targeting (so e.g. Anchor never shields it).
+   */
+  source?: boolean;
 }
 
 export interface FieldState {
@@ -216,6 +222,14 @@ function emptyCells(): Record<Cell, Record<ZoneName, number>> {
 
 function emptyField(cells: Record<Cell, Record<ZoneName, number>>): FieldState {
   return { cells, opponentDenial: 0, variance: 0, energy: new Map(), fitness: new Map() };
+}
+
+/** Synthesize the non-emitting owner that carries a side's squad-wide records. */
+function makeSquadSource(id: number, team: 'player' | 'opponent', traits: TraitRecord[]): DispatchCard {
+  return {
+    id, power: 0, archetype: '__squad__', position: '', team, side: 'attack',
+    isWide: false, cell: 'MID_C', emit: zeroZones(), traits, source: true,
+  };
 }
 
 /** Place each card's base emission into the cell it occupies (the pre-transform field). */
@@ -501,19 +515,33 @@ interface CollectedRecord {
  * with the snapshot-read + delta-pool commutativity rule and the `priority`
  * escape hatch. Deterministic for a fixed (cards, seed, increment).
  */
+/** Squad-wide records (Tactical cards + Manager) applied per side, not tied to a card. */
+export interface SquadTraits {
+  playerSquadTraits?: TraitRecord[];
+  opponentSquadTraits?: TraitRecord[];
+}
+
 export function dispatchTraits(
   cards: DispatchCard[],
   seed: number,
   increment: number,
+  squad?: SquadTraits,
 ): DispatchResult {
   // The pre-transform field is just every card's emission placed in its cell.
   const field = emptyField(buildBaseCells(cards));
   const log: TraitLogLine[] = [];
 
-  // Stable iteration: cards by id, each card's trait order preserved.
-  const ordered = [...cards].sort((a, b) => a.id - b.id);
-  const playerTeam = ordered.filter((c) => c.team === 'player');
-  const opponentTeam = ordered.filter((c) => c.team === 'opponent');
+  // Tactical cards and the Manager ride a synthetic source owner per side, so their
+  // effects flow through the same palette as player traits.
+  const sources: DispatchCard[] = [];
+  if (squad?.playerSquadTraits?.length) sources.push(makeSquadSource(-1, 'player', squad.playerSquadTraits));
+  if (squad?.opponentSquadTraits?.length) sources.push(makeSquadSource(-2, 'opponent', squad.opponentSquadTraits));
+
+  // Stable iteration: cards by id, each card's trait order preserved. Sources are
+  // collected (their traits run) but kept out of the targetable team pools.
+  const ordered = [...cards, ...sources].sort((a, b) => a.id - b.id);
+  const playerTeam = ordered.filter((c) => c.team === 'player' && !c.source);
+  const opponentTeam = ordered.filter((c) => c.team === 'opponent' && !c.source);
 
   const collected: CollectedRecord[] = [];
   for (const owner of ordered) {
