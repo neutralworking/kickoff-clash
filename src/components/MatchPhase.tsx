@@ -9,7 +9,6 @@ import { getFormation } from '../lib/formations';
 import type { MatchV5State, IncrementResult } from '../lib/match-v5';
 import {
   initMatch,
-  commitAttackers,
   evaluateSplit,
   resolveIncrement,
   getOpponentBaselines,
@@ -73,25 +72,17 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       ? INCREMENT_MINUTES[matchState.currentIncrement]
       : 90;
 
-  // ---- Toggle attacker ----
-  const handleToggleAttacker = useCallback(
-    (cardId: number) => {
-      setMatchState((prev: MatchV5State) => {
-        const nextOrder = [...prev.attackerOrder];
-        const existingIndex = nextOrder.indexOf(cardId);
-        if (existingIndex !== -1) {
-          nextOrder.splice(existingIndex, 1);
-        } else {
-          // Check if card is injured
-          const card = prev.xi.find((c) => c.id === cardId);
-          if (card?.injured) return prev;
-          nextOrder.push(cardId);
-        }
-        return commitAttackers(prev, nextOrder);
-      });
-    },
-    [],
-  );
+  // ---- Reposition: swap two players' formation slots (the allocation lever) ----
+  const handleReassign = useCallback((cardA: number, cardB: number) => {
+    setMatchState((prev: MatchV5State) => {
+      const xi = [...prev.xi];
+      const ia = xi.findIndex((c) => c.id === cardA);
+      const ib = xi.findIndex((c) => c.id === cardB);
+      if (ia < 0 || ib < 0 || ia === ib) return prev;
+      [xi[ia], xi[ib]] = [xi[ib], xi[ia]];
+      return { ...prev, xi };
+    });
+  }, []);
 
   // ---- Kick Off: evaluate and resolve ----
   const handleKickOff = useCallback(() => {
@@ -230,9 +221,9 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
           nextMinute={nextMinute}
           mode={subPhase === 'resolving' ? 'resolve' : 'plan'}
           currentResult={currentResult}
-          onToggleAttacker={handleToggleAttacker}
           onToggleTactic={handleToggleTactic}
           onSub={handleSub}
+          onReassign={handleReassign}
           onFormationChange={handleFormationChange}
           onContinue={subPhase === 'resolving' ? handleResolveComplete : handleKickOff}
         />

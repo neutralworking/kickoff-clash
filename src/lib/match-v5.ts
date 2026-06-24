@@ -28,8 +28,8 @@ import type { MatchEvent } from './hand';
 import type { DispatchCard, ZoneName } from './verbs';
 import { dispatchTraits, ZONES } from './verbs';
 import { traitsForCard } from './role-transforms';
-import type { Lane, Cell, PlacedEmission } from './field';
-import { cellOf, computeLaneVectors, coupledAttackThreat, coupledDefenceThreat } from './field';
+import type { Lane, Cell, Band, PlacedEmission } from './field';
+import { cellOf, bandOf, computeLaneVectors, coupledAttackThreat, coupledDefenceThreat } from './field';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -94,6 +94,8 @@ export interface AttackDefenceSplit {
   lanePush: Record<Lane, number>;
   /** Per-lane defensive cover (zonal field, §4). */
   laneCover: Record<Lane, number>;
+  /** Attacking players deep → forward (the move sequence; last is the finisher). */
+  attackingOrder: number[];
 }
 
 export interface IncrementResult {
@@ -133,20 +135,6 @@ const OPPONENT_BASELINES: { attack: number; defence: number }[] = [
   { attack: 1000, defence: 1050 }, // Match 5
 ];
 
-/** Dual-role contribution rules */
-const DUAL_ROLES: {
-  archetype?: string;
-  role?: string;
-  attackWhenDefending: number; // fraction of power → attack score
-  defenceWhenAttacking: number; // fraction of power → defence score
-}[] = [
-  { archetype: 'Controller', attackWhenDefending: 0.30, defenceWhenAttacking: 0 },
-  { archetype: 'Passer',     attackWhenDefending: 0.25, defenceWhenAttacking: 0 },
-  { archetype: 'Commander',  attackWhenDefending: 0, defenceWhenAttacking: 0.20 },
-  { role: 'Regista',         attackWhenDefending: 0.35, defenceWhenAttacking: 0 },
-  { role: 'Libero',          attackWhenDefending: 0.20, defenceWhenAttacking: 0 },
-];
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -159,18 +147,6 @@ function cardToSlotted(card: Card, formation: Formation): SlottedCard {
   // Find best matching slot for this card's position
   const slot = formation.slots.find((s: FormationSlot) => s.accepts.includes(card.position));
   return { card, slot: slot?.type ?? card.position };
-}
-
-function getDualRole(card: Card): { attackWhenDefending: number; defenceWhenAttacking: number } | null {
-  for (const rule of DUAL_ROLES) {
-    if (rule.archetype && card.archetype === rule.archetype) return rule;
-    if (rule.role && card.tacticalRole === rule.role) return rule;
-  }
-  return null;
-}
-
-function isEngine(card: Card): boolean {
-  return card.archetype === 'Engine';
 }
 
 function isWideCard(card: Card): boolean {
@@ -489,81 +465,51 @@ export function evaluateSplit(
   const { xi, formation, playingStyle, personalityBonus, opponentWeakness } = state;
   const maxAtk = formation.maxAttackers;
 
-  const orderedAttackers = state.attackerOrder
-    .map((id) => xi.find((card) => card.id === id))
-    .filter((card): card is Card => !!card);
-
-  // Partition into attackers and defenders
-  const attackers: Card[] = [];
-  const defenders: Card[] = [];
-  for (const card of xi) {
-    if (state.attackerIds.has(card.id)) {
-      attackers.push(card);
-    } else {
-      defenders.push(card);
-    }
-  }
-  const playPattern = inferPlayPattern(orderedAttackers, defenders, tacticSlots, playingStyle);
-
   const attackBreakdown: CascadeLine[] = [];
   const defenceBreakdown: CascadeLine[] = [];
 
-  // --- Base power (per-card emission into the four proto-zones) ---
-  // Each card's emission feeds the verb dispatcher (MATCH_ENGINE §7: base emit
-  // snapshot → transforms → contest), then the transformed field flows on.
-  const emit = new Map<number, Record<ZoneName, number>>();
+  // --- Positioning model (DESIGN §1, MATCH_ENGINE §2/§4) ---
+  // No per-increment commit. Each player's attack/defence emission is set by the
+  // band (ATT/MID/DEF) of the formation slot they occupy (xi[i] ↔ slots[i]); the
+  // allocation decision is the shape itself. Midfielders contribute to both.
+  const BAND_ATK: Record<Band, number> = { ATT: 1.0, MID: 0.55, DEF: 0.18 };
+  const BAND_DEF: Record<Band, number> = { ATT: 0.12, MID: 0.55, DEF: 1.0 };
   const zeroEmit = (): Record<ZoneName, number> => ({ attack: 0, defence: 0, creation: 0, finishing: 0 });
 
-  // Sort attackers by power descending — weakest get diminished if over cap
-  const sortedAttackers = [...attackers].sort((a, b) => b.power - a.power);
+  const emit = new Map<number, Record<ZoneName, number>>();
+  const cardCell = new Map<number, Cell>();
+  const cardY = new Map<number, number>();
+  const attackers: Card[] = [];
+  const defenders: Card[] = [];
   let baseAttack = 0;
-  for (let i = 0; i < sortedAttackers.length; i++) {
-    const card = sortedAttackers[i];
-    let power = card.power;
-
-    // Engine: 70% to assigned side
-    if (isEngine(card)) power = Math.round(power * 0.70);
-
-    // Soft cap diminishing
-    if (i >= maxAtk) {
-      power = Math.round(power * 0.50);
-    }
-
-    baseAttack += power;
-    const e = emit.get(card.id) ?? zeroEmit();
-    e.attack = power;
-    emit.set(card.id, e);
-  }
-
   let baseDefence = 0;
-  for (const card of defenders) {
-    let power = card.power;
-    // Injured defenders at 50%
-    if (card.injured) power = Math.round(power * 0.50);
-    // Engine: 70% to assigned side
-    if (isEngine(card)) power = Math.round(power * 0.70);
-    baseDefence += power;
-    const e = emit.get(card.id) ?? zeroEmit();
-    e.defence = power;
-    emit.set(card.id, e);
-  }
-
-  // Chance creation / finishing emission (per attacker via getChanceProfile).
   let baseCreation = 0;
   let baseFinishing = 0;
-  for (const card of attackers) {
-    const profile = getChanceProfile(card);
-    const creation = Math.round(card.power * profile.creation);
-    const finishing = Math.round(card.power * profile.finishing);
-    baseCreation += creation;
-    baseFinishing += finishing;
-    const e = emit.get(card.id) ?? zeroEmit();
-    e.creation = creation;
-    e.finishing = finishing;
-    emit.set(card.id, e);
-  }
 
-  attackBreakdown.push({ label: 'Forward commitment', value: baseAttack, type: 'base' });
+  xi.forEach((card, i) => {
+    const slot = formation.slots[i] ?? formation.slots[formation.slots.length - 1];
+    const cell = cellOf(slot.x, slot.y);
+    const band = bandOf(cell);
+    cardCell.set(card.id, cell);
+    cardY.set(card.id, slot.y);
+    const power = card.injured ? Math.round(card.power * 0.5) : card.power;
+    const profile = getChanceProfile(card);
+    const a = Math.round(power * BAND_ATK[band]);
+    const d = Math.round(power * BAND_DEF[band]);
+    emit.set(card.id, { attack: a, defence: d, creation: Math.round(a * profile.creation), finishing: Math.round(a * profile.finishing) });
+    baseAttack += a;
+    baseDefence += d;
+    baseCreation += Math.round(a * profile.creation);
+    baseFinishing += Math.round(a * profile.finishing);
+    if (band === 'ATT' || band === 'MID') attackers.push(card);
+    if (band === 'DEF' || band === 'MID') defenders.push(card);
+  });
+
+  // The move flows deep → forward; the most advanced attacker is the finisher.
+  const orderedAttackers = [...attackers].sort((a, b) => (cardY.get(b.id) ?? 0) - (cardY.get(a.id) ?? 0));
+  const playPattern = inferPlayPattern(orderedAttackers, defenders, tacticSlots, playingStyle);
+
+  attackBreakdown.push({ label: 'Forward shape', value: baseAttack, type: 'base' });
   defenceBreakdown.push({ label: 'Back-line shape', value: baseDefence, type: 'base' });
 
   // --- Verb dispatcher: migrated roles + new transforms reshape the field ---
@@ -574,7 +520,7 @@ export function evaluateSplit(
     tacticalRole: card.tacticalRole,
     position: card.position,
     team: 'player',
-    side: state.attackerIds.has(card.id) ? 'attack' : 'defence',
+    side: bandOf(cardCell.get(card.id) ?? 'MID_C') === 'DEF' ? 'defence' : 'attack',
     isWide: isWideCard(card),
     emit: emit.get(card.id) ?? zeroEmit(),
     traits: traitsForCard(card),
@@ -614,63 +560,22 @@ export function evaluateSplit(
   }
 
   // --- Zonal field (§4): place the (dispatcher-adjusted) emission onto lanes ---
-  // Spatial shape comes from each card's formation cell; magnitude tracks the
-  // post-dispatcher attack/defence totals. The coupled lane contest runs downstream
-  // in resolveIncrement (it needs the opponent's defensive budget).
-  const slotCellFor = (card: Card): Cell => {
-    const slot = formation.slots.find((s: FormationSlot) => s.accepts.includes(card.position));
-    return slot ? cellOf(slot.x, slot.y) : 'MID_C';
-  };
-  const preAttackSum = attackers.reduce((s, c) => s + (emit.get(c.id)?.attack ?? 0), 0);
-  const preDefSum = defenders.reduce((s, c) => s + (emit.get(c.id)?.defence ?? 0), 0);
+  // Each card sits in its formation cell; magnitude tracks the post-dispatcher
+  // totals. The coupled lane contest runs downstream in resolveIncrement.
+  const preAttackSum = xi.reduce((s, c) => s + (emit.get(c.id)?.attack ?? 0), 0);
+  const preDefSum = xi.reduce((s, c) => s + (emit.get(c.id)?.defence ?? 0), 0);
   const scaleA = preAttackSum > 0 ? baseAttack / preAttackSum : 0;
   const scaleD = preDefSum > 0 ? baseDefence / preDefSum : 0;
   const placed: PlacedEmission[] = xi.map((card) => {
-    const e = emit.get(card.id) ?? { attack: 0, defence: 0, creation: 0, finishing: 0 };
-    return { cell: slotCellFor(card), attack: e.attack * scaleA, defence: e.defence * scaleD };
+    const e = emit.get(card.id) ?? zeroEmit();
+    return { cell: cardCell.get(card.id) ?? 'MID_C', attack: e.attack * scaleA, defence: e.defence * scaleD };
   });
   const { push: lanePush, cover: laneCover } = computeLaneVectors(placed);
 
-  // --- Dual-role contributions ---
-  let dualAttack = 0;
-  let dualDefence = 0;
-
-  // Engine cross-contributions (30% to other side)
-  for (const card of attackers) {
-    if (isEngine(card)) {
-      const contrib = Math.round(card.power * 0.30);
-      dualDefence += contrib;
-    }
-  }
-  for (const card of defenders) {
-    if (isEngine(card)) {
-      const contrib = Math.round(card.power * 0.30);
-      dualAttack += contrib;
-    }
-  }
-
-  // Non-engine dual roles
-  for (const card of defenders) {
-    if (isEngine(card)) continue;
-    const rule = getDualRole(card);
-    if (rule && rule.attackWhenDefending > 0) {
-      dualAttack += Math.round(card.power * rule.attackWhenDefending);
-    }
-  }
-  for (const card of attackers) {
-    if (isEngine(card)) continue;
-    const rule = getDualRole(card);
-    if (rule && rule.defenceWhenAttacking > 0) {
-      dualDefence += Math.round(card.power * rule.defenceWhenAttacking);
-    }
-  }
-
-  if (dualAttack > 0) {
-    attackBreakdown.push({ label: 'Support from deep', value: dualAttack, type: 'dual-role' });
-  }
-  if (dualDefence > 0) {
-    defenceBreakdown.push({ label: 'Recovery cover', value: dualDefence, type: 'dual-role' });
-  }
+  // Midfield dual-contribution is already captured by the band split, so there is
+  // no separate dual-role layer in the positioning model.
+  const dualAttack = 0;
+  const dualDefence = 0;
 
   // --- Positional synergies ---
   const attackerSlotted = attackers.map((c) => cardToSlotted(c, formation));
@@ -825,6 +730,7 @@ export function evaluateSplit(
     varianceFactor: dispatched.variance,
     lanePush,
     laneCover,
+    attackingOrder: orderedAttackers.map((c) => c.id),
   };
 }
 

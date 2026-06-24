@@ -31,8 +31,6 @@ export const FIELD_CONST = {
   k: 1.1,            // contest convexity (near-linear: balanced shapes stay viable)
   oppReact: 0.5,     // how hard the opponent's cover shifts toward our strong lanes
   coverPool: 0.6,    // share of our defensive cover that is mobile/shared across lanes
-  pushW: { ATT: 1.0, MID: 0.5, DEF: 0.25 },   // attack push weights by band (overlapping FBs count a little)
-  coverW: { DEF: 1.0, MID: 0.5, ATT: 0 },      // defensive cover weights by band
 };
 
 /** Bucket a formation slot's x/y into a field cell (§4). */
@@ -68,11 +66,12 @@ export interface LaneVectors {
 export function computeLaneVectors(placed: PlacedEmission[]): LaneVectors {
   const push: Record<Lane, number> = { L: 0, C: 0, R: 0 };
   const cover: Record<Lane, number> = { L: 0, C: 0, R: 0 };
+  // Band weighting now lives in each card's emission (attack vs defence split by
+  // band), so the lane simply sums what's placed in it.
   for (const p of placed) {
-    const band = bandOf(p.cell);
     const lane = laneOf(p.cell);
-    push[lane] += FIELD_CONST.pushW[band] * p.attack;
-    cover[lane] += FIELD_CONST.coverW[band] * p.defence;
+    push[lane] += p.attack;
+    cover[lane] += p.defence;
   }
   return { push, cover };
 }
