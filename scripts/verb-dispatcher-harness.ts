@@ -34,7 +34,10 @@ import {
   type MatchV5State,
 } from '../src/lib/match-v5';
 import { generateOpponentXI, opponentScaleTraits, counterPush, reactivityFor } from '../src/lib/opponent';
-import { chemistryStrength, accrueMatch, coApp, chemistryRecords } from '../src/lib/chem';
+import { chemistryStrength, accrueMatch, coApp, chemistryRecords, pruneCard } from '../src/lib/chem';
+import { interestOn } from '../src/lib/run';
+import { calculateAttendance } from '../src/lib/economy';
+import type { SlottedCard } from '../src/lib/scoring';
 import { dispatchTraits, buildBaseCells, type DispatchCard } from '../src/lib/verbs';
 import { ROLE_TRANSFORMS } from '../src/lib/role-transforms';
 import { CELLS, cellOf, bandOf, attackVsCover, pushVsReserveCover, type Band, type Lane } from '../src/lib/field';
@@ -464,6 +467,36 @@ console.log('\n10. Fitness depletion');
     return x.xi.map((c) => (c.fitness ?? 6).toFixed(2)).join(',');
   };
   check('fitness drain is deterministic', run() === run());
+}
+
+// ---------------------------------------------------------------------------
+// 11. Economy & run loop (ECONOMY §1/§3/§4)
+// ---------------------------------------------------------------------------
+console.log('\n11. Economy & run loop');
+{
+  // Interest: banked cash compounds (capped).
+  check('banked cash earns interest', interestOn(5000) === 500 && interestOn(1000) === 100, `5000→+${interestOn(5000)}, 1000→+${interestOn(1000)}`);
+  check('interest is capped (no runaway banking)', interestOn(1_000_000) === 1500, `1e6→+${interestOn(1_000_000)}`);
+
+  const slottedXI: SlottedCard[] = cards.slice(0, 11).map((c, i) => ({ card: c, slot: `slot_${i}` }));
+  const gate = (style: string, yg: number, og: number) =>
+    calculateAttendance(slottedXI, [], yg, og, 0, 2, 0, style).revenue;
+
+  // Entertainment: a spectacle style out-draws a pragmatic one (same result).
+  const entertaining = gate('tiki-taka', 1, 0);
+  const pragmatic = gate('direct-play', 1, 0);
+  check('an entertaining style draws a bigger gate than a pragmatic one', entertaining > pragmatic, `tiki-taka=${entertaining} direct-play=${pragmatic}`);
+
+  // Anti-snowball: a narrow win funds nearly as well as a rout.
+  const narrow = gate('tiki-taka', 1, 0);
+  const rout = gate('tiki-taka', 5, 0);
+  check('a narrow win funds nearly as well as a rout (anti-snowball)', rout / narrow < 1.2, `1-0=${narrow} 5-0=${rout} ratio=${(rout / narrow).toFixed(2)}`);
+  check('a win still out-earns a loss', gate('tiki-taka', 1, 0) > gate('tiki-taka', 0, 1));
+
+  // Chemistry churn: selling a card forfeits all its pairs.
+  const matrix = accrueMatch({}, [1, 2, 3], 10);
+  const pruned = pruneCard(matrix, 2);
+  check('selling a card forfeits its chemistry (churn tax)', coApp(pruned, 1, 2) === 0 && coApp(pruned, 2, 3) === 0 && coApp(pruned, 1, 3) === 10, `1-3 kept=${coApp(pruned, 1, 3)}`);
 }
 
 console.log(`\n=== ${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} ===\n`);

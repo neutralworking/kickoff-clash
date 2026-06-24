@@ -27,6 +27,7 @@ import type { PackContents } from './packs';
 import { ALL_TACTICS, type TacticCard } from './tactics';
 import { getFormation } from './formations';
 import type { CoAppearance } from './chem';
+import { pruneCard } from './chem';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -779,11 +780,20 @@ export function startMatch(state: RunState): { state: RunState; handState: HandS
 /**
  * Advance to next match round
  */
+/** Compounding interest on banked cash, capped (ECONOMY §4: save-vs-spend under
+ *  elimination — over-banking gets you knocked out before it pays off). §10 dial. */
+export const INTEREST_RATE = 0.10;
+export const INTEREST_CAP = 1500;
+export function interestOn(cash: number): number {
+  return Math.min(Math.round(Math.max(0, cash) * INTEREST_RATE), INTEREST_CAP);
+}
+
 export function advanceToNextMatch(state: RunState): RunState {
   return {
     ...state,
     round: state.round + 1,
     bench: [...state.deck],
+    cash: state.cash + interestOn(state.cash),
     status: 'match',
   };
 }
@@ -822,6 +832,8 @@ export function sellCard(state: RunState, card: Card): RunState {
     ...state,
     deck: state.deck.filter(c => c.id !== card.id),
     cash: state.cash + fee,
+    // Releasing a card forfeits its accumulated chemistry (the churn tax, §3/§5).
+    chemistry: pruneCard(state.chemistry, card.id),
   };
 }
 

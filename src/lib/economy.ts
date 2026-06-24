@@ -8,6 +8,16 @@
 import type { Card, SlottedCard, Durability } from './scoring';
 import { DURABILITY_PRICE_MOD, DURABILITY_FAN_BONUS, seededRandom } from './scoring';
 
+/** Entertainment crowd multiplier by playing style (ECONOMY §1: spectacle draws
+ *  bigger gates; pragmatic styles draw smaller). §10 tuning dial. */
+const ENTERTAINMENT_MOD: Record<string, number> = {
+  'total-football': 1.18,
+  'tiki-taka': 1.15,
+  'gegenpressing': 1.12,
+  'counter-attack': 0.95,
+  'direct-play': 0.92,
+};
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -30,10 +40,11 @@ export interface AttendanceResult {
   archetypeFans: number;
   personalityFans: number;
   durabilityFans: number;
-  goalFans: number;
+  goalFans: number;          // flat result bonus (win/draw/loss) — anti-snowball (§1)
   actionFans: number;
   synergyFans: number;
-  totalGoalsBonus: number;
+  totalGoalsBonus: number;   // capped goal spectacle
+  entertainmentMod: number;  // style crowd multiplier (§1)
   rawAttendance: number;
   capacity: number;
   attendance: number;
@@ -217,6 +228,7 @@ export function calculateAttendance(
   actionFanAccumulator: number,
   stadiumTier: number,
   ticketPriceBonus: number = 0,
+  playingStyle: string = '',
 ): AttendanceResult {
   const stadium = getStadium(stadiumTier);
 
@@ -236,8 +248,9 @@ export function calculateAttendance(
     return sum + (DURABILITY_FAN_BONUS[sc.card.durability] ?? 0);
   }, 0);
 
-  // Goal fans
-  const goalFans = (yourGoals * 50) + (opponentGoals * 30);
+  // Result bonus — flat by outcome, NOT per-goal-margin: a narrow win funds nearly as
+  // well as a rout (anti-snowball under permadeath, ECONOMY §1).
+  const goalFans = yourGoals > opponentGoals ? 400 : yourGoals === opponentGoals ? 150 : 50;
 
   // Action card spectacle (accumulated fan impact from all rounds)
   const actionFans = Math.max(0, actionFanAccumulator); // Floor at 0
@@ -247,12 +260,17 @@ export function calculateAttendance(
     return sum + (SYNERGY_FAN_PULL[conn.tier] ?? 0);
   }, 0);
 
-  // Total goals bonus
+  // Goal spectacle — capped, so goals add a little colour without rewarding routs.
   const totalGoals = yourGoals + opponentGoals;
-  const totalGoalsBonus = totalGoals * 20;
+  const totalGoalsBonus = Math.min(totalGoals, 5) * 25;
 
-  const rawAttendance = archetypeFans + personalityFans + durabilityFans +
-    goalFans + actionFans + synergyFans + totalGoalsBonus;
+  // Entertaining styles pull bigger crowds (the spectacle-vs-pragmatism tension).
+  const entertainmentMod = ENTERTAINMENT_MOD[playingStyle] ?? 1.0;
+
+  const rawAttendance = Math.round(
+    (archetypeFans + personalityFans + durabilityFans +
+      goalFans + actionFans + synergyFans + totalGoalsBonus) * entertainmentMod,
+  );
   const capacity = stadium.capacity;
   const attendance = Math.min(rawAttendance, capacity);
   const ticketPrice = stadium.ticketPrice + ticketPriceBonus;
@@ -266,6 +284,7 @@ export function calculateAttendance(
     actionFans,
     synergyFans,
     totalGoalsBonus,
+    entertainmentMod,
     rawAttendance,
     capacity,
     attendance,

@@ -237,6 +237,7 @@ export default function GameShell() {
       0,
       runState.stadiumTier,
       runState.ticketPriceBonus,
+      runState.playingStyle,
     );
 
     // Durability check on the XI cards

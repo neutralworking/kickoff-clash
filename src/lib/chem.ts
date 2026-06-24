@@ -62,6 +62,19 @@ export function accrueMatch(matrix: CoAppearance, xiIds: number[], increments: n
 }
 
 /**
+ * Drop every pair involving a card — the churn tax (ECONOMY §3/§5): selling or
+ * replacing a card forfeits its accumulated chemistry. Pure.
+ */
+export function pruneCard(matrix: CoAppearance, cardId: number): CoAppearance {
+  const out: CoAppearance = {};
+  for (const key of Object.keys(matrix)) {
+    const [a, b] = key.split(':').map(Number);
+    if (a !== cardId && b !== cardId) out[key] = matrix[key];
+  }
+  return out;
+}
+
+/**
  * Chemistry strength for a pair: a saturating earned curve over co-appearances, plus
  * static links (nationality, shared archetype). 0..1.
  */
