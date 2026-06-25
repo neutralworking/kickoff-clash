@@ -24,16 +24,15 @@ import type { HandState } from '../lib/hand';
 import { INCREMENT_MINUTES } from '../lib/hand';
 import type { JokerCard } from '../lib/jokers';
 import { rehydrateJokers } from '../lib/jokers';
-import type { PackType } from '../lib/packs';
-import { openPack } from '../lib/packs';
+import { ripStarterPacks } from '../lib/packs';
 import { getTacticById } from '../lib/tactics';
 import { calculateAttendance, getStadiumTier } from '../lib/economy';
 import { findConnections } from '../lib/chemistry';
 import { accrueMatch } from '../lib/chem';
 import type { PackContents } from '../lib/packs';
+import type { TeamSelection } from '../lib/run';
 import TitleScreen from './TitleScreen';
-import SetupPhase from './SetupPhase';
-import CardReveal from './CardReveal';
+import TeamSelect from './TeamSelect';
 import MatchPhase from './MatchPhase';
 import PostMatch from './PostMatch';
 import ShopPhase from './ShopPhase';
@@ -143,11 +142,11 @@ function saveHistory(state: RunState): void {
 // Phase type
 // ---------------------------------------------------------------------------
 
-type Phase = 'title' | 'setup' | 'reveal' | 'match' | 'postmatch' | 'shop' | 'end';
+type Phase = 'title' | 'teamSelect' | 'match' | 'postmatch' | 'shop' | 'end';
 
 function phaseFromStatus(status: RunState['status']): Phase {
   if (status === 'won' || status === 'lost') return 'end';
-  if (status === 'packSelect') return 'setup';
+  if (status === 'packSelect' || status === 'setup') return 'teamSelect';
   if (status === 'title') return 'title';
   return status as Phase;
 }
@@ -163,7 +162,6 @@ export default function GameShell() {
   const [durabilityResult, setDurabilityResult] = useState<DurabilityResult | null>(null);
   const [lastMatchResult, setLastMatchResult] = useState<MatchResult | null>(null);
   const [pendingContents, setPendingContents] = useState<PackContents | null>(null);
-  const [pendingStyle, setPendingStyle] = useState<string | null>(null);
   const [pendingSeed, setPendingSeed] = useState<number>(0);
 
   // Check for existing run on mount without reading localStorage during render.
@@ -184,11 +182,14 @@ export default function GameShell() {
   // Phase handlers
   // =========================================================================
 
-  // --- Title ---
+  // --- Title: rip the three starter packs, then go to team selection ---
   const handleNewRun = useCallback(() => {
     clearRun();
     setRunState(null);
-    setPhase('setup');
+    const seed = Date.now();
+    setPendingContents(ripStarterPacks(seed));
+    setPendingSeed(seed);
+    setPhase('teamSelect');
   }, []);
 
   const handleContinue = useCallback(() => {
@@ -199,25 +200,14 @@ export default function GameShell() {
     }
   }, []);
 
-  // --- Setup (Pack Opening) → Reveal → Match ---
-  const handleStart = useCallback((packType: PackType, style: string) => {
-    const seed = Date.now();
-    const contents = openPack(packType, seed);
-    setPendingContents(contents);
-    setPendingStyle(style);
-    setPendingSeed(seed);
-    setPhase('reveal');
-  }, []);
-
-  const handleRevealComplete = useCallback(() => {
-    if (!pendingContents || !pendingStyle) return;
-    const run = createRun(pendingContents, pendingStyle, pendingSeed);
+  // --- Team selection → Match ---
+  const handleTeamConfirm = useCallback((selection: TeamSelection) => {
+    const run = createRun(selection, pendingSeed);
     setRunState(run);
     setPendingContents(null);
-    setPendingStyle(null);
     setPhase('match');
     saveRun(run);
-  }, [pendingContents, pendingStyle, pendingSeed]);
+  }, [pendingSeed]);
 
   // --- Match Complete ---
   const handleMatchComplete = useCallback((result: { yourGoals: number; opponentGoals: number; result: 'win' | 'draw' | 'loss'; handState: HandState }) => {
@@ -455,12 +445,9 @@ export default function GameShell() {
           />
         );
 
-      case 'setup':
-        return <SetupPhase onStart={handleStart} />;
-
-      case 'reveal':
+      case 'teamSelect':
         return pendingContents ? (
-          <CardReveal contents={pendingContents} onComplete={handleRevealComplete} />
+          <TeamSelect contents={pendingContents} onConfirm={handleTeamConfirm} />
         ) : null;
 
       case 'match': {

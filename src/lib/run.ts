@@ -23,9 +23,8 @@ import type { HandState } from './hand';
 import { rollXI } from './hand';
 import type { JokerCard } from './jokers';
 import { getExtraDiscards } from './jokers';
-import type { PackContents } from './packs';
 import { ALL_TACTICS, type TacticCard } from './tactics';
-import { getFormation } from './formations';
+import { getFormation, ALL_FORMATIONS } from './formations';
 import type { CoAppearance } from './chem';
 import { pruneCard } from './chem';
 
@@ -33,9 +32,18 @@ import { pruneCard } from './chem';
 // Types
 // ---------------------------------------------------------------------------
 
+/** Pre-match intent: sways point distribution (engine wiring is a later pass). */
+export type TeamIntent = 'attacking' | 'balanced' | 'defensive';
+
+/** Neutral default style (flat per-card bonus); a style is otherwise chosen in-game. */
+export const DEFAULT_STYLE = 'total-football';
+
 export interface RunState {
   formation: string;
   playingStyle: string;
+  intent: TeamIntent;            // pre-match attacking/balanced/defensive lean
+  startingXI: number[];          // 11 cardIds in formation-slot order (xi[i] ↔ slots[i])
+  benchIds: number[];            // up to 7 cardIds available as subs
   deck: Card[];
   bench: Card[];
   jokers: JokerCard[];           // active jokers (max 3)
@@ -709,31 +717,41 @@ export function generateStarterActionDeck(seed: number): ActionCard[] {
   return seededShuffle([...SAMPLE_ACTION_DECK], seed);
 }
 
+/** The player's pre-match team selection (from the TeamSelect screen). */
+export interface TeamSelection {
+  players: Card[];        // the full 25-player rip → the run deck
+  startingXI: number[];   // 11 cardIds in formation-slot order
+  benchIds: number[];     // up to 7 cardIds available as subs
+  manager: JokerCard | null;
+  tactics: TacticCard[];  // 10 tactic cards
+  formationId: string;    // chosen formation
+  intent: TeamIntent;     // attacking / balanced / defensive
+}
+
 /**
- * Initialize a new run from pack contents (v4)
+ * Initialize a new run from the player's explicit team selection.
+ * The full 25-player rip becomes the deck; the chosen XI/bench drive the match
+ * (the unselected players are unavailable until the shop).
  */
-export function createRun(packContents: PackContents, style: string, seed?: number): RunState {
+export function createRun(sel: TeamSelection, seed?: number): RunState {
   const runSeed = seed ?? Math.floor(Math.random() * 1000000);
-  const ownedFormations = packContents.formations.map(f => f.id);
-  const seenIds = new Set(packContents.players.map(card => card.id));
-  const reservePool = seededShuffle(
-    ALL_CARDS.filter(card => !seenIds.has(card.id)),
-    runSeed + 404,
-  );
-  const reserveFillers = packContents.players.length < 11
-    ? reservePool.slice(0, 11 - packContents.players.length)
-    : [];
-  const startingDeck = [...packContents.players, ...reserveFillers];
+  const ownedFormations = ALL_FORMATIONS.map(f => f.id);
+  const benchCards = sel.benchIds
+    .map(id => sel.players.find(c => c.id === id))
+    .filter((c): c is Card => Boolean(c));
 
   return {
-    formation: ownedFormations[0] ?? '4-3-3',
-    playingStyle: style,
-    deck: startingDeck,
-    bench: [...startingDeck],
-    jokers: packContents.managers,
+    formation: sel.formationId,
+    playingStyle: DEFAULT_STYLE,
+    intent: sel.intent,
+    startingXI: sel.startingXI,
+    benchIds: sel.benchIds,
+    deck: sel.players,
+    bench: benchCards,
+    jokers: sel.manager ? [sel.manager] : [],
     ownedFormations,
-    tacticsDeck: packContents.tactics,
-    activeFormation: ownedFormations[0] ?? '4-3-3',
+    tacticsDeck: sel.tactics,
+    activeFormation: sel.formationId,
     trainingApplied: {},
     cash: 0,
     stadiumTier: 1,
