@@ -1,43 +1,91 @@
 @import "tailwindcss";
 
+/* ===========================================================================
+   KICKOFF CLASH — CANONICAL DESIGN SYSTEM
+   Refreshed Sensible-Soccer pixel look. Single source of truth: DESIGN.md.
+
+   This @theme block is the token layer. The legacy casino/felt names
+   (--felt, --leather, --amber, --gold, --cream, --dust, --ink, --danger,
+   --pitch-*) are RETAINED so existing screens keep working, but their VALUES
+   now resolve to the Sensible-Soccer system: deep night-pitch surfaces, hard
+   --ink-black pixel borders, bright turf greens, and kit-red / kit-blue / gold
+   accents. Redefine here, not in components.
+   =========================================================================== */
 @theme inline {
-  --felt: #0b1a10;
-  --felt-light: #122118;
-  --leather: #1a1510;
-  --leather-light: #241e16;
-  --amber: #e8621a;
-  --amber-glow: rgba(232, 98, 26, 0.4);
-  --amber-soft: #c4530f;
-  --gold: #d4a035;
-  --gold-glow: rgba(212, 160, 53, 0.35);
-  --pitch-green: #2d8a4e;
-  --pitch-dark: #1a5c33;
-  --pitch-light: #3ba55d;
-  --danger: #c0392b;
-  --cream: #f5f0e0;
-  --cream-soft: #d9d0b8;
-  --dust: #9a8b73;
-  --ink: #5c5040;
-  --radius: 10px;
-  --radius-sm: 6px;
-  --radius-lg: 14px;
+  /* --- Foundation: the Sensible-Soccer pixel core ------------------------- */
+  --ink-black: #07100b;       /* hard pixel border / drop-shadow */
+  --line-white: #f2f6ef;      /* pitch-line white, brightest text */
 
-  /* Refreshed Sensible-Soccer pixel palette -------------------------------- */
-  --pitch-bright: #1f7a43;   /* bold flat turf for pixel surfaces */
-  --pitch-stripe: #25884c;   /* alternate mow stripe */
-  --kit-red: #e23b35;        /* bold kit red accent */
-  --kit-blue: #3d7bd6;       /* away-kit blue */
-  --ink-black: #0a120c;      /* hard pixel border / shadow */
-  --line-white: #eef3ec;     /* pitch line white */
+  --pitch-bright: #1f9d4f;    /* bold flat turf for pixel surfaces */
+  --pitch-stripe: #1a8a45;    /* alternate mow stripe */
+  --kit-red: #e8362f;         /* primary kit-red accent / CTA */
+  --kit-blue: #2f7fe0;        /* away-kit blue accent */
 
-  /* Font variables set by next/font in layout.tsx via CSS custom properties */
-  /* --font-display, --font-body, --font-flavour are injected as class variables */
+  /* --- Surfaces (night-pitch greens, flat bold blocks) -------------------- */
+  --felt: #0a160e;            /* app background — deep night pitch */
+  --felt-light: #0f1f15;      /* raised background band */
+  --surface: #122a1b;         /* default panel/card surface */
+  --surface-raised: #18371f;  /* hovered / elevated surface */
+  --leather: #122a1b;         /* legacy panel name → surface */
+  --leather-light: #18371f;   /* legacy raised name → surface-raised */
+
+  /* --- Borders ------------------------------------------------------------ */
+  --border: #2c5238;          /* default hairline border (on dark surface) */
+  --border-strong: var(--ink-black); /* hard pixel edge */
+
+  /* --- Accents (warm) ----------------------------------------------------- */
+  --amber: #ff7a1f;           /* primary warm accent / CTA */
+  --amber-soft: #e0600f;      /* CTA gradient base */
+  --amber-glow: rgba(255, 122, 31, 0.4);
+  --gold: #f5c542;            /* legendary / highlight gold */
+  --gold-glow: rgba(245, 197, 66, 0.35);
+
+  /* --- Pitch (legacy names → bright turf) --------------------------------- */
+  --pitch-green: #1f9d4f;
+  --pitch-dark: #14723a;
+  --pitch-light: #34c46a;
+
+  /* --- Semantic ----------------------------------------------------------- */
+  --success: #34c46a;         /* win / positive */
+  --danger: #e8362f;          /* loss / negative — unified with kit-red */
+  --warning: #f5c542;
+
+  /* --- Text --------------------------------------------------------------- */
+  --cream: #f2f6ef;           /* primary text (was off-white cream) */
+  --cream-soft: #c3d2c0;      /* secondary text */
+  --dust: #88a08c;            /* muted / caption text */
+  --ink: #5a7561;             /* disabled / faint text on dark */
+
+  /* --- Radius (pixel system stays tight) ---------------------------------- */
+  --radius: 8px;
+  --radius-sm: 4px;
+  --radius-lg: 12px;
+
+  /* Font variables set by next/font in layout.tsx via CSS custom properties:
+     --font-pixel (Silkscreen, display/headings/labels),
+     --font-display (Archivo Black, fallback heavy display),
+     --font-body (DM Sans, running text), --font-flavour (Playfair, flavour). */
+}
+
+/* Font aliasing: --font-display now resolves to the Silkscreen pixel face so
+   every heading that references var(--font-display) adopts the canonical look.
+   --font-heavy keeps Archivo Black for oversized hero type. */
+:root {
+  --font-display: var(--font-pixel);
 }
 
 body {
   background: var(--felt);
   color: var(--cream);
   font-family: var(--font-body);
+}
+
+/* Pixel display faces render crisper without sub-pixel smoothing artefacts on
+   hard edges; body stays antialiased for legible running text. */
+h1, h2, h3,
+[style*="--font-pixel"],
+[style*="--font-display"] {
+  letter-spacing: 0.01em;
 }
 
 /* Phase Visual Differentiation */
