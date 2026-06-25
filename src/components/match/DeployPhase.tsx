@@ -61,8 +61,29 @@ export default function DeployPhase({
     ),
     [matchState],
   );
-  const defenceMargin = split.defenceScore - opponentBaseline.attack;
-  const attackMargin = split.attackScore - opponentBaseline.defence;
+  // Read the exchange as football verdicts, not raw deltas. Numbers stay, demoted.
+  const attackRatio = opponentBaseline.defence > 0 ? split.attackScore / opponentBaseline.defence : 2;
+  const defenceRatio = opponentBaseline.attack > 0 ? split.defenceScore / opponentBaseline.attack : 2;
+  const verdict = (r: number): { label: string; color: string } => {
+    if (r >= 1.6) return { label: 'On top', color: '#86efac' };
+    if (r >= 1.15) return { label: 'Edging it', color: '#bef264' };
+    if (r >= 0.85) return { label: 'Even', color: '#fcd34d' };
+    if (r >= 0.6) return { label: 'Second best', color: '#fdba74' };
+    return { label: 'Overrun', color: '#fca5a5' };
+  };
+  const attackVerdict = verdict(attackRatio);
+  const defenceVerdict = verdict(defenceRatio);
+  const barFill = (r: number) => Math.round(Math.max(0.05, Math.min(1, r / 2)) * 100);
+
+  // Attacking thrust by lane (surfaces the step-2 zonal contest).
+  const laneLabels = { L: 'Left', C: 'Centre', R: 'Right' } as const;
+  const laneTotal = split.lanePush.L + split.lanePush.C + split.lanePush.R;
+  const lanePct = (v: number) => (laneTotal > 0 ? Math.round((v / laneTotal) * 100) : 0);
+  const dominantLane = laneTotal > 0
+    ? (['L', 'C', 'R'] as const).reduce((a, b) => (split.lanePush[b] > split.lanePush[a] ? b : a))
+    : null;
+  const balancedThrust = dominantLane !== null && lanePct(split.lanePush[dominantLane]) < 45;
+
   const attackChemistry = split.attackSynergies.reduce((sum, syn) => sum + syn.bonus, 0)
     + split.crossSynergies.reduce((sum, syn) => sum + syn.attackBonus, 0);
   const defenceChemistry = split.defenceSynergies.reduce((sum, syn) => sum + syn.bonus, 0)
@@ -116,137 +137,93 @@ export default function DeployPhase({
           flexShrink: 0,
         }}
       >
-        <div
-          style={{
-            display: 'grid',
-            gap: 6,
-            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          }}
-        >
+        <div style={{ display: 'grid', gap: 8 }}>
+          {/* The call — lead with the football, not the maths. */}
           <div
             style={{
-              padding: '10px 12px',
-              borderRadius: 10,
-              background: 'linear-gradient(180deg, rgba(96,165,250,0.18), rgba(15,23,42,0.35))',
-              border: '1px solid rgba(96,165,250,0.28)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+              padding: '12px 14px',
+              borderRadius: 14,
+              background: 'linear-gradient(135deg, rgba(232,98,26,0.22), rgba(0,0,0,0.3))',
+              border: '1px solid rgba(232,98,26,0.3)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
             }}
           >
-            <div style={{ fontSize: 9, color: '#93c5fd', fontWeight: 700, letterSpacing: 0.6 }}>
-              DEFENCE POWER
-            </div>
-            <div
-              style={{
-                marginTop: 3,
-                display: 'flex',
-                alignItems: 'baseline',
-                justifyContent: 'space-between',
-                gap: 10,
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: 'var(--font-display, sans-serif)',
-                  fontSize: 20,
-                  color: '#dbeafe',
-                }}
-              >
-                {split.defenceScore}
-              </span>
-              <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-                target {opponentBaseline.attack}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+              <span style={{ fontSize: 9, color: '#fdba74', fontWeight: 700, letterSpacing: 0.8 }}>THE CALL</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: overCap ? '#fca5a5' : 'var(--dust, #8a7560)' }}>
+                {atkCount}/{maxAtk} forward{overCap ? ' · over cap' : ''}
               </span>
             </div>
-            <div style={{ marginTop: 4, fontSize: 10, color: defenceMargin >= 0 ? '#86efac' : '#fca5a5' }}>
-              {defenceMargin >= 0 ? `+${defenceMargin} over their pressure` : `${defenceMargin} under their pressure`}
-            </div>
-            <div style={{ marginTop: 6, fontSize: 9, color: 'var(--cream-soft, #d9d0b8)' }}>
-              Chemistry {defenceChemistry > 0 ? `+${defenceChemistry}` : 'quiet'}
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: '10px 12px',
-              borderRadius: 10,
-              background: 'linear-gradient(180deg, rgba(251,191,36,0.18), rgba(69,26,3,0.32))',
-              border: '1px solid rgba(251,191,36,0.28)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
-            }}
-          >
-            <div style={{ fontSize: 9, color: '#fcd34d', fontWeight: 700, letterSpacing: 0.6 }}>
-              ATTACK POWER
-            </div>
-            <div
-              style={{
-                marginTop: 3,
-                display: 'flex',
-                alignItems: 'baseline',
-                justifyContent: 'space-between',
-                gap: 10,
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: 'var(--font-display, sans-serif)',
-                  fontSize: 20,
-                  color: '#fde68a',
-                }}
-              >
-                {split.attackScore}
-              </span>
-              <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-                target {opponentBaseline.defence}
-              </span>
-            </div>
-            <div style={{ marginTop: 4, fontSize: 10, color: attackMargin >= 0 ? '#86efac' : '#fca5a5' }}>
-              {attackMargin >= 0 ? `+${attackMargin} over their block` : `${attackMargin} under their block`}
-            </div>
-            <div style={{ marginTop: 6, fontSize: 9, color: 'var(--cream-soft, #d9d0b8)' }}>
-              Chemistry {attackChemistry > 0 ? `+${attackChemistry}` : 'quiet'}
-            </div>
-            <div style={{ marginTop: 2, fontSize: 9, color: 'var(--cream-soft, #d9d0b8)' }}>
-              Create {split.chanceCreation} | Finish {split.shotQuality}
-            </div>
-          </div>
-          <div
-            style={{
-              padding: '10px 12px',
-              borderRadius: 10,
-              background: 'linear-gradient(180deg, rgba(232,98,26,0.16), rgba(0,0,0,0.22))',
-              border: '1px solid rgba(232,98,26,0.22)',
-            }}
-          >
-            <div style={{ fontSize: 9, color: '#fdba74', fontWeight: 700, letterSpacing: 0.6 }}>
-              CALL
-            </div>
-            <div style={{ marginTop: 3, fontSize: 16, color: 'var(--cream, #f5f0e8)', fontWeight: 800 }}>
+            <div style={{ marginTop: 2, fontFamily: 'var(--font-display, sans-serif)', fontSize: 24, color: 'var(--cream, #f5f0e8)', lineHeight: 1.05 }}>
               {split.playName}
             </div>
-            <div style={{ marginTop: 4, fontSize: 10, color: 'var(--cream-soft, #d9d0b8)' }}>
-              Play Call | {split.playName}
-            </div>
-            <div style={{ marginTop: 6, fontSize: 10, color: 'var(--dust, #8a7560)', lineHeight: 1.35 }}>
+            <div style={{ marginTop: 5, fontSize: 11, color: 'var(--cream-soft, #d9d0b8)', lineHeight: 1.4 }}>
               {split.playSummary}
+            </div>
+            {finisher && (
+              <div style={{ marginTop: 8, display: 'inline-block', padding: '4px 10px', borderRadius: 999, background: 'rgba(251,191,36,0.14)', border: '1px solid rgba(251,191,36,0.22)', fontSize: 11, color: '#fde68a', fontWeight: 700 }}>
+                Finish through {finisher.name}
+              </div>
+            )}
+          </div>
+
+          {/* The exchange — verdict first, numbers demoted. */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ padding: '9px 12px', borderRadius: 12, background: 'linear-gradient(180deg, rgba(251,191,36,0.15), rgba(69,26,3,0.28))', border: '1px solid rgba(251,191,36,0.24)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span style={{ fontSize: 9, color: '#fcd34d', fontWeight: 700, letterSpacing: 0.6 }}>IN ATTACK</span>
+                <span style={{ fontSize: 12, color: attackVerdict.color, fontWeight: 800 }}>{attackVerdict.label}</span>
+              </div>
+              <div style={{ marginTop: 6, height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                <div style={{ width: `${barFill(attackRatio)}%`, height: '100%', background: 'linear-gradient(90deg, #f59e0b, #fde68a)' }} />
+              </div>
+              <div style={{ marginTop: 6, fontSize: 9, color: 'var(--dust, #8a7560)' }}>
+                {split.attackScore} v their {opponentBaseline.defence} block{attackChemistry > 0 ? ` · chem +${attackChemistry}` : ''}
+              </div>
+            </div>
+            <div style={{ padding: '9px 12px', borderRadius: 12, background: 'linear-gradient(180deg, rgba(96,165,250,0.15), rgba(15,23,42,0.32))', border: '1px solid rgba(96,165,250,0.24)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span style={{ fontSize: 9, color: '#93c5fd', fontWeight: 700, letterSpacing: 0.6 }}>IN DEFENCE</span>
+                <span style={{ fontSize: 12, color: defenceVerdict.color, fontWeight: 800 }}>{defenceVerdict.label}</span>
+              </div>
+              <div style={{ marginTop: 6, height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                <div style={{ width: `${barFill(defenceRatio)}%`, height: '100%', background: 'linear-gradient(90deg, #2563eb, #93c5fd)' }} />
+              </div>
+              <div style={{ marginTop: 6, fontSize: 9, color: 'var(--dust, #8a7560)' }}>
+                {split.defenceScore} v their {opponentBaseline.attack} press{defenceChemistry > 0 ? ` · chem +${defenceChemistry}` : ''}
+              </div>
             </div>
           </div>
 
-          <div
-            style={{
-              padding: '10px 12px',
-              borderRadius: 10,
-              background: 'linear-gradient(180deg, rgba(0,0,0,0.24), rgba(0,0,0,0.14))',
-              border: '1px solid rgba(245,240,224,0.08)',
-            }}
-          >
-            <div style={{ fontSize: 9, color: 'var(--dust, #8a7560)', fontWeight: 700, letterSpacing: 0.6 }}>
-              COMMITMENT
+          {/* Attacking thrust by lane — surfaces the zonal contest. */}
+          <div style={{ padding: '9px 12px', borderRadius: 12, background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(245,240,224,0.08)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
+              <span style={{ fontSize: 9, color: 'var(--dust, #8a7560)', fontWeight: 700, letterSpacing: 0.6 }}>ATTACKING THRUST</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: dominantLane ? '#fde68a' : 'var(--dust, #8a7560)' }}>
+                {attackers.length === 0
+                  ? 'Holding shape'
+                  : balancedThrust
+                    ? 'Spread across the pitch'
+                    : `Loaded ${laneLabels[dominantLane!].toLowerCase()}`}
+              </span>
             </div>
-            <div style={{ marginTop: 3, fontSize: 16, color: 'var(--cream, #f5f0e8)', fontWeight: 800 }}>
-              {atkCount}/{maxAtk} forward
-            </div>
-            <div style={{ marginTop: 6, fontSize: 10, color: overCap ? '#fca5a5' : 'var(--dust, #8a7560)' }}>
-              {overCap ? 'Extra attackers are halved.' : 'You are within the attack cap.'}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              {(['L', 'C', 'R'] as const).map((lane) => (
+                <div key={lane}>
+                  <div style={{ height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${lanePct(split.lanePush[lane])}%`,
+                        height: '100%',
+                        background: dominantLane === lane && !balancedThrust ? 'linear-gradient(90deg, #e8621a, #fbbf24)' : 'rgba(148,163,184,0.5)',
+                      }}
+                    />
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 9, textAlign: 'center', color: dominantLane === lane && !balancedThrust ? '#fde68a' : 'var(--dust, #8a7560)', fontWeight: dominantLane === lane && !balancedThrust ? 700 : 400 }}>
+                    {laneLabels[lane]}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

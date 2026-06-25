@@ -9,21 +9,15 @@ import { getFormation } from '../lib/formations';
 import type { MatchV5State, IncrementResult } from '../lib/match-v5';
 import {
   initMatch,
-  commitAttackers,
   evaluateSplit,
   resolveIncrement,
-  getOpponentBaselines,
   advanceIncrement,
   makeSub,
-  discardFromBench,
   getMatchResult,
 } from '../lib/match-v5';
 import type { TacticSlots } from '../lib/tactics';
 import { canDeploy, createEmptySlots, deployTactic, removeTactic } from '../lib/tactics';
-import MatchScorebar from './match/MatchScorebar';
-import DeployPhase from './match/DeployPhase';
-import ResolvingPhase from './match/ResolvingPhase';
-import BetweenPhase from './match/BetweenPhase';
+import PitchMatchView from './match/PitchMatchView';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,6 +60,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       runState.round,
       opponent.style,
       opponentBuild.weaknessArchetype,
+      runState.chemistry ?? {},
     );
   });
 
@@ -77,55 +72,23 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       ? INCREMENT_MINUTES[matchState.currentIncrement]
       : 90;
 
-  // ---- Toggle attacker ----
-  const handleToggleAttacker = useCallback(
-    (cardId: number) => {
-      setMatchState((prev: MatchV5State) => {
-        const nextOrder = [...prev.attackerOrder];
-        const existingIndex = nextOrder.indexOf(cardId);
-        if (existingIndex !== -1) {
-          nextOrder.splice(existingIndex, 1);
-        } else {
-          // Check if card is injured
-          const card = prev.xi.find((c) => c.id === cardId);
-          if (card?.injured) return prev;
-          nextOrder.push(cardId);
-        }
-        return commitAttackers(prev, nextOrder);
-      });
-    },
-    [],
-  );
-
-  const handleReorderAttackers = useCallback((draggedId: number, targetId: number) => {
-    if (draggedId === targetId) return;
-
+  // ---- Reposition: swap two players' formation slots (the allocation lever) ----
+  const handleReassign = useCallback((cardA: number, cardB: number) => {
     setMatchState((prev: MatchV5State) => {
-      const nextOrder = [...prev.attackerOrder];
-      const fromIndex = nextOrder.indexOf(draggedId);
-      const toIndex = nextOrder.indexOf(targetId);
-
-      if (fromIndex === -1 || toIndex === -1) return prev;
-
-      nextOrder.splice(fromIndex, 1);
-      nextOrder.splice(toIndex, 0, draggedId);
-      return commitAttackers(prev, nextOrder);
+      const xi = [...prev.xi];
+      const ia = xi.findIndex((c) => c.id === cardA);
+      const ib = xi.findIndex((c) => c.id === cardB);
+      if (ia < 0 || ib < 0 || ia === ib) return prev;
+      [xi[ia], xi[ib]] = [xi[ib], xi[ia]];
+      return { ...prev, xi };
     });
   }, []);
 
   // ---- Kick Off: evaluate and resolve ----
   const handleKickOff = useCallback(() => {
     const split = evaluateSplit(matchState, runState.jokers, tacticSlots);
-
-    const { attack: oppAtk, defence: oppDef } = getOpponentBaselines(
-      matchState.opponentRound,
-      matchState.opponentStyle,
-      matchState.currentIncrement,
-      matchState,
-    );
-
     const seed = matchSeed + matchState.currentIncrement * 113;
-    const result = resolveIncrement(matchState, split, oppAtk, oppDef, seed);
+    const result = resolveIncrement(matchState, split, seed);
 
     setCurrentResult(result);
     setSubPhase('resolving');
@@ -156,34 +119,13 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     }
   }, [matchState, currentResult]);
 
-  // ---- Sub ----
-  const handleSub = useCallback(
-    (xiCardId: number, benchCardId: number) => {
-      setMatchState((prev: MatchV5State) => makeSub(prev, xiCardId, benchCardId));
-    },
-    [],
-  );
+  const handleSub = useCallback((xiCardId: number, benchCardId: number) => {
+    setMatchState((prev: MatchV5State) => makeSub(prev, xiCardId, benchCardId));
+  }, []);
 
-  // ---- Discard ----
-  const handleDiscard = useCallback(
-    (benchCardIds: number[]) => {
-      setMatchState((prev: MatchV5State) => discardFromBench(prev, benchCardIds));
-    },
-    [],
-  );
-
-  // ---- Formation change (halftime) ----
-  const handleFormationChange = useCallback(
-    (formationId: string) => {
-      const newFormation = getFormation(formationId);
-      setMatchState((prev: MatchV5State) => ({ ...prev, formation: newFormation }));
-    },
-    [],
-  );
-
-  // ---- Continue from between/halftime ----
-  const handleContinue = useCallback(() => {
-    setSubPhase('planning');
+  const handleFormationChange = useCallback((formationId: string) => {
+    const newFormation = getFormation(formationId);
+    setMatchState((prev: MatchV5State) => ({ ...prev, formation: newFormation }));
   }, []);
 
   const handleToggleTactic = useCallback((tacticId: string) => {
@@ -258,93 +200,24 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
         overflow: 'hidden',
       }}
     >
-      {/* Joker row — compact inline pills to save vertical space */}
-      <div
-        className="match-joker-row"
-        style={{
-          display: 'flex',
-          gap: 6,
-          padding: '8px 14px 6px',
-          background: 'rgba(0,0,0,0.25)',
-          alignItems: 'center',
-          overflowX: 'auto',
-          flexShrink: 0,
-        }}
-      >
-        <span style={{ fontSize: 9, color: 'var(--dust, #8a7560)', flexShrink: 0 }}>
-          {'\u{1F454}'}
-        </span>
-        {runState.jokers.length === 0 && (
-          <span style={{ fontSize: 10, color: 'var(--dust, #8a7560)' }}>
-            No managers
-          </span>
-        )}
-        {runState.jokers.map((j) => (
-          <span
-            key={j.id}
-            style={{
-              fontSize: 9,
-              color: 'var(--cream, #f5f0e8)',
-              padding: '2px 6px',
-              borderRadius: 4,
-              background: 'rgba(212,160,53,0.12)',
-              border: '1px solid rgba(212,160,53,0.3)',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            {j.name}
-          </span>
-        ))}
-      </div>
-
-      {/* Score bar */}
-      <MatchScorebar
-        yourGoals={matchState.yourGoals}
-        opponentGoals={matchState.opponentGoals}
-        minute={nextMinute}
-        opponentName={opponentBuild.name}
-        round={runState.round}
-        seasonPoints={runState.seasonPoints}
-        boardTargetPoints={runState.boardTargetPoints}
-        subPhase={subPhase}
-      />
-
-      {/* Main content area by sub-phase */}
-      {subPhase === 'planning' && (
-        <DeployPhase
+      {/* One screen for the whole match: plan → resolve → next, on the pitch. */}
+      {subPhase !== 'finished' && (
+        <PitchMatchView
           matchState={matchState}
           formation={matchState.formation}
           jokers={runState.jokers}
           tacticSlots={tacticSlots}
           availableTactics={runState.tacticsDeck}
-          opponentBuild={opponentBuild}
-          onToggleAttacker={handleToggleAttacker}
-          onReorderAttackers={handleReorderAttackers}
-          onToggleTactic={handleToggleTactic}
-          onKickOff={handleKickOff}
-        />
-      )}
-
-      {subPhase === 'resolving' && currentResult && (
-        <ResolvingPhase
-          result={currentResult}
-          onComplete={handleResolveComplete}
-        />
-      )}
-
-      {(subPhase === 'between' || subPhase === 'halftime') && (
-        <BetweenPhase
-          matchState={matchState}
           ownedFormations={runState.ownedFormations}
-          isHalftime={subPhase === 'halftime'}
-          tacticSlots={tacticSlots}
-          availableTactics={runState.tacticsDeck}
-          onSub={handleSub}
-          onDiscard={handleDiscard}
-          onFormationChange={handleFormationChange}
+          opponentBuild={opponentBuild}
+          nextMinute={nextMinute}
+          mode={subPhase === 'resolving' ? 'resolve' : 'plan'}
+          currentResult={currentResult}
           onToggleTactic={handleToggleTactic}
-          onContinue={handleContinue}
+          onSub={handleSub}
+          onReassign={handleReassign}
+          onFormationChange={handleFormationChange}
+          onContinue={subPhase === 'resolving' ? handleResolveComplete : handleKickOff}
         />
       )}
 
