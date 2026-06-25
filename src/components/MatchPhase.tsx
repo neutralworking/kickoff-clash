@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import type { RunState } from '../lib/run';
 import { getOpponent, getOpponentBuild } from '../lib/run';
 import type { HandState } from '../lib/hand';
-import { rollXI, INCREMENT_MINUTES } from '../lib/hand';
+import { rollXI, handFromSelection, INCREMENT_MINUTES } from '../lib/hand';
 import { getFormation } from '../lib/formations';
 import type { MatchV5State, IncrementResult } from '../lib/match-v5';
 import {
@@ -48,7 +48,10 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
 
   // Core state
   const [matchState, setMatchState] = useState<MatchV5State>(() => {
-    const hand = rollXI(runState.deck, formation, matchSeed);
+    // Honour the player's pre-match selection; fall back to an auto-roll.
+    const hand =
+      handFromSelection(runState.deck, runState.startingXI ?? [], runState.benchIds ?? [], formation) ??
+      rollXI(runState.deck, formation, matchSeed);
     return initMatch(
       hand.xi,
       hand.bench,

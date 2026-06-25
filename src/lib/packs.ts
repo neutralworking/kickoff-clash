@@ -166,3 +166,24 @@ export function openPack(packType: PackType, seed: number): PackContents {
 
   return { players, tactics, formations, managers };
 }
+
+// ---------------------------------------------------------------------------
+// Starter rip (current flow): three fixed packs opened at New Season.
+//   - Player pack:  25 players (full pool)
+//   - Manager pack: 2 managers (pick 1 before the match)
+//   - Tactical pack: 10 tactics (5 opening hand + 1 per turn)
+// All formations are made available so the manager can pick a shape.
+// ---------------------------------------------------------------------------
+
+export const RIP_COUNTS = { players: 25, managers: 2, tactics: 10 } as const;
+
+export function ripStarterPacks(seed: number): PackContents {
+  const players = seededShuffle(ALL_CARDS, seed).slice(0, RIP_COUNTS.players);
+  const tactics = seededShuffle(ALL_TACTICS, seed + 100).slice(0, RIP_COUNTS.tactics);
+  const managers = seededShuffle(ALL_JOKERS, seed + 300).slice(0, RIP_COUNTS.managers);
+  // Lead with 4-3-3, then the rest — every formation is selectable.
+  const base433 = ALL_FORMATIONS.find((f) => f.id === '4-3-3');
+  const rest = ALL_FORMATIONS.filter((f) => f.id !== '4-3-3');
+  const formations = base433 ? [base433, ...rest] : [...ALL_FORMATIONS];
+  return { players, tactics, formations, managers };
+}

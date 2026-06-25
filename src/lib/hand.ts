@@ -272,6 +272,40 @@ export function rollXI(deck: Card[], formation: Formation, seed: number): HandSt
   };
 }
 
+/**
+ * Build a HandState from the player's explicit pre-match selection instead of
+ * rolling one. `startingXIIds` are in formation-slot order (xi[i] ↔ slots[i]);
+ * `benchIds` are the chosen subs. Unselected players are NOT available in-match
+ * (they go nowhere — only bench cards can be subbed on). Returns null if the
+ * selection is incomplete, so the caller can fall back to rollXI.
+ */
+export function handFromSelection(
+  deck: Card[],
+  startingXIIds: number[],
+  benchIds: number[],
+  formation: Formation,
+): HandState | null {
+  if (startingXIIds.length !== formation.slots.length) return null;
+  const byId = new Map(deck.map((c) => [c.id, c]));
+  const xi = startingXIIds.map((id) => byId.get(id)).filter((c): c is Card => Boolean(c));
+  if (xi.length !== formation.slots.length) return null;
+  const bench = benchIds.map((id) => byId.get(id)).filter((c): c is Card => Boolean(c));
+
+  return {
+    xi,
+    bench,
+    remainingDeck: [],   // the unselected players are unavailable for this match
+    subsRemaining: 5,
+    subsUsed: [],
+    tacticSlots: createEmptySlots(),
+    currentIncrement: 0,
+    isFirstHalf: true,
+    scores: [],
+    yourGoals: 0,
+    opponentGoals: 0,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 2. discardFromBench — Remove bench card, draw replacement from deck
 // ---------------------------------------------------------------------------

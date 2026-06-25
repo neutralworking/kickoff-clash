@@ -23,15 +23,12 @@ const playfairDisplay = Playfair_Display({
 
 export const metadata: Metadata = {
   title: "Kickoff Clash",
-  description: "A football season deckbuilder at kickoff.neutralworking.com",
-  metadataBase: new URL("https://kickoff.neutralworking.com"),
-  alternates: {
-    canonical: "/",
-  },
+  description: "A football season deckbuilder roguelike.",
+  metadataBase: new URL("https://neutralworking.github.io/kickoff-clash/"),
   openGraph: {
     title: "Kickoff Clash",
     description: "Build your squad. Play your cards. Win the season.",
-    url: "https://kickoff.neutralworking.com",
+    url: "https://neutralworking.github.io/kickoff-clash/",
     siteName: "Kickoff Clash",
     type: "website",
   },
