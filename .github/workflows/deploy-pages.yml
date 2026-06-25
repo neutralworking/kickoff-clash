@@ -8,7 +8,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [claude/nw-138-m0b9hr]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -35,8 +35,6 @@ jobs:
           NEXT_PUBLIC_BASE_PATH: /kickoff-clash
         run: npm run build
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out
