@@ -22,6 +22,14 @@
   --radius-sm: 6px;
   --radius-lg: 14px;
 
+  /* Refreshed Sensible-Soccer pixel palette -------------------------------- */
+  --pitch-bright: #1f7a43;   /* bold flat turf for pixel surfaces */
+  --pitch-stripe: #25884c;   /* alternate mow stripe */
+  --kit-red: #e23b35;        /* bold kit red accent */
+  --kit-blue: #3d7bd6;       /* away-kit blue */
+  --ink-black: #0a120c;      /* hard pixel border / shadow */
+  --line-white: #eef3ec;     /* pitch line white */
+
   /* Font variables set by next/font in layout.tsx via CSS custom properties */
   /* --font-display, --font-body, --font-flavour are injected as class variables */
 }
@@ -354,4 +362,90 @@ body {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Pack-opening flow (refreshed Sensible-Soccer pixel look)
+   --------------------------------------------------------------------------- */
+
+/* Pixelated rendering helper for sprite-like chips */
+.pixelated {
+  image-rendering: pixelated;
+}
+
+/* The sealed pack idles with a tiny breathing wobble, inviting a tap. */
+@keyframes packIdle {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-6px) rotate(1deg); }
+}
+.pack-idle {
+  animation: packIdle 2.2s ease-in-out infinite;
+}
+
+/* The rip: pack jolts, flares, then tears upward off-screen. */
+@keyframes packRip {
+  0% { transform: translateY(0) scale(1) rotate(0deg); }
+  18% { transform: translateY(2px) scale(1.06) rotate(-2deg); }
+  34% { transform: translateY(0) scale(1.1) rotate(2deg); }
+  60% { transform: translateY(-10px) scale(1.14) rotate(-1deg); }
+  100% { transform: translateY(-180px) scale(1.25) rotate(4deg); opacity: 0; }
+}
+.pack-rip {
+  animation: packRip 0.62s cubic-bezier(0.5, 0, 0.75, 0) forwards;
+}
+
+/* White burst behind the pack as it tears. */
+@keyframes packFlash {
+  0% { opacity: 0; transform: scale(0.4); }
+  35% { opacity: 0.85; }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+.pack-flash {
+  animation: packFlash 0.62s ease-out forwards;
+}
+
+/* Each revealed chip snaps up from below with a stagger (set inline delay). */
+@keyframes chipReveal {
+  0% { opacity: 0; transform: translateY(14px) scale(0.82); }
+  60% { opacity: 1; transform: translateY(-2px) scale(1.04); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.chip-reveal {
+  opacity: 0;
+  animation: chipReveal 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Hero card flip for the spotlight reveal. */
+@keyframes heroPop {
+  0% { opacity: 0; transform: translateY(20px) scale(0.7); }
+  55% { opacity: 1; transform: translateY(-4px) scale(1.08); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.hero-pop {
+  animation: heroPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Rarity screen flash for Epic / Legendary pulls. */
+@keyframes packRarityFlash {
+  0% { opacity: 0.55; }
+  100% { opacity: 0; }
+}
+.pack-rarity-flash {
+  animation: packRarityFlash 0.45s ease-out forwards;
+}
+
+/* Crisp pixel-edged shadow for sprite chips & panels. */
+.pixel-edge {
+  box-shadow: 0 2px 0 0 var(--ink-black), 0 3px 0 0 rgba(0,0,0,0.35);
+}
+
+/* Mown-pitch stripe backdrop for the pack stages. */
+.pitch-stripes {
+  background-image: repeating-linear-gradient(
+    180deg,
+    var(--pitch-bright) 0px,
+    var(--pitch-bright) 26px,
+    var(--pitch-stripe) 26px,
+    var(--pitch-stripe) 52px
+  );
 }
