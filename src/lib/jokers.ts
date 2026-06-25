@@ -4,17 +4,23 @@ import type { Connection } from './chemistry';
 
 export interface JokerCard {
   id: string;
-  name: string;
-  effect: string;          // human-readable effect description
-  flavour: string;         // comedic text
+  name: string;            // the gaffer (a person)
+  philosophy: string;      // one-line persona
+  traits: string[];        // readable trait tags (backed by managerTraits records)
+  nation?: string;
+  effect: string;          // legacy human-readable effect (hand.ts scoring path)
+  flavour: string;
   rarity: 'common' | 'uncommon' | 'rare';
-  compute: (xi: Card[], connections: Connection[]) => number; // returns bonus points
+  compute: (xi: Card[], connections: Connection[]) => number; // legacy bonus points
 }
 
 export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'the_dinosaur',
-    name: 'The Dinosaur',
+    name: 'Roy Tanner',
+    philosophy: 'Get it forward and win the second ball.',
+    traits: ['Direct Play', 'Aerial Targets'],
+    nation: 'England',
     effect: '+30 per Target or Powerhouse in XI',
     flavour: 'Route one. Every time.',
     rarity: 'common',
@@ -22,7 +28,10 @@ export const ALL_JOKERS: JokerCard[] = [
   },
   {
     id: 'the_professor',
-    name: 'The Professor',
+    name: 'Émile Roux',
+    philosophy: 'Keep the ball; the goals will come.',
+    traits: ['Possession', 'Patient Build-up'],
+    nation: 'France',
     effect: '+25 per Controller or Passer',
     flavour: 'The game is simple.',
     rarity: 'common',
@@ -30,7 +39,10 @@ export const ALL_JOKERS: JokerCard[] = [
   },
   {
     id: 'the_gambler',
-    name: 'The Gambler',
+    name: 'Vince Calloway',
+    philosophy: 'Fortune favours the brave.',
+    traits: ['High Risk', 'Backs Mavericks'],
+    nation: 'Scotland',
     effect: 'Glass and Phoenix cards get +40 power',
     flavour: 'Fortune favours the brave.',
     rarity: 'uncommon',
@@ -38,7 +50,10 @@ export const ALL_JOKERS: JokerCard[] = [
   },
   {
     id: 'youth_developer',
-    name: 'Youth Developer',
+    name: 'Greta Lind',
+    philosophy: 'Trust the kids and they repay you.',
+    traits: ['Youth Project', 'Raw Talent'],
+    nation: 'Sweden',
     effect: '+20 per Common card in XI',
     flavour: 'Give the kids a chance.',
     rarity: 'common',
@@ -46,7 +61,10 @@ export const ALL_JOKERS: JokerCard[] = [
   },
   {
     id: 'the_mourinho',
-    name: 'The Mourinho',
+    name: 'Aurélio Sá',
+    philosophy: 'Concede nothing, punish everything.',
+    traits: ['Low Block', 'Counter-Punch'],
+    nation: 'Portugal',
     effect: '+50 per Destroyer or Cover',
     flavour: 'Park the bus. Win the league.',
     rarity: 'uncommon',
@@ -54,7 +72,10 @@ export const ALL_JOKERS: JokerCard[] = [
   },
   {
     id: 'hairdryer',
-    name: 'The Hairdryer',
+    name: 'Iain MacRae',
+    philosophy: 'Leaders set the standard; everyone follows.',
+    traits: ['Motivator', 'Leaders Thrive'],
+    nation: 'Scotland',
     effect: '+80 if a Captain personality is in XI',
     flavour: "Nobody's sitting down.",
     rarity: 'rare',
@@ -62,7 +83,10 @@ export const ALL_JOKERS: JokerCard[] = [
   },
   {
     id: 'chemistry_set',
-    name: 'Chemistry Set',
+    name: 'Marta Pires',
+    philosophy: 'The whole is greater than the sum.',
+    traits: ['Team Cohesion', 'Chemistry'],
+    nation: 'Brazil',
     effect: 'Each synergy connection gives +15 extra',
     flavour: 'The whole is greater than the sum.',
     rarity: 'uncommon',
@@ -70,7 +94,10 @@ export const ALL_JOKERS: JokerCard[] = [
   },
   {
     id: 'scouts_eye',
-    name: "Scout's Eye",
+    name: 'Dieter Falk',
+    philosophy: 'I always know a player.',
+    traits: ['Scouting Network', 'Squad Depth'],
+    nation: 'Germany',
     effect: '+1 discard per match',
     flavour: 'I know a player...',
     rarity: 'rare',

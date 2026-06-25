@@ -32,6 +32,7 @@ import { accrueMatch } from '../lib/chem';
 import type { PackContents } from '../lib/packs';
 import type { TeamSelection } from '../lib/run';
 import TitleScreen from './TitleScreen';
+import PackReveal from './PackReveal';
 import TeamSelect from './TeamSelect';
 import MatchPhase from './MatchPhase';
 import PostMatch from './PostMatch';
@@ -142,7 +143,7 @@ function saveHistory(state: RunState): void {
 // Phase type
 // ---------------------------------------------------------------------------
 
-type Phase = 'title' | 'teamSelect' | 'match' | 'postmatch' | 'shop' | 'end';
+type Phase = 'title' | 'packOpen' | 'teamSelect' | 'match' | 'postmatch' | 'shop' | 'end';
 
 function phaseFromStatus(status: RunState['status']): Phase {
   if (status === 'won' || status === 'lost') return 'end';
@@ -182,13 +183,17 @@ export default function GameShell() {
   // Phase handlers
   // =========================================================================
 
-  // --- Title: rip the three starter packs, then go to team selection ---
+  // --- Title: rip the three starter packs, reveal them, then select ---
   const handleNewRun = useCallback(() => {
     clearRun();
     setRunState(null);
     const seed = Date.now();
     setPendingContents(ripStarterPacks(seed));
     setPendingSeed(seed);
+    setPhase('packOpen');
+  }, []);
+
+  const handlePacksOpened = useCallback(() => {
     setPhase('teamSelect');
   }, []);
 
@@ -444,6 +449,11 @@ export default function GameShell() {
             hasExistingRun={hasExistingRun}
           />
         );
+
+      case 'packOpen':
+        return pendingContents ? (
+          <PackReveal contents={pendingContents} onContinue={handlePacksOpened} />
+        ) : null;
 
       case 'teamSelect':
         return pendingContents ? (
