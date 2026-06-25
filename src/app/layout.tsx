@@ -1,11 +1,19 @@
 import type { Metadata } from "next";
-import { Archivo_Black, DM_Sans, Playfair_Display } from "next/font/google";
+import { Archivo_Black, DM_Sans, Playfair_Display, Silkscreen } from "next/font/google";
 import "./globals.css";
 
 const archivoBlack = Archivo_Black({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-display",
+  display: "swap",
+});
+
+// Chunky pixel display face for the refreshed Sensible-Soccer look.
+const silkscreen = Silkscreen({
+  weight: ["400", "700"],
+  subsets: ["latin"],
+  variable: "--font-pixel",
   display: "swap",
 });
 
@@ -47,7 +55,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`dark ${archivoBlack.variable} ${dmSans.variable} ${playfairDisplay.variable}`}>
+    <html lang="en" className={`dark ${archivoBlack.variable} ${dmSans.variable} ${playfairDisplay.variable} ${silkscreen.variable}`}>
       <body className="min-h-screen antialiased" style={{ background: 'var(--felt)', color: 'var(--cream)', fontFamily: 'var(--font-body)' }}>
         {children}
       </body>
