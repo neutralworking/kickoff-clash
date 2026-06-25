@@ -30,10 +30,12 @@ import type { DispatchCard, ZoneName, TraitRecord } from './verbs';
 import { dispatchTraits } from './verbs';
 import { traitsForCard } from './role-transforms';
 import type { Lane, Cell, Band } from './field';
-import { CELLS, cellOf, bandOf, attackVsCover, pushVsReserveCover } from './field';
+import { CELLS, cellOf, bandOf } from './field';
 import { generateOpponentXI, opponentScaleTraits, counterPush, reactivityFor } from './opponent';
 import type { CoAppearance } from './chem';
 import { chemistryRecords } from './chem';
+import type { PossessionSide, Shot } from './possession';
+import { simulatePeriod } from './possession';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -118,6 +120,15 @@ export interface IncrementResult {
   opponentGoalChance: number;
   yourScored: boolean;
   opponentScored: boolean;
+  // Per-possession model (engine v1): goals per period can be 0..n.
+  yourGoalCount: number;
+  opponentGoalCount: number;
+  yourXG: number;
+  opponentXG: number;
+  yourPossessions: number;
+  opponentPossessions: number;
+  yourShots: Shot[];
+  opponentShots: Shot[];
   event: MatchEvent;
 }
 
@@ -157,7 +168,7 @@ const zeroEmit = (): Record<ZoneName, number> => ({ attack: 0, defence: 0, creat
  *  cascade the lean opponent side path skips, AND for the player's own inflated
  *  defence it attacks into, so a comparably-powered opponent is a real threat.
  *  (DESIGN §7 difficulty dial; calibrated against the deck-strength sweep.) */
-const OPP_COHESION = 2.5;
+const OPP_COHESION = 1.3;
 
 // --- Fitness (MATCH_ENGINE §3.1; §7 dials) ---
 // Dynamic 1–6 condition. fitnessFactor scales emission: fresh (6) = full, spent (1) =
@@ -901,84 +912,66 @@ export function resolveIncrement(
     opponentScaleTraits(state.opponentXI, state.currentIncrement),
   );
 
-  // The opponent runs the lean side path (no synergy/style/personality cascade), so
-  // its raw attack reads ~half a comparably-powered player side. OPP_COHESION stands
-  // in for those skipped multipliers — a coordinated team — applied to its *attacking*
-  // output only (its cover stays lean so you can still break it down). §7 dial.
-  // Offensive counter: bias its push toward your thinnest cover lane before scaling.
-  const counteredPush = counterPush(opp.lanePush, split.laneCover, reactivity);
-  const oppPush: Record<Lane, number> = {
-    L: counteredPush.L * OPP_COHESION,
-    C: counteredPush.C * OPP_COHESION,
-    R: counteredPush.R * OPP_COHESION,
-  };
-  const oppCreation = opp.chanceCreation * OPP_COHESION;
+  // The opponent runs the lean side path (no synergy/style/personality cascade). Its
+  // raw lane push/cover are already power-comparable to a player side, so the lane
+  // contest (shot volume) uses them straight — only the offensive counter biases its
+  // push toward your thinnest cover lane. OPP_COHESION compensates ONLY for the skipped
+  // cascade on the QUALITY/CONTROL dimensions (creation, finishing, possession), where a
+  // player deck's synergy+style+personality stack genuinely lifts it above raw power.
+  const oppPush = counterPush(opp.lanePush, split.laneCover, reactivity);
   const oppFinishing = opp.shotQuality * OPP_COHESION;
 
-  // YOUR threat: your lane push vs their positioned cover; your chance quality vs
-  // their defensive score. Defensive counter: their cover shifts onto your loaded lane
-  // in proportion to this opponent's reactivity.
-  const pressureRatio = attackVsCover(split.lanePush, opp.laneCover, reactivity);
-  const oppDef = Math.max(1, opp.defenceScore);
-  const creationRatio = split.chanceCreation / (oppDef * 0.8);
-  const finishingRatio = split.shotQuality / (oppDef * 0.68);
+  // Defensive counter: the opponent shifts mobile cover onto your loaded lanes in
+  // proportion to its reactivity; you committed your shape, so yours stays put.
+  const yourPushSum = (split.lanePush.L + split.lanePush.C + split.lanePush.R) || 1;
+  const oppCoverSum = opp.laneCover.L + opp.laneCover.C + opp.laneCover.R;
+  const oppEffCover: Record<Lane, number> = {
+    L: opp.laneCover.L * (1 - reactivity) + oppCoverSum * reactivity * (split.lanePush.L / yourPushSum),
+    C: opp.laneCover.C * (1 - reactivity) + oppCoverSum * reactivity * (split.lanePush.C / yourPushSum),
+    R: opp.laneCover.R * (1 - reactivity) + oppCoverSum * reactivity * (split.lanePush.R / yourPushSum),
+  };
 
-  let yourChanceVolume = clamp(
-    0.08 + (creationRatio - 0.7) * 0.28 + (pressureRatio - 1.0) * 0.10,
-    0.04,
-    0.72,
-  );
-  let yourChanceQuality = clamp(
-    0.16 + (finishingRatio - 0.6) * 0.26 + (pressureRatio - 1.0) * 0.08,
-    0.08,
-    0.78,
-  );
-  let yourGoalChance = clamp(yourChanceVolume * yourChanceQuality * 1.18, 0.02, 0.52);
-
-  // THEIR threat: their lane push vs your cover; their chance quality vs your defence.
-  const theirPressureRatio = pushVsReserveCover(oppPush, split.laneCover);
-  const yourDef = Math.max(1, split.defenceScore);
-  const oppCreationRatio = oppCreation / (yourDef * 0.8);
-  const oppFinishingRatio = oppFinishing / (yourDef * 0.68);
-
-  let opponentChanceVolume = clamp(
-    0.08 + (oppCreationRatio - 0.7) * 0.28 + (theirPressureRatio - 1.0) * 0.10,
-    0.04,
-    0.62,
-  );
-  let opponentChanceQuality = clamp(
-    0.16 + (oppFinishingRatio - 0.6) * 0.26 + (theirPressureRatio - 1.0) * 0.08,
-    0.08,
-    0.64,
-  );
-  let opponentGoalChance = clamp(opponentChanceVolume * opponentChanceQuality * 1.10, 0.02, 0.42);
-
-  // Cross denial: each side's `deny` verbs suppress the other's conversion (capped,
-  // so a stack can never fully shut a side out).
+  // Cross denial: each side's `deny` verbs suppress the OTHER's conversion (capped).
   const yourDenial = clamp(split.opponentDenial ?? 0, 0, 0.5);   // you → them
   const theirDenial = clamp(opp.denial ?? 0, 0, 0.5);            // them → you
-  opponentGoalChance *= 1 - yourDenial;
-  yourGoalChance *= 1 - theirDenial;
 
-  // 90th minute drama
-  if (state.currentIncrement === 4) {
-    yourChanceVolume *= 1.18;
-    yourChanceQuality *= 1.08;
-    yourGoalChance *= 1.3;
-    opponentChanceVolume *= 1.15;
-    opponentChanceQuality *= 1.05;
-    opponentGoalChance *= 1.3;
-  }
+  // --- Per-possession resolution: the period is a pool of possessions split by
+  // control; each becomes a shot (push vs cover) carrying an xG that is itself a dice
+  // roll. Goals are the sum, so a period yields 0..n. The zonal contest feeds it.
+  const drama = state.currentIncrement === 4 ? 1.3 : 1.0;
+  // Chance quality blends finishing with creation, so a creation-heavy (build-up) side
+  // still converts rather than being punished for low raw finishing.
+  const chanceQuality = (finishing: number, creation: number) => 0.55 * finishing + 0.45 * creation;
+  const youSide: PossessionSide = {
+    lanePush: split.lanePush,
+    laneCover: split.laneCover,
+    shotQuality: chanceQuality(split.shotQuality, split.chanceCreation),
+    defenceScore: split.defenceScore,
+    control: split.chanceCreation + split.attackScore,
+    denial: yourDenial,
+  };
+  const oppSide: PossessionSide = {
+    lanePush: oppPush,
+    laneCover: oppEffCover,
+    shotQuality: chanceQuality(oppFinishing, opp.chanceCreation * OPP_COHESION),
+    defenceScore: opp.defenceScore,
+    control: (opp.chanceCreation + opp.attackScore) * OPP_COHESION,
+    denial: theirDenial,
+  };
 
-  // Seeded, deterministic rolls. Variance verbs shape each side's spread around its
-  // mean (forward hook for the xG→Poisson step; neutral at 0).
-  const shapeRoll = (r: number, v: number) =>
-    v === 0 ? r : clamp(0.5 + (r - 0.5) * (1 + v), 0, 0.9999);
-  const yourRoll = shapeRoll(seededRandom(seed * 71 + state.currentIncrement * 13 + 1), split.varianceFactor ?? 0);
-  const theirRoll = shapeRoll(seededRandom(seed * 83 + state.currentIncrement * 17 + 2), opp.variance ?? 0);
+  const period = simulatePeriod(youSide, oppSide, seed, state.currentIncrement, drama);
+  const yourGoalCount = period.you.goals;
+  const opponentGoalCount = period.opp.goals;
+  const yourScored = yourGoalCount > 0;
+  const opponentScored = opponentGoalCount > 0;
 
-  const yourScored = yourRoll < yourGoalChance;
-  const opponentScored = theirRoll < opponentGoalChance;
+  // Display fields (probability of ≥1 goal + shot-volume/quality readouts).
+  const yourGoalChance = clamp(1 - Math.exp(-period.you.xg), 0, 1);
+  const opponentGoalChance = clamp(1 - Math.exp(-period.opp.xg), 0, 1);
+  const yourChanceVolume = clamp(period.you.shots.length / 6, 0, 1);
+  const opponentChanceVolume = clamp(period.opp.shots.length / 6, 0, 1);
+  const yourChanceQuality = period.you.shots.length ? clamp(period.you.xg / period.you.shots.length, 0, 1) : 0;
+  const opponentChanceQuality = period.opp.shots.length ? clamp(period.opp.xg / period.opp.shots.length, 0, 1) : 0;
 
   // Generate commentary
   const allConnections = [...split.attackSynergies, ...split.defenceSynergies, ...split.crossSynergies];
@@ -1012,6 +1005,14 @@ export function resolveIncrement(
     opponentGoalChance,
     yourScored,
     opponentScored,
+    yourGoalCount,
+    opponentGoalCount,
+    yourXG: period.you.xg,
+    opponentXG: period.opp.xg,
+    yourPossessions: period.you.possessions,
+    opponentPossessions: period.opp.possessions,
+    yourShots: period.you.shots,
+    opponentShots: period.opp.shots,
     event: { minute, text: eventText, type: eventType },
   };
 }
@@ -1070,8 +1071,8 @@ export function getOpponentBaselines(
 
 export function advanceIncrement(state: MatchV5State, result: IncrementResult): MatchV5State {
   const newScores = [...state.scores, result];
-  const newYourGoals = state.yourGoals + (result.yourScored ? 1 : 0);
-  const newOpponentGoals = state.opponentGoals + (result.opponentScored ? 1 : 0);
+  const newYourGoals = state.yourGoals + result.yourGoalCount;
+  const newOpponentGoals = state.opponentGoals + result.opponentGoalCount;
   const nextIncrement = state.currentIncrement + 1;
   const isFirstHalf = nextIncrement <= 1;
 

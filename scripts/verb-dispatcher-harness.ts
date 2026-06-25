@@ -41,6 +41,7 @@ import type { SlottedCard } from '../src/lib/scoring';
 import { dispatchTraits, buildBaseCells, type DispatchCard } from '../src/lib/verbs';
 import { ROLE_TRANSFORMS } from '../src/lib/role-transforms';
 import { CELLS, cellOf, bandOf, attackVsCover, pushVsReserveCover, type Band, type Lane } from '../src/lib/field';
+import { simulatePeriod, type PossessionSide } from '../src/lib/possession';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -497,6 +498,64 @@ console.log('\n11. Economy & run loop');
   const matrix = accrueMatch({}, [1, 2, 3], 10);
   const pruned = pruneCard(matrix, 2);
   check('selling a card forfeits its chemistry (churn tax)', coApp(pruned, 1, 2) === 0 && coApp(pruned, 2, 3) === 0 && coApp(pruned, 1, 3) === 10, `1-3 kept=${coApp(pruned, 1, 3)}`);
+}
+
+// ---------------------------------------------------------------------------
+// 12. Per-possession goal model (possession → shot → xG → dice)
+// ---------------------------------------------------------------------------
+console.log('\n12. Per-possession goal model');
+{
+  const lanes = (v: number): Record<Lane, number> => ({ L: v, C: v, R: v });
+  const side = (push: number, cover: number, quality: number, def: number, control: number): PossessionSide => ({
+    lanePush: lanes(push), laneCover: lanes(cover), shotQuality: quality, defenceScore: def, control, denial: 0,
+  });
+
+  // Possessions are pooled (20) and split by control; the split sums to the pool.
+  const even = simulatePeriod(side(500, 600, 600, 1000, 1200), side(500, 600, 600, 1000, 1200), 99, 0);
+  check('possessions split by control sum to the pool', even.you.possessions + even.opp.possessions === 20,
+    `${even.you.possessions}+${even.opp.possessions}`);
+
+  // A dominant-control side takes the larger share (clamped).
+  const lop = simulatePeriod(side(500, 600, 600, 1000, 3000), side(500, 600, 600, 1000, 900), 99, 0);
+  check('the higher-control side gets more possessions', lop.you.possessions > lop.opp.possessions,
+    `${lop.you.possessions} vs ${lop.opp.possessions}`);
+
+  // Every shot carries an xG, and goals never exceed shots.
+  const shotsOk = even.you.shots.every((s) => s.xg > 0 && s.xg <= 1) && even.you.goals <= even.you.shots.length;
+  check('shots carry xG in (0,1] and goals ≤ shots', shotsOk,
+    `${even.you.shots.length} shots, ${even.you.goals} goals`);
+
+  // Goals scale with the contest: a strong attack vs a weak defence out-scores
+  // the mirror image, averaged over seeds (removes single-roll noise).
+  let strongGoals = 0, weakGoals = 0;
+  for (let s = 0; s < 200; s++) {
+    strongGoals += simulatePeriod(side(900, 600, 1100, 700, 2200), side(400, 500, 400, 1400, 1000), s, 0).you.goals;
+    weakGoals += simulatePeriod(side(400, 600, 400, 1400, 1000), side(900, 500, 1100, 700, 2200), s, 0).you.goals;
+  }
+  check('goals scale with the contest (strong attack > weak attack)', strongGoals > weakGoals * 1.5,
+    `strong=${strongGoals} weak=${weakGoals} over 200 periods`);
+
+  // Determinism: identical inputs → identical period outcome.
+  const d1 = simulatePeriod(side(700, 600, 700, 1000, 1500), side(500, 600, 600, 1100, 1200), 42, 3);
+  const d2 = simulatePeriod(side(700, 600, 700, 1000, 1500), side(500, 600, 600, 1100, 1200), 42, 3);
+  check('identical inputs → identical period (deterministic)', JSON.stringify(d1) === JSON.stringify(d2));
+
+  // Goal volume sits in a sane band (~3/match target) for an evenly-matched full
+  // match: average total goals across a seed sweep of a power-matched deck.
+  const evenDeck = [...cards].sort((a, b) => b.power - a.power).slice(180, 198);
+  let total = 0; const N = 120;
+  for (let s = 0; s < N; s++) {
+    const bench = evenDeck.slice(11, 18);
+    let st = initMatch(evenDeck.slice(0, 11), bench, [], formation, 'tiki-taka', [], 2000 + s * 13, 2, 'Balanced', 'Sprinter');
+    for (let i = 0; i < 5; i++) {
+      const ids = [...st.xi].filter((c) => !c.injured).sort((a, b) => b.power - a.power).slice(0, 4).map((c) => c.id);
+      st = commitAttackers(st, ids);
+      st = advanceIncrement(st, resolveIncrement(st, evaluateSplit(st, [], slots), 2000 + s * 13));
+    }
+    total += st.yourGoals + st.opponentGoals;
+  }
+  const avg = total / N;
+  check('total goals per match sit near the ~3 target (1.5–4.5)', avg >= 1.5 && avg <= 4.5, `avg total = ${avg.toFixed(2)}`);
 }
 
 console.log(`\n=== ${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} ===\n`);
