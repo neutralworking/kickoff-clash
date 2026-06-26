@@ -132,6 +132,24 @@ export interface IncrementResult {
   yourShots: Shot[];
   opponentShots: Shot[];
   event: MatchEvent;
+  // Per-shot commentary feed (additive, deterministic). One MatchBeat per shot, in
+  // engine order: your shots first, then the opponent's. Pure display.
+  beats: MatchBeat[];
+}
+
+/** One commentary line per resolved shot. Deterministic; never feeds match math.
+ *  `outcome` mirrors PitchMatchView's buildTimeline split exactly so the feed and the
+ *  on-pitch animation agree: goal if the shot scored, else save if xg >= SAVE_BEAT_XG,
+ *  else miss. */
+export interface MatchBeat {
+  minute: number;
+  side: 'you' | 'opp';
+  lane: Lane;
+  xg: number;
+  outcome: 'goal' | 'save' | 'miss';
+  scorerId: number | null;
+  scorerName: string | null;
+  text: string;
 }
 
 export interface MatchV5Result {
@@ -891,6 +909,157 @@ export function evaluateSplit(
 }
 
 // ---------------------------------------------------------------------------
+// Per-shot commentary beats (additive, deterministic)
+//
+// One MatchBeat per resolved shot. Pure display — never feeds match math. All
+// randomness uses NEW salts on the stateless seededRandom hash, so existing
+// scorelines are byte-identical.
+// ---------------------------------------------------------------------------
+
+/** Save/miss split for non-goal shots. MUST equal PitchMatchView buildTimeline's
+ *  SAVE_XG so the feed and the on-pitch animation classify identically. */
+const SAVE_BEAT_XG = 0.22;
+
+/** Attacking-band positions that can plausibly be a shot's scorer. */
+const ATTACKING_POSITIONS = new Set(['CF', 'WF', 'AM', 'WM', 'CM']);
+
+function laneOfX(x: number): Lane {
+  if (x < 42) return 'L';
+  if (x > 58) return 'R';
+  return 'C';
+}
+
+/** A stateless-hash roll keyed on (seed, inc, side, shotIndex) under a caller salt. */
+function beatRng(seed: number, inc: number, side: number, shotIdx: number, salt: number): number {
+  const m =
+    (((seed * 73856093) ^ (inc * 19349663) ^ (side * 83492791) ^ (shotIdx * 2654435761) ^ (salt * 40503)) >>> 0);
+  return seededRandom(m);
+}
+
+/**
+ * Deterministically pick the shooter for one shot from `xi`, positioned by `formation`.
+ * Candidates = attacking-band cards whose formation slot sits in the shot's lane; the
+ * pick index is seeded on (seed, inc, side, shotIdx) with a NEW salt (varies shot-to-
+ * shot, reproducible). Fallbacks: any attacking card → any outfield card → null.
+ */
+function pickShooter(
+  xi: Card[],
+  formation: Formation,
+  lane: Lane,
+  seed: number,
+  inc: number,
+  side: number,
+  shotIdx: number,
+  committedIds: Set<number> | null,
+): Card | null {
+  // Map each card to its formation slot's lane via index (xi[i] fills slots[i]).
+  const laneCandidates: Card[] = [];
+  const attackingAny: Card[] = [];
+  const outfieldAny: Card[] = [];
+  for (let i = 0; i < xi.length; i++) {
+    const card = xi[i];
+    if (!card) continue;
+    // If a committed-attacker set is supplied, prefer it for the scorer (the players
+    // actually pushed forward this increment); slot/lane mapping still uses the full XI.
+    if (committedIds && committedIds.size > 0 && !committedIds.has(card.id)) continue;
+    const slot = formation.slots[i];
+    const isGK = card.position === 'GK' || slot?.type === 'GK';
+    if (isGK) continue;
+    outfieldAny.push(card);
+    const band = slot ? bandOf(cellOf(slot.x, slot.y)) : null;
+    const attacking = ATTACKING_POSITIONS.has(card.position) || band === 'ATT';
+    if (!attacking) continue;
+    attackingAny.push(card);
+    const slotLane = slot ? laneOfX(slot.x) : 'C';
+    if (slotLane === lane) laneCandidates.push(card);
+  }
+  const pool = laneCandidates.length ? laneCandidates
+    : attackingAny.length ? attackingAny
+    : outfieldAny.length ? outfieldAny
+    : null;
+  if (!pool) return null;
+  const idx = Math.floor(beatRng(seed, inc, side, shotIdx, 12) * pool.length);
+  return pool[Math.min(pool.length - 1, idx)];
+}
+
+const LANE_WORD: Record<Lane, string> = { L: 'left', C: 'middle', R: 'right' };
+
+/** Terse one-liner for a beat, with NEW-salt seeded phrasing variety. */
+function beatText(
+  outcome: 'goal' | 'save' | 'miss',
+  lane: Lane,
+  scorerName: string | null,
+  seed: number,
+  inc: number,
+  side: number,
+  shotIdx: number,
+): string {
+  const subject = scorerName ?? 'The attack';
+  const laneWord = LANE_WORD[lane];
+  const variety = beatRng(seed, inc, side, shotIdx, 13);
+  if (outcome === 'goal') {
+    const pool = [
+      `${subject} finishes from the ${laneWord} — GOAL!`,
+      `${subject} buries it from the ${laneWord} — GOAL!`,
+      `${subject} strikes from the ${laneWord} — GOAL!`,
+    ];
+    return pool[Math.floor(variety * pool.length)];
+  }
+  if (outcome === 'save') {
+    const pool = [
+      `${subject} is denied — saved`,
+      `${subject} stopped — saved`,
+      `${subject} thwarted — saved`,
+    ];
+    return pool[Math.floor(variety * pool.length)];
+  }
+  // miss
+  const offWord = laneWord === 'middle' ? 'over' : 'wide';
+  const pool = [
+    `${subject} drags it ${offWord}`,
+    `${subject} skews it ${offWord}`,
+    `${subject} fires it ${offWord}`,
+  ];
+  return pool[Math.floor(variety * pool.length)];
+}
+
+/**
+ * Build the per-shot commentary beats for one side, in shot order. `side` is 0 (you)
+ * or 1 (opp), matching the possession RNG side index so beats stay aligned with the
+ * shots they describe.
+ */
+function buildBeats(
+  shots: Shot[],
+  xi: Card[],
+  formation: Formation,
+  sideLabel: 'you' | 'opp',
+  side: number,
+  minute: number,
+  seed: number,
+  inc: number,
+  committedIds: Set<number> | null,
+): MatchBeat[] {
+  return shots.map((shot, shotIdx) => {
+    const outcome: 'goal' | 'save' | 'miss' = shot.goal
+      ? 'goal'
+      : shot.xg >= SAVE_BEAT_XG ? 'save' : 'miss';
+    const scorer = pickShooter(xi, formation, shot.lane, seed, inc, side, shotIdx, committedIds);
+    const scorerId = scorer?.id ?? null;
+    const scorerName = scorer?.name ?? null;
+    return {
+      minute,
+      side: sideLabel,
+      lane: shot.lane,
+      xg: shot.xg,
+      outcome,
+      scorerId,
+      scorerName,
+      text: beatText(outcome, shot.lane, scorerName, seed, inc, side, shotIdx),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // 4. resolveIncrement
 // ---------------------------------------------------------------------------
 
@@ -997,6 +1166,15 @@ export function resolveIncrement(
     eventType = 'chance';
   }
 
+  // Per-shot commentary beats (additive, deterministic): your shots then the
+  // opponent's, in engine order. side index matches the possession RNG (0=you, 1=opp).
+  // YOUR scorer pool prefers the committed attackers; OPP uses its full positioned XI.
+  const committedIds = state.attackerIds && state.attackerIds.size > 0 ? state.attackerIds : null;
+  const beats: MatchBeat[] = [
+    ...buildBeats(period.you.shots, state.xi, state.formation, 'you', 0, minute, seed, state.currentIncrement, committedIds),
+    ...buildBeats(period.opp.shots, state.opponentXI, state.opponentFormation, 'opp', 1, minute, seed, state.currentIncrement, null),
+  ];
+
   return {
     minute,
     split,
@@ -1019,6 +1197,7 @@ export function resolveIncrement(
     yourShots: period.you.shots,
     opponentShots: period.opp.shots,
     event: { minute, text: eventText, type: eventType },
+    beats,
   };
 }
 

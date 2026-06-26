@@ -80,6 +80,19 @@ const STYLE_FORMATION: Record<string, string> = {
 /** Round power budget → opponent base power (DESIGN §7 difficulty dial). */
 const ROUND_POWER = [76, 81, 86, 91, 96];
 
+/** Fictional surname pool for opponent XI display names. Names only — never feeds
+ *  match math. Seeded pick (NEW salt) + per-XI dedup so each opponent reads as a real
+ *  named side. ~50 invented surnames, no real footballers. */
+const SURNAMES = [
+  'Voss', 'Renard', 'Haldor', 'Kessler', 'Brandt', 'Marek', 'Sorin', 'Calder',
+  'Drobny', 'Ferreira', 'Lindqvist', 'Okoro', 'Vasquez', 'Petrov', 'Norebo',
+  'Achterberg', 'Salvi', 'Konno', 'Dembele', 'Ravel', 'Tessier', 'Olund',
+  'Berisha', 'Maganga', 'Ivankov', 'Quintero', 'Faxe', 'Holloway', 'Strand',
+  'Reuben', 'Costa', 'Adeyemi', 'Vornov', 'Larsson', 'Belmonte', 'Hage',
+  'Cisse', 'Truong', 'Maldini', 'Roux', 'Skoglund', 'Vargic', 'Nieto',
+  'Halversen', 'Okafor', 'Pasic', 'Lindholm', 'Esquivel', 'Brunner', 'Talbot',
+];
+
 function pick<T>(arr: T[], roll: number): T {
   return arr[Math.min(arr.length - 1, Math.floor(roll * arr.length))];
 }
@@ -95,15 +108,24 @@ export function generateOpponentXI(
   const formation = getFormation(STYLE_FORMATION[style] ?? '4-3-3');
   const basePower = ROUND_POWER[Math.min(Math.max(round - 1, 0), ROUND_POWER.length - 1)];
 
+  const usedSurnames = new Set<string>();
   const xi: Card[] = formation.slots.map((slot, i) => {
     const profiles = SLOT_PROFILES[slot.type] ?? SLOT_PROFILES.CM;
     const profile = pick(profiles, seededRandom(seed * 31 + i * 97 + round * 13));
     // ±6 seeded jitter around the round's base power.
     const jitter = Math.round((seededRandom(seed * 17 + i * 53 + round * 7) - 0.5) * 12);
     const power = Math.max(60, Math.min(99, basePower + jitter));
+    // Display surname: NEW salt distinct from the power/profile rolls, deduped within
+    // this XI (advance to the next candidate on collision). Name only — no math impact.
+    let nameIdx = Math.floor(seededRandom(seed * 911 + i * 2399 + round * 53) * SURNAMES.length);
+    for (let n = 0; n < SURNAMES.length && usedSurnames.has(SURNAMES[nameIdx]); n++) {
+      nameIdx = (nameIdx + 1) % SURNAMES.length;
+    }
+    const surname = SURNAMES[nameIdx];
+    usedSurnames.add(surname);
     const card: Card = {
       id: 9000 + i,
-      name: `${formation.id} ${slot.label}`,
+      name: surname,
       position: profile.position,
       archetype: profile.archetype,
       tacticalRole: profile.role,
