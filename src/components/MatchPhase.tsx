@@ -224,84 +224,71 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
         />
       )}
 
-      {subPhase === 'finished' && (
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-          }}
-        >
+      {subPhase === 'finished' && (() => {
+        const win = matchState.yourGoals > matchState.opponentGoals;
+        const loss = matchState.yourGoals < matchState.opponentGoals;
+        const resultColor = win ? 'var(--success)' : loss ? 'var(--danger)' : 'var(--gold)';
+        return (
           <div
             style={{
-              fontFamily: 'var(--font-display, sans-serif)',
-              fontSize: 18,
-              color: 'var(--cream, #f5f0e8)',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 10,
+              padding: '0 24px',
             }}
           >
-            FULL TIME
+            <div style={{ fontFamily: 'var(--font-pixel, sans-serif)', fontSize: 14, letterSpacing: 1, color: 'var(--dust)' }}>
+              FULL TIME
+            </div>
+            <div
+              className="score-pop"
+              style={{
+                fontFamily: 'var(--font-pixel, sans-serif)',
+                fontSize: 48,
+                color: 'var(--line-white)',
+                lineHeight: 1,
+                textShadow: '0 3px 0 var(--ink-black)',
+              }}
+            >
+              {matchState.yourGoals}–{matchState.opponentGoals}
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-pixel, sans-serif)',
+                fontSize: 18,
+                marginTop: 2,
+                color: resultColor,
+                textShadow: '0 2px 0 var(--ink-black)',
+              }}
+            >
+              {win ? 'WIN' : loss ? 'LOSS' : 'DRAW'}
+            </div>
+            <button
+              onClick={handleMatchFinished}
+              className="advance-btn-pulse"
+              style={{
+                marginTop: 14,
+                width: '100%',
+                maxWidth: 320,
+                padding: '13px 0',
+                borderRadius: 'var(--radius)',
+                border: '2px solid var(--ink-black)',
+                boxShadow: '0 4px 0 0 var(--ink-black)',
+                background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))',
+                color: 'var(--cream)',
+                fontFamily: 'var(--font-pixel, sans-serif)',
+                fontSize: 15,
+                cursor: 'pointer',
+              }}
+            >
+              CONTINUE →
+            </button>
           </div>
-          <div
-            style={{
-              fontFamily: 'var(--font-display, sans-serif)',
-              fontSize: 40,
-              color: 'var(--cream, #f5f0e8)',
-              lineHeight: 1,
-            }}
-          >
-            {matchState.yourGoals} - {matchState.opponentGoals}
-          </div>
-          <div
-            style={{
-              fontFamily: 'var(--font-display, sans-serif)',
-              fontSize: 16,
-              marginTop: 6,
-              color:
-                matchState.yourGoals > matchState.opponentGoals
-                  ? '#22c55e'
-                  : matchState.yourGoals < matchState.opponentGoals
-                    ? '#ef4444'
-                    : '#f59e0b',
-            }}
-          >
-            {matchState.yourGoals > matchState.opponentGoals
-              ? 'WIN'
-              : matchState.yourGoals < matchState.opponentGoals
-                ? 'LOSS'
-                : 'DRAW'}
-          </div>
-          <button
-            onClick={handleMatchFinished}
-            style={{
-              marginTop: 12,
-              width: '100%',
-              maxWidth: 320,
-              padding: '12px 0',
-              borderRadius: 8,
-              border: 'none',
-              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-              color: '#1a1a1a',
-              fontFamily: 'var(--font-display, sans-serif)',
-              fontSize: 16,
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(245,158,11,0.4)',
-            }}
-          >
-            Continue
-          </button>
-        </div>
-      )}
-
-      {/* Pulse animation */}
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.6; }
-        }
-      `}</style>
+        );
+      })()}
     </div>
   );
 }

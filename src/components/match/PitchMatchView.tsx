@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MatchV5State, IncrementResult } from '../../lib/match-v5';
-import { getOpponentBaselines } from '../../lib/match-v5';
 import type { Formation, FormationSlot } from '../../lib/formations';
 import { getFormation } from '../../lib/formations';
-import type { Band } from '../../lib/field';
+import type { Band, Lane } from '../../lib/field';
 import { cellOf, bandOf } from '../../lib/field';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard, TacticSlots } from '../../lib/tactics';
@@ -13,6 +12,7 @@ import type { OpponentBuild, OpponentPlayer } from '../../lib/run';
 import type { Card } from '../../lib/scoring';
 import CardModal from '../cards/CardModal';
 import type { GameCardModel } from '../cards/GameCard';
+import { PIXEL, lastName } from '../cards/cardTokens';
 
 interface PitchMatchViewProps {
   matchState: MatchV5State;
@@ -32,10 +32,15 @@ interface PitchMatchViewProps {
   onContinue: () => void;
 }
 
-const LINE = 'rgba(255,255,255,0.12)';
-const GOAL_NODE = { x: 50, y: 7 };
-const STEP_MS = 320;
-const lastName = (name: string) => name.split(' ').slice(-1)[0];
+// ---------------------------------------------------------------------------
+// Tokens & geometry
+// ---------------------------------------------------------------------------
+
+const LINE = 'rgba(242,246,239,0.12)';
+const LANE_X: Record<Lane, number> = { L: 22, C: 50, R: 78 };
+const YOUR_GOAL_Y = 6;   // your XI attacks UP toward the top goal
+const OPP_GOAL_Y = 94;   // the opponent attacks DOWN toward the bottom goal
+const MIDFIELD = { x: 50, y: 48 };
 const cleanCommentary = (text: string) => { const d = text.indexOf('— '); return d >= 0 ? text.slice(d + 2) : text; };
 
 interface PitchSpot {
@@ -83,6 +88,133 @@ function rivalPitch(opponentBuild: OpponentBuild): PitchSpot[] {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Event-driven possession timeline
+//
+// The animation is built ENTIRELY from the engine's IncrementResult — the same
+// numbers that decide the score. Each beat reflects a real possession:
+//   • goal  → ball runs the shot's lane, net shakes, goalmouth flares, GOAL erupts.
+//   • shot  → ball runs the lane, then a muted SAVED / OFF-TARGET flash (by xG).
+//   • idle  → a grey fizzle in midfield: a possession that went nowhere.
+// Distinct outcomes look distinct; the sequence ends on the increment's tally.
+// Pure + deterministic (no RNG), so a given increment always animates the same.
+// ---------------------------------------------------------------------------
+
+type BeatKind = 'goal' | 'save' | 'miss' | 'idle';
+interface Beat {
+  side: 'you' | 'opp';
+  kind: BeatKind;
+  lane: Lane;
+  xg: number;
+  label: string;
+}
+
+const SAVE_XG = 0.22; // a missed shot above this read as a goalkeeper's save, else off target
+
+function buildTimeline(result: IncrementResult): Beat[] {
+  const beats: Beat[] = [];
+  const make = (side: 'you' | 'opp', shots: typeof result.yourShots) => {
+    for (const s of shots) {
+      if (s.goal) beats.push({ side, kind: 'goal', lane: s.lane, xg: s.xg, label: 'GOAL!' });
+      else if (s.xg >= SAVE_XG) beats.push({ side, kind: 'save', lane: s.lane, xg: s.xg, label: side === 'you' ? 'SAVED' : 'SAVED!' });
+      else beats.push({ side, kind: 'miss', lane: s.lane, xg: s.xg, label: 'OFF TARGET' });
+    }
+  };
+  make('you', result.yourShots);
+  make('opp', result.opponentShots);
+
+  // A couple of "nothing" possessions so wasted control reads as muted, not absent.
+  // Capped so the period stays snappy; goals/shots are never dropped.
+  const yourIdle = Math.max(0, result.yourPossessions - result.yourShots.length);
+  const oppIdle = Math.max(0, result.opponentPossessions - result.opponentShots.length);
+  const idleBeats: Beat[] = [];
+  if (yourIdle > 0) idleBeats.push({ side: 'you', kind: 'idle', lane: 'C', xg: 0, label: '' });
+  if (oppIdle > 0) idleBeats.push({ side: 'opp', kind: 'idle', lane: 'C', xg: 0, label: '' });
+
+  // Order: lead with a beat of build-up (idle) for tempo, then the meaningful
+  // shots in the engine's order, ending on the decisive ones. Deterministic.
+  const shotsBeats = beats;
+  const ordered: Beat[] = [];
+  if (idleBeats[0]) ordered.push(idleBeats[0]);
+  // Interleave shots so both sides' moments are visible, goals last within each run.
+  const nonGoal = shotsBeats.filter((b) => b.kind !== 'goal');
+  const goals = shotsBeats.filter((b) => b.kind === 'goal');
+  ordered.push(...nonGoal);
+  if (idleBeats[1] && ordered.length < 3) ordered.push(idleBeats[1]);
+  ordered.push(...goals);
+
+  // If literally nothing happened, still show one quiet possession so the period
+  // never feels frozen.
+  if (ordered.length === 0) ordered.push({ side: 'you', kind: 'idle', lane: 'C', xg: 0, label: '' });
+  return ordered.slice(0, 6);
+}
+
+// Beat pacing (ms): travel for shots, a touch quicker for idle build-up.
+const BEAT_MS: Record<BeatKind, number> = { goal: 1500, save: 900, miss: 850, idle: 650 };
+
+// Optional slow-motion multiplier — only ever set by the headless verification
+// harness so each beat is long enough to screenshot. Never set in product.
+function animScale(): number {
+  if (typeof window === 'undefined') return 1;
+  const w = window as unknown as { __KC_ANIM_SCALE__?: number };
+  return typeof w.__KC_ANIM_SCALE__ === 'number' && w.__KC_ANIM_SCALE__ > 0 ? w.__KC_ANIM_SCALE__ : 1;
+}
+
+// ---------------------------------------------------------------------------
+// PossessionClock — the event-driven beat sequencer (ISSUE 7).
+//
+// A self-contained, KEYED-per-increment unit: the parent renders one of these
+// keyed by the increment identity, so every resolution gets a fresh instance
+// with a clean lifecycle (no stale closures, no dropped timers, no re-arm bugs).
+// It owns no UI — it just runs the clock and reports the live beat + running
+// score + completion up to the parent via stable callbacks.
+// ---------------------------------------------------------------------------
+
+interface PossessionClockProps {
+  timeline: Beat[];
+  baseYou: number;
+  baseOpp: number;
+  onState: (beatIdx: number, you: number, opp: number, shake: 'you' | 'opp' | null) => void;
+  onDone: () => void;
+}
+
+function PossessionClock({ timeline, baseYou, baseOpp, onState, onDone }: PossessionClockProps) {
+  // Stable refs to the latest callbacks so the run-once effect never restarts.
+  const cb = useRef({ onState, onDone });
+  cb.current = { onState, onDone };
+
+  useEffect(() => {
+    const scale = animScale();
+    const durs = timeline.map((b) => BEAT_MS[b.kind] * scale);
+    let you = baseYou;
+    let opp = baseOpp;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let t = 0;
+
+    cb.current.onState(0, you, opp, null);
+    timeline.forEach((b, i) => {
+      const d = durs[i];
+      if (b.kind === 'goal') {
+        timers.push(setTimeout(() => {
+          if (b.side === 'you') you += 1; else opp += 1;
+          cb.current.onState(i, you, opp, b.side);
+          timers.push(setTimeout(() => cb.current.onState(i, you, opp, null), 560));
+        }, t + d * 0.35));
+      }
+      // Enter beat i (idle/shot reveal) at its start.
+      timers.push(setTimeout(() => cb.current.onState(i, you, opp, null), t));
+      t += d;
+    });
+    timers.push(setTimeout(() => { cb.current.onState(timeline.length, you, opp, null); cb.current.onDone(); }, t));
+
+    return () => timers.forEach(clearTimeout);
+    // Run exactly once per mount; the parent remounts via `key` for each increment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return null;
+}
+
 export default function PitchMatchView({
   matchState, formation, jokers, tacticSlots, availableTactics, ownedFormations,
   opponentBuild, nextMinute, mode, currentResult,
@@ -91,235 +223,364 @@ export default function PitchMatchView({
   const [trayOpen, setTrayOpen] = useState(false);
   const [oppView, setOppView] = useState(false);
   const [tickerOpen, setTickerOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [benchSel, setBenchSel] = useState<number | null>(null);
-  const [drag, setDrag] = useState<{ kind: 'bench' | 'pitch'; id: number } | null>(null);
   const [formSheet, setFormSheet] = useState(false);
-  const [ballIdx, setBallIdx] = useState(-1);
-  const [showOutcome, setShowOutcome] = useState(false);
   const [modal, setModal] = useState<GameCardModel | null>(null);
 
+  // Pointer drag: a tap inspects, a drag moves. We track movement to disambiguate.
+  const [drag, setDrag] = useState<{ kind: 'bench' | 'pitch'; id: number } | null>(null);
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const [hoverTargetId, setHoverTargetId] = useState<number | null>(null);
+  const pointerRef = useRef<{ id: number; kind: 'bench' | 'pitch'; startX: number; startY: number; moved: boolean } | null>(null);
+  const pitchRef = useRef<HTMLDivElement | null>(null);
+
+  // Resolve animation — driven by the keyed PossessionClock child below.
+  const [beatIdx, setBeatIdx] = useState(-1);
+  const [animGoals, setAnimGoals] = useState<{ you: number; opp: number } | null>(null);
+  const [shake, setShake] = useState<'you' | 'opp' | null>(null);
+  const [resolveDone, setResolveDone] = useState(false);
+
   const { bench, yourGoals, opponentGoals, xi, subsRemaining } = matchState;
-  const baseline = useMemo(() => getOpponentBaselines(matchState.opponentRound, matchState.opponentStyle, matchState.currentIncrement, matchState), [matchState]);
-  const threat = ((baseline.attack + baseline.defence) / 115).toFixed(1);
+
+  // ISSUE 1 — average opposition strength: the mean POWER of the opponent XI.
+  const oppStrength = useMemo(() => {
+    const xs = opponentBuild.xi;
+    if (!xs.length) return 0;
+    return Math.round(xs.reduce((s, p) => s + p.power, 0) / xs.length);
+  }, [opponentBuild]);
+
   const youSpots = useMemo(() => yourPitch(matchState, formation), [matchState, formation]);
-  const spots = oppView ? rivalPitch(opponentBuild) : youSpots;
+  const rivalSpots = useMemo(() => rivalPitch(opponentBuild), [opponentBuild]);
+  const spots = oppView ? rivalSpots : youSpots;
 
-  // The move sequence comes from the engine's positioning result.
-  const orderedAttack = useMemo(() => {
-    const order = currentResult?.split.attackingOrder ?? [];
-    return order.map((id) => youSpots.find((s) => s.cardId === id)).filter((s): s is PitchSpot => !!s);
-  }, [currentResult, youSpots]);
+  // ISSUE 7 — the timeline comes from the real increment data.
+  const timeline = useMemo(() => (currentResult ? buildTimeline(currentResult) : []), [currentResult]);
+  const beat = beatIdx >= 0 && beatIdx < timeline.length ? timeline[beatIdx] : null;
 
+  // Reset the playhead when we leave resolve mode (back to planning).
   useEffect(() => {
-    setShowOutcome(false);
-    if (mode !== 'resolve' || !currentResult) { setBallIdx(-1); return; }
-    if (orderedAttack.length === 0) { setBallIdx(-1); setShowOutcome(true); return; }
-    setBallIdx(0);
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    for (let i = 1; i <= orderedAttack.length; i++) timers.push(setTimeout(() => setBallIdx(i), i * STEP_MS));
-    timers.push(setTimeout(() => setShowOutcome(true), (orderedAttack.length + 1) * STEP_MS));
-    return () => timers.forEach(clearTimeout);
-  }, [mode, currentResult, orderedAttack.length]);
+    if (mode === 'resolve') return;
+    const r = setTimeout(() => { setBeatIdx(-1); setAnimGoals(null); setShake(null); setResolveDone(false); }, 0);
+    return () => clearTimeout(r);
+  }, [mode]);
 
+  const resolving = mode === 'resolve';
+  const sequenceDone = resolving && (resolveDone || (timeline.length > 0 && beatIdx >= timeline.length));
+
+  // Feed (ticker)
   const feed = useMemo(() => {
     const played = matchState.scores.map((r) => ({ minute: r.minute, text: cleanCommentary(r.event.text), type: r.event.type }));
-    if (mode === 'resolve' && currentResult) played.push({ minute: currentResult.minute, text: cleanCommentary(currentResult.event.text), type: currentResult.event.type });
+    if (resolving && currentResult) played.push({ minute: currentResult.minute, text: cleanCommentary(currentResult.event.text), type: currentResult.event.type });
     return played;
-  }, [matchState.scores, mode, currentResult]);
-  const baseLines = feed.length ? feed.slice(-3) : [{ minute: nextMinute, text: 'Set your shape — attack and defence follow where your players stand.', type: 'chance' as const }];
+  }, [matchState.scores, resolving, currentResult]);
+
+  // ISSUE 6 — sensible pre-kickoff guidance (no fake minute, styled as a coach prompt).
+  const preKickoff = feed.length === 0 && !resolving;
+  const baseLines = feed.length ? feed.slice(-3) : [];
   const tickerLines: ({ minute: number; text: string; type: string } | null)[] = [...baseLines];
   while (tickerLines.length < 3) tickerLines.unshift(null);
 
   const manager = jokers[0] ?? null;
   const deployedIds = new Set(tacticSlots.slots.filter(Boolean).map((t) => t!.id));
-  const selected = selectedId !== null ? xi.find((c) => c.id === selectedId) ?? null : null;
   const badge = opponentBuild.name.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'OPP';
-  const colour = (type: string) => (type === 'goal-yours' ? '#86efac' : type === 'goal-opponent' ? '#fca5a5' : 'var(--cream-soft,#d9d0b8)');
-  const moving = !oppView && mode === 'plan' && (benchSel !== null || drag !== null);
+  const colour = (type: string) => (type === 'goal-yours' ? 'var(--success)' : type === 'goal-opponent' ? 'var(--danger)' : 'var(--cream-soft)');
+  // `drag` is only set once movement crosses the threshold, so its presence
+  // already means a real drag is underway (taps never set it).
+  const moving = !oppView && mode === 'plan' && drag !== null;
 
-  const activeCardId = !oppView && ballIdx >= 0 && ballIdx < orderedAttack.length ? orderedAttack[ballIdx].cardId : null;
-  const finisherSpot = orderedAttack.at(-1) ?? null;
-  const ballArrived = ballIdx >= orderedAttack.length - 1 && orderedAttack.length > 0;
-  const ballPos = ballIdx < 0 ? null : (ballIdx < orderedAttack.length ? { x: orderedAttack[ballIdx].slot.x, y: orderedAttack[ballIdx].slot.y } : GOAL_NODE);
-  const goalThisBeat = mode === 'resolve' && !!currentResult?.yourScored;
-  const concededThisBeat = mode === 'resolve' && !!currentResult?.opponentScored;
-  const firingCard = ballArrived && finisherSpot?.cardId ? xi.find((c) => c.id === finisherSpot.cardId) ?? null : null;
+  const displayGoals = animGoals ?? { you: yourGoals, opp: opponentGoals };
 
-  const onDropPlayer = (targetId: number) => {
-    if (!drag) return;
-    if (drag.kind === 'bench') onSub(targetId, drag.id);
-    else if (drag.id !== targetId) onReassign(drag.id, targetId);
-    setDrag(null); setBenchSel(null);
+  // Receives the live beat + running score from the keyed PossessionClock.
+  const handleClockState = (idx: number, you: number, opp: number, sh: 'you' | 'opp' | null) => {
+    setBeatIdx(idx);
+    setAnimGoals({ you, opp });
+    setShake(sh);
+  };
+  const handleClockDone = () => setResolveDone(true);
+
+  // ---- pointer drag/inspect on a player token --------------------------------
+  const inspectCard = (cardId: number | undefined) => {
+    if (cardId === undefined) return;
+    const c = xi.find((p) => p.id === cardId);
+    if (c) setModal({ variant: 'player', card: c as Card });
   };
 
-  return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
-      <style>{`
-        @keyframes kcPop { from { transform: translate(-50%,-50%) scale(0.3); opacity: 0 } to { transform: translate(-50%,-50%) scale(1); opacity: 1 } }
-        @keyframes kcFire { 0%,100% { box-shadow: 0 0 0 0 rgba(251,191,36,0) } 50% { box-shadow: 0 0 0 7px rgba(251,191,36,0.45) } }
-        @keyframes kcFloat { 0% { transform: translate(-50%,4px); opacity: 0 } 100% { transform: translate(-50%,-14px); opacity: 1 } }
-        @keyframes kcGoal { 0% { opacity: 0; transform: translate(-50%,-50%) scale(0.7) } 18% { opacity: 1; transform: translate(-50%,-50%) scale(1.06) } 78% { opacity: 1 } 100% { opacity: 0; transform: translate(-50%,-50%) scale(1) } }
-        @keyframes kcSlide { from { transform: translateX(100%) } to { transform: translateX(0) } }
-        .kc-pop { animation: kcPop 280ms cubic-bezier(.2,.8,.3,1.2) both }
-        .kc-fire { animation: kcFire 900ms ease-in-out infinite }
-      `}</style>
+  const beginPointer = (kind: 'bench' | 'pitch', id: number, e: React.PointerEvent) => {
+    if (mode !== 'plan' || oppView) return;
+    pointerRef.current = { id, kind, startX: e.clientX, startY: e.clientY, moved: false };
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
 
-      {/* Header */}
+  const movePointer = (e: React.PointerEvent) => {
+    const p = pointerRef.current;
+    if (!p) return;
+    const dx = e.clientX - p.startX;
+    const dy = e.clientY - p.startY;
+    if (!p.moved && Math.hypot(dx, dy) > 8) {
+      p.moved = true;
+      setDrag({ kind: p.kind, id: p.id });
+    }
+    if (p.moved) {
+      const rect = pitchRef.current?.getBoundingClientRect();
+      if (rect) {
+        setDragPos({ x: ((e.clientX - rect.left) / rect.width) * 100, y: ((e.clientY - rect.top) / rect.height) * 100 });
+        // Find the nearest pitch player under the pointer for highlight.
+        let best: number | null = null; let bestD = Infinity;
+        for (const s of youSpots) {
+          if (s.cardId === undefined || s.isGK || s.cardId === p.id) continue;
+          const sx = rect.left + (s.slot.x / 100) * rect.width;
+          const sy = rect.top + (s.slot.y / 100) * rect.height;
+          const d = Math.hypot(e.clientX - sx, e.clientY - sy);
+          if (d < bestD && d < 60) { bestD = d; best = s.cardId; }
+        }
+        setHoverTargetId(best);
+      }
+    }
+  };
+
+  const endPointer = (e: React.PointerEvent) => {
+    const p = pointerRef.current;
+    pointerRef.current = null;
+    if (!p) return;
+    if (!p.moved) {
+      // A tap → inspect (pitch players are full cards; bench too).
+      const card = (p.kind === 'pitch' ? xi : bench).find((c) => c.id === p.id);
+      if (card) setModal({ variant: 'player', card: card as Card });
+    } else if (hoverTargetId !== null) {
+      // ISSUE 4 — a drag onto a player: bench → sub in; pitch → swap slots.
+      if (p.kind === 'bench') onSub(hoverTargetId, p.id);
+      else if (p.id !== hoverTargetId) onReassign(p.id, hoverTargetId);
+    }
+    setDrag(null); setDragPos(null); setHoverTargetId(null);
+    e.stopPropagation();
+  };
+
+  const dragCard = drag ? (drag.kind === 'pitch' ? xi : bench).find((c) => c.id === drag.id) ?? null : null;
+  const dragSpot = drag?.kind === 'pitch' ? youSpots.find((s) => s.cardId === drag.id) : null;
+
+  // ---- resolve: where the ball travels (lane × target goalmouth) ------------
+  const ballLaneX = beat ? LANE_X[beat.lane] : 50;
+  const targetGoalY = beat ? (beat.side === 'you' ? YOUR_GOAL_Y : OPP_GOAL_Y) : 50;
+  // Slow-mo (verification only) also stretches the marker CSS animations so the
+  // ball / flash / eruption stay on screen long enough to capture. 1× in product.
+  const aScale = animScale();
+  const dur = (ms: number) => (aScale === 1 ? undefined : `${Math.round(ms * aScale)}ms`);
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}
+      onPointerMove={drag ? movePointer : undefined}
+      onPointerUp={drag ? endPointer : undefined}
+    >
+      {/* The event-driven possession clock — keyed per increment so each
+          resolution gets a clean lifecycle (ISSUE 7). Renders nothing itself. */}
+      {resolving && currentResult && (
+        <PossessionClock
+          key={matchState.currentIncrement}
+          timeline={timeline}
+          baseYou={yourGoals}
+          baseOpp={opponentGoals}
+          onState={handleClockState}
+          onDone={handleClockDone}
+        />
+      )}
+
+      {/* Header — opponent identity + average strength, the live score, view toggle */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 16px 8px', gap: 12, flexShrink: 0 }}>
-        <div style={{ display: 'flex', gap: 11, alignItems: 'center', minWidth: 0 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 9, background: 'linear-gradient(160deg,#8b1d1d,#5c1212)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fde2e2', flexShrink: 0 }}>{badge}</div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 'var(--radius-sm)', background: 'linear-gradient(160deg, var(--kit-red), #9e1f1a)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: PIXEL, fontSize: 11, color: 'var(--line-white)', flexShrink: 0 }}>{badge}</div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--cream,#f5f0e8)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opponentBuild.name}</div>
-            <div style={{ fontSize: 11, color: 'var(--dust,#8a7560)' }}>threat <span style={{ color: '#fca5a5' }}>{'\u{1F525}'} {threat}</span></div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--cream)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opponentBuild.name}</div>
+            {/* ISSUE 1 — clear average opposition strength badge */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1 }}>AVG</span>
+              <span style={{ fontSize: 11, color: 'var(--dust)' }}>OPP STRENGTH <b style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--line-white)' }}>{oppStrength}</b></span>
+            </div>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'var(--font-display,sans-serif)', fontSize: 24, lineHeight: 1, color: 'var(--cream,#f5f0e8)' }}>{yourGoals} – {opponentGoals}</div>
-          <div style={{ fontSize: 11, color: 'var(--dust,#8a7560)', marginTop: 2 }}>{String(nextMinute).padStart(2, '0')}:00</div>
-          <button onClick={() => setOppView((v) => !v)} style={{ marginTop: 3, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 11, color: oppView ? '#fca5a5' : '#60a5fa', fontWeight: 600 }}>{oppView ? 'viewing Rivals' : 'viewing your XI'}</button>
+          <div style={{ fontFamily: PIXEL, fontSize: 22, lineHeight: 1, color: 'var(--line-white)', display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+            <span className={shake === 'you' ? 'score-tick' : undefined} style={{ display: 'inline-block', color: shake === 'you' ? 'var(--success)' : 'var(--line-white)' }}>{displayGoals.you}</span>
+            <span style={{ color: 'var(--dust)' }}>–</span>
+            <span className={shake === 'opp' ? 'score-tick' : undefined} style={{ display: 'inline-block', color: shake === 'opp' ? 'var(--danger)' : 'var(--line-white)' }}>{displayGoals.opp}</span>
+          </div>
+          <div style={{ fontFamily: PIXEL, fontSize: 9, color: 'var(--dust)', marginTop: 4 }}>{String(nextMinute).padStart(2, '0')}:00</div>
         </div>
       </div>
 
-      {/* Ticker — three lines, tap to expand */}
-      <button onClick={() => setTickerOpen(true)} style={{ textAlign: 'left', margin: '0 16px 10px', padding: '8px 12px', borderRadius: 12, background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, cursor: 'pointer', display: 'grid', gap: 2 }}>
-        {tickerLines.map((e, i) => (
-          <div key={i} style={{ display: 'flex', gap: 10, fontSize: 12, height: 17, lineHeight: '17px', color: e ? colour(e.type) : 'transparent', opacity: e ? 0.5 + (i / 2) * 0.5 : 1 }}>
-            <span style={{ color: 'var(--dust,#8a7560)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, visibility: e ? 'visible' : 'hidden' }}>{e ? `${String(e.minute).padStart(2, '0')}:00` : '00:00'}</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e ? e.text : ''}</span>
+      {/* Ticker — three lines, tap to expand. Pre-kickoff shows a coach prompt. */}
+      <button onClick={() => setTickerOpen(true)} style={{ textAlign: 'left', margin: '0 16px 10px', padding: '8px 12px', borderRadius: 'var(--radius)', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', flexShrink: 0, cursor: 'pointer', display: 'grid', gap: 2 }}>
+        {preKickoff ? (
+          // ISSUE 6 — guidance, not a fake match event (no minute stamp).
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 51 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--amber)', borderRadius: 3, padding: '3px 5px', lineHeight: 1, flexShrink: 0 }}>COACH</span>
+            <span style={{ fontSize: 12, color: 'var(--cream-soft)', lineHeight: 1.35 }}>Set your XI and shape, then kick off. Drag a player to swap; tap to inspect.</span>
           </div>
-        ))}
+        ) : (
+          tickerLines.map((e, i) => (
+            <div key={i} style={{ display: 'flex', gap: 10, fontSize: 12, height: 17, lineHeight: '17px', color: e ? colour(e.type) : 'transparent', opacity: e ? 0.5 + (i / 2) * 0.5 : 1 }}>
+              <span style={{ color: 'var(--dust)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, visibility: e ? 'visible' : 'hidden' }}>{e ? `${String(e.minute).padStart(2, '0')}:00` : '00:00'}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e ? e.text : ''}</span>
+            </div>
+          ))
+        )}
       </button>
 
       {/* Pitch */}
-      <div style={{ position: 'relative', flex: 1, minHeight: 0, margin: '0 16px', borderRadius: 18, border: '1px solid rgba(255,255,255,0.08)', background: oppView ? 'rgba(139,29,29,0.05)' : 'rgba(255,255,255,0.015)', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', left: '50%', top: 10, bottom: 10, width: 1, borderLeft: `1px dashed ${LINE}` }} />
+      <div ref={pitchRef} style={{ position: 'relative', flex: 1, minHeight: 0, margin: '0 16px', borderRadius: 'var(--radius-lg)', border: '2px solid var(--ink-black)', background: oppView
+        ? 'repeating-linear-gradient(180deg, rgba(158,31,26,0.16) 0px, rgba(158,31,26,0.16) 26px, rgba(158,31,26,0.10) 26px, rgba(158,31,26,0.10) 52px)'
+        : 'repeating-linear-gradient(180deg, rgba(31,157,79,0.16) 0px, rgba(31,157,79,0.16) 26px, rgba(31,157,79,0.10) 26px, rgba(31,157,79,0.10) 52px)', boxShadow: '0 3px 0 0 var(--ink-black)', overflow: 'hidden', touchAction: 'none' }}>
+        {/* Pitch markings */}
+        <div style={{ position: 'absolute', left: 10, right: 10, top: '50%', height: 1, borderTop: `1px dashed ${LINE}` }} />
         <div style={{ position: 'absolute', left: '50%', top: '50%', width: 84, height: 84, transform: 'translate(-50%,-50%)', borderRadius: '50%', border: `1px solid ${LINE}` }} />
+        {/* Goals (top = the goal your XI attacks; bottom = your own goal the opponent attacks) */}
+        <div className={shake === (oppView ? 'opp' : 'you') ? 'net-shake' : undefined} style={{ position: 'absolute', left: '50%', top: 0, transform: 'translateX(-50%)', width: 78, height: 14, borderRadius: '0 0 6px 6px', border: `2px solid ${LINE}`, borderTop: 'none', background: 'repeating-linear-gradient(90deg, rgba(242,246,239,0.10) 0 3px, transparent 3px 6px)' }} />
+        <div className={shake === (oppView ? 'you' : 'opp') ? 'net-shake' : undefined} style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: 78, height: 14, borderRadius: '6px 6px 0 0', border: `2px solid ${LINE}`, borderBottom: 'none', background: 'repeating-linear-gradient(90deg, rgba(242,246,239,0.10) 0 3px, transparent 3px 6px)' }} />
 
-        {!oppView && (
-          <button onClick={() => setFormSheet(true)} style={{ position: 'absolute', top: 10, left: 10, zIndex: 8, fontSize: 11, fontWeight: 800, color: '#dbeafe', background: 'rgba(37,99,235,0.22)', border: '1px solid rgba(96,165,250,0.4)', borderRadius: 8, padding: '4px 9px', cursor: 'pointer' }}>{formation.name} {'▾'}</button>
-        )}
-
+        {/* Players */}
         {spots.map((spot, i) => {
           if (!oppView && !spot.cardId) return null;
           const attacking = !oppView && (spot.band === 'ATT' || spot.band === 'MID') && !spot.isGK;
           const spearhead = attacking && spot.band === 'ATT';
-          const sel = !oppView && spot.cardId === selectedId;
-          const active = spot.cardId === activeCardId;
-          const firing = !oppView && (spot.cardId === firingCard?.id || active);
-          const dropTarget = moving && !spot.isGK && spot.cardId !== undefined;
+          const isDropTarget = moving && !spot.isGK && spot.cardId !== undefined && spot.cardId !== drag?.id;
+          const isHover = isDropTarget && hoverTargetId === spot.cardId;
+          const isDragging = drag?.kind === 'pitch' && drag.id === spot.cardId;
+          // During resolve, the carrier glows on the side that's currently attacking.
+          const carrier = resolving && beat && ((beat.side === 'you' && !oppView && spearhead) || (beat.side === 'opp' && oppView && spot.band === 'ATT'));
           const base = oppView
-            ? (spot.isGK ? 'rgba(120,120,120,0.18)' : 'linear-gradient(160deg,#b1322f,#7f1d1d)')
-            : (spot.isGK ? 'rgba(120,120,120,0.18)' : spearhead ? 'linear-gradient(160deg,#3b82f6,#1d4ed8)' : 'linear-gradient(160deg,#1d4ed8,#1e3a8a)');
+            ? (spot.isGK ? 'linear-gradient(160deg, #5a6b5f, #36433a)' : 'linear-gradient(160deg, var(--kit-red), #9e1f1a)')
+            : (spot.isGK ? 'linear-gradient(160deg, #5a6b5f, #36433a)' : spearhead ? 'linear-gradient(160deg, #4a93f0, var(--kit-blue))' : 'linear-gradient(160deg, var(--kit-blue), #1f5bb0)');
+          const ring = isHover ? '2px solid var(--gold)'
+            : isDropTarget ? '2px dashed var(--gold)'
+            : spearhead ? '2px solid var(--gold)'
+            : spot.isStar ? '2px solid var(--gold)'
+            : spot.isGK ? '2px solid var(--ink-black)'
+            : '2px solid var(--ink-black)';
           return (
-            <div key={`${oppView ? 'o' : 'y'}-${i}`} className="kc-pop"
-              onDragOver={dropTarget ? (e) => e.preventDefault() : undefined}
-              onDrop={dropTarget ? () => onDropPlayer(spot.cardId!) : undefined}
-              style={{ position: 'absolute', left: `${spot.slot.x}%`, top: `${spot.slot.y}%`, transform: 'translate(-50%,-50%)', display: 'grid', justifyItems: 'center', gap: 2, width: 64, zIndex: sel || firing || active ? 6 : attacking ? 4 : 3 }}>
-              <button className={attacking && mode === 'resolve' ? 'kc-fire' : undefined}
-                draggable={mode === 'plan' && !oppView && !spot.isGK && spot.cardId !== undefined}
-                onDragStart={() => spot.cardId !== undefined && setDrag({ kind: 'pitch', id: spot.cardId })}
-                onDragEnd={() => setDrag(null)}
-                onClick={() => {
-                  if (oppView || spot.cardId === undefined) return;
-                  if (benchSel !== null) { onSub(spot.cardId, benchSel); setBenchSel(null); return; }
-                  setSelectedId((s) => (s === spot.cardId ? null : spot.cardId!));
-                }}
+            <div key={`${oppView ? 'o' : 'y'}-${i}`} className="move-pop"
+              style={{ position: 'absolute', left: `${spot.slot.x}%`, top: `${spot.slot.y}%`, transform: 'translate(-50%,-50%)', display: 'grid', justifyItems: 'center', gap: 2, width: 60, zIndex: isHover || carrier ? 6 : attacking ? 4 : 3, opacity: isDragging ? 0.3 : 1 }}>
+              <button
+                className={carrier ? 'carrier-glow' : undefined}
+                onPointerDown={(e) => beginPointer('pitch', spot.cardId!, e)}
+                onPointerMove={drag ? undefined : movePointer}
+                onPointerUp={drag ? undefined : endPointer}
+                disabled={oppView || mode !== 'plan' || spot.cardId === undefined}
+                onClick={() => { if (oppView && spot.cardId === undefined) return; }}
                 style={{
-                  width: 42, height: 42, borderRadius: '50%', padding: 0, cursor: oppView || spot.isGK ? 'default' : 'grab', transition: 'box-shadow 160ms, border-color 160ms, transform 160ms',
-                  transform: active ? 'scale(1.18)' : 'scale(1)', background: base,
-                  border: dropTarget ? '2px dashed #fbbf24' : spearhead ? '2px solid #fbbf24' : spot.isStar ? '2px solid #fde68a' : spot.isGK ? '1px solid rgba(255,255,255,0.25)' : attacking ? '2px solid rgba(147,197,253,0.5)' : '2px solid rgba(255,255,255,0.14)',
-                  color: '#fff', fontWeight: 800, fontSize: spot.isGK ? 11 : 14,
-                  boxShadow: active ? '0 0 0 4px rgba(253,230,138,0.55)' : sel ? '0 0 0 3px rgba(96,165,250,0.5)' : spearhead ? '0 4px 12px rgba(37,99,235,0.4)' : '0 2px 6px rgba(0,0,0,0.3)',
+                  width: 40, height: 40, borderRadius: '50%', padding: 0,
+                  cursor: oppView ? 'default' : 'grab', touchAction: 'none',
+                  transition: 'box-shadow 160ms, transform 160ms', transform: isHover ? 'scale(1.14)' : 'scale(1)',
+                  background: base, border: ring,
+                  color: 'var(--line-white)', fontFamily: PIXEL, fontSize: spot.isGK ? 8 : 12,
+                  boxShadow: spearhead || spot.isStar ? '0 2px 0 0 var(--ink-black), 0 0 0 3px var(--gold-glow)' : '0 2px 0 0 var(--ink-black)',
                 }}>{spot.isGK ? 'GK' : spot.number}</button>
-              {spot.name && <span style={{ fontSize: 8.5, fontWeight: 600, color: oppView ? '#fca5a5' : spearhead ? '#fde68a' : 'rgba(245,240,224,0.85)', textShadow: '0 1px 2px rgba(0,0,0,0.6)', maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spot.name}</span>}
-              {oppView && spot.isStar && <span style={{ position: 'absolute', top: -16, fontSize: 8.5, fontWeight: 800, color: '#fde68a', background: 'rgba(0,0,0,0.55)', padding: '1px 6px', borderRadius: 999, whiteSpace: 'nowrap' }}>{'★'} DANGER</span>}
-              {!oppView && mode === 'plan' && spot.cardId !== undefined && !spot.isGK && (
-                <span role="button" aria-label="Inspect player" onClick={(e) => { e.stopPropagation(); const c = xi.find((p) => p.id === spot.cardId); if (c) setModal({ variant: 'player', card: c as Card }); }}
-                  style={{ position: 'absolute', top: -6, right: 4, width: 16, height: 16, borderRadius: '50%', background: 'rgba(10,22,14,0.92)', border: '1.5px solid #f2f6ef', color: '#f2f6ef', fontFamily: 'var(--font-pixel, monospace)', fontSize: 9, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 9 }}>i</span>
+              {spot.name && <span style={{ fontSize: 8.5, fontWeight: 700, color: oppView ? '#fca5a5' : spearhead ? 'var(--gold)' : 'var(--cream-soft)', textShadow: '0 1px 2px var(--ink-black)', maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spot.name}</span>}
+              {oppView && spot.isStar && <span style={{ position: 'absolute', top: -15, fontFamily: PIXEL, fontSize: 7.5, color: 'var(--ink-black)', background: 'var(--gold)', padding: '2px 5px', borderRadius: 3, whiteSpace: 'nowrap' }}>{'★'} DANGER</span>}
+              {/* ISSUE 3 — inspect pip on EVERY token in plan mode, GK included. */}
+              {!oppView && mode === 'plan' && spot.cardId !== undefined && (
+                <span role="button" aria-label="Inspect player"
+                  onPointerDown={(e) => { e.stopPropagation(); }}
+                  onClick={(e) => { e.stopPropagation(); inspectCard(spot.cardId); }}
+                  style={{ position: 'absolute', top: -6, right: 2, width: 17, height: 17, borderRadius: '50%', background: 'var(--ink-black)', border: '1.5px solid var(--line-white)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 9, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 9 }}>i</span>
               )}
             </div>
           );
         })}
 
-        {!oppView && ballPos && (
-          <div style={{ position: 'absolute', left: `${ballPos.x}%`, top: `${ballPos.y}%`, width: 14, height: 14, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #fff, #cbd5e1)', boxShadow: '0 0 8px rgba(255,255,255,0.8)', transform: 'translate(-50%,-50%)', transition: `left ${STEP_MS - 40}ms ease-in-out, top ${STEP_MS - 40}ms ease-in-out`, zIndex: 8, pointerEvents: 'none' }} />
+        {/* ---- Possession ball / shot / fizzle (event-driven) ---- */}
+        {resolving && beat && beat.kind !== 'idle' && (
+          <>
+            {/* Lane glow showing where the move is going */}
+            <div key={`lane-${beatIdx}`} className="lane-sweep" style={{ position: 'absolute', left: `${LANE_X[beat.lane] - 11}%`, width: '22%', top: beat.side === 'you' ? '6%' : '46%', height: '48%', background: `linear-gradient(${beat.side === 'you' ? '0deg' : '180deg'}, ${beat.side === 'you' ? 'var(--kit-blue)' : 'var(--kit-red)'}, transparent)`, opacity: 0.18, pointerEvents: 'none', zIndex: 2, animationDuration: dur(600) }} />
+            {/* The ball streaks down the lane to the target goal */}
+            <div key={`ball-${beatIdx}`} className="shot-kick" style={{ position: 'absolute', left: `${ballLaneX}%`, top: `${targetGoalY}%`, width: 14, height: 14, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, var(--line-white), #b9c4ba)', boxShadow: '0 0 10px rgba(242,246,239,0.85), 0 2px 0 0 var(--ink-black)', transform: 'translate(-50%,-50%)', zIndex: 8, pointerEvents: 'none', animationDuration: dur(280) }} />
+            {/* Outcome marker at the goalmouth */}
+            {beat.kind === 'goal' && (
+              <div key={`flash-${beatIdx}`} className="goal-flash" style={{ position: 'absolute', left: '50%', top: `${targetGoalY}%`, width: 120, height: 60, transform: 'translate(-50%,-50%)', borderRadius: '50%', background: `radial-gradient(circle, ${beat.side === 'you' ? 'var(--success)' : 'var(--danger)'}, transparent 70%)`, zIndex: 7, pointerEvents: 'none', animationDuration: dur(700) }} />
+            )}
+            {(beat.kind === 'save' || beat.kind === 'miss') && (
+              <div key={`miss-${beatIdx}`} className="shot-miss" style={{ position: 'absolute', left: `${ballLaneX}%`, top: `${targetGoalY + (beat.side === 'you' ? 4 : -4)}%`, transform: 'translate(-50%,-50%)', fontFamily: PIXEL, fontSize: 10, color: 'var(--cream-soft)', background: 'rgba(7,16,11,0.85)', border: '1px solid var(--border)', borderRadius: 3, padding: '3px 6px', zIndex: 9, pointerEvents: 'none', whiteSpace: 'nowrap', animationDuration: dur(620) }}>{beat.label}</div>
+            )}
+          </>
         )}
 
-        {firingCard && finisherSpot && !oppView && (
-          <div style={{ position: 'absolute', left: `${finisherSpot.slot.x}%`, top: `${finisherSpot.slot.y}%`, transform: 'translate(-50%,-50%)', zIndex: 9, pointerEvents: 'none' }}>
-            <div style={{ position: 'absolute', left: '50%', top: -30, animation: 'kcFloat 400ms ease-out both', whiteSpace: 'nowrap', fontSize: 10, fontWeight: 800, color: '#1a1a1a', background: 'linear-gradient(135deg,#fde68a,#f59e0b)', padding: '3px 9px', borderRadius: 999, boxShadow: '0 4px 12px rgba(245,158,11,0.5)' }}>
-              {lastName(firingCard.name)} — {(firingCard.tacticalRole ?? firingCard.archetype)} fires!
-            </div>
+        {/* A wasted possession: muted grey fizzle in midfield */}
+        {resolving && beat && beat.kind === 'idle' && (
+          <div key={`idle-${beatIdx}`} className="possession-fizzle" style={{ position: 'absolute', left: `${MIDFIELD.x}%`, top: `${MIDFIELD.y + (beat.side === 'you' ? -6 : 6)}%`, transform: 'translate(-50%,-50%)', display: 'grid', justifyItems: 'center', gap: 3, zIndex: 6, pointerEvents: 'none', animationDuration: dur(500) }}>
+            <div style={{ width: 11, height: 11, borderRadius: '50%', background: 'rgba(136,160,140,0.6)', boxShadow: '0 0 6px rgba(136,160,140,0.4)' }} />
+            <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)' }}>{beat.side === 'you' ? 'BUILD-UP' : 'THEY PROBE'}</span>
           </div>
         )}
 
-        {showOutcome && (goalThisBeat || concededThisBeat) && (
-          <div style={{ position: 'absolute', left: '50%', top: '50%', zIndex: 10, pointerEvents: 'none', animation: 'kcGoal 1600ms ease-out both', fontFamily: 'var(--font-display,sans-serif)', fontSize: 46, fontWeight: 900, color: goalThisBeat ? '#86efac' : '#fca5a5', textShadow: '0 4px 24px rgba(0,0,0,0.6)' }}>
-            {goalThisBeat ? 'GOAL!' : 'CONCEDED'}
+        {/* GOAL / CONCEDED eruption (driven by the goal beat) */}
+        {resolving && beat && beat.kind === 'goal' && (
+          <div key={`erupt-${beatIdx}`} className="goal-erupt" style={{ position: 'absolute', left: '50%', top: '50%', zIndex: 10, pointerEvents: 'none', fontFamily: PIXEL, fontSize: beat.side === 'you' ? 40 : 34, color: beat.side === 'you' ? 'var(--success)' : 'var(--danger)', textShadow: '0 3px 0 var(--ink-black)', whiteSpace: 'nowrap', animationDuration: dur(1450) }}>
+            {beat.side === 'you' ? 'GOAL!' : 'CONCEDED'}
           </div>
         )}
 
+        {/* Opponent intel strip while viewing the opposition */}
         {oppView && (<>
-          <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 7, fontSize: 9, fontWeight: 700, color: '#fca5a5', background: 'rgba(0,0,0,0.5)', padding: '3px 8px', borderRadius: 8 }}>{opponentBuild.style} · {opponentBuild.formation}</div>
-          <div style={{ position: 'absolute', bottom: 10, left: 10, right: 10, zIndex: 7, fontSize: 10, color: '#fecaca', background: 'rgba(0,0,0,0.55)', padding: '6px 10px', borderRadius: 10, lineHeight: 1.35 }}>
-            <b style={{ color: '#86efac' }}>Soft spot:</b> {opponentBuild.weakness.toLowerCase()} — {opponentBuild.starAbility.toLowerCase()}.
+          <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 7, fontFamily: PIXEL, fontSize: 8, color: 'var(--cream)', background: 'rgba(7,16,11,0.7)', border: '1px solid var(--border)', padding: '4px 7px', borderRadius: 'var(--radius-sm)' }}>{opponentBuild.style} · {opponentBuild.formation}</div>
+          <div style={{ position: 'absolute', bottom: 10, left: 10, right: 10, zIndex: 7, fontSize: 10, color: 'var(--cream-soft)', background: 'rgba(7,16,11,0.75)', border: '1px solid var(--border)', padding: '7px 10px', borderRadius: 'var(--radius)', lineHeight: 1.4 }}>
+            <b style={{ color: 'var(--success)', fontFamily: PIXEL, fontSize: 9 }}>SOFT SPOT</b> &nbsp;{opponentBuild.weakness.toLowerCase()} — {opponentBuild.starAbility.toLowerCase()}.
           </div>
         </>)}
 
-        {selected && !oppView && mode === 'plan' && (() => {
-          const spot = spots.find((s) => s.cardId === selected.id);
-          const top = spot ? Math.min(70, spot.slot.y) : 40;
-          const role = spot ? (spot.band === 'ATT' ? 'Attacking' : spot.band === 'DEF' ? 'Defending' : 'Box-to-box') : '';
-          return (
-            <div style={{ position: 'absolute', left: '50%', top: `${top}%`, transform: 'translate(-50%, calc(-100% - 22px))', width: 192, zIndex: 7, pointerEvents: 'none' }}>
-              <div style={{ borderRadius: 12, background: 'rgba(15,23,42,0.96)', border: '1px solid rgba(96,165,250,0.45)', padding: '9px 11px', boxShadow: '0 12px 28px rgba(0,0,0,0.45)' }}>
-                <div style={{ fontSize: 10, color: '#93c5fd', fontWeight: 700, marginBottom: 5 }}>{role} · {spot?.slot.label}</div>
-                <div style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 6, background: 'rgba(37,99,235,0.5)', fontSize: 11, fontWeight: 800, color: '#fff' }}>#{spot?.number ?? '?'} · {selected.name}</div>
-                <div style={{ marginTop: 6, fontSize: 13, fontWeight: 800, color: 'var(--cream,#f5f0e8)' }}>{selected.tacticalRole ?? selected.archetype}</div>
-                <div style={{ marginTop: 3, fontSize: 11, color: '#bfdbfe', lineHeight: 1.35 }}>{selected.abilityText ?? 'Drag to a new slot to change the shape.'}</div>
-              </div>
-            </div>
-          );
-        })()}
+        {/* Side rail — SHAPE (the ONE formation control, issue 5) + TACTICS */}
+        {!oppView && mode === 'plan' && (
+          <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: 8, zIndex: 5 }}>
+            <button onClick={() => setFormSheet(true)} style={{ writingMode: 'vertical-rl', padding: '12px 6px', borderRadius: 'var(--radius) 0 0 var(--radius)', border: '2px solid var(--ink-black)', borderRight: 'none', background: 'var(--kit-blue)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 9, letterSpacing: 1, cursor: 'pointer' }}>SHAPE · {formation.name}</button>
+            <button onClick={() => setTrayOpen(true)} style={{ writingMode: 'vertical-rl', padding: '12px 6px', borderRadius: 'var(--radius) 0 0 var(--radius)', border: '2px solid var(--ink-black)', borderRight: 'none', background: 'var(--amber)', color: 'var(--ink-black)', fontFamily: PIXEL, fontSize: 9, letterSpacing: 1, cursor: 'pointer' }}>TACTICS</button>
+          </div>
+        )}
 
-        <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: 8, zIndex: 5 }}>
-          <button onClick={() => setTrayOpen(true)} style={{ writingMode: 'vertical-rl', padding: '13px 6px', borderRadius: '10px 0 0 10px', border: '1px solid rgba(245,158,11,0.3)', borderRight: 'none', background: 'rgba(232,98,26,0.22)', color: '#fde68a', fontSize: 11, fontWeight: 800, letterSpacing: 1, cursor: 'pointer' }}>TACTICS</button>
-          <button onClick={() => setFormSheet(true)} style={{ writingMode: 'vertical-rl', padding: '13px 6px', borderRadius: '10px 0 0 10px', border: '1px solid rgba(96,165,250,0.3)', borderRight: 'none', background: 'rgba(37,99,235,0.22)', color: '#dbeafe', fontSize: 11, fontWeight: 800, letterSpacing: 1, cursor: 'pointer' }}>SHAPE</button>
-        </div>
+        {/* Drag ghost following the finger */}
+        {drag && dragPos && dragCard && (
+          <div style={{ position: 'absolute', left: `${dragPos.x}%`, top: `${dragPos.y}%`, transform: 'translate(-50%,-50%) scale(1.14)', zIndex: 12, pointerEvents: 'none', display: 'grid', justifyItems: 'center', gap: 2 }}>
+            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(160deg, var(--kit-blue), #1f5bb0)', border: '2px solid var(--gold)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 0 0 var(--ink-black), 0 0 0 4px var(--gold-glow)' }}>{drag.kind === 'pitch' ? dragSpot?.number ?? '?' : '+'}</div>
+            <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--gold)', textShadow: '0 1px 2px var(--ink-black)' }}>{lastName(dragCard.name)}</span>
+          </div>
+        )}
       </div>
 
-      {/* Subs bench */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px 6px', flexShrink: 0, overflow: 'hidden' }}>
-        <span style={{ fontSize: 11, color: 'var(--dust,#8a7560)', flexShrink: 0 }}>subs · {subsRemaining}</span>
+      {/* Subs bench — tap to inspect, drag onto a player to sub in */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px 4px', flexShrink: 0, overflow: 'hidden' }}>
+        <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', flexShrink: 0 }}>SUBS {subsRemaining}</span>
         {bench.slice(0, 7).map((card, i) => {
-          const picked = benchSel === card.id;
+          const isDragging = drag?.kind === 'bench' && drag.id === card.id;
           return (
-            <div key={card.id} draggable={mode === 'plan' && !oppView} onDragStart={() => setDrag({ kind: 'bench', id: card.id })} onDragEnd={() => setDrag(null)}
-              onClick={() => { if (mode === 'plan' && !oppView) setBenchSel((b) => (b === card.id ? null : card.id)); }} title={card.name}
-              style={{ width: 34, height: 34, borderRadius: 7, background: picked ? 'rgba(245,158,11,0.25)' : 'rgba(255,255,255,0.05)', border: `1px solid ${picked ? 'rgba(245,158,11,0.6)' : 'rgba(255,255,255,0.08)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: picked ? '#fde68a' : 'var(--cream-soft,#d9d0b8)', flexShrink: 0, cursor: mode === 'plan' && !oppView ? 'grab' : 'default' }}>{i + 12}</div>
+            <button key={card.id}
+              onPointerDown={(e) => beginPointer('bench', card.id, e)}
+              onPointerMove={drag ? undefined : movePointer}
+              onPointerUp={drag ? undefined : endPointer}
+              disabled={mode !== 'plan' || oppView}
+              title={card.name}
+              style={{ width: 34, height: 34, borderRadius: 'var(--radius-sm)', background: 'var(--surface)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: PIXEL, fontSize: 10, color: 'var(--cream-soft)', flexShrink: 0, cursor: mode === 'plan' && !oppView ? 'grab' : 'default', touchAction: 'none', opacity: isDragging ? 0.3 : 1 }}>{i + 12}</button>
           );
         })}
-        {moving && <span style={{ fontSize: 10, color: '#fde68a', marginLeft: 2 }}>→ drop on a player</span>}
+        {moving && <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--gold)', marginLeft: 2 }}>→ DROP ON A PLAYER</span>}
       </div>
 
-      {/* Controls */}
-      <div style={{ display: 'flex', gap: 10, padding: '4px 16px 14px', flexShrink: 0 }}>
-        <button onClick={() => setOppView((v) => !v)} style={{ flex: '0 0 86px', padding: '11px 0', borderRadius: 12, border: `1px solid ${oppView ? 'rgba(252,165,165,0.4)' : 'rgba(255,255,255,0.12)'}`, background: oppView ? 'rgba(139,29,29,0.18)' : 'rgba(255,255,255,0.04)', color: 'var(--cream,#f5f0e8)', fontSize: 12, fontWeight: 700, cursor: 'pointer', lineHeight: 1.2 }}>{'⇄'}<br />{oppView ? 'Your XI' : 'Rivals'}</button>
-        <button onClick={onContinue} style={{ flex: 1, padding: '11px 0', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#2563eb,#1d4ed8)', color: '#fff', fontFamily: 'var(--font-display,sans-serif)', fontSize: 17, fontWeight: 800, cursor: 'pointer', boxShadow: '0 8px 20px rgba(37,99,235,0.35)' }}>{mode === 'resolve' ? 'Play on' : 'Continue'} {'→'}</button>
+      {/* Controls — ISSUE 2: clear View Opposition / View Team toggle + advance CTA */}
+      <div style={{ display: 'flex', gap: 10, padding: '8px 16px 14px', flexShrink: 0 }}>
+        <button onClick={() => setOppView((v) => !v)} style={{ flex: '0 0 104px', padding: '11px 0', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: oppView ? 'var(--surface-raised)' : 'var(--surface)', color: 'var(--cream)', fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.3, cursor: 'pointer', lineHeight: 1.3 }}>{oppView ? 'VIEW TEAM' : 'VIEW OPP'}</button>
+        <button onClick={onContinue} disabled={resolving && !sequenceDone}
+          className={resolving ? undefined : 'advance-btn-pulse'}
+          style={{ flex: 1, padding: '11px 0', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 4px 0 0 var(--ink-black)', background: resolving && !sequenceDone ? 'var(--surface)' : 'linear-gradient(135deg, var(--amber), var(--amber-soft))', color: resolving && !sequenceDone ? 'var(--dust)' : 'var(--cream)', fontFamily: PIXEL, fontSize: 15, cursor: resolving && !sequenceDone ? 'default' : 'pointer', transition: 'background 200ms, color 200ms' }}>
+          {resolving ? (sequenceDone ? 'PLAY ON →' : 'PLAYING…') : 'KICK OFF →'}
+        </button>
       </div>
 
       {/* Match log */}
       {tickerOpen && (
-        <div onClick={() => setTickerOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 22, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxHeight: '70%', overflowY: 'auto', background: 'linear-gradient(180deg,#10160d,#0a0f0b)', borderTop: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px 16px 0 0', padding: '16px 18px 22px' }}>
+        <div onClick={() => setTickerOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 22, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end' }} className="scrim-fade">
+          <div onClick={(e) => e.stopPropagation()} className="sheet-rise" style={{ width: '100%', maxHeight: '62%', overflowY: 'auto', overscrollBehavior: 'contain', background: 'var(--felt)', borderTop: '2px solid var(--ink-black)', borderRadius: '16px 16px 0 0', padding: '16px 18px 22px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--cream,#f5f0e8)', letterSpacing: 0.6 }}>MATCH LOG</span>
-              <button onClick={() => setTickerOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--dust,#8a7560)', fontSize: 18, cursor: 'pointer' }}>{'×'}</button>
+              <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--cream)', letterSpacing: 0.6 }}>MATCH LOG</span>
+              <button onClick={() => setTickerOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--dust)', fontSize: 18, cursor: 'pointer' }}>{'×'}</button>
             </div>
-            {feed.length === 0 ? <div style={{ fontSize: 13, color: 'var(--dust,#8a7560)' }}>Kickoff — no events yet.</div> : feed.slice().reverse().map((e, i) => (
+            {feed.length === 0 ? <div style={{ fontSize: 12, color: 'var(--dust)' }}>Kickoff — no events yet.</div> : feed.slice().reverse().map((e, i) => (
               <div key={i} style={{ display: 'flex', gap: 12, fontSize: 13, lineHeight: 1.6, color: colour(e.type) }}>
-                <span style={{ color: 'var(--dust,#8a7560)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{String(e.minute).padStart(2, '0')}:00</span>
+                <span style={{ color: 'var(--dust)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{String(e.minute).padStart(2, '0')}:00</span>
                 <span>{e.text}</span>
               </div>
             ))}
@@ -327,19 +588,19 @@ export default function PitchMatchView({
         </div>
       )}
 
-      {/* Formation sheet */}
+      {/* Formation sheet — the single formation control's surface */}
       {formSheet && (
-        <div onClick={() => setFormSheet(false)} style={{ position: 'absolute', inset: 0, zIndex: 21, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'linear-gradient(180deg,#10160d,#0a0f0b)', borderTop: '1px solid rgba(96,165,250,0.25)', borderRadius: '16px 16px 0 0', padding: '16px 18px 22px' }}>
+        <div onClick={() => setFormSheet(false)} style={{ position: 'absolute', inset: 0, zIndex: 21, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }} className="scrim-fade">
+          <div onClick={(e) => e.stopPropagation()} className="sheet-rise" style={{ width: '100%', background: 'var(--felt)', borderTop: '2px solid var(--kit-blue)', borderRadius: '16px 16px 0 0', padding: '16px 18px 22px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#dbeafe', letterSpacing: 0.6 }}>SHAPE</span>
-              <button onClick={() => setFormSheet(false)} style={{ background: 'none', border: 'none', color: 'var(--dust,#8a7560)', fontSize: 18, cursor: 'pointer' }}>{'×'}</button>
+              <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--cream)', letterSpacing: 0.6 }}>SHAPE</span>
+              <button onClick={() => setFormSheet(false)} style={{ background: 'none', border: 'none', color: 'var(--dust)', fontSize: 18, cursor: 'pointer' }}>{'×'}</button>
             </div>
-            <div style={{ fontSize: 10, color: 'var(--dust,#8a7560)', marginBottom: 12 }}>Shape sets attack vs defence. Drag players on the pitch to fine-tune.</div>
+            <div style={{ fontSize: 10, color: 'var(--dust)', marginBottom: 12, lineHeight: 1.4 }}>Shape sets attack vs defence. Drag players on the pitch to fine-tune.</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {ownedFormations.map((fid) => {
                 const active = formation.id === fid;
-                return <button key={fid} onClick={() => { onFormationChange(fid); setFormSheet(false); }} style={{ padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 800, background: active ? 'linear-gradient(160deg,rgba(37,99,235,0.4),rgba(0,0,0,0.25))' : 'rgba(255,255,255,0.04)', border: `1px solid ${active ? 'rgba(96,165,250,0.6)' : 'rgba(255,255,255,0.09)'}`, color: active ? '#dbeafe' : 'var(--cream-soft,#d9d0b8)' }}>{getFormation(fid).name}</button>;
+                return <button key={fid} onClick={() => { onFormationChange(fid); setFormSheet(false); }} style={{ padding: '9px 14px', borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: PIXEL, fontSize: 11, border: '2px solid var(--ink-black)', boxShadow: active ? '0 3px 0 0 var(--ink-black)' : 'none', background: active ? 'var(--kit-blue)' : 'var(--surface)', color: active ? 'var(--line-white)' : 'var(--cream-soft)' }}>{getFormation(fid).name}</button>;
               })}
             </div>
           </div>
@@ -348,34 +609,34 @@ export default function PitchMatchView({
 
       {/* Tactical shelf */}
       {trayOpen && (
-        <div onClick={() => setTrayOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'flex-end' }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: '82%', maxWidth: 340, height: '100%', background: 'linear-gradient(180deg,#10160d,#0a0f0b)', borderLeft: '1px solid rgba(245,158,11,0.2)', padding: '16px 16px 20px', overflowY: 'auto', animation: 'kcSlide 220ms ease-out both' }}>
+        <div onClick={() => setTrayOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'flex-end' }} className="scrim-fade">
+          <div onClick={(e) => e.stopPropagation()} className="drawer-slide" style={{ width: '84%', maxWidth: 340, height: '100%', background: 'var(--felt)', borderLeft: '2px solid var(--amber)', padding: '16px 16px 20px', overflowY: 'auto', overscrollBehavior: 'contain' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#fbbf24', letterSpacing: 0.8 }}>TACTICAL SHELF</span>
-              <button onClick={() => setTrayOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--dust,#8a7560)', fontSize: 18, cursor: 'pointer' }}>{'×'}</button>
+              <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--amber)', letterSpacing: 0.8 }}>TACTICAL SHELF</span>
+              <button onClick={() => setTrayOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--dust)', fontSize: 18, cursor: 'pointer' }}>{'×'}</button>
             </div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--dust,#8a7560)', letterSpacing: 0.8, marginBottom: 6 }}>MANAGER</div>
-            <div style={{ borderRadius: 12, padding: '11px 13px', marginBottom: 18, background: manager ? 'linear-gradient(160deg,rgba(212,160,53,0.18),rgba(0,0,0,0.25))' : 'rgba(255,255,255,0.03)', border: `1px solid ${manager ? 'rgba(212,160,53,0.4)' : 'rgba(255,255,255,0.08)'}` }}>
+            <div style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.8, marginBottom: 6 }}>MANAGER</div>
+            <div style={{ borderRadius: 'var(--radius)', padding: '11px 13px', marginBottom: 18, background: 'var(--surface)', border: `2px solid ${manager ? 'var(--gold)' : 'var(--ink-black)'}` }}>
               {manager ? (<>
-                <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--cream,#f5f0e8)' }}>{manager.name}</div>
-                <div style={{ fontSize: 12, color: '#e7c98a', marginTop: 3, lineHeight: 1.4 }}>{manager.effect}</div>
-              </>) : <div style={{ fontSize: 12, color: 'var(--dust,#8a7560)' }}>No manager — sign one in the shop.</div>}
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--cream)' }}>{manager.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--cream-soft)', marginTop: 4, lineHeight: 1.4 }}>{manager.effect}</div>
+              </>) : <div style={{ fontSize: 11, color: 'var(--dust)' }}>No manager — sign one in the shop.</div>}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--dust,#8a7560)', letterSpacing: 0.8 }}>TACTICAL CARDS</span>
-              <span style={{ fontSize: 10, color: 'var(--dust,#8a7560)' }}>{deployedIds.size}/{tacticSlots.slots.length} deployed</span>
+              <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.8 }}>TACTICAL CARDS</span>
+              <span style={{ fontSize: 9, color: 'var(--dust)' }}>{deployedIds.size}/{tacticSlots.slots.length} deployed</span>
             </div>
             <div style={{ display: 'grid', gap: 8 }}>
-              {availableTactics.length === 0 && <div style={{ fontSize: 12, color: 'var(--dust,#8a7560)' }}>No tactical cards drafted for this fixture.</div>}
+              {availableTactics.length === 0 && <div style={{ fontSize: 11, color: 'var(--dust)' }}>No tactical cards drafted for this fixture.</div>}
               {availableTactics.map((tactic) => {
                 const active = deployedIds.has(tactic.id);
                 return (
-                  <button key={tactic.id} onClick={() => onToggleTactic(tactic.id)} style={{ textAlign: 'left', borderRadius: 11, padding: '10px 12px', cursor: 'pointer', background: active ? 'linear-gradient(160deg,rgba(245,158,11,0.2),rgba(0,0,0,0.25))' : 'rgba(255,255,255,0.04)', border: `1px solid ${active ? 'rgba(245,158,11,0.5)' : 'rgba(255,255,255,0.09)'}` }}>
+                  <button key={tactic.id} onClick={() => onToggleTactic(tactic.id)} style={{ textAlign: 'left', borderRadius: 'var(--radius)', padding: '10px 12px', cursor: 'pointer', background: 'var(--surface)', border: `2px solid ${active ? 'var(--amber)' : 'var(--ink-black)'}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--cream,#f5f0e8)' }}>{tactic.name}</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: active ? '#fde68a' : 'var(--dust,#8a7560)' }}>{active ? 'DEPLOYED' : 'tap to deploy'}</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--cream)' }}>{tactic.name}</span>
+                      <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: active ? 'var(--amber)' : 'var(--dust)' }}>{active ? 'DEPLOYED' : 'TAP TO DEPLOY'}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--cream-soft,#d9d0b8)', marginTop: 3, lineHeight: 1.4 }}>{tactic.effect}</div>
+                    <div style={{ fontSize: 11, color: 'var(--cream-soft)', marginTop: 3, lineHeight: 1.4 }}>{tactic.effect}</div>
                   </button>
                 );
               })}
@@ -384,7 +645,7 @@ export default function PitchMatchView({
         </div>
       )}
 
-      {/* Full-card overlay — tap the info pip on a player to inspect. */}
+      {/* Full-card overlay — tap any player (yours, GK included) to inspect. */}
       <CardModal model={modal} onClose={() => setModal(null)} />
     </div>
   );
