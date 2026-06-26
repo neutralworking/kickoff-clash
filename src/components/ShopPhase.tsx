@@ -13,8 +13,12 @@ import type { JokerCard as JokerCardType } from '../lib/jokers';
 import { getShopJokers } from '../lib/jokers';
 import { ALL_FORMATIONS } from '../lib/formations';
 import type { OpponentBuild } from '../lib/run';
-import PlayerCard from './PlayerCard';
-import JokerCard from './JokerCard';
+import GameCard, { type GameCardModel } from './cards/GameCard';
+import CardModal from './cards/CardModal';
+import { PIXEL } from './cards/cardTokens';
+
+// SHOP_ITEMS kept imported to preserve the module surface; not referenced directly.
+void SHOP_ITEMS;
 
 interface ShopPhaseProps {
   state: RunState;
@@ -42,6 +46,8 @@ const FORMATION_COST = 20_000;
 const TRAINING_COST = 8_000;
 const TRAINING_INCREMENT = 5;
 const TRAINING_MAX = 20;
+
+type Tab = 'market' | 'squad' | 'backroom';
 
 export default function ShopPhase({
   state,
@@ -74,8 +80,10 @@ export default function ShopPhase({
     [shopSeed, rerollCount],
   );
   const [showCardPick, setShowCardPick] = useState<'normal' | 'rare' | null>(null);
-  const [sellMode, setSellMode] = useState(false);
-  const [trainMode, setTrainMode] = useState(false);
+  const [tab, setTab] = useState<Tab>('market');
+  const [sellSheet, setSellSheet] = useState(false);
+  const [sellConfirm, setSellConfirm] = useState<Card | null>(null);
+  const [modal, setModal] = useState<GameCardModel | null>(null);
 
   const academy = getAcademyTier(state.academyTier);
   const acSeed = shopSeed + 777;
@@ -115,726 +123,897 @@ export default function ShopPhase({
     });
   const injuredCards = state.deck.filter((card) => card.injured);
 
+  const offeredJokers = shopJokers.filter(
+    j => !state.jokers.some(owned => owned.id === j.id),
+  );
+  const canPickJoker = state.jokers.length < 3 && offeredJokers.length > 0;
+
+  const TABS: { id: Tab; label: string }[] = [
+    { id: 'market', label: 'Market' },
+    { id: 'squad', label: 'Squad' },
+    { id: 'backroom', label: 'Backroom' },
+  ];
+
   return (
-    <div className="phase-shop max-w-2xl mx-auto p-4 space-y-5 overflow-y-auto max-h-screen">
-      {/* Header + Stats Bar */}
-      <div
-        className="rounded-[var(--radius)] p-4"
-        style={{
-          background: 'var(--leather)',
-          border: '1px solid rgba(212,160,53,0.25)',
-        }}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <h2
-            className="text-2xl uppercase tracking-wider"
-            style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)' }}
-          >
-            Transfer Window
-          </h2>
-          <div className="text-right">
-            <div className="text-[10px] uppercase tracking-[0.15em]" style={{ color: 'var(--dust)' }}>
-              Cash
-            </div>
-            <div
-              className="text-2xl"
-              style={{ fontFamily: 'var(--font-display)', color: 'var(--gold)' }}
+    <div
+      className="flex flex-col overflow-hidden relative"
+      style={{
+        height: '100dvh',
+        background: 'var(--felt)',
+        paddingTop: 'max(env(safe-area-inset-top), 10px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
+      }}
+    >
+      {/* ── Header: Transfer Window · cash · points ─────────────────────── */}
+      <div className="shrink-0 px-3">
+        <div className="flex items-center gap-2">
+          <div className="flex flex-col mr-auto min-w-0">
+            <span
+              className="uppercase truncate"
+              style={{ fontFamily: PIXEL, fontSize: 15, color: 'var(--cream)', textShadow: '0 2px 0 var(--ink-black)', letterSpacing: 0.5 }}
             >
-              {'\u00a3'}{state.cash.toLocaleString()}
-            </div>
+              Transfer Window
+            </span>
+            <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)', marginTop: 2 }}>
+              MATCH {state.round} {'·'} {state.deck.length} SQUAD
+            </span>
+          </div>
+
+          <HeaderStat label="PTS" value={`${state.seasonPoints}/${state.boardTargetPoints}`} />
+          <div
+            className="flex flex-col items-end justify-center shrink-0"
+            style={{
+              minWidth: 84,
+              height: 40,
+              padding: '0 10px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--surface)',
+              border: '2px solid var(--ink-black)',
+              boxShadow: '0 2px 0 0 var(--ink-black)',
+            }}
+          >
+            <span style={{ fontFamily: PIXEL, fontSize: 14, lineHeight: 1, color: 'var(--gold)' }}>
+              {'£'}{state.cash.toLocaleString()}
+            </span>
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)', marginTop: 2 }}>CASH</span>
           </div>
         </div>
-        {/* Quick stats row */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          <StatChip label="Points" value={`${state.seasonPoints}/${state.boardTargetPoints}`} />
-          <StatChip label="Deck" value={`${state.deck.length} cards`} />
-          <StatChip label="Tactics" value={`${state.tacticsDeck.length} cards`} />
-          <StatChip
-            label="Formations"
-            value={state.ownedFormations.length > 0 ? state.ownedFormations.join(', ') : 'None'}
-          />
-        </div>
-        {/* Active jokers inline */}
+
+        {/* Active jokers strip */}
         {state.jokers.length > 0 && (
-          <div className="flex gap-2 flex-wrap mt-3">
+          <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar">
             {state.jokers.map(j => (
-              <JokerCard key={j.id} joker={j} compact />
+              <button
+                key={j.id}
+                onClick={() => setModal({ variant: 'manager', manager: j })}
+                className="shrink-0 active:scale-95"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  height: 28,
+                  padding: '0 9px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '2px solid var(--ink-black)',
+                  background: 'var(--surface)',
+                  boxShadow: '0 2px 0 0 var(--ink-black)',
+                }}
+              >
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--kit-red)' }} />
+                <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--cream)', maxWidth: 96 }}>{j.name}</span>
+              </button>
             ))}
           </div>
         )}
       </div>
 
-      {/* Joker Shop */}
-      {state.jokers.length < 3 && shopJokers.length > 0 && (
-        <Section title="Joker Shop">
-          <div className="flex gap-3 flex-wrap justify-center">
-            {shopJokers
-              .filter(j => !state.jokers.some(owned => owned.id === j.id))
-              .map(j => (
-                <div key={j.id} className="text-center">
-                  <JokerCard
-                    joker={j}
-                    onClick={() => {
-                      if (state.cash >= JOKER_COST) onBuyJoker(j);
-                    }}
-                  />
-                  <div
-                    className="text-[10px] font-bold mt-1"
-                    style={{
-                      color: state.cash >= JOKER_COST ? 'var(--gold)' : 'var(--ink)',
-                    }}
-                  >
-                    {'\u00a3'}{JOKER_COST.toLocaleString()}
-                  </div>
-                </div>
-              ))}
-          </div>
-        </Section>
-      )}
-
-      {/* Featured actions */}
-      {!showCardPick && (
-        <Section title="Do Something Useful">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <FeatureCard
-              title="Buy Prospects"
-              subtitle={`${academy.playersOffered} academy players waiting`}
-              accent="var(--pitch-green)"
-              active
-            >
-              <div className="text-[11px]" style={{ color: 'var(--cream-soft)' }}>
-                Academy players are purchaseable here right now.
-              </div>
-              <div className="text-[10px] mt-1" style={{ color: 'var(--gold)' }}>
-                {academy.cost === 0 ? 'Each prospect is FREE' : `Each prospect costs £${academy.cost.toLocaleString()}`}
-              </div>
-            </FeatureCard>
-
-            <FeatureCard
-              title="Train Core"
-              subtitle={`${trainableCards.filter(({ applied }) => applied < TRAINING_MAX).length} players can still improve`}
-              accent="var(--amber)"
-              active={state.deck.length > 0}
-            >
-              <div className="text-[11px]" style={{ color: 'var(--cream-soft)' }}>
-                Spend £{TRAINING_COST.toLocaleString()} for +{TRAINING_INCREMENT} power, up to +{TRAINING_MAX}.
-              </div>
-              <button
-                onClick={() => {
-                  setTrainMode(true);
-                  setSellMode(false);
-                }}
-                className="mt-2 px-3 py-1 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase"
-                style={{
-                  background: 'rgba(232,98,26,0.16)',
-                  color: 'var(--cream)',
-                  border: '1px solid rgba(232,98,26,0.35)',
-                }}
-              >
-                Open Training
-              </button>
-            </FeatureCard>
-
-            <FeatureCard
-              title="Change Shape"
-              subtitle={`${state.tacticsDeck.length} tactics, ${unownedFormations.length} formations left`}
-              accent="var(--gold)"
-              active
-            >
-              <div className="text-[11px]" style={{ color: 'var(--cream-soft)' }}>
-                Add systems, not just bodies.
-              </div>
-            </FeatureCard>
-          </div>
-        </Section>
-      )}
-
-      <Section title="Utility Room">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <FeatureCard
-            title="Reroll Market"
-            subtitle="Refresh transfer and joker offers"
-            accent="var(--gold)"
-            active={state.cash >= 8000}
-          >
-            <div className="text-[11px]" style={{ color: 'var(--cream-soft)' }}>
-              Burn cash to hunt for a better tactical fit.
-            </div>
+      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
+      <div className="shrink-0 flex gap-1.5 px-3 mt-2.5">
+        {TABS.map(t => {
+          const active = tab === t.id;
+          return (
             <button
-              onClick={() => {
-                if (onRerollShop()) {
-                  setRerollCount((prev) => prev + 1);
-                  setShowCardPick(null);
-                }
-              }}
-              disabled={state.cash < 8000}
-              className="mt-2 px-3 py-2 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase"
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className="flex-1 active:scale-[0.98]"
               style={{
-                background: state.cash >= 8000 ? 'rgba(212,160,53,0.16)' : 'rgba(0,0,0,0.16)',
-                color: state.cash >= 8000 ? 'var(--cream)' : 'var(--ink)',
-                border: `1px solid ${state.cash >= 8000 ? 'rgba(212,160,53,0.35)' : 'rgba(154,139,115,0.12)'}`,
-                cursor: state.cash >= 8000 ? 'pointer' : 'not-allowed',
+                height: 38,
+                borderRadius: 'var(--radius-sm)',
+                border: '2px solid var(--ink-black)',
+                background: active ? 'var(--amber)' : 'var(--surface)',
+                boxShadow: active ? '0 2px 0 0 var(--ink-black)' : '0 2px 0 0 var(--ink-black)',
+                fontFamily: PIXEL,
+                fontSize: 10,
+                letterSpacing: 0.6,
+                color: active ? 'var(--ink-black)' : 'var(--dust)',
+                textTransform: 'uppercase',
               }}
             >
-              Reroll
-              <div style={{ fontSize: 9, marginTop: 2 }}>£8,000</div>
+              {t.label}
             </button>
-          </FeatureCard>
+          );
+        })}
+      </div>
 
-          <FeatureCard
-            title="Medical Room"
-            subtitle={injuredCards.length > 0 ? `${injuredCards.length} injured player${injuredCards.length > 1 ? 's' : ''}` : 'Squad fully fit'}
-            accent="var(--danger)"
-            active={injuredCards.length > 0 && state.cash >= 12000}
-          >
-            <div className="text-[11px]" style={{ color: 'var(--cream-soft)' }}>
-              Restore one injured player before the next fixture.
-            </div>
-            {injuredCards.length > 0 ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {injuredCards.slice(0, 3).map((card) => (
-                  <button
-                    key={card.id}
-                    onClick={() => onHealPlayer(card.id)}
-                    className="px-2 py-1 rounded-[var(--radius-sm)] text-[10px] font-bold"
-                    style={{
-                      background: state.cash >= 12000 ? 'rgba(192,57,43,0.16)' : 'rgba(0,0,0,0.16)',
-                      color: state.cash >= 12000 ? 'var(--cream)' : 'var(--ink)',
-                      border: `1px solid ${state.cash >= 12000 ? 'rgba(192,57,43,0.35)' : 'rgba(154,139,115,0.12)'}`,
-                    }}
-                  >
-                    Heal {card.name}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </FeatureCard>
+      {/* ── Active tab body — the ONLY scrolling region ─────────────────── */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 pt-3" style={{ overscrollBehavior: 'contain' }}>
+        {tab === 'market' && (
+          <MarketTab
+            state={state}
+            offeredJokers={offeredJokers}
+            canPickJoker={canPickJoker}
+            setShowCardPick={setShowCardPick}
+            onBuyJoker={onBuyJoker}
+            onRerollShop={onRerollShop}
+            setRerollCount={setRerollCount}
+            openModal={setModal}
+          />
+        )}
 
-          <FeatureCard
-            title="Scout Report"
-            subtitle={scoutedOpponent ? `Report ready on ${scoutedOpponent.name}` : 'Reveal next opponent plan'}
-            accent="var(--pitch-light)"
-            active={!scoutedOpponent && state.cash >= 10000}
-          >
-            <div className="text-[11px]" style={{ color: 'var(--cream-soft)' }}>
-              Buy intel before you shape the squad.
-            </div>
-            {!scoutedOpponent ? (
-              <button
-                onClick={onScoutOpponent}
-                disabled={state.cash < 10000}
-                className="mt-2 px-3 py-2 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase"
-                style={{
-                  background: state.cash >= 10000 ? 'rgba(59,165,93,0.16)' : 'rgba(0,0,0,0.16)',
-                  color: state.cash >= 10000 ? 'var(--cream)' : 'var(--ink)',
-                  border: `1px solid ${state.cash >= 10000 ? 'rgba(59,165,93,0.35)' : 'rgba(154,139,115,0.12)'}`,
-                  cursor: state.cash >= 10000 ? 'pointer' : 'not-allowed',
-                }}
-              >
-                Scout
-                <div style={{ fontSize: 9, marginTop: 2 }}>£10,000</div>
-              </button>
-            ) : (
-              <div className="mt-2 text-[10px] leading-snug" style={{ color: 'var(--dust)' }}>
-                {scoutedOpponent.style}. Weakness: {scoutedOpponent.weakness}. Star: {scoutedOpponent.starPlayer.name}.
-              </div>
-            )}
-          </FeatureCard>
-        </div>
-      </Section>
+        {tab === 'squad' && (
+          <SquadTab
+            state={state}
+            trainableCards={trainableCards}
+            injuredCards={injuredCards}
+            onTrainPlayer={onTrainPlayer}
+            onHealPlayer={onHealPlayer}
+            openModal={setModal}
+            openSell={() => setSellSheet(true)}
+          />
+        )}
 
-      {/* Card Pick Modal */}
-      {showCardPick && (
-        <div
-          className="rounded-[var(--radius-lg)] p-6"
+        {tab === 'backroom' && (
+          <BackroomTab
+            state={state}
+            academy={academy}
+            academyCards={academyCards}
+            unownedFormations={unownedFormations}
+            scoutedOpponent={scoutedOpponent}
+            onBuyAcademy={onBuyAcademy}
+            onUpgradeAcademy={onUpgradeAcademy}
+            onBuyTacticPack={onBuyTacticPack}
+            onBuyFormation={onBuyFormation}
+            onScoutOpponent={onScoutOpponent}
+            openModal={setModal}
+          />
+        )}
+      </div>
+
+      {/* ── Footer: Next Match CTA ──────────────────────────────────────── */}
+      <div className="shrink-0 px-3 pt-2.5">
+        <button
+          onClick={onNext}
+          className="w-full active:scale-[0.99]"
           style={{
-            background: 'var(--leather-light)',
-            border: '2px solid var(--amber)',
-            boxShadow: '0 0 30px var(--amber-glow)',
+            height: 52,
+            borderRadius: 'var(--radius)',
+            border: '2px solid var(--ink-black)',
+            background: 'linear-gradient(180deg, var(--amber) 0%, var(--amber-soft) 100%)',
+            boxShadow: '0 3px 0 0 var(--ink-black), 0 4px 14px var(--amber-glow)',
+            fontFamily: PIXEL,
+            fontSize: 14,
+            letterSpacing: 0.8,
+            color: 'var(--line-white)',
+            textTransform: 'uppercase',
           }}
         >
-          <h3
-            className="text-sm uppercase tracking-[0.2em] mb-4 text-center"
-            style={{ fontFamily: 'var(--font-display)', color: 'var(--dust)' }}
-          >
-            Pick 1 of 3
-          </h3>
-          <div className="flex gap-4 justify-center">
-            {(showCardPick === 'rare' ? rareCards : shopCards).map(card => (
-              <div key={card.id} className="text-center">
-                <PlayerCard
-                  card={card}
-                  onClick={() => {
-                    onBuyCard(card, showCardPick === 'rare' ? RARE_PICK_COST : CARD_PICK_COST);
+          Next Match {'→'}
+        </button>
+      </div>
+
+      {/* ── Card-pick bottom sheet ──────────────────────────────────────── */}
+      {showCardPick && (
+        <BottomSheet title="Pick 1 of 3" onClose={() => setShowCardPick(null)}>
+          <div className="grid grid-cols-3 gap-3">
+            {(showCardPick === 'rare' ? rareCards : shopCards).map(card => {
+              const cost = showCardPick === 'rare' ? RARE_PICK_COST : CARD_PICK_COST;
+              return (
+                <CardCell
+                  key={card.id}
+                  model={{ variant: 'player', card }}
+                  priceLabel={`£${cost.toLocaleString()}`}
+                  affordable={state.cash >= cost}
+                  actionLabel="Sign"
+                  onAction={() => {
+                    onBuyCard(card, cost);
                     setShowCardPick(null);
+                  }}
+                  onInspect={() => setModal({ variant: 'player', card })}
+                />
+              );
+            })}
+          </div>
+        </BottomSheet>
+      )}
+
+      {/* ── Sell bottom sheet (replaces confirm()) ──────────────────────── */}
+      {sellSheet && (
+        <BottomSheet
+          title={sellConfirm ? 'Confirm Sale' : 'Sell Players'}
+          onClose={() => { setSellSheet(false); setSellConfirm(null); }}
+        >
+          {sellConfirm ? (
+            <div className="flex flex-col items-center" style={{ gap: 14 }}>
+              <div style={{ width: 128 }}>
+                <GameCard model={{ variant: 'player', card: sellConfirm }} />
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--cream-soft)', textAlign: 'center', lineHeight: 1.4 }}>
+                Sell <b style={{ color: 'var(--cream)' }}>{sellConfirm.name}</b> for{' '}
+                <b style={{ color: 'var(--gold)' }}>{'£'}{getTransferFee(sellConfirm).toLocaleString()}</b>?
+              </p>
+              <div className="flex gap-2 w-full">
+                <SheetButton
+                  label="Cancel"
+                  tone="muted"
+                  onClick={() => setSellConfirm(null)}
+                />
+                <SheetButton
+                  label="Confirm Sale"
+                  tone="danger"
+                  onClick={() => {
+                    onSellCard(sellConfirm);
+                    setSellConfirm(null);
                   }}
                 />
               </div>
-            ))}
-          </div>
-          <button
-            onClick={() => setShowCardPick(null)}
-            className="mt-4 text-sm transition-colors block mx-auto"
-            style={{ color: 'var(--dust)' }}
-          >
-            Cancel
-          </button>
-        </div>
+            </div>
+          ) : state.deck.length === 0 ? (
+            <EmptyState text="No players to sell." />
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              {state.deck.map(card => (
+                <CardCell
+                  key={card.id}
+                  model={{ variant: 'player', card }}
+                  priceLabel={`£${getTransferFee(card).toLocaleString()}`}
+                  affordable
+                  actionLabel="Sell"
+                  actionTone="danger"
+                  onAction={() => setSellConfirm(card)}
+                  onInspect={() => setModal({ variant: 'player', card })}
+                />
+              ))}
+            </div>
+          )}
+        </BottomSheet>
       )}
 
-      {/* Transfer Market */}
-      {!showCardPick && (
-        <Section title="Transfer Market">
-          <div className="grid grid-cols-2 gap-2">
-            <ShopButton
-              label="Card Pick"
-              desc="Choose 1 of 3"
-              cost={CARD_PICK_COST}
-              cash={state.cash}
-              onClick={() => setShowCardPick('normal')}
-            />
-            <ShopButton
-              label="Rare+ Pick"
-              desc="Rare or better"
-              cost={RARE_PICK_COST}
-              cash={state.cash}
-              onClick={() => setShowCardPick('rare')}
-            />
-          </div>
-        </Section>
-      )}
+      {/* Single CardModal mounted at shop root (renders absolute inset-0). */}
+      <CardModal model={modal} onClose={() => setModal(null)} />
+    </div>
+  );
+}
 
-      {/* Academy */}
-      <Section title={`Academy (Tier ${state.academyTier} — ${academy.name})`}>
-        <div
-          className="rounded-[var(--radius)] p-3 mb-3"
-          style={{
-            background: 'linear-gradient(135deg, rgba(45,138,78,0.16), rgba(0,0,0,0.08))',
-            border: '1px solid rgba(59,165,93,0.22)',
-          }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)' }}>
-                Prospect intake
-              </div>
-              <div className="text-[10px] mt-1 leading-snug" style={{ color: 'var(--dust)' }}>
-                Cheap depth, durability variance, and a route to train hidden value into your squad.
-              </div>
-              <div className="text-[10px] mt-1" style={{ color: 'var(--gold)' }}>
-                Cost per player: {academy.cost === 0 ? 'FREE' : `£${academy.cost.toLocaleString()}`}
-              </div>
-            </div>
-            {state.academyTier < 4 && (
-              <button
-                disabled={state.cash < ACADEMY_UPGRADE_COST}
-                onClick={onUpgradeAcademy}
-                className="px-3 py-2 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase transition-all"
-                style={{
-                  background:
-                    state.cash >= ACADEMY_UPGRADE_COST
-                      ? 'rgba(212,160,53,0.15)'
-                      : 'var(--leather)',
-                  color:
-                    state.cash >= ACADEMY_UPGRADE_COST
-                      ? 'var(--gold)'
-                      : 'var(--ink)',
-                  border: `1px solid ${
-                    state.cash >= ACADEMY_UPGRADE_COST
-                      ? 'rgba(212,160,53,0.3)'
-                      : 'rgba(154,139,115,0.15)'
-                  }`,
-                  cursor: state.cash >= ACADEMY_UPGRADE_COST ? 'pointer' : 'not-allowed',
-                  flexShrink: 0,
-                }}
-              >
-                Upgrade
-                <div style={{ fontSize: 9, marginTop: 2 }}>
-                  £{ACADEMY_UPGRADE_COST.toLocaleString()}
-                </div>
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="flex gap-3 overflow-x-auto pb-1">
-          {academyCards.map(card => (
-            <div
-              key={card.id}
-              className="text-center shrink-0 rounded-[var(--radius)] p-2"
-              style={{
-                background: 'rgba(0,0,0,0.12)',
-                border: '1px solid rgba(59,165,93,0.14)',
-              }}
-            >
-              <PlayerCard
-                card={card}
-                onClick={() => {
-                  if (academy.cost === 0 || state.cash >= academy.cost) {
-                    onBuyAcademy(card);
-                  }
-                }}
-              />
-              <button
-                onClick={() => {
-                  if (academy.cost === 0 || state.cash >= academy.cost) {
-                    onBuyAcademy(card);
-                  }
-                }}
-                disabled={academy.cost > 0 && state.cash < academy.cost}
-                className="mt-2 w-full px-2 py-2 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase transition-all"
-                style={{
-                  background: academy.cost === 0 || state.cash >= academy.cost ? 'rgba(59,165,93,0.16)' : 'rgba(0,0,0,0.16)',
-                  color: academy.cost === 0 || state.cash >= academy.cost ? 'var(--cream)' : 'var(--ink)',
-                  border: `1px solid ${academy.cost === 0 || state.cash >= academy.cost ? 'rgba(59,165,93,0.35)' : 'rgba(154,139,115,0.12)'}`,
-                  cursor: academy.cost === 0 || state.cash >= academy.cost ? 'pointer' : 'not-allowed',
-                }}
-              >
-                Sign
-                <div style={{ fontSize: 9, marginTop: 2 }}>
-                  {academy.cost === 0 ? 'FREE' : `£${academy.cost.toLocaleString()}`}
-                </div>
-              </button>
-            </div>
-          ))}
-        </div>
-      </Section>
+// ===========================================================================
+// MARKET TAB
+// ===========================================================================
 
-      {/* Tactic Pack */}
-      <Section title="Tactical Intelligence">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-xs font-bold" style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)' }}>
-              Tactic Pack
-            </div>
-            <div className="text-[9px] mt-0.5" style={{ color: 'var(--dust)' }}>
-              2 random tactics added to your deck
-            </div>
-            <div className="text-[9px] mt-0.5" style={{ color: 'var(--dust)' }}>
-              Tactics: {state.tacticsDeck.length} cards
-            </div>
-          </div>
-          <button
-            disabled={state.cash < TACTIC_PACK_COST}
-            onClick={onBuyTacticPack}
-            className="px-4 py-2 rounded-[var(--radius-sm)] text-xs font-bold uppercase transition-all"
-            style={{
-              background: state.cash >= TACTIC_PACK_COST ? 'rgba(212,160,53,0.15)' : 'var(--leather)',
-              color: state.cash >= TACTIC_PACK_COST ? 'var(--gold)' : 'var(--ink)',
-              border: `1px solid ${state.cash >= TACTIC_PACK_COST ? 'rgba(212,160,53,0.3)' : 'rgba(154,139,115,0.15)'}`,
-              cursor: state.cash >= TACTIC_PACK_COST ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {'\u00a3'}{TACTIC_PACK_COST.toLocaleString()}
-          </button>
+function MarketTab({
+  state, offeredJokers, canPickJoker,
+  setShowCardPick, onBuyJoker, onRerollShop, setRerollCount, openModal,
+}: {
+  state: RunState;
+  offeredJokers: JokerCardType[];
+  canPickJoker: boolean;
+  setShowCardPick: (v: 'normal' | 'rare' | null) => void;
+  onBuyJoker: (joker: JokerCardType) => void;
+  onRerollShop: () => boolean;
+  setRerollCount: React.Dispatch<React.SetStateAction<number>>;
+  openModal: (m: GameCardModel) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 pb-2">
+      {/* Card picks */}
+      <SectionCard title="Player Market" accent="var(--gold)">
+        <div className="grid grid-cols-2 gap-2">
+          <BuyTile
+            label="Card Pick"
+            sub="Choose 1 of 3"
+            cost={CARD_PICK_COST}
+            affordable={state.cash >= CARD_PICK_COST}
+            onClick={() => setShowCardPick('normal')}
+          />
+          <BuyTile
+            label="Rare+ Pick"
+            sub="Rare or better"
+            cost={RARE_PICK_COST}
+            affordable={state.cash >= RARE_PICK_COST}
+            onClick={() => setShowCardPick('rare')}
+          />
         </div>
-      </Section>
+      </SectionCard>
 
-      {/* Formation Cards */}
-      <Section title="Formation Scouting">
-        {unownedFormations.length === 0 ? (
-          <div
-            className="text-sm text-center py-2"
-            style={{ color: 'var(--gold)', fontFamily: 'var(--font-display)' }}
-          >
-            All formations owned ✓
-          </div>
+      {/* Gaffer signings */}
+      <SectionCard title="Gaffer Signings" accent="var(--kit-red)">
+        {!canPickJoker ? (
+          <EmptyState
+            text={state.jokers.length >= 3
+              ? 'Backroom full — 3 gaffers signed.'
+              : 'No gaffers available this window.'}
+          />
         ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {unownedFormations.map(f => (
-              <div
-                key={f.id}
-                className="rounded-[var(--radius-sm)] p-3"
-                style={{
-                  background: 'var(--leather-light)',
-                  border: '1px solid rgba(154,139,115,0.15)',
-                }}
-              >
-                <div
-                  className="text-sm font-bold"
-                  style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)' }}
-                >
-                  {f.name}
-                </div>
-                <div
-                  className="text-[9px] mt-1 mb-2 leading-snug"
-                  style={{ color: 'var(--dust)' }}
-                >
-                  {f.description}
-                </div>
-                <button
-                  disabled={state.cash < FORMATION_COST}
-                  onClick={() => onBuyFormation(f.id)}
-                  className="w-full px-2 py-1 rounded text-[10px] font-bold uppercase transition-all"
-                  style={{
-                    background: state.cash >= FORMATION_COST ? 'rgba(212,160,53,0.15)' : 'transparent',
-                    color: state.cash >= FORMATION_COST ? 'var(--gold)' : 'var(--ink)',
-                    border: `1px solid ${state.cash >= FORMATION_COST ? 'rgba(212,160,53,0.3)' : 'rgba(154,139,115,0.1)'}`,
-                    cursor: state.cash >= FORMATION_COST ? 'pointer' : 'not-allowed',
-                  }}
-                >
-                  Buy — {'\u00a3'}{FORMATION_COST.toLocaleString()}
-                </button>
-              </div>
+          <div className="grid grid-cols-3 gap-3">
+            {offeredJokers.map(j => (
+              <CardCell
+                key={j.id}
+                model={{ variant: 'manager', manager: j }}
+                priceLabel={`£${JOKER_COST.toLocaleString()}`}
+                affordable={state.cash >= JOKER_COST}
+                actionLabel="Sign"
+                actionTone="danger"
+                onAction={() => { if (state.cash >= JOKER_COST) onBuyJoker(j); }}
+                onInspect={() => openModal({ variant: 'manager', manager: j })}
+              />
             ))}
           </div>
         )}
-      </Section>
+      </SectionCard>
+
+      {/* Reroll */}
+      <SectionCard title="Refresh Market" accent="var(--amber)">
+        <RowAction
+          title="Reroll the board"
+          sub="Hunt a better tactical fit"
+          cost={8000}
+          affordable={state.cash >= 8000}
+          onClick={() => {
+            if (onRerollShop()) {
+              setRerollCount((prev) => prev + 1);
+              setShowCardPick(null);
+            }
+          }}
+        />
+      </SectionCard>
+    </div>
+  );
+}
+
+// ===========================================================================
+// SQUAD TAB
+// ===========================================================================
+
+function SquadTab({
+  state, trainableCards, injuredCards, onTrainPlayer, onHealPlayer, openModal, openSell,
+}: {
+  state: RunState;
+  trainableCards: { card: Card; applied: number }[];
+  injuredCards: Card[];
+  onTrainPlayer: (cardId: number) => void;
+  onHealPlayer: (cardId: number) => boolean;
+  openModal: (m: GameCardModel) => void;
+  openSell: () => void;
+}) {
+  const canHeal = state.cash >= 12000;
+  return (
+    <div className="flex flex-col gap-3 pb-2">
+      {/* Medical room */}
+      <SectionCard title="Medical Room" accent="var(--danger)">
+        {injuredCards.length === 0 ? (
+          <EmptyState text="Squad fully fit." />
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p style={{ fontSize: 10, color: 'var(--dust)', lineHeight: 1.4 }}>
+              Restore injured players before kick-off — {'£'}12,000 each.
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              {injuredCards.map(card => (
+                <CardCell
+                  key={card.id}
+                  model={{ variant: 'player', card }}
+                  priceLabel={`£${(12000).toLocaleString()}`}
+                  affordable={canHeal}
+                  actionLabel="Heal"
+                  actionTone="danger"
+                  onAction={() => onHealPlayer(card.id)}
+                  onInspect={() => openModal({ variant: 'player', card })}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </SectionCard>
 
       {/* Training */}
-      <Section title="Training Ground">
-        <div className="flex items-center justify-between mb-3">
-          <button
-            onClick={() => {
-              setTrainMode(!trainMode);
-              if (sellMode) setSellMode(false);
-            }}
-            className="text-sm font-bold uppercase tracking-[0.15em] transition-colors"
-            style={{ color: trainMode ? 'var(--amber)' : 'var(--dust)' }}
-          >
-            {trainMode ? '\u2716 Close Training' : '\ud83c\udfd8\ufe0f Open Training'}
-          </button>
-        </div>
-        <div
-          className="rounded-[var(--radius)] p-3"
-          style={{
-            background: 'linear-gradient(135deg, rgba(232,98,26,0.12), rgba(0,0,0,0.08))',
-            border: '1px solid rgba(232,98,26,0.16)',
-          }}
-        >
-          <div className="text-[10px] leading-snug mb-3" style={{ color: 'var(--dust)' }}>
-            Training is available now. Upgrade key players by +{TRAINING_INCREMENT} each session for £{TRAINING_COST.toLocaleString()}, up to +{TRAINING_MAX}.
-          </div>
-          <div className="flex gap-3 overflow-x-auto pb-1">
+      <SectionCard
+        title="Training Ground"
+        accent="var(--amber)"
+        right={
+          <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)', letterSpacing: 0.5 }}>
+            +{TRAINING_INCREMENT} / {'£'}{TRAINING_COST.toLocaleString()}
+          </span>
+        }
+      >
+        {state.deck.length === 0 ? (
+          <EmptyState text="No players to train." />
+        ) : (
+          <div className="grid grid-cols-3 gap-3">
             {trainableCards.map(({ card, applied }) => {
               const isMax = applied >= TRAINING_MAX;
               const canAfford = state.cash >= TRAINING_COST;
               return (
-                <div
+                <CardCell
                   key={card.id}
-                  className="relative text-center shrink-0 rounded-[var(--radius)] p-2"
-                  style={{
-                    background: 'rgba(0,0,0,0.12)',
-                    border: '1px solid rgba(232,98,26,0.12)',
-                  }}
-                >
-                  <PlayerCard
-                    card={card}
-                    onClick={() => {
-                      if (!isMax && canAfford) {
-                        onTrainPlayer(card.id);
-                      }
-                    }}
-                  />
-                  <div
-                    className="mt-2 text-[10px] font-bold"
-                    style={{
-                      color: isMax ? 'var(--amber)' : 'var(--gold)',
-                    }}
-                  >
-                    {isMax ? 'MAX' : applied > 0 ? `+${applied}` : '+0'}
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (!isMax && canAfford) {
-                        onTrainPlayer(card.id);
-                      }
-                    }}
-                    disabled={isMax || !canAfford}
-                    className="mt-2 w-full px-2 py-2 rounded-[var(--radius-sm)] text-[10px] font-bold uppercase transition-all"
-                    style={{
-                      background: !isMax && canAfford ? 'rgba(232,98,26,0.16)' : 'rgba(0,0,0,0.16)',
-                      color: !isMax && canAfford ? 'var(--cream)' : 'var(--ink)',
-                      border: `1px solid ${!isMax && canAfford ? 'rgba(232,98,26,0.35)' : 'rgba(154,139,115,0.12)'}`,
-                      cursor: !isMax && canAfford ? 'pointer' : 'not-allowed',
-                    }}
-                  >
-                    {isMax ? 'Finished' : 'Train'}
-                    {!isMax && <div style={{ fontSize: 9, marginTop: 2 }}>£{TRAINING_COST.toLocaleString()}</div>}
-                  </button>
-                </div>
+                  model={{ variant: 'player', card }}
+                  badge={isMax ? 'MAX' : applied > 0 ? `+${applied}` : undefined}
+                  badgeColor={isMax ? 'var(--amber)' : 'var(--gold)'}
+                  priceLabel={isMax ? 'Maxed' : `£${TRAINING_COST.toLocaleString()}`}
+                  affordable={!isMax && canAfford}
+                  actionLabel={isMax ? 'Finished' : 'Train'}
+                  actionDisabled={isMax}
+                  onAction={() => { if (!isMax && canAfford) onTrainPlayer(card.id); }}
+                  onInspect={() => openModal({ variant: 'player', card })}
+                />
               );
             })}
-            {state.deck.length === 0 && (
-              <div className="text-sm py-4" style={{ color: 'var(--dust)' }}>
-                No cards to train
-              </div>
-            )}
-          </div>
-        </div>
-      </Section>
-
-      {/* Sell Cards */}
-      <Section title="Asset Management">
-        <button
-          onClick={() => {
-            setSellMode(!sellMode);
-            if (trainMode) setTrainMode(false);
-          }}
-          className="text-sm font-bold uppercase tracking-[0.15em] transition-colors"
-          style={{ color: sellMode ? 'var(--amber)' : 'var(--dust)' }}
-        >
-          {sellMode ? '\u2716 Cancel Selling' : '\uD83D\uDCB0 Sell Cards'}
-        </button>
-        {sellMode && (
-          <div className="flex flex-wrap gap-2 justify-center mt-3">
-            {state.deck.map(card => (
-              <PlayerCard
-                key={card.id}
-                card={card}
-                size="mini"
-                showSellPrice
-                onClick={() => {
-                  if (confirm(`Sell ${card.name} for \u00a3${getTransferFee(card).toLocaleString()}?`)) {
-                    onSellCard(card);
-                  }
-                }}
-              />
-            ))}
-            {state.deck.length === 0 && (
-              <div className="text-sm py-4" style={{ color: 'var(--dust)' }}>
-                No cards to sell
-              </div>
-            )}
           </div>
         )}
-      </Section>
+      </SectionCard>
 
-      {/* Next Match */}
-      <div className="flex justify-center pt-4 pb-8">
-        <button
-          onClick={onNext}
-          className="px-10 py-4 rounded-[var(--radius)] text-lg uppercase tracking-wide transition-all hover:brightness-110 hover:scale-[1.03] active:scale-95"
-          style={{
-            fontFamily: 'var(--font-display)',
-            background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))',
-            color: 'var(--cream)',
-            boxShadow: '0 4px 20px var(--amber-glow)',
-          }}
-        >
-          Next Match {'\u2192'}
-        </button>
-      </div>
+      {/* Sell */}
+      <SectionCard title="Asset Management" accent="var(--gold)">
+        <RowAction
+          title="Sell players"
+          sub={`${state.deck.length} in squad`}
+          actionLabel="Open"
+          affordable={state.deck.length > 0}
+          onClick={openSell}
+        />
+      </SectionCard>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// BACKROOM TAB
+// ===========================================================================
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function BackroomTab({
+  state, academy, academyCards, unownedFormations, scoutedOpponent,
+  onBuyAcademy, onUpgradeAcademy, onBuyTacticPack, onBuyFormation, onScoutOpponent, openModal,
+}: {
+  state: RunState;
+  academy: ReturnType<typeof getAcademyTier>;
+  academyCards: Card[];
+  unownedFormations: typeof ALL_FORMATIONS;
+  scoutedOpponent: OpponentBuild | null;
+  onBuyAcademy: (card: Card) => void;
+  onUpgradeAcademy: () => void;
+  onBuyTacticPack: () => void;
+  onBuyFormation: (formationId: string) => void;
+  onScoutOpponent: () => boolean;
+  openModal: (m: GameCardModel) => void;
+}) {
+  const canUpgrade = state.cash >= ACADEMY_UPGRADE_COST;
+  return (
+    <div className="flex flex-col gap-3 pb-2">
+      {/* Scout report */}
+      <SectionCard title="Scout Report" accent="var(--kit-blue)">
+        {scoutedOpponent ? (
+          <div
+            style={{
+              background: 'rgba(0,0,0,0.25)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: 10,
+            }}
+          >
+            <div className="flex items-center justify-between" style={{ gap: 8 }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--cream)' }}>{scoutedOpponent.name}</span>
+              <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--kit-blue)', letterSpacing: 0.4 }}>
+                {scoutedOpponent.style.toUpperCase()}
+              </span>
+            </div>
+            <p style={{ fontSize: 10.5, color: 'var(--cream-soft)', lineHeight: 1.45, marginTop: 6 }}>
+              Weakness: <b style={{ color: 'var(--danger)' }}>{scoutedOpponent.weakness}</b>.
+            </p>
+            <p style={{ fontSize: 10.5, color: 'var(--dust)', lineHeight: 1.45, marginTop: 2 }}>
+              Star: {scoutedOpponent.starPlayer.name} ({scoutedOpponent.starPlayer.position}).
+            </p>
+          </div>
+        ) : (
+          <RowAction
+            title="Scout next opponent"
+            sub="Reveal style, weakness & star"
+            cost={10000}
+            affordable={state.cash >= 10000}
+            onClick={onScoutOpponent}
+          />
+        )}
+      </SectionCard>
+
+      {/* Academy */}
+      <SectionCard
+        title={`Academy · Tier ${state.academyTier}`}
+        accent="var(--success)"
+        right={
+          state.academyTier < 4 ? (
+            <button
+              onClick={onUpgradeAcademy}
+              disabled={!canUpgrade}
+              className="active:scale-95"
+              style={{
+                height: 30,
+                padding: '0 9px',
+                borderRadius: 'var(--radius-sm)',
+                border: '2px solid var(--ink-black)',
+                background: canUpgrade ? 'var(--surface-raised)' : 'var(--surface)',
+                boxShadow: '0 2px 0 0 var(--ink-black)',
+                fontFamily: PIXEL,
+                fontSize: 7.5,
+                letterSpacing: 0.4,
+                color: canUpgrade ? 'var(--gold)' : 'var(--ink)',
+                cursor: canUpgrade ? 'pointer' : 'not-allowed',
+              }}
+            >
+              UPGRADE {'£'}{(ACADEMY_UPGRADE_COST / 1000).toFixed(0)}K
+            </button>
+          ) : (
+            <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--gold)' }}>MAX TIER</span>
+          )
+        }
+      >
+        <p style={{ fontSize: 10, color: 'var(--dust)', lineHeight: 1.4, marginBottom: 8 }}>
+          {academy.name} intake — {academy.cost === 0 ? 'free' : `£${academy.cost.toLocaleString()}`} per prospect.
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          {academyCards.map(card => {
+            const affordable = academy.cost === 0 || state.cash >= academy.cost;
+            return (
+              <CardCell
+                key={card.id}
+                model={{ variant: 'player', card }}
+                priceLabel={academy.cost === 0 ? 'FREE' : `£${academy.cost.toLocaleString()}`}
+                affordable={affordable}
+                actionLabel="Sign"
+                onAction={() => { if (affordable) onBuyAcademy(card); }}
+                onInspect={() => openModal({ variant: 'player', card })}
+              />
+            );
+          })}
+        </div>
+      </SectionCard>
+
+      {/* Tactic pack */}
+      <SectionCard title="Tactical Intelligence" accent="var(--gold)">
+        <RowAction
+          title="Tactic Pack"
+          sub={`2 random tactics · ${state.tacticsDeck.length} owned`}
+          cost={TACTIC_PACK_COST}
+          affordable={state.cash >= TACTIC_PACK_COST}
+          onClick={onBuyTacticPack}
+        />
+      </SectionCard>
+
+      {/* Formations */}
+      <SectionCard title="Formation Scouting" accent="var(--kit-blue)">
+        {unownedFormations.length === 0 ? (
+          <EmptyState text="All formations owned." />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {unownedFormations.map(f => (
+              <RowAction
+                key={f.id}
+                title={f.name}
+                sub={f.description}
+                cost={FORMATION_COST}
+                affordable={state.cash >= FORMATION_COST}
+                onClick={() => onBuyFormation(f.id)}
+              />
+            ))}
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
+// ===========================================================================
+// Shared primitives
+// ===========================================================================
+
+function HeaderStat({ label, value }: { label: string; value: string }) {
   return (
     <div
-      className="rounded-[var(--radius)] p-4"
+      className="flex flex-col items-center justify-center shrink-0"
       style={{
-        background: 'var(--leather)',
-        border: '1px solid rgba(154,139,115,0.15)',
+        minWidth: 52,
+        height: 40,
+        padding: '0 8px',
+        borderRadius: 'var(--radius-sm)',
+        background: 'var(--surface)',
+        border: '2px solid var(--ink-black)',
+        boxShadow: '0 2px 0 0 var(--ink-black)',
       }}
     >
-      <h3
-        className="text-xs font-bold uppercase tracking-[0.2em] mb-3"
-        style={{ color: 'var(--dust)' }}
-      >
-        {title}
-      </h3>
-      {children}
+      <span style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--cream)' }}>{value}</span>
+      <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)', marginTop: 2 }}>{label}</span>
     </div>
   );
 }
 
-function StatChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span
-        className="text-[9px] uppercase tracking-[0.12em]"
-        style={{ color: 'var(--dust)' }}
-      >
-        {label}:
-      </span>
-      <span
-        className="text-[10px] font-bold"
-        style={{ color: 'var(--cream)' }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function FeatureCard({
-  title,
-  subtitle,
-  accent,
-  active,
-  children,
+function SectionCard({
+  title, accent, right, children,
 }: {
   title: string;
-  subtitle: string;
   accent: string;
-  active: boolean;
+  right?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div
-      className="rounded-[var(--radius)] p-3"
       style={{
-        background: 'var(--leather-light)',
-        border: `1px solid ${active ? accent : 'rgba(154,139,115,0.12)'}`,
-        boxShadow: active ? `inset 0 0 0 1px color-mix(in srgb, ${accent} 25%, transparent)` : undefined,
+        background: 'var(--surface)',
+        border: '2px solid var(--ink-black)',
+        borderRadius: 'var(--radius)',
+        boxShadow: '0 2px 0 0 var(--ink-black)',
+        overflow: 'hidden',
       }}
     >
-      <div className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)' }}>
-        {title}
+      <div className="flex items-center" style={{ gap: 8, padding: '9px 10px 0' }}>
+        <span style={{ width: 4, height: 12, background: accent, borderRadius: 1, flexShrink: 0 }} />
+        <span className="mr-auto truncate" style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.8, color: 'var(--cream)', textTransform: 'uppercase' }}>
+          {title}
+        </span>
+        {right}
       </div>
-      <div className="text-[10px] mt-1 mb-2" style={{ color: 'var(--dust)' }}>
-        {subtitle}
-      </div>
-      {children}
+      <div style={{ padding: 10 }}>{children}</div>
     </div>
   );
 }
 
-function ShopButton({
-  label,
-  desc,
-  cost,
-  cash,
-  onClick,
+/** A card token + price + buy button, used across every market grid. */
+function CardCell({
+  model, priceLabel, affordable, actionLabel, actionTone = 'default',
+  actionDisabled = false, badge, badgeColor, onAction, onInspect,
+}: {
+  model: GameCardModel;
+  priceLabel: string;
+  affordable: boolean;
+  actionLabel: string;
+  actionTone?: 'default' | 'danger';
+  actionDisabled?: boolean;
+  badge?: string;
+  badgeColor?: string;
+  onAction: () => void;
+  onInspect: () => void;
+}) {
+  const active = affordable && !actionDisabled;
+  const accentBg =
+    actionTone === 'danger' ? 'rgba(232,54,47,0.18)' : 'rgba(255,122,31,0.18)';
+  const accentBorder =
+    actionTone === 'danger' ? 'var(--kit-red)' : 'var(--amber)';
+  return (
+    <div className="flex flex-col" style={{ gap: 5 }}>
+      <div style={{ position: 'relative' }}>
+        <GameCard model={model} onClick={onInspect} dimmed={!active} />
+        {badge && (
+          <span
+            style={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              fontFamily: PIXEL,
+              fontSize: 8,
+              color: 'var(--ink-black)',
+              background: badgeColor ?? 'var(--gold)',
+              border: '1.5px solid var(--ink-black)',
+              borderRadius: 3,
+              padding: '2px 4px',
+              lineHeight: 1,
+            }}
+          >
+            {badge}
+          </span>
+        )}
+      </div>
+      <button
+        onClick={onAction}
+        disabled={!active}
+        className="active:scale-95"
+        style={{
+          height: 40,
+          borderRadius: 'var(--radius-sm)',
+          border: '2px solid var(--ink-black)',
+          background: active ? accentBg : 'var(--surface-raised)',
+          boxShadow: '0 2px 0 0 var(--ink-black)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 1,
+          cursor: active ? 'pointer' : 'not-allowed',
+          opacity: active ? 1 : 0.55,
+        }}
+      >
+        <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.4, color: active ? 'var(--cream)' : 'var(--ink)', textTransform: 'uppercase' }}>
+          {actionLabel}
+        </span>
+        <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: active ? accentBorder : 'var(--ink)' }}>{priceLabel}</span>
+      </button>
+    </div>
+  );
+}
+
+/** A wide button tile for picks (no card preview). */
+function BuyTile({
+  label, sub, cost, affordable, onClick,
 }: {
   label: string;
-  desc: string;
+  sub: string;
   cost: number;
-  cash: number;
+  affordable: boolean;
   onClick: () => void;
 }) {
-  const canAfford = cash >= cost;
   return (
     <button
-      disabled={!canAfford}
       onClick={onClick}
-      className="p-3 rounded-[var(--radius-sm)] text-left transition-all"
+      disabled={!affordable}
+      className="text-left active:scale-[0.98]"
       style={{
-        background: canAfford ? 'var(--leather-light)' : 'var(--leather)',
-        border: `1px solid ${canAfford ? 'rgba(154,139,115,0.2)' : 'rgba(154,139,115,0.08)'}`,
-        opacity: canAfford ? 1 : 0.4,
-        cursor: canAfford ? 'pointer' : 'not-allowed',
+        padding: 11,
+        borderRadius: 'var(--radius-sm)',
+        border: '2px solid var(--ink-black)',
+        background: affordable ? 'var(--surface-raised)' : 'var(--surface)',
+        boxShadow: '0 2px 0 0 var(--ink-black)',
+        cursor: affordable ? 'pointer' : 'not-allowed',
+        opacity: affordable ? 1 : 0.55,
       }}
     >
-      <div
-        className="text-xs font-bold"
-        style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)' }}
-      >
-        {label}
-      </div>
-      <div className="text-[9px]" style={{ color: 'var(--dust)' }}>
-        {desc}
-      </div>
-      <div
-        className="text-xs font-bold mt-1"
-        style={{ color: 'var(--gold)' }}
-      >
-        {'\u00a3'}{cost.toLocaleString()}
+      <div style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)' }}>{label}</div>
+      <div style={{ fontSize: 9, color: 'var(--dust)', marginTop: 3 }}>{sub}</div>
+      <div style={{ fontFamily: PIXEL, fontSize: 9.5, color: affordable ? 'var(--gold)' : 'var(--ink)', marginTop: 6 }}>
+        {'£'}{cost.toLocaleString()}
       </div>
     </button>
+  );
+}
+
+/** A horizontal title + sub on the left, price/action button on the right. */
+function RowAction({
+  title, sub, cost, affordable, actionLabel, onClick,
+}: {
+  title: string;
+  sub: string;
+  cost?: number;
+  affordable: boolean;
+  actionLabel?: string;
+  onClick: () => void;
+}) {
+  return (
+    <div className="flex items-center" style={{ gap: 10 }}>
+      <div className="min-w-0 mr-auto">
+        <div className="truncate" style={{ fontFamily: PIXEL, fontSize: 9.5, color: 'var(--cream)' }}>{title}</div>
+        <div className="truncate" style={{ fontSize: 9.5, color: 'var(--dust)', marginTop: 3, lineHeight: 1.3 }}>{sub}</div>
+      </div>
+      <button
+        onClick={onClick}
+        disabled={!affordable}
+        className="active:scale-95 shrink-0"
+        style={{
+          minWidth: 70,
+          height: 40,
+          padding: '0 12px',
+          borderRadius: 'var(--radius-sm)',
+          border: '2px solid var(--ink-black)',
+          background: affordable ? 'var(--amber)' : 'var(--surface)',
+          boxShadow: '0 2px 0 0 var(--ink-black)',
+          fontFamily: PIXEL,
+          fontSize: 9.5,
+          letterSpacing: 0.3,
+          color: affordable ? 'var(--ink-black)' : 'var(--ink)',
+          cursor: affordable ? 'pointer' : 'not-allowed',
+          opacity: affordable ? 1 : 0.6,
+        }}
+      >
+        {actionLabel ?? (cost != null ? `£${cost.toLocaleString()}` : 'Go')}
+      </button>
+    </div>
+  );
+}
+
+function BottomSheet({
+  title, onClose, children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="absolute inset-0 flex flex-col justify-end scrim-fade"
+      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(2px)', zIndex: 50 }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="sheet-rise flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--felt-light)',
+          borderTop: '2px solid var(--ink-black)',
+          borderTopLeftRadius: 'var(--radius-lg)',
+          borderTopRightRadius: 'var(--radius-lg)',
+          maxHeight: '82dvh',
+          padding: '12px 14px max(env(safe-area-inset-bottom), 14px)',
+        }}
+      >
+        <div className="flex items-center shrink-0" style={{ gap: 8, marginBottom: 12 }}>
+          <span className="mr-auto" style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--cream)', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            {title}
+          </span>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="active:scale-90"
+            style={{
+              width: 36, height: 36,
+              borderRadius: 'var(--radius-sm)',
+              border: '2px solid var(--ink-black)',
+              background: 'var(--surface)',
+              boxShadow: '0 2px 0 0 var(--ink-black)',
+              color: 'var(--cream)',
+              fontFamily: PIXEL,
+              fontSize: 15,
+              lineHeight: 1,
+            }}
+          >
+            {'×'}
+          </button>
+        </div>
+        <div className="min-h-0 overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SheetButton({
+  label, tone, onClick,
+}: {
+  label: string;
+  tone: 'muted' | 'danger';
+  onClick: () => void;
+}) {
+  const danger = tone === 'danger';
+  return (
+    <button
+      onClick={onClick}
+      className="flex-1 active:scale-[0.98]"
+      style={{
+        height: 46,
+        borderRadius: 'var(--radius-sm)',
+        border: '2px solid var(--ink-black)',
+        background: danger ? 'var(--kit-red)' : 'var(--surface)',
+        boxShadow: '0 2px 0 0 var(--ink-black)',
+        fontFamily: PIXEL,
+        fontSize: 11,
+        letterSpacing: 0.4,
+        color: danger ? 'var(--line-white)' : 'var(--cream)',
+        textTransform: 'uppercase',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div
+      className="flex items-center justify-center"
+      style={{
+        minHeight: 64,
+        padding: 12,
+        borderRadius: 'var(--radius-sm)',
+        border: '1px dashed var(--border)',
+        background: 'rgba(0,0,0,0.18)',
+      }}
+    >
+      <span style={{ fontFamily: PIXEL, fontSize: 9, color: 'var(--dust)', letterSpacing: 0.4, textAlign: 'center', lineHeight: 1.5 }}>
+        {text}
+      </span>
+    </div>
   );
 }
