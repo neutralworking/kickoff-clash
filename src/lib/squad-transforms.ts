@@ -26,12 +26,14 @@ import type { TacticCard, TacticSlots } from './tactics';
 import type { JokerCard } from './jokers';
 import type { Connection } from './chemistry';
 import type { TraitRecord, ZoneName } from './verbs';
+import type { TeamIntent } from './run';
 
 export interface SquadContext {
   xi: Card[];
   increment: number;      // 0–4
   opponentGoals: number;  // for "after conceding" style conditions
   connections: Connection[];
+  intent?: TeamIntent;    // pre-match attacking/balanced/defensive lean (§ intent)
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +159,36 @@ export function managerTraits(joker: JokerCard, ctx: SquadContext): TraitRecord[
 }
 
 // ---------------------------------------------------------------------------
+// Intent — the pre-match attacking/balanced/defensive lean (a squad-wide record,
+// like a soft, always-on tactic). It sways the point distribution: Attacking
+// pushes output up top while thinning the back line; Defensive solidifies the
+// rear and suppresses the opponent at the cost of your own attack. Magnitudes
+// are deliberately gentle (smaller than a tactic) — a lean, not a commitment.
+// ---------------------------------------------------------------------------
+
+export function intentTraits(intent: TeamIntent | undefined, _ctx: SquadContext): TraitRecord[] {
+  switch (intent) {
+    case 'attacking':
+      return [
+        ampZone('Attacking intent', 0.12, 'attack'),
+        ampZone('Attacking intent', 0.12, 'creation'),
+        ampZone('Attacking intent', 0.12, 'finishing'),
+        ampZone('Attacking intent', -0.12, 'defence'),
+      ];
+    case 'defensive':
+      return [
+        ampZone('Defensive intent', 0.15, 'defence'),
+        denyOpponent('Defensive intent', 0.10),
+        ampZone('Defensive intent', -0.10, 'attack'),
+        ampZone('Defensive intent', -0.10, 'creation'),
+      ];
+    case 'balanced':
+    default:
+      return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Combined squad records for a side
 // ---------------------------------------------------------------------------
 
@@ -172,5 +204,6 @@ export function squadTraits(
   for (const joker of jokers) {
     records.push(...managerTraits(joker, ctx));
   }
+  records.push(...intentTraits(ctx.intent, ctx));
   return records;
 }

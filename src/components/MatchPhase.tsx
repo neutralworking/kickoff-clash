@@ -64,6 +64,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       opponent.style,
       opponentBuild.weaknessArchetype,
       runState.chemistry ?? {},
+      runState.intent ?? 'balanced',
     );
   });
 

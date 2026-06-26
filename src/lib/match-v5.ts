@@ -18,6 +18,7 @@ import type { Formation, FormationSlot } from './formations';
 import type { JokerCard } from './jokers';
 import { getExtraDiscards } from './jokers';
 import type { TacticSlots } from './tactics';
+import type { TeamIntent } from './run';
 import { squadTraits } from './squad-transforms';
 import {
   INCREMENT_MINUTES,
@@ -64,6 +65,7 @@ export interface MatchV5State {
   opponentGoals: number;
   formation: Formation;
   playingStyle: string;
+  intent: TeamIntent;         // pre-match attacking/balanced/defensive lean
   personalityBonus: PersonalityBonus;
   opponentRound: number;      // 1–5 (for baseline lookup)
   opponentStyle: string;      // Passive | Balanced | Attacking | Counter | Adaptive
@@ -465,6 +467,7 @@ export function initMatch(
   opponentStyle: string,
   opponentWeakness: string,
   chemistry: CoAppearance = {},
+  intent: TeamIntent = 'balanced',
 ): MatchV5State {
   // The opponent is now a real positioned side (step 4), generated deterministically
   // from the round budget + style. It plays through the same dispatcher as you do.
@@ -491,6 +494,7 @@ export function initMatch(
     opponentGoals: 0,
     formation,
     playingStyle,
+    intent,
     personalityBonus: calculatePersonalityBonus(xi, seed),
     opponentRound,
     opponentStyle,
@@ -676,6 +680,7 @@ export function evaluateSplit(
       increment: state.currentIncrement,
       opponentGoals: state.opponentGoals,
       connections: allConnections,
+      intent: state.intent,
     }),
     ...chemistryRecords(xi, formation, state.chemistry ?? {}),
   ];
