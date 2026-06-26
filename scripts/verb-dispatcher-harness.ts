@@ -558,5 +558,34 @@ console.log('\n12. Per-possession goal model');
   check('total goals per match sit near the ~3 target (1.5–4.5)', avg >= 1.5 && avg <= 4.5, `avg total = ${avg.toFixed(2)}`);
 }
 
+// ---------------------------------------------------------------------------
+// 13. Pre-match intent sways the point distribution (Attacking/Balanced/Defensive)
+// ---------------------------------------------------------------------------
+console.log('\n13. Pre-match intent (attacking / balanced / defensive)');
+{
+  const xi = buildRoledXI();
+  const bench = cards.sort((a, b) => b.power - a.power).slice(11, 18);
+  const splitFor = (intent: 'attacking' | 'balanced' | 'defensive') => {
+    const s = initMatch(xi, bench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter', {}, intent);
+    return evaluateSplit(s, [], slots);
+  };
+  const att = splitFor('attacking');
+  const bal = splitFor('balanced');
+  const def = splitFor('defensive');
+
+  check('attacking intent lifts attack above balanced', att.attackScore > bal.attackScore,
+    `att=${att.attackScore} bal=${bal.attackScore}`);
+  check('defensive intent lifts defence above balanced', def.defenceScore > bal.defenceScore,
+    `def=${def.defenceScore} bal=${bal.defenceScore}`);
+  check('attacking attacks more than defensive', att.attackScore > def.attackScore,
+    `att=${att.attackScore} def=${def.attackScore}`);
+  check('defensive defends more than attacking', def.defenceScore > att.defenceScore,
+    `def=${def.defenceScore} att=${att.defenceScore}`);
+  // Balanced is the neutral baseline — same as passing no intent at all.
+  const noIntent = evaluateSplit(initMatch(xi, bench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter'), [], slots);
+  check('balanced intent == no-intent baseline', Math.abs(noIntent.attackScore - bal.attackScore) < 1e-6 && Math.abs(noIntent.defenceScore - bal.defenceScore) < 1e-6,
+    `atk ${noIntent.attackScore} vs ${bal.attackScore}`);
+}
+
 console.log(`\n=== ${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} ===\n`);
 process.exit(failures === 0 ? 0 : 1);
