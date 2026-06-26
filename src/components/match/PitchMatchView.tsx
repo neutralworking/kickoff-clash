@@ -10,6 +10,9 @@ import { cellOf, bandOf } from '../../lib/field';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard, TacticSlots } from '../../lib/tactics';
 import type { OpponentBuild, OpponentPlayer } from '../../lib/run';
+import type { Card } from '../../lib/scoring';
+import CardModal from '../cards/CardModal';
+import type { GameCardModel } from '../cards/GameCard';
 
 interface PitchMatchViewProps {
   matchState: MatchV5State;
@@ -94,6 +97,7 @@ export default function PitchMatchView({
   const [formSheet, setFormSheet] = useState(false);
   const [ballIdx, setBallIdx] = useState(-1);
   const [showOutcome, setShowOutcome] = useState(false);
+  const [modal, setModal] = useState<GameCardModel | null>(null);
 
   const { bench, yourGoals, opponentGoals, xi, subsRemaining } = matchState;
   const baseline = useMemo(() => getOpponentBaselines(matchState.opponentRound, matchState.opponentStyle, matchState.currentIncrement, matchState), [matchState]);
@@ -230,6 +234,10 @@ export default function PitchMatchView({
                 }}>{spot.isGK ? 'GK' : spot.number}</button>
               {spot.name && <span style={{ fontSize: 8.5, fontWeight: 600, color: oppView ? '#fca5a5' : spearhead ? '#fde68a' : 'rgba(245,240,224,0.85)', textShadow: '0 1px 2px rgba(0,0,0,0.6)', maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spot.name}</span>}
               {oppView && spot.isStar && <span style={{ position: 'absolute', top: -16, fontSize: 8.5, fontWeight: 800, color: '#fde68a', background: 'rgba(0,0,0,0.55)', padding: '1px 6px', borderRadius: 999, whiteSpace: 'nowrap' }}>{'★'} DANGER</span>}
+              {!oppView && mode === 'plan' && spot.cardId !== undefined && !spot.isGK && (
+                <span role="button" aria-label="Inspect player" onClick={(e) => { e.stopPropagation(); const c = xi.find((p) => p.id === spot.cardId); if (c) setModal({ variant: 'player', card: c as Card }); }}
+                  style={{ position: 'absolute', top: -6, right: 4, width: 16, height: 16, borderRadius: '50%', background: 'rgba(10,22,14,0.92)', border: '1.5px solid #f2f6ef', color: '#f2f6ef', fontFamily: 'var(--font-pixel, monospace)', fontSize: 9, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 9 }}>i</span>
+              )}
             </div>
           );
         })}
@@ -375,6 +383,9 @@ export default function PitchMatchView({
           </div>
         </div>
       )}
+
+      {/* Full-card overlay — tap the info pip on a player to inspect. */}
+      <CardModal model={modal} onClose={() => setModal(null)} />
     </div>
   );
 }

@@ -5,58 +5,29 @@ import type { PackContents } from '../lib/packs';
 import type { Card } from '../lib/scoring';
 import type { JokerCard } from '../lib/jokers';
 import type { TacticCard } from '../lib/tactics';
+import GameCard, { type GameCardModel } from './cards/GameCard';
+import CardModal from './cards/CardModal';
 
 // ---------------------------------------------------------------------------
-// Props (unchanged — three stages happen internally)
+// Props — three stages happen internally. onContinue now surfaces the picked
+// manager so GameShell can carry it into TeamSelect (pre-filled gaffer chip).
 // ---------------------------------------------------------------------------
 
 interface PackRevealProps {
   contents: PackContents;
-  onContinue: () => void;
+  onContinue: (managerId: string | null) => void;
 }
 
 // ---------------------------------------------------------------------------
 // Constants / helpers
 // ---------------------------------------------------------------------------
 
-const RARITY_COLOR: Record<string, string> = {
-  Common: '#9aa0a8',
-  Rare: '#3d7bd6',
-  Epic: '#a855f7',
-  Legendary: '#e8a23a',
-};
-
 const RARITY_FLASH: Record<string, string> = {
   Epic: 'rgba(168,85,247,0.55)',
   Legendary: 'rgba(232,162,58,0.6)',
 };
 
-const POSITION_COLORS: Record<string, string> = {
-  GK: '#e8621a',
-  CD: '#3d7bd6',
-  WD: '#3d7bd6',
-  DM: '#22c55e',
-  CM: '#22c55e',
-  WM: '#22c55e',
-  AM: '#a855f7',
-  WF: '#f59e0b',
-  CF: '#e23b35',
-};
-
-const NATION_FLAG: Record<string, string> = {
-  England: '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}',
-  Scotland: '\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}',
-  France: '\u{1F1EB}\u{1F1F7}',
-  Sweden: '\u{1F1F8}\u{1F1EA}',
-  Portugal: '\u{1F1F5}\u{1F1F9}',
-  Brazil: '\u{1F1E7}\u{1F1F7}',
-  Germany: '\u{1F1E9}\u{1F1EA}',
-};
-
-function lastName(name: string): string {
-  const parts = name.trim().split(' ');
-  return parts[parts.length - 1];
-}
+const PIXEL = 'var(--font-pixel, monospace)';
 
 type Stage = 'players' | 'managers' | 'tactics';
 type SubPhase = 'sealed' | 'ripping' | 'reveal';
@@ -77,7 +48,7 @@ const STAGE_META: Record<Stage, StageMeta> = {
     packLabel: 'PLAYER PACK',
     packSub: 'The squad',
     packAccent: 'var(--gold)',
-    teach: 'These cards are your squad. You’ll pick 11 to take the pitch.',
+    teach: 'These cards are your squad. Tap any card to inspect it. You’ll pick 11 to take the pitch.',
   },
   managers: {
     key: 'managers',
@@ -85,7 +56,7 @@ const STAGE_META: Record<Stage, StageMeta> = {
     packLabel: 'MANAGER PACK',
     packSub: 'The gaffers',
     packAccent: 'var(--kit-red)',
-    teach: 'A gaffer shapes the whole team through their traits. You’ll pick one.',
+    teach: 'A gaffer shapes the whole team through their traits. Tap to inspect, then pick one.',
   },
   tactics: {
     key: 'tactics',
@@ -93,7 +64,7 @@ const STAGE_META: Record<Stage, StageMeta> = {
     packLabel: 'TACTICAL PACK',
     packSub: 'The playbook',
     packAccent: 'var(--kit-blue)',
-    teach: 'Tactics are your in-match hand — drawn and played as the game unfolds.',
+    teach: 'Tactics are your in-match hand — drawn and played as the game unfolds. Tap to inspect.',
   },
 };
 
@@ -142,7 +113,7 @@ function SealedPack({
             height: 232,
             border: '3px solid var(--ink-black)',
             borderRadius: 'var(--radius-lg)',
-            background: `linear-gradient(160deg, var(--leather-light) 0%, var(--leather) 55%, #0f0b08 100%)`,
+            background: `linear-gradient(160deg, var(--surface-raised) 0%, var(--surface) 55%, #0c1d12 100%)`,
             boxShadow: `0 0 0 2px ${meta.packAccent}, 0 14px 30px rgba(0,0,0,0.55)`,
             display: 'flex',
             flexDirection: 'column',
@@ -161,7 +132,7 @@ function SealedPack({
               left: 8,
               right: 8,
               height: 0,
-              borderTop: '2px dashed rgba(245,240,224,0.25)',
+              borderTop: '2px dashed rgba(242,246,239,0.25)',
             }}
           />
           <div
@@ -173,7 +144,7 @@ function SealedPack({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontFamily: 'var(--font-pixel, monospace)',
+              fontFamily: PIXEL,
               fontSize: 16,
               fontWeight: 700,
               color: meta.packAccent,
@@ -184,7 +155,7 @@ function SealedPack({
           </div>
           <div
             style={{
-              fontFamily: 'var(--font-pixel, monospace)',
+              fontFamily: PIXEL,
               fontSize: 13,
               lineHeight: 1.5,
               letterSpacing: 0.5,
@@ -199,7 +170,7 @@ function SealedPack({
           </div>
           <div
             style={{
-              fontFamily: 'var(--font-pixel, monospace)',
+              fontFamily: PIXEL,
               fontSize: 9,
               color: meta.packAccent,
               letterSpacing: 0.5,
@@ -214,7 +185,7 @@ function SealedPack({
         <div
           className="chip-reveal"
           style={{
-            fontFamily: 'var(--font-pixel, monospace)',
+            fontFamily: PIXEL,
             fontSize: 10,
             letterSpacing: 1,
             color: 'var(--dust)',
@@ -229,77 +200,12 @@ function SealedPack({
 }
 
 // ===========================================================================
-// Player sprite chip
+// Player stage reveal — paginated grid of player GameCards (8/page → 4 pages)
 // ===========================================================================
 
-function PlayerChip({ card, delay }: { card: Card; delay: number }) {
-  const rarity = RARITY_COLOR[card.rarity] ?? RARITY_COLOR.Common;
-  const posColor = POSITION_COLORS[card.position] ?? '#71717a';
-  return (
-    <div
-      className="chip-reveal pixel-edge"
-      style={{
-        animationDelay: `${delay}ms`,
-        background: 'linear-gradient(160deg, #16140f, #0d0b07)',
-        border: `2px solid ${rarity}`,
-        borderRadius: 'var(--radius-sm)',
-        padding: '5px 6px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 3,
-        minWidth: 0,
-      }}
-    >
-      <div className="flex items-center justify-between" style={{ gap: 4 }}>
-        <span
-          style={{
-            background: posColor,
-            color: '#fff',
-            fontFamily: 'var(--font-pixel, monospace)',
-            fontSize: 8,
-            lineHeight: 1,
-            padding: '3px 4px',
-            borderRadius: 3,
-            flexShrink: 0,
-          }}
-        >
-          {card.position}
-        </span>
-        <span
-          style={{
-            fontFamily: 'var(--font-pixel, monospace)',
-            fontSize: 13,
-            lineHeight: 1,
-            color: rarity,
-          }}
-        >
-          {card.power}
-        </span>
-      </div>
-      <span
-        className="truncate"
-        style={{ fontSize: 11, fontWeight: 700, color: 'var(--cream)', lineHeight: 1.15 }}
-      >
-        {lastName(card.name)}
-      </span>
-      <span
-        className="truncate"
-        style={{ fontSize: 8.5, color: 'var(--dust)', letterSpacing: 0.2, lineHeight: 1 }}
-      >
-        {card.archetype}
-      </span>
-      <div style={{ height: 2, background: rarity, borderRadius: 2, marginTop: 1 }} />
-    </div>
-  );
-}
+const PLAYERS_PER_PAGE = 8;
 
-// ===========================================================================
-// Player stage reveal — paginated grid (3 cols × 5 rows = 15/page → 2 pages)
-// ===========================================================================
-
-const PLAYERS_PER_PAGE = 15;
-
-function PlayerReveal({ players }: { players: Card[] }) {
+function PlayerReveal({ players, onOpen }: { players: Card[]; onOpen: (c: Card) => void }) {
   const [page, setPage] = useState(0);
   const pageCount = Math.ceil(players.length / PLAYERS_PER_PAGE);
   const start = page * PLAYERS_PER_PAGE;
@@ -326,41 +232,30 @@ function PlayerReveal({ players }: { players: Card[] }) {
         />
       )}
 
-      <div
-        key={page}
-        className="flex-1 min-h-0 grid"
-        style={{
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          gridAutoRows: 'min-content',
-          gap: 7,
-          alignContent: 'start',
-        }}
-      >
-        {pageCards.map((c, i) => (
-          <PlayerChip key={c.id} card={c} delay={i * 28} />
-        ))}
+      <div className="flex-1 min-h-0 flex flex-col justify-center">
+        <div
+          key={page}
+          className="grid"
+          style={{
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: 8,
+          }}
+        >
+          {pageCards.map((c, i) => (
+            <GameCard
+              key={c.id}
+              model={{ variant: 'player', card: c }}
+              delay={i * 28}
+              onClick={() => onOpen(c)}
+              ariaLabel={`Inspect ${c.name}`}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Pager */}
       <div className="flex items-center justify-center gap-3 shrink-0" style={{ paddingTop: 10 }}>
-        <button
-          onClick={() => setPage((p) => Math.max(0, p - 1))}
-          disabled={page === 0}
-          aria-label="Previous page"
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 'var(--radius-sm)',
-            border: '2px solid var(--ink-black)',
-            background: page === 0 ? 'rgba(255,255,255,0.04)' : 'var(--leather-light)',
-            color: page === 0 ? 'var(--ink)' : 'var(--cream)',
-            fontFamily: 'var(--font-pixel, monospace)',
-            fontSize: 14,
-            cursor: page === 0 ? 'default' : 'pointer',
-          }}
-        >
-          {'‹'}
-        </button>
+        <PagerBtn dir="prev" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))} />
         <div className="flex items-center gap-2">
           {Array.from({ length: pageCount }).map((_, i) => (
             <span
@@ -369,194 +264,120 @@ function PlayerReveal({ players }: { players: Card[] }) {
                 width: i === page ? 22 : 8,
                 height: 8,
                 borderRadius: 4,
-                background: i === page ? 'var(--gold)' : 'rgba(245,240,224,0.25)',
+                background: i === page ? 'var(--gold)' : 'rgba(242,246,239,0.25)',
                 transition: 'all 0.25s ease',
               }}
             />
           ))}
         </div>
-        <button
-          onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-          disabled={page >= pageCount - 1}
-          aria-label="Next page"
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 'var(--radius-sm)',
-            border: '2px solid var(--ink-black)',
-            background: page >= pageCount - 1 ? 'rgba(255,255,255,0.04)' : 'var(--leather-light)',
-            color: page >= pageCount - 1 ? 'var(--ink)' : 'var(--cream)',
-            fontFamily: 'var(--font-pixel, monospace)',
-            fontSize: 14,
-            cursor: page >= pageCount - 1 ? 'default' : 'pointer',
-          }}
-        >
-          {'›'}
-        </button>
+        <PagerBtn dir="next" disabled={page >= pageCount - 1} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} />
+      </div>
+    </div>
+  );
+}
+
+function PagerBtn({ dir, disabled, onClick }: { dir: 'prev' | 'next'; disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={dir === 'prev' ? 'Previous page' : 'Next page'}
+      style={{
+        width: 40,
+        height: 40,
+        borderRadius: 'var(--radius-sm)',
+        border: '2px solid var(--ink-black)',
+        background: disabled ? 'rgba(255,255,255,0.04)' : 'var(--surface-raised)',
+        color: disabled ? 'var(--ink)' : 'var(--cream)',
+        fontFamily: PIXEL,
+        fontSize: 14,
+        cursor: disabled ? 'default' : 'pointer',
+      }}
+    >
+      {dir === 'prev' ? '‹' : '›'}
+    </button>
+  );
+}
+
+// ===========================================================================
+// Manager stage reveal — two gaffer GameCards, tap to inspect, pick one
+// ===========================================================================
+
+function ManagerReveal({
+  managers,
+  pickedId,
+  onOpen,
+  onPick,
+}: {
+  managers: JokerCard[];
+  pickedId: string | null;
+  onOpen: (m: JokerCard) => void;
+  onPick: (id: string) => void;
+}) {
+  return (
+    <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12, alignContent: 'center' }}>
+        {managers.map((m, i) => {
+          const picked = pickedId === m.id;
+          return (
+            <div key={m.id} className="flex flex-col" style={{ gap: 8, minWidth: 0 }}>
+              <GameCard
+                model={{ variant: 'manager', manager: m }}
+                delay={i * 120}
+                selected={picked}
+                onClick={() => onOpen(m)}
+                ariaLabel={`Inspect ${m.name}`}
+              />
+              <button
+                onClick={() => onPick(m.id)}
+                className="active:scale-95"
+                style={{
+                  fontFamily: PIXEL,
+                  fontSize: 11,
+                  letterSpacing: 0.5,
+                  color: picked ? 'var(--ink-black)' : 'var(--cream)',
+                  padding: '10px 0',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '2px solid var(--ink-black)',
+                  background: picked
+                    ? 'linear-gradient(135deg, var(--kit-red), #b62520)'
+                    : 'var(--surface)',
+                  boxShadow: picked
+                    ? '0 3px 0 0 var(--ink-black), 0 5px 14px rgba(232,54,47,0.4)'
+                    : '0 3px 0 0 var(--ink-black)',
+                  transition: 'transform 0.12s ease',
+                  cursor: 'pointer',
+                }}
+              >
+                {picked ? 'PICKED ✓' : 'PICK GAFFER'}
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 // ===========================================================================
-// Manager stage reveal — two gaffer cards
+// Tactics stage reveal — grid of tactic GameCards
 // ===========================================================================
 
-function ManagerReveal({ managers }: { managers: JokerCard[] }) {
+function TacticReveal({ tactics, onOpen }: { tactics: TacticCard[]; onOpen: (t: TacticCard) => void }) {
   return (
-    <div className="flex-1 min-h-0 flex flex-col justify-center gap-3">
-      {managers.map((m, i) => (
-        <div
-          key={m.id}
-          className="chip-reveal pixel-edge"
-          style={{
-            animationDelay: `${i * 120}ms`,
-            background: 'linear-gradient(160deg, var(--leather-light), var(--leather))',
-            border: '2px solid var(--kit-red)',
-            borderRadius: 'var(--radius)',
-            padding: 14,
-            display: 'flex',
-            gap: 12,
-            alignItems: 'stretch',
-          }}
-        >
-          {/* Gaffer sprite badge */}
-          <div
-            style={{
-              flexShrink: 0,
-              width: 60,
-              height: 60,
-              borderRadius: 'var(--radius-sm)',
-              background: 'radial-gradient(circle at 50% 35%, #2a221a, #14100b)',
-              border: '2px solid var(--ink-black)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 30,
-              alignSelf: 'center',
-            }}
-          >
-            {'\u{1F454}'}
-          </div>
-
-          <div className="flex flex-col min-w-0" style={{ gap: 5, flex: 1 }}>
-            <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
-              <span
-                className="truncate"
-                style={{
-                  fontFamily: 'var(--font-pixel, monospace)',
-                  fontSize: 13,
-                  color: 'var(--cream)',
-                  textShadow: '0 1px 0 var(--ink-black)',
-                }}
-              >
-                {m.name}
-              </span>
-              {m.nation && (
-                <span style={{ fontSize: 15, flexShrink: 0 }} title={m.nation}>
-                  {NATION_FLAG[m.nation] ?? '\u{1F3F3}'}
-                </span>
-              )}
-            </div>
-            <p
-              style={{
-                fontFamily: 'var(--font-flavour, serif)',
-                fontStyle: 'italic',
-                fontSize: 11.5,
-                lineHeight: 1.3,
-                color: 'var(--cream-soft)',
-                margin: 0,
-              }}
-            >
-              {'“'}{m.philosophy}{'”'}
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {m.traits.map((t) => (
-                <span
-                  key={t}
-                  style={{
-                    fontFamily: 'var(--font-pixel, monospace)',
-                    fontSize: 8,
-                    letterSpacing: 0.3,
-                    color: 'var(--kit-red)',
-                    background: 'rgba(226,59,53,0.14)',
-                    border: '1px solid rgba(226,59,53,0.4)',
-                    borderRadius: 4,
-                    padding: '4px 6px',
-                    lineHeight: 1,
-                  }}
-                >
-                  {t.toUpperCase()}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
+    <div
+      className="flex-1 min-h-0 grid overflow-y-auto"
+      style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gridAutoRows: 'min-content', gap: 8, alignContent: 'start', overscrollBehavior: 'contain' }}
+    >
+      {tactics.map((t, i) => (
+        <GameCard
+          key={t.id}
+          model={{ variant: 'tactic', tactic: t }}
+          delay={i * 35}
+          onClick={() => onOpen(t)}
+          ariaLabel={`Inspect ${t.name}`}
+        />
       ))}
-    </div>
-  );
-}
-
-// ===========================================================================
-// Tactics stage reveal — grid of tactic cards
-// ===========================================================================
-
-const TACTIC_CAT_COLOR: Record<string, string> = {
-  attacking: 'var(--kit-red)',
-  defensive: 'var(--kit-blue)',
-  specialist: 'var(--gold)',
-};
-
-function TacticReveal({ tactics }: { tactics: TacticCard[] }) {
-  return (
-    <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gridAutoRows: '1fr', gap: 8 }}>
-      {tactics.map((t, i) => {
-        const accent = TACTIC_CAT_COLOR[t.category] ?? 'var(--gold)';
-        return (
-          <div
-            key={t.id}
-            className="chip-reveal pixel-edge"
-            style={{
-              animationDelay: `${i * 35}ms`,
-              background: 'linear-gradient(160deg, #16140f, #0d0b07)',
-              border: `2px solid var(--ink-black)`,
-              borderLeft: `4px solid ${accent}`,
-              borderRadius: 'var(--radius-sm)',
-              padding: '8px 9px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 4,
-              minWidth: 0,
-              overflow: 'hidden',
-            }}
-          >
-            <span
-              className="truncate"
-              style={{
-                fontFamily: 'var(--font-pixel, monospace)',
-                fontSize: 10,
-                color: 'var(--cream)',
-                lineHeight: 1.2,
-              }}
-            >
-              {t.name}
-            </span>
-            <span
-              style={{
-                fontSize: 9,
-                lineHeight: 1.3,
-                color: 'var(--dust)',
-                display: '-webkit-box',
-                WebkitLineClamp: 3,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-              }}
-            >
-              {t.effect}
-            </span>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -568,6 +389,8 @@ function TacticReveal({ tactics }: { tactics: TacticCard[] }) {
 export default function PackReveal({ contents, onContinue }: PackRevealProps) {
   const [stage, setStage] = useState<Stage>('players');
   const [phase, setPhase] = useState<SubPhase>('sealed');
+  const [pickedManagerId, setPickedManagerId] = useState<string | null>(null);
+  const [modal, setModal] = useState<GameCardModel | null>(null);
   const ripTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Players sorted strongest-first so pulls feel rewarding (display only).
@@ -594,7 +417,7 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
       setStage('tactics');
       setPhase('sealed');
     } else {
-      onContinue();
+      onContinue(pickedManagerId);
     }
   }
 
@@ -602,7 +425,10 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
     stage === 'players' ? contents.players.length : stage === 'managers' ? contents.managers.length : contents.tactics.length;
   const countNoun = stage === 'players' ? 'players' : stage === 'managers' ? 'gaffers' : 'tactics';
 
-  const continueLabel = stage === 'tactics' ? 'Pick Your Team →' : 'Next Pack →';
+  // On the manager stage the continue button is gated on a pick.
+  const managerGated = stage === 'managers' && pickedManagerId === null;
+  const continueLabel =
+    stage === 'tactics' ? 'Pick Your Team →' : stage === 'managers' ? (managerGated ? 'Pick a Gaffer' : 'Next Pack →') : 'Next Pack →';
 
   return (
     <div
@@ -621,7 +447,7 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            'radial-gradient(ellipse at 50% 22%, rgba(45,138,78,0.16) 0%, transparent 55%)',
+            'radial-gradient(ellipse at 50% 22%, rgba(31,157,79,0.16) 0%, transparent 55%)',
         }}
       />
 
@@ -641,8 +467,8 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
                   background: active
                     ? STAGE_META[s].packAccent
                     : done
-                      ? 'rgba(245,240,224,0.5)'
-                      : 'rgba(245,240,224,0.18)',
+                      ? 'rgba(242,246,239,0.5)'
+                      : 'rgba(242,246,239,0.18)',
                   transition: 'all 0.3s ease',
                 }}
               />
@@ -652,7 +478,7 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
         <h1
           className="text-center"
           style={{
-            fontFamily: 'var(--font-pixel, monospace)',
+            fontFamily: PIXEL,
             fontSize: 17,
             letterSpacing: 0.5,
             color: 'var(--cream)',
@@ -665,7 +491,7 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
         <p
           className="text-center"
           style={{
-            fontFamily: 'var(--font-pixel, monospace)',
+            fontFamily: PIXEL,
             fontSize: 9,
             letterSpacing: 1,
             color: meta.packAccent,
@@ -681,11 +507,16 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
         {phase !== 'reveal' ? (
           <SealedPack meta={meta} count={count} countNoun={countNoun} ripping={phase === 'ripping'} onRip={rip} />
         ) : stage === 'players' ? (
-          <PlayerReveal players={sortedPlayers} />
+          <PlayerReveal players={sortedPlayers} onOpen={(c) => setModal({ variant: 'player', card: c })} />
         ) : stage === 'managers' ? (
-          <ManagerReveal managers={contents.managers} />
+          <ManagerReveal
+            managers={contents.managers}
+            pickedId={pickedManagerId}
+            onOpen={(m) => setModal({ variant: 'manager', manager: m })}
+            onPick={(id) => setPickedManagerId(id)}
+          />
         ) : (
-          <TacticReveal tactics={contents.tactics} />
+          <TacticReveal tactics={contents.tactics} onOpen={(t) => setModal({ variant: 'tactic', tactic: t })} />
         )}
       </div>
 
@@ -697,7 +528,7 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
               className="chip-reveal"
               style={{
                 background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(245,240,224,0.12)',
+                border: '1px solid rgba(242,246,239,0.12)',
                 borderRadius: 'var(--radius-sm)',
                 padding: '9px 12px',
                 marginBottom: 10,
@@ -711,19 +542,25 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
             </div>
             <button
               onClick={advanceStage}
-              className="w-full active:scale-95"
+              disabled={managerGated}
+              className={managerGated ? '' : 'w-full active:scale-95'}
               style={{
-                fontFamily: 'var(--font-pixel, monospace)',
+                width: '100%',
+                fontFamily: PIXEL,
                 fontSize: 14,
                 letterSpacing: 0.5,
-                color: 'var(--cream)',
+                color: managerGated ? 'var(--ink)' : 'var(--cream)',
                 padding: '15px 0',
                 borderRadius: 'var(--radius)',
                 border: '2px solid var(--ink-black)',
-                background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))',
-                boxShadow: '0 4px 0 0 var(--ink-black), 0 6px 18px var(--amber-glow)',
+                background: managerGated
+                  ? 'var(--surface)'
+                  : 'linear-gradient(135deg, var(--amber), var(--amber-soft))',
+                boxShadow: managerGated
+                  ? '0 4px 0 0 var(--ink-black)'
+                  : '0 4px 0 0 var(--ink-black), 0 6px 18px var(--amber-glow)',
                 transition: 'transform 0.12s ease',
-                cursor: 'pointer',
+                cursor: managerGated ? 'default' : 'pointer',
               }}
             >
               {continueLabel}
@@ -731,6 +568,9 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
           </>
         )}
       </div>
+
+      {/* Full-card overlay */}
+      <CardModal model={modal} onClose={() => setModal(null)} />
     </div>
   );
 }

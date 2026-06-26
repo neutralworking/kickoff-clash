@@ -215,6 +215,86 @@ the match and team-select pitches.
 
 ---
 
+## Cards
+
+The card is the atom of Kickoff Clash. Players are cards, gaffers are cards,
+tactics are cards — and like Marvel Snap / Balatro they read as **real playing
+cards** and **tap to expand** into a full-card overlay. One reusable family
+powers every screen, so the look never drifts.
+
+Source: `src/components/cards/`
+- `cardTokens.ts` — the single source of truth for rarity/position/durability
+  colours, position long-labels, tactic-category accents, nation flags + codes,
+  and `lastName`. Every screen imports these; never hardcode the maps again.
+- `GameCard.tsx` — the playing card. `<GameCard model={…} size="grid|full" …>`.
+- `CardModal.tsx` — the expanded full-card overlay.
+
+### The frame (shared)
+
+Every card is a true **2.5 : 3.5 playing-card** rectangle: hard
+`--ink-black` border (2px grid / 3px full), `--radius-sm` (grid) / `--radius`
+(full) corners, a flat night-pitch gradient fill
+(`--surface-raised → --surface → #0c1d12`), and the signature stacked pixel drop
+shadow. An **accent rail** runs across the top and bottom of every card — this
+colour is the card's identity:
+
+- **PLAYER** → rarity colour (`Common` grey, `Rare` kit-blue, `Epic` purple,
+  `Legendary` gold).
+- **MANAGER** → `--kit-red`.
+- **TACTIC** → category colour (`attacking` kit-red, `defensive` kit-blue,
+  `specialist` gold).
+
+`selected` adds an accent inset ring; `dimmed` drops opacity to ~0.42 for
+ineligible picks. Ratings are always `--line-white` (contrast law).
+
+### The three variants
+
+All three share the frame but carry a variant-specific **pixel-art sprite**
+(flat CSS/SVG blocks, `shapeRendering: crispEdges`, no image assets) and body.
+
+- **PLAYER** — position tab (left) + big rating (right); a pixel kit-and-head
+  sprite in the kit colour with an accent crest block; surname; archetype +
+  nation flag/code.
+- **MANAGER** — `GAFFER` tab + nation; a pixel suit-and-tie sprite (tie in
+  accent); name; italic philosophy flavour; trait pills.
+- **TACTIC** — category tab; a pixel chevron / tactic-board sprite; name;
+  effect (line-clamped at grid size).
+
+### Expand interaction
+
+Tapping **any** card opens `CardModal`: a dimmed scrim
+(`rgba(0,0,0,.66)` + 2px blur, `z-index: 60`) with a close control (top-right,
+40px), the same card rendered at `size="full"` (animated in with `hero-pop`),
+and the **full detail** below in stacked `--surface` panels. The page never
+scrolls — only the detail column scrolls internally
+(`overscroll-behavior: contain`). Closes on backdrop tap, the × control, or
+**Escape**.
+
+Detail shown:
+- **Player** — rating, long position, nation, archetype (+ secondary), durability,
+  role/theme chips, ability, strengths (green) / weaknesses (red) tags, character
+  tags (gold), bio, and the quirk as a flavour line.
+- **Manager** — name, nation (+flag), philosophy flavour, trait pills. (Never the
+  legacy `effect` text.)
+- **Tactic** — name, category, effect, flavour, and any contradiction note.
+
+Each screen owns its own `modal` state and renders one `<CardModal>`; tokens
+that have another primary action (place / remove / select) carry a small **`i`
+info pip** so inspect is always available without breaking that action:
+- Pack reveal: the whole card taps to inspect (managers also get a PICK button).
+- Team-select sheets: the card taps to place/pick; the `i` pip inspects.
+- Team-select pitch: tapping a placed chip **removes** it; the `i` pip inspects.
+- Match pitch: planning-mode your-XI chips show an `i` pip that inspects (tap
+  still selects/subs; rivals are not full cards, so they don't expand).
+
+### Motion
+
+`GameCard` reuses `chip-reveal` (staggered grid entrance via the `delay` prop);
+`CardModal` reuses `hero-pop` for the card and `scrim-fade` for the scrim. No
+new keyframes were needed.
+
+---
+
 ## Motion
 
 Snappy and GPU-cheap: prefer `transform` / `opacity` over reflow. Durations
