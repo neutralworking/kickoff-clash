@@ -13,9 +13,14 @@ import {
   autoFill,
   BENCH_SIZE,
 } from '../lib/team-select';
+import GameCard, { type GameCardModel } from './cards/GameCard';
+import CardModal from './cards/CardModal';
+import { PIXEL, RARITY_COLOR, POSITION_COLOR, lastName } from './cards/cardTokens';
 
 interface TeamSelectProps {
   contents: PackContents;
+  /** Pre-selected gaffer carried from the manager pack reveal. */
+  initialManagerId?: string | null;
   onConfirm: (sel: TeamSelection) => void;
 }
 
@@ -25,44 +30,6 @@ const INTENTS: { id: TeamIntent; label: string; accent: string }[] = [
   { id: 'defensive', label: 'DEF', accent: 'var(--kit-blue)' },
 ];
 
-// Rarity rings the chip; ratings stay line-white for legibility (DESIGN contrast law).
-const RARITY_COLOR: Record<string, string> = {
-  Common: '#9aa0a8',
-  Rare: '#3d7bd6',
-  Epic: '#a855f7',
-  Legendary: '#e8a23a',
-};
-
-// Position family → dot colour, matching PackReveal's POSITION_COLORS palette.
-const POSITION_COLOR: Record<string, string> = {
-  GK: '#e8621a',
-  CD: '#3d7bd6',
-  WD: '#3d7bd6',
-  DM: '#22c55e',
-  CM: '#22c55e',
-  WM: '#22c55e',
-  AM: '#a855f7',
-  WF: '#f59e0b',
-  CF: '#e23b35',
-};
-
-const NATION_FLAG: Record<string, string> = {
-  England: '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}',
-  Scotland: '\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}',
-  France: '\u{1F1EB}\u{1F1F7}',
-  Sweden: '\u{1F1F8}\u{1F1EA}',
-  Portugal: '\u{1F1F5}\u{1F1F9}',
-  Brazil: '\u{1F1E7}\u{1F1F7}',
-  Germany: '\u{1F1E9}\u{1F1EA}',
-};
-
-const PIXEL = 'var(--font-pixel, monospace)';
-
-function lastName(name: string): string {
-  const p = name.trim().split(' ');
-  return p[p.length - 1];
-}
-
 type Overlay =
   | { kind: 'slot'; index: number }
   | { kind: 'bench' }
@@ -70,7 +37,7 @@ type Overlay =
   | { kind: 'formation' }
   | null;
 
-export default function TeamSelect({ contents, onConfirm }: TeamSelectProps) {
+export default function TeamSelect({ contents, initialManagerId, onConfirm }: TeamSelectProps) {
   const pool = contents.players;
   const byId = useMemo(() => new Map(pool.map((c) => [c.id, c])), [pool]);
 
@@ -78,11 +45,15 @@ export default function TeamSelect({ contents, onConfirm }: TeamSelectProps) {
   const formation: Formation = getFormation(formationId);
 
   const [sel, setSel] = useState<XISelection>(() => emptySelection(formation));
-  const [managerId, setManagerId] = useState<string | null>(null);
+  const [managerId, setManagerId] = useState<string | null>(
+    initialManagerId && contents.managers.some((m) => m.id === initialManagerId) ? initialManagerId : null,
+  );
   const [intent, setIntent] = useState<TeamIntent>('balanced');
   const [overlay, setOverlay] = useState<Overlay>(null);
   // Tracks which slot index just received a chip, to fire the place animation.
   const [placedSlot, setPlacedSlot] = useState<number | null>(null);
+  // Full-card overlay (tap any card to inspect — non-destructive).
+  const [modal, setModal] = useState<GameCardModel | null>(null);
 
   const usedIds = useMemo(
     () => new Set<number>([...sel.starters.filter((x): x is number => x != null), ...sel.bench]),
@@ -156,7 +127,6 @@ export default function TeamSelect({ contents, onConfirm }: TeamSelectProps) {
   }
 
   const activeSlot = overlay?.kind === 'slot' ? formation.slots[overlay.index] : null;
-  const intentMeta = INTENTS.find((it) => it.id === intent)!;
 
   return (
     <div
@@ -270,7 +240,7 @@ export default function TeamSelect({ contents, onConfirm }: TeamSelectProps) {
           })}
         </div>
 
-        {/* Manager chip */}
+        {/* Manager chip — tap to (re)pick. */}
         <button
           onClick={() => setOverlay({ kind: 'manager' })}
           className="flex-1 flex items-center gap-1.5 px-2 min-w-0 active:scale-[0.98]"
@@ -301,6 +271,7 @@ export default function TeamSelect({ contents, onConfirm }: TeamSelectProps) {
           byId={byId}
           placedSlot={placedSlot}
           onSlot={(i, hasCard) => (hasCard ? clearSlot(i) : setOverlay({ kind: 'slot', index: i }))}
+          onInspect={(card) => setModal({ variant: 'player', card })}
         />
       </div>
 
@@ -324,8 +295,8 @@ export default function TeamSelect({ contents, onConfirm }: TeamSelectProps) {
             return (
               <button
                 key={i}
-                onClick={() => (card ? removeBench(card.id) : setOverlay({ kind: 'bench' }))}
-                className="flex flex-col items-center justify-center active:scale-95"
+                onClick={() => (card ? setModal({ variant: 'player', card }) : setOverlay({ kind: 'bench' }))}
+                className="relative flex flex-col items-center justify-center active:scale-95"
                 style={{
                   height: 44,
                   borderRadius: 'var(--radius-sm)',
@@ -342,6 +313,31 @@ export default function TeamSelect({ contents, onConfirm }: TeamSelectProps) {
                     </span>
                     <span className="truncate w-full text-center px-0.5" style={{ fontSize: 7.5, color: 'var(--cream-soft)', marginTop: 2 }}>
                       {lastName(card.name)}
+                    </span>
+                    {/* Remove affordance — keeps tap = inspect, this corner = remove. */}
+                    <span
+                      role="button"
+                      aria-label={`Remove ${lastName(card.name)} from bench`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeBench(card.id);
+                      }}
+                      className="absolute flex items-center justify-center"
+                      style={{
+                        top: -5,
+                        right: -5,
+                        width: 16,
+                        height: 16,
+                        borderRadius: '50%',
+                        background: 'var(--danger)',
+                        border: '1.5px solid var(--ink-black)',
+                        color: 'var(--line-white)',
+                        fontFamily: PIXEL,
+                        fontSize: 9,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {'×'}
                     </span>
                   </>
                 ) : (
@@ -407,15 +403,24 @@ export default function TeamSelect({ contents, onConfirm }: TeamSelectProps) {
                   setManagerId(id);
                   setOverlay(null);
                 }}
+                onInspect={(m) => setModal({ variant: 'manager', manager: m })}
               />
             ) : overlay.kind === 'formation' ? (
               <FormationSheet formations={contents.formations} current={formationId} onPick={switchFormation} />
             ) : (
-              <PlayerSheet available={available} activeSlot={activeSlot} onPick={placeInOverlay} />
+              <PlayerSheet
+                available={available}
+                activeSlot={activeSlot}
+                onPick={placeInOverlay}
+                onInspect={(c) => setModal({ variant: 'player', card: c })}
+              />
             )}
           </div>
         </div>
       )}
+
+      {/* Full-card overlay — sits above the sheets. */}
+      <CardModal model={modal} onClose={() => setModal(null)} />
     </div>
   );
 }
@@ -430,12 +435,14 @@ function Pitch({
   byId,
   placedSlot,
   onSlot,
+  onInspect,
 }: {
   formation: Formation;
   starters: (number | null)[];
   byId: Map<number, Card>;
   placedSlot: number | null;
   onSlot: (index: number, hasCard: boolean) => void;
+  onInspect: (card: Card) => void;
 }) {
   const line = 'rgba(242,246,239,0.5)';
   return (
@@ -482,6 +489,7 @@ function Pitch({
             card={card}
             justPlaced={placedSlot === i}
             onClick={() => onSlot(i, !!card)}
+            onInspect={card ? () => onInspect(card) : undefined}
           />
         );
       })}
@@ -494,11 +502,13 @@ function PitchSlot({
   card,
   justPlaced,
   onClick,
+  onInspect,
 }: {
   slot: Formation['slots'][number];
   card: Card | undefined;
   justPlaced: boolean;
   onClick: () => void;
+  onInspect?: () => void;
 }) {
   const isGK = slot.type === 'GK';
   const kit = isGK ? '#16a34a' : 'var(--kit-red)';
@@ -537,7 +547,7 @@ function PitchSlot({
             className="absolute"
             style={{
               bottom: -2,
-              right: -2,
+              left: -2,
               width: 11,
               height: 11,
               borderRadius: '50%',
@@ -545,6 +555,31 @@ function PitchSlot({
               border: '1.5px solid var(--ink-black)',
             }}
           />
+          {/* Info affordance — non-destructive full-card view (tap on chip = remove). */}
+          <span
+            role="button"
+            aria-label={`Inspect ${lastName(card.name)}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onInspect?.();
+            }}
+            className="absolute flex items-center justify-center"
+            style={{
+              bottom: -3,
+              right: -4,
+              width: 14,
+              height: 14,
+              borderRadius: '50%',
+              background: 'var(--surface)',
+              border: '1.5px solid var(--line-white)',
+              color: 'var(--line-white)',
+              fontFamily: PIXEL,
+              fontSize: 8,
+              lineHeight: 1,
+            }}
+          >
+            i
+          </span>
         </div>
       ) : (
         <div
@@ -608,17 +643,20 @@ function ActionBtn({ label, accent, onClick }: { label: string; accent: string; 
 }
 
 // ---------------------------------------------------------------------------
-// Player picker sheet — eligible-first grid of sprite cards
+// Player picker sheet — eligible-first grid of player GameCards.
+// Tap a card to place it; the info pip opens the full card (non-destructive).
 // ---------------------------------------------------------------------------
 
 function PlayerSheet({
   available,
   activeSlot,
   onPick,
+  onInspect,
 }: {
   available: Card[];
   activeSlot: Formation['slots'][number] | null;
   onPick: (id: number) => void;
+  onInspect: (c: Card) => void;
 }) {
   const sorted = useMemo(() => {
     if (!activeSlot) return available;
@@ -631,53 +669,43 @@ function PlayerSheet({
   }, [available, activeSlot]);
 
   return (
-    <div className="grid grid-cols-3 gap-1.5 overflow-y-auto px-3 pt-1" style={{ overscrollBehavior: 'contain' }}>
+    <div className="grid grid-cols-3 gap-2 overflow-y-auto px-3 pt-1 pb-2" style={{ overscrollBehavior: 'contain' }}>
       {sorted.map((c) => {
         const eligible = !activeSlot || positionFitsSlot(c.position, activeSlot);
-        const ring = RARITY_COLOR[c.rarity] ?? 'var(--border)';
-        const posColor = POSITION_COLOR[c.position] ?? 'var(--dust)';
         return (
-          <button
-            key={c.id}
-            onClick={() => onPick(c.id)}
-            className="text-left active:scale-95 pixel-edge"
-            style={{
-              background: 'linear-gradient(160deg, var(--surface-raised), var(--surface))',
-              border: `2px solid ${eligible ? ring : 'var(--border)'}`,
-              borderRadius: 'var(--radius-sm)',
-              padding: '6px 7px',
-              opacity: eligible ? 1 : 0.42,
-              transition: 'transform 0.1s ease',
-              minWidth: 0,
-            }}
-          >
-            <div className="flex items-center justify-between" style={{ gap: 4 }}>
-              <span
-                style={{
-                  background: posColor,
-                  color: 'var(--line-white)',
-                  fontFamily: PIXEL,
-                  fontSize: 7.5,
-                  lineHeight: 1,
-                  padding: '3px 4px',
-                  borderRadius: 3,
-                  flexShrink: 0,
-                }}
-              >
-                {c.position}
-              </span>
-              <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, color: 'var(--line-white)' }}>
-                {Math.round(c.power)}
-              </span>
-            </div>
-            <span className="truncate block" style={{ fontSize: 11, fontWeight: 700, color: 'var(--cream)', marginTop: 4, lineHeight: 1.15 }}>
-              {lastName(c.name)}
+          <div key={c.id} className="relative" style={{ minWidth: 0 }}>
+            <GameCard
+              model={{ variant: 'player', card: c }}
+              dimmed={!eligible}
+              onClick={() => onPick(c.id)}
+              ariaLabel={`Place ${c.name}`}
+            />
+            <span
+              role="button"
+              aria-label={`Inspect ${c.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onInspect(c);
+              }}
+              className="absolute flex items-center justify-center active:scale-90"
+              style={{
+                top: 4,
+                right: 4,
+                width: 18,
+                height: 18,
+                borderRadius: '50%',
+                background: 'var(--surface)',
+                border: '1.5px solid var(--line-white)',
+                color: 'var(--line-white)',
+                fontFamily: PIXEL,
+                fontSize: 9,
+                lineHeight: 1,
+                zIndex: 2,
+              }}
+            >
+              i
             </span>
-            <span className="truncate block" style={{ fontSize: 8.5, color: 'var(--dust)', marginTop: 1, lineHeight: 1 }}>
-              {c.archetype}
-            </span>
-            <div style={{ height: 2, background: ring, borderRadius: 2, marginTop: 4 }} />
-          </button>
+          </div>
         );
       })}
     </div>
@@ -685,86 +713,58 @@ function PlayerSheet({
 }
 
 // ---------------------------------------------------------------------------
-// Manager picker sheet — gaffer cards with trait pills
+// Manager picker sheet — gaffer GameCards. Tap to pick; info pip to inspect.
 // ---------------------------------------------------------------------------
 
 function ManagerSheet({
   managers,
   managerId,
   onPick,
+  onInspect,
 }: {
   managers: PackContents['managers'];
   managerId: string | null;
   onPick: (id: string) => void;
+  onInspect: (m: PackContents['managers'][number]) => void;
 }) {
   return (
-    <div className="flex flex-col gap-2 overflow-y-auto px-3 pt-1" style={{ overscrollBehavior: 'contain' }}>
+    <div className="grid grid-cols-2 gap-2 overflow-y-auto px-3 pt-1 pb-2" style={{ overscrollBehavior: 'contain' }}>
       {managers.map((m) => {
         const on = managerId === m.id;
         return (
-          <button
-            key={m.id}
-            onClick={() => onPick(m.id)}
-            className="text-left active:scale-[0.99] pixel-edge"
-            style={{
-              background: 'linear-gradient(160deg, var(--surface-raised), var(--surface))',
-              border: `2px solid ${on ? 'var(--kit-red)' : 'var(--ink-black)'}`,
-              borderRadius: 'var(--radius)',
-              padding: 12,
-              display: 'flex',
-              gap: 11,
-              transition: 'transform 0.1s ease',
-            }}
-          >
-            <div
-              className="flex items-center justify-center shrink-0 self-center"
+          <div key={m.id} className="relative" style={{ minWidth: 0 }}>
+            <GameCard
+              model={{ variant: 'manager', manager: m }}
+              selected={on}
+              onClick={() => onPick(m.id)}
+              ariaLabel={`Pick ${m.name}`}
+            />
+            <span
+              role="button"
+              aria-label={`Inspect ${m.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onInspect(m);
+              }}
+              className="absolute flex items-center justify-center active:scale-90"
               style={{
-                width: 52,
-                height: 52,
-                borderRadius: 'var(--radius-sm)',
-                background: 'radial-gradient(circle at 50% 35%, #2a221a, #14100b)',
-                border: '2px solid var(--ink-black)',
-                fontSize: 26,
+                top: 4,
+                right: 4,
+                width: 18,
+                height: 18,
+                borderRadius: '50%',
+                background: 'var(--surface)',
+                border: '1.5px solid var(--line-white)',
+                color: 'var(--line-white)',
+                fontFamily: PIXEL,
+                fontSize: 9,
+                lineHeight: 1,
+                zIndex: 2,
               }}
             >
-              {'\u{1F454}'}
-            </div>
-            <div className="flex flex-col min-w-0" style={{ gap: 5, flex: 1 }}>
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 12, color: on ? 'var(--kit-red)' : 'var(--cream)' }}>
-                  {m.name}
-                </span>
-                {m.nation && (
-                  <span style={{ fontSize: 14, flexShrink: 0 }} title={m.nation}>
-                    {NATION_FLAG[m.nation] ?? '\u{1F3F3}'}
-                  </span>
-                )}
-              </div>
-              <p style={{ fontFamily: 'var(--font-flavour, serif)', fontStyle: 'italic', fontSize: 11.5, lineHeight: 1.3, color: 'var(--cream-soft)', margin: 0 }}>
-                {'“'}{m.philosophy}{'”'}
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {m.traits.map((t) => (
-                  <span
-                    key={t}
-                    style={{
-                      fontFamily: PIXEL,
-                      fontSize: 7.5,
-                      letterSpacing: 0.3,
-                      color: 'var(--kit-red)',
-                      background: 'rgba(232,54,47,0.14)',
-                      border: '1px solid rgba(232,54,47,0.4)',
-                      borderRadius: 4,
-                      padding: '4px 6px',
-                      lineHeight: 1,
-                    }}
-                  >
-                    {t.toUpperCase()}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </button>
+              i
+            </span>
+          </div>
         );
       })}
     </div>
@@ -785,7 +785,7 @@ function FormationSheet({
   onPick: (id: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-1.5 overflow-y-auto px-3 pt-1" style={{ overscrollBehavior: 'contain' }}>
+    <div className="grid grid-cols-2 gap-1.5 overflow-y-auto px-3 pt-1 pb-2" style={{ overscrollBehavior: 'contain' }}>
       {formations.map((f) => {
         const on = f.id === current;
         return (

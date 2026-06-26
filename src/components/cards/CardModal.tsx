@@ -1,0 +1,407 @@
+'use client';
+
+/**
+ * Kickoff Clash — CardModal
+ *
+ * The full-card overlay. Tapping any GameCard opens this: a dimmed scrim with a
+ * large GameCard (size="full") on the left and the complete detail panel on the
+ * right (stacked on a phone). The page never scrolls; the panel scrolls
+ * internally if a bio runs long. Closes on backdrop tap, the close control, or
+ * Escape.
+ *
+ * Detail content per variant:
+ *   • Player  — position (long), archetype (+secondary), rating, rarity, nation,
+ *               durability, tags, strengths, weaknesses, quirk, bio.
+ *   • Manager — nation, philosophy, trait pills.
+ *   • Tactic  — category, effect, flavour, contradiction note.
+ */
+
+import { useEffect } from 'react';
+import type { Card } from '../../lib/scoring';
+import type { JokerCard } from '../../lib/jokers';
+import type { TacticCard } from '../../lib/tactics';
+import { getTacticById } from '../../lib/tactics';
+import GameCard, { type GameCardModel } from './GameCard';
+import {
+  PIXEL,
+  RARITY_COLOR,
+  POSITION_LABEL,
+  DURABILITY_META,
+  TACTIC_CAT_COLOR,
+  nationFlag,
+  nationCode,
+} from './cardTokens';
+
+interface CardModalProps {
+  model: GameCardModel | null;
+  onClose: () => void;
+}
+
+export default function CardModal({ model, onClose }: CardModalProps) {
+  useEffect(() => {
+    if (!model) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [model, onClose]);
+
+  if (!model) return null;
+
+  const accent =
+    model.variant === 'player'
+      ? RARITY_COLOR[model.card.rarity] ?? RARITY_COLOR.Common
+      : model.variant === 'manager'
+        ? 'var(--kit-red)'
+        : TACTIC_CAT_COLOR[model.tactic.category] ?? 'var(--gold)';
+
+  return (
+    <div
+      className="absolute inset-0 flex flex-col scrim-fade"
+      style={{
+        background: 'rgba(0,0,0,0.66)',
+        backdropFilter: 'blur(2px)',
+        zIndex: 60,
+        padding: 'max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 16px)',
+      }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      {/* Close control */}
+      <div className="flex justify-end shrink-0" style={{ marginBottom: 10 }}>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="active:scale-90"
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 'var(--radius-sm)',
+            border: '2px solid var(--ink-black)',
+            background: 'var(--surface)',
+            boxShadow: '0 3px 0 0 var(--ink-black)',
+            color: 'var(--cream)',
+            fontFamily: PIXEL,
+            fontSize: 16,
+            lineHeight: 1,
+            transition: 'transform 0.12s ease',
+          }}
+        >
+          {'×'}
+        </button>
+      </div>
+
+      {/* Card + detail */}
+      <div
+        className="flex-1 min-h-0 flex flex-col items-center justify-start"
+        onClick={(e) => e.stopPropagation()}
+        style={{ gap: 14 }}
+      >
+        <div className="hero-pop shrink-0" style={{ width: 168, maxWidth: '46%' }}>
+          <GameCard model={model} size="full" />
+        </div>
+
+        <div
+          className="w-full min-h-0 overflow-y-auto"
+          style={{
+            maxWidth: 360,
+            overscrollBehavior: 'contain',
+          }}
+        >
+          {model.variant === 'player' ? (
+            <PlayerDetail card={model.card} accent={accent} />
+          ) : model.variant === 'manager' ? (
+            <ManagerDetail manager={model.manager} accent={accent} />
+          ) : (
+            <TacticDetail tactic={model.tactic} accent={accent} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shared detail primitives
+// ---------------------------------------------------------------------------
+
+function Panel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="pixel-edge"
+      style={{
+        background: 'var(--surface)',
+        border: '2px solid var(--ink-black)',
+        borderRadius: 'var(--radius)',
+        padding: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)' }}>{children}</span>
+  );
+}
+
+function StatCell({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div
+      style={{
+        background: 'rgba(0,0,0,0.25)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-sm)',
+        padding: '6px 8px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 3,
+        minWidth: 0,
+      }}
+    >
+      <Label>{label}</Label>
+      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 11, color: color ?? 'var(--cream)', lineHeight: 1.1 }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function TagRow({ items, color, bg }: { items: string[]; color: string; bg: string }) {
+  return (
+    <div className="flex flex-wrap" style={{ gap: 5 }}>
+      {items.map((t) => (
+        <span
+          key={t}
+          style={{
+            fontFamily: PIXEL,
+            fontSize: 8.5,
+            letterSpacing: 0.3,
+            color,
+            background: bg,
+            border: `1px solid ${color}`,
+            borderRadius: 'var(--radius-lg)',
+            padding: '4px 7px',
+            lineHeight: 1,
+          }}
+        >
+          {t.toUpperCase()}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PLAYER detail
+// ---------------------------------------------------------------------------
+
+function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
+  const flag = nationFlag(card.nation);
+  const nation = flag ? `${flag} ${card.nation}` : card.nation ?? '—';
+  const dur = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
+  return (
+    <div className="flex flex-col" style={{ gap: 10 }}>
+      <Panel>
+        <div className="flex items-center justify-between" style={{ gap: 8 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'var(--cream)', lineHeight: 1.15 }}>{card.name}</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 9, color: accent, letterSpacing: 0.5, flexShrink: 0 }}>
+            {card.rarity.toUpperCase()}
+          </span>
+        </div>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 6 }}>
+          <StatCell label="RATING" value={String(Math.round(card.power))} color="var(--line-white)" />
+          <StatCell label="POSITION" value={POSITION_LABEL[card.position] ?? card.position} />
+          <StatCell label="NATION" value={flag ? card.nation ?? '—' : nationCode(card.nation) || '—'} />
+          <StatCell label="ARCHETYPE" value={card.archetype} color={accent} />
+          {card.secondaryArchetype && <StatCell label="SECONDARY" value={card.secondaryArchetype} />}
+          <StatCell label="DURABILITY" value={dur.label} color={dur.color} />
+        </div>
+        {(card.tacticalRole || card.personalityTheme) && (
+          <div className="flex flex-wrap" style={{ gap: 5 }}>
+            {card.tacticalRole && (
+              <Chip label="ROLE" value={card.tacticalRole} />
+            )}
+            {card.personalityTheme && card.personalityTheme !== 'General' && (
+              <Chip label="THEME" value={card.personalityTheme} />
+            )}
+          </div>
+        )}
+      </Panel>
+
+      {card.abilityText && (
+        <Panel>
+          <Label>{(card.abilityName ?? 'Ability').toUpperCase()}</Label>
+          <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--cream-soft)' }}>{card.abilityText}</span>
+        </Panel>
+      )}
+
+      {(card.strengths?.length || card.weaknesses?.length) && (
+        <Panel>
+          {card.strengths && card.strengths.length > 0 && (
+            <div className="flex flex-col" style={{ gap: 6 }}>
+              <Label>STRENGTHS</Label>
+              <TagRow items={card.strengths} color="var(--success)" bg="rgba(52,196,106,0.12)" />
+            </div>
+          )}
+          {card.weaknesses && card.weaknesses.length > 0 && (
+            <div className="flex flex-col" style={{ gap: 6 }}>
+              <Label>WEAKNESSES</Label>
+              <TagRow items={card.weaknesses} color="var(--danger)" bg="rgba(232,54,47,0.12)" />
+            </div>
+          )}
+        </Panel>
+      )}
+
+      {card.tags && card.tags.length > 0 && (
+        <Panel>
+          <Label>TAGS</Label>
+          <TagRow items={card.tags} color="var(--gold)" bg="rgba(245,197,66,0.1)" />
+        </Panel>
+      )}
+
+      {(card.bio || card.quirk) && (
+        <Panel>
+          {card.bio && (
+            <p style={{ fontSize: 11.5, lineHeight: 1.45, color: 'var(--cream-soft)', margin: 0 }}>{card.bio}</p>
+          )}
+          {card.quirk && (
+            <p
+              style={{
+                fontFamily: 'var(--font-flavour, serif)',
+                fontStyle: 'italic',
+                fontSize: 11,
+                lineHeight: 1.4,
+                color: 'var(--dust)',
+                margin: 0,
+              }}
+            >
+              {'“'}{card.quirk}{'”'}
+            </p>
+          )}
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+function Chip({ label, value }: { label: string; value: string }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        background: 'rgba(0,0,0,0.25)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-lg)',
+        padding: '4px 8px',
+      }}
+    >
+      <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--dust)' }}>{label}</span>
+      <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--cream)', lineHeight: 1 }}>{value}</span>
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MANAGER detail
+// ---------------------------------------------------------------------------
+
+function ManagerDetail({ manager, accent }: { manager: JokerCard; accent: string }) {
+  const flag = nationFlag(manager.nation);
+  return (
+    <div className="flex flex-col" style={{ gap: 10 }}>
+      <Panel>
+        <div className="flex items-center justify-between" style={{ gap: 8 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'var(--cream)', lineHeight: 1.15 }}>{manager.name}</span>
+          {manager.nation && (
+            <span style={{ fontSize: 11, color: 'var(--dust)', flexShrink: 0, display: 'inline-flex', gap: 5, alignItems: 'center' }}>
+              {flag && <span style={{ fontSize: 14 }}>{flag}</span>}
+              {manager.nation}
+            </span>
+          )}
+        </div>
+        <p
+          style={{
+            fontFamily: 'var(--font-flavour, serif)',
+            fontStyle: 'italic',
+            fontSize: 13,
+            lineHeight: 1.4,
+            color: 'var(--cream-soft)',
+            margin: 0,
+          }}
+        >
+          {'“'}{manager.philosophy}{'”'}
+        </p>
+      </Panel>
+
+      <Panel>
+        <Label>TRAITS</Label>
+        <TagRow items={manager.traits} color={accent} bg="rgba(232,54,47,0.14)" />
+      </Panel>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TACTIC detail
+// ---------------------------------------------------------------------------
+
+function TacticDetail({ tactic, accent }: { tactic: TacticCard; accent: string }) {
+  const contradicts = tactic.contradicts ? getTacticById(tactic.contradicts) : null;
+  return (
+    <div className="flex flex-col" style={{ gap: 10 }}>
+      <Panel>
+        <div className="flex items-center justify-between" style={{ gap: 8 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'var(--cream)', lineHeight: 1.15 }}>{tactic.name}</span>
+          <span
+            style={{
+              fontFamily: PIXEL,
+              fontSize: 8,
+              letterSpacing: 0.5,
+              color: 'var(--ink-black)',
+              background: accent,
+              borderRadius: 3,
+              padding: '4px 6px',
+              flexShrink: 0,
+            }}
+          >
+            {tactic.category.toUpperCase()}
+          </span>
+        </div>
+        <div className="flex flex-col" style={{ gap: 6 }}>
+          <Label>EFFECT</Label>
+          <span style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--cream-soft)' }}>{tactic.effect}</span>
+        </div>
+      </Panel>
+
+      <Panel>
+        <p
+          style={{
+            fontFamily: 'var(--font-flavour, serif)',
+            fontStyle: 'italic',
+            fontSize: 12.5,
+            lineHeight: 1.45,
+            color: 'var(--dust)',
+            margin: 0,
+          }}
+        >
+          {tactic.flavour}
+        </p>
+        {contradicts && (
+          <span style={{ fontSize: 10.5, color: 'var(--danger)', lineHeight: 1.35 }}>
+            Replaces <b style={{ color: 'var(--cream)' }}>{contradicts.name}</b> if deployed together.
+          </span>
+        )}
+      </Panel>
+    </div>
+  );
+}

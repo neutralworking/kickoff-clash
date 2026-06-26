@@ -49,7 +49,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'high_line',
     name: 'High Line',
-    effect: '+15% base power — risky: opponent also gains +10%',
+    effect: 'Your whole attack plays at +15%. Push up and overload them.',
     flavour: '"We press from the front. The last line is courage."',
     contradicts: 'low_block',
     category: 'attacking',
@@ -58,7 +58,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'press_high',
     name: 'Press High',
-    effect: '+20% if Engine/Destroyer in XI, else +5',
+    effect: 'Engines & Destroyers play at +20%. Win it back high.',
     flavour: '"Every second counts. Suffocate them early."',
     contradicts: 'sit_deep',
     category: 'attacking',
@@ -75,7 +75,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'wing_play',
     name: 'Wing Play',
-    effect: '+10% avg power per Dribbler/Sprinter in wide slots',
+    effect: 'Dribblers & Sprinters play at +10%. Stretch the pitch.',
     flavour: '"Stretch them. Make the pitch as wide as possible."',
     contradicts: 'narrow',
     category: 'attacking',
@@ -91,7 +91,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'narrow',
     name: 'Narrow Shape',
-    effect: '+10% avg power per Controller/Passer in central slots',
+    effect: 'Controllers & Passers play at +10%. Own the middle.',
     flavour: '"Compact. Triangles everywhere. No space for them to breathe."',
     contradicts: 'wing_play',
     category: 'attacking',
@@ -109,7 +109,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'low_block',
     name: 'Low Block',
-    effect: 'Cuts opponent power 20% — your attack down 10%',
+    effect: 'Opponent attack −20%. Your attack −10%. Soak it up.',
     flavour: '"Let them have the ball. We\'ll take the three points."',
     contradicts: 'high_line',
     category: 'defensive',
@@ -118,7 +118,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'sit_deep',
     name: 'Sit Deep',
-    effect: '-15% opponent, compounding -5% your attack per increment',
+    effect: 'Opponent attack −15%. Your attack fades −5% each phase.',
     flavour: '"Patience. The counter is coming. Wait for it."',
     contradicts: 'press_high',
     category: 'defensive',
@@ -127,7 +127,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'fortress',
     name: 'Fortress',
-    effect: '-25% opponent first 30\', fades to 0 at 90\'',
+    effect: 'Opponent attack −25%, fading to nothing by full time.',
     flavour: '"Build the wall. Make them break themselves against it."',
     category: 'defensive',
     compute: (_xi, increment) => {
@@ -140,7 +140,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'counter_attack',
     name: 'Counter Attack',
-    effect: '+25 flat after opponent scores',
+    effect: 'Once they score: +5% attack & finishing. Punish them.',
     flavour: '"One touch. Three passes. Goal. They never learn."',
     contradicts: 'possession',
     category: 'specialist',
@@ -149,7 +149,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'possession',
     name: 'Possession Game',
-    effect: '+5% cumulative per increment — rewards patience',
+    effect: '+5% attack & creation each phase — it compounds.',
     flavour: '"The ball is ours. They can\'t score without it."',
     contradicts: 'counter_attack',
     category: 'specialist',
@@ -158,7 +158,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'set_piece',
     name: 'Set Piece Specialists',
-    effect: '+15 per Target/Commander in XI',
+    effect: 'Targets & Commanders finish at +15%. Every dead ball counts.',
     flavour: '"Every dead ball is a chance. We\'ve rehearsed them all."',
     category: 'specialist',
     compute: (xi) => countArchetypes(xi, ['Target', 'Commander']) * 15,
@@ -166,7 +166,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'dark_arts',
     name: 'Dark Arts',
-    effect: '+20 flat, -10% opponent — 15% red card risk',
+    effect: '+4% attack and −10% to the opponent. Plays it dirty.',
     flavour: '"They don\'t call it the beautiful game for nothing. Beautifully ugly."',
     category: 'specialist',
     compute: () => 20,
@@ -174,7 +174,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'youth_policy',
     name: 'Youth Policy',
-    effect: '+20 per Common rarity card in XI',
+    effect: '+3% attack per Common in your XI (up to +20%).',
     flavour: '"They\'re hungry. They have nothing to lose and everything to prove."',
     category: 'specialist',
     compute: (xi) => xi.filter(c => c.rarity === 'Common').length * 20,

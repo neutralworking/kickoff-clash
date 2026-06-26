@@ -13,7 +13,7 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
       style={{ background: 'var(--felt)' }}
     >
       {/* Title — Silkscreen pixel hero, sized to fit a phone without overflow */}
-      <div className="mb-4">
+      <div className="mb-12">
         <h1
           className="uppercase leading-none"
           style={{
@@ -37,18 +37,6 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
           CLASH
         </h1>
       </div>
-
-      {/* Tagline */}
-      <p
-        className="text-base mb-12"
-        style={{
-          fontFamily: 'var(--font-flavour)',
-          fontStyle: 'italic',
-          color: 'var(--dust)',
-        }}
-      >
-        Build your squad. Play your cards. Win the season.
-      </p>
 
       {/* Buttons */}
       <div className="flex flex-col gap-3 w-full max-w-xs">

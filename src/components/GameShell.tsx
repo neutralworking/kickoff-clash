@@ -164,6 +164,8 @@ export default function GameShell() {
   const [lastMatchResult, setLastMatchResult] = useState<MatchResult | null>(null);
   const [pendingContents, setPendingContents] = useState<PackContents | null>(null);
   const [pendingSeed, setPendingSeed] = useState<number>(0);
+  // Manager chosen during the manager-pack reveal; carried into TeamSelect.
+  const [pickedManagerId, setPickedManagerId] = useState<string | null>(null);
 
   // Check for existing run on mount without reading localStorage during render.
   useEffect(() => {
@@ -193,7 +195,8 @@ export default function GameShell() {
     setPhase('packOpen');
   }, []);
 
-  const handlePacksOpened = useCallback(() => {
+  const handlePacksOpened = useCallback((managerId: string | null) => {
+    setPickedManagerId(managerId);
     setPhase('teamSelect');
   }, []);
 
@@ -457,7 +460,7 @@ export default function GameShell() {
 
       case 'teamSelect':
         return pendingContents ? (
-          <TeamSelect contents={pendingContents} onConfirm={handleTeamConfirm} />
+          <TeamSelect contents={pendingContents} initialManagerId={pickedManagerId} onConfirm={handleTeamConfirm} />
         ) : null;
 
       case 'match': {
