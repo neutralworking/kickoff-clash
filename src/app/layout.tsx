@@ -2,18 +2,22 @@ import type { Metadata } from "next";
 import { Archivo_Black, DM_Sans, Playfair_Display, Silkscreen } from "next/font/google";
 import "./globals.css";
 
-const archivoBlack = Archivo_Black({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-display",
-  display: "swap",
-});
-
-// Chunky pixel display face for the refreshed Sensible-Soccer look.
+// Silkscreen is the CANONICAL display face (Sensible-Soccer pixel look). It is
+// bound to BOTH --font-pixel and --font-display so every existing heading that
+// already uses var(--font-display) inherits the pixel system automatically.
 const silkscreen = Silkscreen({
   weight: ["400", "700"],
   subsets: ["latin"],
   variable: "--font-pixel",
+  display: "swap",
+});
+
+// Archivo Black is kept as a heavy non-pixel fallback display face for very
+// large hero type where pixel letterforms get too wide to fit a phone.
+const archivoBlack = Archivo_Black({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-heavy",
   display: "swap",
 });
 
@@ -55,7 +59,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`dark ${archivoBlack.variable} ${dmSans.variable} ${playfairDisplay.variable} ${silkscreen.variable}`}>
+    <html lang="en" className={`dark ${silkscreen.variable} ${archivoBlack.variable} ${dmSans.variable} ${playfairDisplay.variable}`}>
       <body className="min-h-screen antialiased" style={{ background: 'var(--felt)', color: 'var(--cream)', fontFamily: 'var(--font-body)' }}>
         {children}
       </body>

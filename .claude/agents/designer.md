@@ -45,16 +45,22 @@ Mood: a slick team-management cockpit — confident, tactile, a little arcade.
 
 ## Design system (single source of truth)
 
-- Tokens live in `src/app/globals.css` (`@theme inline`): `--felt`, `--leather`,
-  `--amber`, `--gold`, `--pitch-green/-dark/-light`, `--cream`, `--cream-soft`,
-  `--dust`, `--danger`, `--radius*`. **Reuse and extend these** — add tokens,
-  don't hardcode one-off hexes. If the palette needs to evolve toward the
-  Sensible-Soccer look (e.g. brighter pitch greens, a bold kit-red), change it at
-  the token level so the whole game moves together.
-- Fonts are wired in `src/app/layout.tsx` via `next/font/google` as
-  `--font-display` / `--font-body` / `--font-flavour`. The build host has
-  internet, so adding a pixel display face (e.g. a Press Start 2P / Silkscreen /
-  Pixelify-style font) for headings is fair game — keep body text legible.
+- **`DESIGN.md` at the repo root is the canonical visual source of truth** — the
+  refreshed Sensible-Soccer pixel system (palette, type, spacing, components,
+  motion). Read it first and design to it; it supersedes the old felt-and-leather
+  look.
+- Tokens live in `src/app/globals.css` (`@theme inline`): the Sensible-Soccer
+  core (`--ink-black`, `--line-white`, `--pitch-bright`, `--kit-red`,
+  `--kit-blue`) plus surfaces/accents/text (`--felt`, `--surface`/`--leather`,
+  `--amber`, `--gold`, `--cream`, `--dust`, `--danger`, `--radius*`). The legacy
+  names are retained as aliases. **Reuse and extend these** — add tokens, don't
+  hardcode one-off hexes. Evolve the look at the token level so the whole game
+  moves together.
+- Fonts are wired in `src/app/layout.tsx` via `next/font/google`. **Silkscreen
+  is the canonical pixel display face** (`--font-pixel`, and `--font-display`
+  aliases it). `--font-body` (DM Sans) is running text, `--font-flavour`
+  (Playfair) is flavour quotes, `--font-heavy` (Archivo Black) is the oversized
+  fallback. Keep body text legible; see `DESIGN.md` › Typography.
 - Animation keyframes belong in `globals.css` (see `packTear`, `cardAppear`,
   `card-flip`, `dealIn`). Prefer reusing/extending them.
 
