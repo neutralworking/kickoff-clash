@@ -525,27 +525,38 @@ function StatsScreen({
         {/* FIX 7 — ZONES WON as a pitch-shaped 3×3 mini-heatmap. Oriented from your
             perspective: ATT third at the TOP (toward the opponent's goal), MID in
             the middle, DEF at the BOTTOM (your goal); columns L/C/R left-to-right.
-            Green = you won the cell, red = opponent, neutral = contested/tie. */}
+            Green = you lead the cell, red = opponent, neutral = level. Each cell
+            carries its SIGNED control margin (engine `zoneMargin`): +n you lead,
+            -n the opponent leads, 0 level. A slim DEF/MID/ATT caption column sits
+            to the LEFT of every row so each cell is free for its number. */}
         <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
           <StatLabel delay={280}>ZONES WON · <span style={{ color: YOU }}>{youZonesWon}</span>–<span style={{ color: OPP }}>{oppZonesWon}</span></StatLabel>
           <div className="stat-row-in" style={{ display: 'flex', justifyContent: 'center', animationDelay: '290ms' }}>
-            {/* A pitch-shaped frame: top goal (opponent's) → bottom goal (yours). */}
-            <div style={{ position: 'relative', width: 150, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', background: '#0a1a10', padding: 5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {/* A pitch-shaped frame: top goal (opponent's) → bottom goal (yours).
+                LABEL_W reserves a slim row-caption column; the 3 lanes fill the rest. */}
+            <div style={{ position: 'relative', width: 202, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', background: '#0a1a10', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {/* opponent goal mouth (top) */}
-              <div style={{ position: 'absolute', top: -3, left: '50%', transform: 'translateX(-50%)', width: 30, height: 3, borderRadius: '0 0 2px 2px', background: OPP }} />
+              <div style={{ position: 'absolute', top: -3, left: 'calc(50% + 13px)', transform: 'translateX(-50%)', width: 32, height: 3, borderRadius: '0 0 2px 2px', background: OPP }} />
               {/* your goal mouth (bottom) */}
-              <div style={{ position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)', width: 30, height: 3, borderRadius: '2px 2px 0 0', background: YOU }} />
+              <div style={{ position: 'absolute', bottom: -3, left: 'calc(50% + 13px)', transform: 'translateX(-50%)', width: 32, height: 3, borderRadius: '2px 2px 0 0', background: YOU }} />
               {gridZones.map((band) => (
-                <div key={band} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+                <div key={band} style={{ display: 'grid', gridTemplateColumns: '26px repeat(3, 1fr)', gap: 4, alignItems: 'stretch' }}>
+                  {/* Row caption: full word DEF / MID / ATT, out to the side. */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.3, color: 'var(--dust)', lineHeight: 1 }}>{band}</span>
+                  </div>
                   {gridLanes.map((lane) => {
                     const cell = `${band}_${lane}` as Cell;
                     const youWon = stats.yourZoneGrid[cell];
                     const oppWon = stats.opponentZoneGrid[cell];
                     const bg = youWon ? YOU : oppWon ? OPP : 'var(--surface)';
+                    const margin = stats.zoneMargin[cell] ?? 0;
+                    const marginText = margin > 0 ? `+${margin}` : String(margin);
+                    // High contrast on the bright tints (dark ink); muted cream on neutral.
+                    const fg = youWon || oppWon ? 'var(--ink-black)' : 'var(--cream-soft)';
                     return (
-                      <div key={cell} title={`${band} ${lane}`} style={{ height: 24, borderRadius: 2, background: bg, border: '1px solid var(--ink-black)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {/* band initial only in the centre column keeps it legible, not busy. */}
-                        {lane === 'C' && <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: youWon || oppWon ? 'var(--ink-black)' : 'var(--dust)', lineHeight: 1 }}>{band[0]}</span>}
+                      <div key={cell} title={`${band} ${lane}`} style={{ height: 26, borderRadius: 2, background: bg, border: '1px solid var(--ink-black)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontFamily: PIXEL, fontSize: 10, color: fg, lineHeight: 1, fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{marginText}</span>
                       </div>
                     );
                   })}
