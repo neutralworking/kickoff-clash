@@ -46,8 +46,10 @@ import PhaseTransition from './PhaseTransition';
 
 const STORAGE_KEY = 'kickoff-clash-v4-run';
 const HISTORY_KEY = 'kickoff-clash-v4-history';
-const MAX_LOSSES = 3;
+// v1 permadeath: a single loss ends the run. A draw continues but earns a reduced
+// reward. (Multi-loss tolerance + a board target arrive with later game modes.)
 const MAX_ROUNDS = 5;
+const DRAW_REWARD_FACTOR = 0.5;
 
 // ---------------------------------------------------------------------------
 // Serialization helpers — joker/tactic compute functions aren't serializable
@@ -241,6 +243,11 @@ export default function GameShell() {
     // Durability check on the XI cards
     const durResult = postMatchDurabilityCheck(slottedXI, runState.seed + runState.round * 999);
 
+    // v1 reward: a win earns the full match gate, a draw earns DRAW_REWARD_FACTOR of it,
+    // a loss earns nothing (the run is over).
+    const rewardFactor = result.result === 'win' ? 1 : result.result === 'draw' ? DRAW_REWARD_FACTOR : 0;
+    const matchReward = Math.round(attendance.revenue * rewardFactor);
+
     // Create match result entry
     const matchResult: MatchResult = {
       round: runState.round,
@@ -250,7 +257,7 @@ export default function GameShell() {
       pointsEarned: result.result === 'win' ? 3 : result.result === 'draw' ? 1 : 0,
       seasonPoints: runState.seasonPoints + (result.result === 'win' ? 3 : result.result === 'draw' ? 1 : 0),
       attendance: attendance.attendance,
-      revenue: attendance.revenue,
+      revenue: matchReward,
       result: result.result,
       synergiesTriggered: connections.map(c => c.name),
       shattered: durResult.shattered.map(c => c.name),
@@ -285,7 +292,7 @@ export default function GameShell() {
     const newState: RunState = {
       ...runState,
       deck: updatedDeck,
-      cash: runState.cash + attendance.revenue,
+      cash: runState.cash + matchReward,
       stadiumTier,
       wins,
       losses,
@@ -295,30 +302,30 @@ export default function GameShell() {
       chemistry,
     };
 
-    setRunState(newState);
     setLastMatchResult(matchResult);
     setDurabilityResult(durResult);
-    setPhase('postmatch');
-    saveRun(newState);
+
+    if (result.result === 'loss') {
+      // v1 permadeath — a single defeat ends the run; go straight to the run-over screen.
+      const ended: RunState = { ...newState, status: 'lost' };
+      setRunState(ended);
+      saveHistory(ended);
+      clearRun();
+      setPhase('end');
+    } else {
+      setRunState(newState);
+      setPhase('postmatch');
+      saveRun(newState);
+    }
   }, [runState]);
 
   // --- Post Match ---
   const handlePostMatchContinue = useCallback(() => {
     if (!runState) return;
 
-    if (runState.losses >= MAX_LOSSES) {
-      const ended = { ...runState, status: 'lost' as const };
-      setRunState(ended);
-      saveHistory(ended);
-      clearRun();
-      setPhase('end');
-    } else if (runState.round >= MAX_ROUNDS) {
-      const status: RunState['status'] =
-        runState.seasonPoints >= runState.boardTargetPoints ? 'won' : 'lost';
-      const ended = {
-        ...runState,
-        status,
-      };
+    if (runState.round >= MAX_ROUNDS) {
+      // Survived all five fixtures without a defeat — the run is won.
+      const ended: RunState = { ...runState, status: 'won' };
       setRunState(ended);
       saveHistory(ended);
       clearRun();
@@ -474,11 +481,15 @@ export default function GameShell() {
       }
 
       case 'postmatch': {
-        if (!lastMatchResult || !durabilityResult) return null;
+        if (!lastMatchResult || !durabilityResult || !runState) return null;
         return (
           <PostMatch
             matchResult={lastMatchResult}
             durabilityResult={durabilityResult}
+            round={lastMatchResult.round}
+            totalRounds={MAX_ROUNDS}
+            wins={runState.wins}
+            matchHistory={runState.matchHistory}
             onContinue={handlePostMatchContinue}
           />
         );
