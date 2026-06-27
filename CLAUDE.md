@@ -26,7 +26,7 @@ No test framework is installed. The match engine was validated via `scripts/matc
 
 ## What this is
 
-**Kickoff Clash** is a Balatro-style football management roguelike. Players are cards, your XI is your hand, chemistry connections are synergy bonuses, manager cards are jokers. A run is 5 matches; 3 losses ends the run.
+**Kickoff Clash** is a Balatro-style football management roguelike. Players are cards, your XI is your hand, chemistry connections are synergy bonuses, manager cards are jokers. A run is 5 matches; in **v1 a single loss ends the run** (permadeath), while a draw continues with a reduced reward. Surviving all five fixtures wins the run. (Multi-loss tolerance, a board target, and PvP arrive with later game modes.)
 
 **Source of truth for game design:** `MATCH_ENGINE_V5.md` at repo root.
 
