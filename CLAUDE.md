@@ -22,7 +22,7 @@ npm run lint     # ESLint 9 flat config (eslint.config.mjs)
 npm run start    # Serve production build
 ```
 
-No test framework is installed. The match engine was validated via `scripts/match-harness.ts`, which imports engine modules directly and can be re-run with `npx ts-node scripts/match-harness.ts`.
+No test framework is installed. The match engine was validated via `scripts/match-harness.ts`, which imports engine modules directly and can be re-run with `npx tsx scripts/match-harness.ts`. (The script is ESM with extensionless imports, so `ts-node` fails to resolve them — use `tsx`.)
 
 ## What this is
 
