@@ -135,6 +135,25 @@ export interface IncrementResult {
   // Per-shot commentary feed (additive, deterministic). One MatchBeat per shot, in
   // engine order: your shots first, then the opponent's. Pure display.
   beats: MatchBeat[];
+  // Per-increment stats readout (additive, deterministic — display only).
+  stats: MatchStats;
+}
+
+/** Per-increment match stats (additive, deterministic — never feeds match math).
+ *  Possession is the 20-possession split; on-target mirrors the beats outcome
+ *  (goal|save); a lane is "won" when that side's push beats the other's effective
+ *  cover in the lane. */
+export interface MatchStats {
+  yourXG: number;
+  opponentXG: number;
+  yourPossessionPct: number;
+  opponentPossessionPct: number;
+  yourShots: number;
+  opponentShots: number;
+  yourShotsOnTarget: number;
+  opponentShotsOnTarget: number;
+  yourZonesWon: Record<Lane, boolean>;
+  opponentZonesWon: Record<Lane, boolean>;
 }
 
 /** One commentary line per resolved shot. Deterministic; never feeds match math.
@@ -1175,6 +1194,34 @@ export function resolveIncrement(
     ...buildBeats(period.opp.shots, state.opponentXI, state.opponentFormation, 'opp', 1, minute, seed, state.currentIncrement, null),
   ];
 
+  // Per-increment stats (additive, display-only): xG/shots come straight from the
+  // resolved period; possession is the 20-possession split; on-target mirrors the beat
+  // outcome; a lane is "won" when that side out-pushes the other's effective cover.
+  const possTotal = (period.you.possessions + period.opp.possessions) || 1;
+  const yourPossessionPct = Math.round((period.you.possessions / possTotal) * 100);
+  const onTargetFor = (s: 'you' | 'opp') =>
+    beats.filter((b) => b.side === s && (b.outcome === 'goal' || b.outcome === 'save')).length;
+  const stats: MatchStats = {
+    yourXG: period.you.xg,
+    opponentXG: period.opp.xg,
+    yourPossessionPct,
+    opponentPossessionPct: 100 - yourPossessionPct,
+    yourShots: period.you.shots.length,
+    opponentShots: period.opp.shots.length,
+    yourShotsOnTarget: onTargetFor('you'),
+    opponentShotsOnTarget: onTargetFor('opp'),
+    yourZonesWon: {
+      L: split.lanePush.L > oppEffCover.L,
+      C: split.lanePush.C > oppEffCover.C,
+      R: split.lanePush.R > oppEffCover.R,
+    },
+    opponentZonesWon: {
+      L: oppPush.L > split.laneCover.L,
+      C: oppPush.C > split.laneCover.C,
+      R: oppPush.R > split.laneCover.R,
+    },
+  };
+
   return {
     minute,
     split,
@@ -1198,6 +1245,7 @@ export function resolveIncrement(
     opponentShots: period.opp.shots,
     event: { minute, text: eventText, type: eventType },
     beats,
+    stats,
   };
 }
 
