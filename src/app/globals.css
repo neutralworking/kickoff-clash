@@ -642,3 +642,30 @@ h1, h2, h3,
   from { transform: translate(-50%, -50%) scale(1); }
   to { transform: translate(-50%, -50%) scale(1.14); }
 }
+
+/* ---------------------------------------------------------------------------
+   Match — cards on the pitch (the headline: this is a CARD game)
+   The XI render as compact pixel cards. They pop in, glow when carrying, and
+   the per-period stats screen rises between increments. GPU-cheap only.
+   --------------------------------------------------------------------------- */
+
+/* The per-15-minute stats panel rises in over the pitch between periods. */
+@keyframes statsRise {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.stats-rise { animation: statsRise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* A stat bar fills from its side toward the centre on reveal. */
+@keyframes statBarGrow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.stat-bar-grow { animation: statBarGrow 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Each stats row deals in with a small stagger (inline animation-delay). */
+@keyframes statRowIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.stat-row-in { opacity: 0; animation: statRowIn 0.3s ease-out forwards; }

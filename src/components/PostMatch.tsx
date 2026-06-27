@@ -1,7 +1,31 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+/**
+ * Kickoff Clash — PostMatch (FULL TIME)
+ *
+ * The result screen, in the canonical Sensible-Soccer pixel house style.
+ *
+ * TABBED layout (mirrors ShopPhase): a compact, always-visible result header
+ * (FULL TIME · scoreline · verdict · vs opponent), a two-tab body that each
+ * fills the viewport, and a fixed CONTINUE-to-shop footer. The page never
+ * scrolls; only a tab body may scroll internally when a group runs long.
+ *
+ *   • RECAP — the verdict hero treatment + the economy readout (points earned &
+ *     season total, revenue, attendance as on-brand tiles) + a short match
+ *     report. Content is spread + stretched so the screen never feels sparse.
+ *   • SQUAD — the durability aftermath: shattered / injured / promoted players
+ *     as real GameCards under colour-coded headers (or a SQUAD INTACT state).
+ *
+ * Tapping any aftermath card opens the shared CardModal.
+ *
+ * Contract (PostMatchProps) is byte-identical — GameShell wiring is untouched.
+ */
+
+import { useState } from 'react';
 import type { Card } from '../lib/scoring';
+import GameCard, { type GameCardModel } from './cards/GameCard';
+import CardModal from './cards/CardModal';
+import { PIXEL } from './cards/cardTokens';
 
 interface PostMatchProps {
   matchResult: {
@@ -23,224 +47,660 @@ interface PostMatchProps {
   onContinue: () => void;
 }
 
+// Per-result presentation: accent colour + verb + tagline.
+const RESULT_META: Record<
+  PostMatchProps['matchResult']['result'],
+  { label: string; color: string; tag: string }
+> = {
+  win: { label: 'WIN', color: 'var(--success)', tag: 'Three points' },
+  draw: { label: 'DRAW', color: 'var(--dust)', tag: 'A point apiece' },
+  loss: { label: 'LOSS', color: 'var(--danger)', tag: 'Back to the drawing board' },
+};
+
+// Aftermath groups: shattered (gone) → injured → promoted.
+// `badgeFg` is the foreground over the solid `color` fill (contrast law: white on
+// the red/amber fates, ink on the bright gold one).
+type GroupTone = { key: string; title: string; color: string; bg: string; marker: string; badgeFg: string };
+const GROUP_META: Record<'shattered' | 'injured' | 'promoted', GroupTone> = {
+  shattered: { key: 'shattered', title: 'Shattered', color: 'var(--danger)', bg: 'rgba(232,54,47,0.12)', marker: '✕', badgeFg: 'var(--line-white)' },
+  injured: { key: 'injured', title: 'Injured', color: 'var(--amber)', bg: 'rgba(255,122,31,0.12)', marker: '+', badgeFg: 'var(--line-white)' },
+  promoted: { key: 'promoted', title: 'Promoted', color: 'var(--gold)', bg: 'rgba(245,197,66,0.12)', marker: '★', badgeFg: 'var(--ink-black)' },
+};
+
+type Tab = 'recap' | 'squad';
+
 export default function PostMatch({ matchResult, durabilityResult, onContinue }: PostMatchProps) {
-  const [revealStep, setRevealStep] = useState(0);
+  const [tab, setTab] = useState<Tab>('recap');
+  const [modal, setModal] = useState<GameCardModel | null>(null);
 
-  useEffect(() => {
-    if (revealStep < 5) {
-      const timer = setTimeout(() => setRevealStep(s => s + 1), 700);
-      return () => clearTimeout(timer);
-    }
-  }, [revealStep]);
+  const meta = RESULT_META[matchResult.result];
+  const { shattered, injured, promoted, commentary } = durabilityResult;
 
-  const resultColor =
-    matchResult.result === 'win'
-      ? 'var(--pitch-light)'
-      : matchResult.result === 'loss'
-      ? 'var(--danger)'
-      : 'var(--gold)';
+  const groups: { tone: GroupTone; cards: Card[] }[] = [
+    { tone: GROUP_META.shattered, cards: shattered },
+    { tone: GROUP_META.injured, cards: injured },
+    { tone: GROUP_META.promoted, cards: promoted },
+  ].filter((g) => g.cards.length > 0);
 
-  const resultText =
-    matchResult.result === 'win' ? 'WIN' : matchResult.result === 'loss' ? 'LOSS' : 'DRAW';
+  const affected = groups.reduce((n, g) => n + g.cards.length, 0);
+
+  // Find which group a commentary line refers to (for its accent tint).
+  const lineTone = (line: string): GroupTone | null => {
+    if (shattered.some((c) => line.includes(c.name))) return GROUP_META.shattered;
+    if (injured.some((c) => line.includes(c.name))) return GROUP_META.injured;
+    if (promoted.some((c) => line.includes(c.name))) return GROUP_META.promoted;
+    return null;
+  };
 
   return (
-    <div className="phase-postmatch max-w-lg mx-auto p-4 space-y-6 overflow-y-auto max-h-screen">
-      {/* Scoreline */}
-      <div
-        className="transition-all duration-500"
-        style={{ opacity: revealStep >= 0 ? 1 : 0 }}
-      >
-        <div className="text-center relative py-4">
+    <div
+      className="phase-postmatch flex flex-col overflow-hidden relative"
+      style={{
+        height: '100dvh',
+        background: 'var(--felt)',
+        paddingTop: 'max(env(safe-area-inset-top), 10px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
+      }}
+    >
+      {/* ── Result head: FULL TIME · scoreline · verdict ──────────────────── */}
+      <div className="shrink-0 px-3">
+        <div
+          className="relative overflow-hidden"
+          style={{
+            borderRadius: 'var(--radius)',
+            border: '2px solid var(--ink-black)',
+            boxShadow: '0 3px 0 0 var(--ink-black)',
+            background: 'var(--surface)',
+            padding: '10px 14px 12px',
+          }}
+        >
+          {/* result-tinted glow wash behind the verdict */}
           <div
-            className="absolute inset-0 -z-10"
+            className="absolute inset-0 -z-0"
             style={{
-              background:
-                'radial-gradient(ellipse at center, rgba(245,240,224,0.06) 0%, transparent 70%)',
+              background: `radial-gradient(ellipse at 50% 130%, ${meta.color}22 0%, transparent 60%)`,
+              pointerEvents: 'none',
             }}
           />
-          <div
-            className="text-xs uppercase tracking-[0.2em] mb-2"
-            style={{ color: 'var(--dust)' }}
-          >
-            Full Time
+          {/* accent rail in the result colour */}
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: meta.color }} />
+
+          <div className="relative flex items-center justify-between" style={{ gap: 8 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 1.4, color: 'var(--dust)' }}>
+              FULL TIME
+            </span>
+            <span className="truncate" style={{ fontSize: 11, color: 'var(--cream-soft)' }}>
+              vs <b style={{ color: 'var(--cream)' }}>{matchResult.opponentName}</b>
+            </span>
           </div>
-          <div className="flex items-center justify-center gap-6">
+
+          {/* Scoreline + verdict pill on one tight row */}
+          <div className="relative flex items-center justify-center" style={{ gap: 12, marginTop: 6 }}>
+            <ScoreNum value={matchResult.yourGoals} win={matchResult.result === 'win'} />
+            <span style={{ fontFamily: PIXEL, fontSize: 18, color: 'var(--ink)', lineHeight: 1, paddingBottom: 6 }}>
+              {'–'}
+            </span>
+            <ScoreNum value={matchResult.opponentGoals} win={matchResult.result === 'loss'} />
+          </div>
+
+          <div className="relative flex items-center justify-center" style={{ marginTop: 6 }}>
             <span
-              className="text-5xl"
-              style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)' }}
+              className="score-pop"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                fontFamily: PIXEL,
+                fontSize: 13,
+                letterSpacing: 1,
+                color: meta.color,
+                background: `${meta.color}1f`,
+                border: `1.5px solid ${meta.color}`,
+                borderRadius: 'var(--radius-sm)',
+                padding: '5px 12px',
+                lineHeight: 1,
+              }}
             >
-              {matchResult.yourGoals}
+              {meta.label}
+              <span style={{ width: 3, height: 11, background: meta.color, opacity: 0.55, borderRadius: 1 }} />
+              <span style={{ fontSize: 8, letterSpacing: 0.6, color: 'var(--cream-soft)' }}>
+                {meta.tag.toUpperCase()}
+              </span>
             </span>
-            <span className="text-2xl" style={{ color: 'var(--ink)' }}>
-              -
-            </span>
-            <span
-              className="text-5xl"
-              style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)' }}
-            >
-              {matchResult.opponentGoals}
-            </span>
-          </div>
-          <div className="text-sm mt-1" style={{ color: 'var(--dust)' }}>
-            vs {matchResult.opponentName}
           </div>
         </div>
       </div>
 
-      {/* Result banner */}
-      <div
-        style={{
-          opacity: revealStep >= 1 ? 1 : 0,
-        }}
-      >
-        <div className="text-center">
-          <div
-            className={revealStep >= 1 ? 'score-pop' : ''}
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 'clamp(48px, 12vw, 72px)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              color: resultColor,
-              textShadow: `0 0 30px ${resultColor}`,
-            }}
-          >
-            {resultText}
-          </div>
-        </div>
+      {/* ── Tab bar ───────────────────────────────────────────────────────── */}
+      <div className="shrink-0 flex gap-1.5 px-3" style={{ marginTop: 10 }}>
+        <TabButton label="Recap" active={tab === 'recap'} onClick={() => setTab('recap')} />
+        <TabButton
+          label="Squad"
+          active={tab === 'squad'}
+          badge={affected > 0 ? affected : undefined}
+          badgeColor={shattered.length > 0 ? 'var(--danger)' : injured.length > 0 ? 'var(--amber)' : 'var(--gold)'}
+          onClick={() => setTab('squad')}
+        />
       </div>
 
-      {/* Revenue + Attendance */}
-      <div
-        className="transition-all duration-500"
-        style={{
-          opacity: revealStep >= 2 ? 1 : 0,
-          transform: revealStep >= 2 ? 'translateY(0)' : 'translateY(16px)',
-        }}
-      >
-        <div className="flex gap-3 justify-center flex-wrap">
-          <StatBox label="Points" value={`+${matchResult.pointsEarned} (${matchResult.seasonPoints})`} color="var(--pitch-light)" />
-          <StatBox label="Revenue" value={`\u00a3${matchResult.revenue.toLocaleString()}`} color="var(--gold)" />
-          <StatBox label="Attendance" value={matchResult.attendance.toLocaleString()} color="var(--cream)" />
-        </div>
-      </div>
-
-      {/* Durability check */}
-      <div
-        className="transition-all duration-500"
-        style={{
-          opacity: revealStep >= 3 ? 1 : 0,
-          transform: revealStep >= 3 ? 'translateY(0)' : 'translateY(16px)',
-        }}
-      >
-        {durabilityResult.commentary.length > 0 && (
-          <div
-            className="rounded-[var(--radius)] p-4 space-y-2"
-            style={{
-              background: 'var(--leather)',
-              border: '1px solid rgba(154,139,115,0.15)',
-            }}
-          >
-            <h4
-              className="text-xs font-bold uppercase tracking-[0.2em]"
-              style={{ color: 'var(--dust)' }}
-            >
-              Durability Check
-            </h4>
-            {durabilityResult.commentary.map((line, i) => {
-              const isShatter = durabilityResult.shattered.some(c => line.includes(c.name));
-              const isInjury = durabilityResult.injured.some(c => line.includes(c.name));
-              const isPromotion = durabilityResult.promoted.some(c => line.includes(c.name));
-
-              let bg = 'transparent';
-              let borderClr = 'transparent';
-              let textClr = 'var(--cream-soft)';
-              let icon = '';
-
-              if (isShatter) {
-                bg = 'rgba(192,57,43,0.15)';
-                borderClr = 'rgba(192,57,43,0.3)';
-                textClr = '#e74c3c';
-                icon = '\uD83D\uDCA5 ';
-              } else if (isInjury) {
-                bg = 'rgba(230,126,34,0.15)';
-                borderClr = 'rgba(230,126,34,0.3)';
-                textClr = '#e67e22';
-                icon = '\uD83E\uDE78 ';
-              } else if (isPromotion) {
-                bg = 'rgba(212,160,53,0.15)';
-                borderClr = 'rgba(212,160,53,0.3)';
-                textClr = 'var(--gold)';
-                icon = '\u2B50 ';
-              }
-
-              return (
-                <div
-                  key={i}
-                  className="text-sm py-1.5 px-3 rounded-[var(--radius-sm)]"
-                  style={{
-                    fontFamily: 'var(--font-body)',
-                    background: bg,
-                    border: `1px solid ${borderClr}`,
-                    color: textClr,
-                  }}
-                >
-                  {icon}{line}
-                </div>
-              );
-            })}
-          </div>
+      {/* ── Active tab body — the ONLY region that may scroll ──────────────── */}
+      <div className="flex-1 min-h-0 px-3" style={{ marginTop: 10 }}>
+        {tab === 'recap' ? (
+          <RecapTab matchResult={matchResult} meta={meta} />
+        ) : (
+          <SquadTab groups={groups} commentary={commentary} lineTone={lineTone} onOpen={(card) => setModal({ variant: 'player', card })} />
         )}
       </div>
 
-      {/* Continue button */}
+      {/* ── Continue CTA ──────────────────────────────────────────────────── */}
+      <div className="shrink-0 px-3" style={{ paddingTop: 10 }}>
+        <button
+          onClick={onContinue}
+          className="w-full active:scale-[0.99] advance-btn-pulse"
+          style={{
+            height: 52,
+            borderRadius: 'var(--radius)',
+            border: '2px solid var(--ink-black)',
+            background: 'linear-gradient(180deg, var(--amber) 0%, var(--amber-soft) 100%)',
+            boxShadow: '0 3px 0 0 var(--ink-black), 0 4px 14px var(--amber-glow)',
+            fontFamily: PIXEL,
+            fontSize: 14,
+            letterSpacing: 0.8,
+            color: 'var(--line-white)',
+            textTransform: 'uppercase',
+          }}
+        >
+          Continue to Shop {'→'}
+        </button>
+      </div>
+
+      {/* Single CardModal mounted at root (renders absolute inset-0). */}
+      <CardModal model={modal} onClose={() => setModal(null)} />
+    </div>
+  );
+}
+
+// ===========================================================================
+// RECAP TAB — verdict hero + economy readout
+//
+// No durability commentary here (that lives on SQUAD next to its cards). The
+// panel is ONE vertically-centred composition: the verdict poster and the
+// economy ledger are a single stack pinned to the middle of the tab body, with
+// equal flex spacers above and below. The slack is split evenly top/bottom so
+// the screen reads as deliberately composed — never two clusters shoved apart.
+// ===========================================================================
+
+function RecapTab({
+  matchResult,
+  meta,
+}: {
+  matchResult: PostMatchProps['matchResult'];
+  meta: { label: string; color: string; tag: string };
+}) {
+  const gd = matchResult.yourGoals - matchResult.opponentGoals;
+  const gdLabel = gd > 0 ? `+${gd}` : `${gd}`;
+  const gdColor = gd > 0 ? 'var(--success)' : gd < 0 ? 'var(--danger)' : 'var(--dust)';
+  return (
+    <div
+      key="recap"
+      className="h-full flex flex-col relative overflow-hidden stats-rise"
+      style={{
+        background: 'var(--surface)',
+        border: '2px solid var(--ink-black)',
+        borderRadius: 'var(--radius)',
+        boxShadow: '0 2px 0 0 var(--ink-black)',
+      }}
+    >
+      {/* result-tinted wash + accent rail unify the panel under the verdict colour */}
       <div
-        className="transition-all duration-500"
-        style={{ opacity: revealStep >= 4 ? 1 : 0 }}
-      >
-        <div className="flex justify-center pt-4 pb-8">
-          <button
-            onClick={onContinue}
-            className="px-8 py-3 rounded-[var(--radius)] font-bold uppercase tracking-wide transition-all hover:brightness-110 hover:scale-[1.03] active:scale-95"
-            style={{
-              fontFamily: 'var(--font-display)',
-              background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))',
-              color: 'var(--cream)',
-              boxShadow: '0 4px 20px var(--amber-glow)',
-            }}
-          >
-            Continue to Shop
-          </button>
+        className="absolute inset-0"
+        style={{ background: `radial-gradient(ellipse at 50% 12%, ${meta.color}22 0%, transparent 58%)`, pointerEvents: 'none' }}
+      />
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: meta.color }} />
+
+      {/* equal top spacer — soaks up half the slack so the cluster sits centred */}
+      <div className="shrink-0" style={{ flex: 1 }} />
+
+      {/* ── Verdict block — the poster, centred as part of the one cluster. ── */}
+      <div className="relative shrink-0 flex flex-col items-center text-center" style={{ padding: '0 18px', gap: 14 }}>
+        <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1.4, color: 'var(--dust)' }}>RESULT</span>
+        <span
+          className="score-pop"
+          style={{
+            fontFamily: PIXEL,
+            fontSize: 52,
+            letterSpacing: 1.5,
+            lineHeight: 1,
+            color: meta.color,
+            textShadow: `0 3px 0 var(--ink-black), 0 0 24px ${meta.color}`,
+          }}
+        >
+          {meta.label}
+        </span>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'baseline',
+            gap: 7,
+            fontFamily: PIXEL,
+            fontSize: 9.5,
+            letterSpacing: 0.8,
+            color: 'var(--dust)',
+            background: 'rgba(0,0,0,0.28)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '7px 13px',
+            lineHeight: 1,
+          }}
+        >
+          GOAL DIFF
+          <b style={{ fontSize: 15, color: gdColor }}>{gdLabel}</b>
+        </span>
+        <span style={{ fontSize: 12.5, color: 'var(--cream-soft)', lineHeight: 1.45, maxWidth: 280 }}>
+          {summaryLine(matchResult)}
+        </span>
+
+        {/* Goals pip strip — a small on-brand flourish below the verdict,
+            read honestly from the scoreline. */}
+        <div className="flex items-stretch" style={{ gap: 12, marginTop: 4 }}>
+          <GoalPips label="FOR" count={matchResult.yourGoals} color="var(--success)" />
+          <span style={{ width: 1, background: 'var(--border)' }} />
+          <GoalPips label="AGAINST" count={matchResult.opponentGoals} color="var(--danger)" />
         </div>
+      </div>
+
+      {/* ── Divider — joins the verdict to the books as one composition. ──── */}
+      <div className="relative shrink-0" style={{ padding: '20px 14px 0' }}>
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+          <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>THE BOOKS</span>
+          <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+        </div>
+      </div>
+
+      {/* ── Economy readout — three inline stats sharing the lower area. ──── */}
+      <div className="relative shrink-0 grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', padding: '16px 14px 0' }}>
+        <EconStat label="Points" value={`+${matchResult.pointsEarned}`} sub={`${matchResult.seasonPoints} season`} color="var(--success)" delay={0} divider={false} />
+        <EconStat label="Revenue" value={`£${compact(matchResult.revenue)}`} sub="this gate" color="var(--gold)" delay={60} divider />
+        <EconStat label="Attendance" value={compact(matchResult.attendance)} sub="in seats" color="var(--cream)" delay={120} divider />
+      </div>
+
+      {/* equal bottom spacer — mirrors the top so the cluster reads centred */}
+      <div className="shrink-0" style={{ flex: 1 }} />
+    </div>
+  );
+}
+
+/** A labelled strip of pixel pips for goals for/against — a small scoreboard
+ *  flourish. Clamps the pip count so a freak scoreline never overflows. */
+function GoalPips({ label, count, color }: { label: string; count: number; color: string }) {
+  const pips = Math.min(Math.max(count, 0), 7);
+  return (
+    <div className="flex flex-col items-center" style={{ gap: 6 }}>
+      <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: 'var(--dust)' }}>{label}</span>
+      <div className="flex items-center" style={{ gap: 4, minHeight: 12 }}>
+        {count === 0 ? (
+          <span style={{ width: 12, height: 4, background: 'var(--border)', borderRadius: 1 }} />
+        ) : (
+          Array.from({ length: pips }).map((_, i) => (
+            <span
+              key={i}
+              style={{
+                width: 8,
+                height: 12,
+                background: color,
+                border: '1px solid var(--ink-black)',
+                borderRadius: 1,
+                boxShadow: `0 0 6px ${color}55`,
+              }}
+            />
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-function StatBox({ label, value, color }: { label: string; value: string; color?: string }) {
+/** One economy stat in the recap readout row (label · big value · sub), with an
+ *  optional left hairline so the three columns read as a connected ledger. */
+function EconStat({
+  label,
+  value,
+  sub,
+  color,
+  delay,
+  divider,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  color: string;
+  delay: number;
+  divider: boolean;
+}) {
   return (
     <div
-      className="rounded-[var(--radius)] px-5 py-3 text-center min-w-[100px]"
+      className="stat-row-in flex flex-col items-center text-center"
       style={{
-        background: 'var(--leather)',
-        border: '1px solid rgba(154,139,115,0.15)',
+        gap: 7,
+        padding: '0 4px',
+        borderLeft: divider ? '1px solid var(--border)' : undefined,
+        animationDelay: `${delay}ms`,
       }}
     >
+      <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>{label.toUpperCase()}</span>
+      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 19, lineHeight: 1.05, color, maxWidth: '100%' }}>{value}</span>
+      <span style={{ fontSize: 8.5, color: 'var(--cream-soft)', letterSpacing: 0.2 }}>{sub}</span>
+    </div>
+  );
+}
+
+/** A one-line plain-language summary of the result for the recap band. */
+function summaryLine(m: PostMatchProps['matchResult']): string {
+  const opp = m.opponentName;
+  if (m.result === 'win') return `Three points banked against ${opp}.`;
+  if (m.result === 'draw') return `Honours even with ${opp} — a point shared.`;
+  return `Beaten by ${opp} — points left on the pitch.`;
+}
+
+// ===========================================================================
+// SQUAD TAB — durability aftermath (shattered / injured / promoted)
+// ===========================================================================
+
+function SquadTab({
+  groups,
+  commentary,
+  lineTone,
+  onOpen,
+}: {
+  groups: { tone: GroupTone; cards: Card[] }[];
+  commentary: string[];
+  lineTone: (line: string) => GroupTone | null;
+  onOpen: (card: Card) => void;
+}) {
+  const hasAftermath = groups.length > 0;
+  const affected = groups.reduce((n, g) => n + g.cards.length, 0);
+
+  return (
+    <div
+      key="squad"
+      className="h-full flex flex-col overflow-hidden stats-rise"
+      style={{
+        background: 'var(--surface)',
+        border: '2px solid var(--ink-black)',
+        borderRadius: 'var(--radius)',
+        boxShadow: '0 2px 0 0 var(--ink-black)',
+      }}
+    >
+      <PanelHeader
+        accent="var(--amber)"
+        title="Durability Check"
+        right={
+          hasAftermath ? (
+            <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)', letterSpacing: 0.4 }}>
+              {affected} AFFECTED
+            </span>
+          ) : undefined
+        }
+      />
+
+      {/* Compact fate legend — only the fates that actually occurred. */}
+      {hasAftermath && (
+        <div className="shrink-0 flex flex-wrap items-center" style={{ gap: 6, padding: '0 11px 9px' }}>
+          {groups.map(({ tone, cards }) => (
+            <span
+              key={tone.key}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                fontFamily: PIXEL,
+                fontSize: 8,
+                letterSpacing: 0.5,
+                color: tone.color,
+                background: tone.bg,
+                border: `1px solid ${tone.color}`,
+                borderRadius: 'var(--radius-sm)',
+                padding: '4px 7px',
+                lineHeight: 1,
+              }}
+            >
+              <span style={{ fontSize: 9 }}>{tone.marker}</span>
+              {tone.title.toUpperCase()}
+              <span style={{ color: 'var(--dust)' }}>×{cards.length}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div
-        className="text-[10px] uppercase tracking-[0.15em]"
-        style={{ color: 'var(--dust)' }}
+        className="flex-1 min-h-0 overflow-y-auto"
+        style={{ overscrollBehavior: 'contain', padding: '0 11px 11px' }}
       >
-        {label}
-      </div>
-      <div
-        className="text-lg font-bold"
-        style={{
-          fontFamily: 'var(--font-display)',
-          color: color ?? 'var(--cream)',
-        }}
-      >
-        {value}
+        {!hasAftermath ? (
+          <div
+            className="flex flex-col items-center justify-center text-center h-full"
+            style={{ minHeight: 200, padding: 20 }}
+          >
+            <span style={{ fontSize: 30, lineHeight: 1, marginBottom: 10 }}>{'🛡️'}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 13, color: 'var(--success)', letterSpacing: 0.6 }}>
+              SQUAD INTACT
+            </span>
+            <span style={{ fontSize: 11.5, color: 'var(--cream-soft)', marginTop: 8, lineHeight: 1.5, maxWidth: 240 }}>
+              No shatters, no injuries — everyone came through ninety minutes unscathed and ready for the next fixture.
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 11 }}>
+            {/* One dense grid so cards fill the width regardless of how many share
+                a fate; each card carries a corner badge for its outcome. */}
+            <div className="grid grid-cols-3" style={{ gap: 8 }}>
+              {groups.flatMap(({ tone, cards }) =>
+                cards.map((card, i) => (
+                  <FateCard key={card.id} tone={tone} card={card} delay={i * 40} onOpen={onOpen} />
+                )),
+              )}
+            </div>
+
+            {/* Commentary tied to the aftermath — secondary to the cards. */}
+            {commentary.length > 0 && (
+              <div className="flex flex-col" style={{ gap: 6, marginTop: 1 }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>
+                  REPORT
+                </span>
+                {commentary.map((line, i) => (
+                  <ReportLine key={i} line={line} tone={lineTone(line)} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+// ===========================================================================
+// Pieces
+// ===========================================================================
+
+/** A tab toggle, matching the ShopPhase tab bar with an optional count badge. */
+function TabButton({
+  label,
+  active,
+  badge,
+  badgeColor = 'var(--amber)',
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  badge?: number;
+  badgeColor?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex-1 active:scale-[0.98] relative"
+      style={{
+        height: 38,
+        borderRadius: 'var(--radius-sm)',
+        border: '2px solid var(--ink-black)',
+        background: active ? 'var(--amber)' : 'var(--surface)',
+        boxShadow: '0 2px 0 0 var(--ink-black)',
+        fontFamily: PIXEL,
+        fontSize: 10,
+        letterSpacing: 0.6,
+        color: active ? 'var(--ink-black)' : 'var(--dust)',
+        textTransform: 'uppercase',
+      }}
+    >
+      {label}
+      {badge != null && (
+        <span
+          style={{
+            position: 'absolute',
+            top: -6,
+            right: -5,
+            minWidth: 16,
+            height: 16,
+            padding: '0 3px',
+            borderRadius: 8,
+            border: '1.5px solid var(--ink-black)',
+            background: badgeColor,
+            color: 'var(--line-white)',
+            fontFamily: PIXEL,
+            fontSize: 8,
+            lineHeight: '13px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** Shared panel header chip: accent bar · pixel title · optional right slot. */
+function PanelHeader({ accent, title, right }: { accent: string; title: string; right?: React.ReactNode }) {
+  return (
+    <div className="shrink-0 flex items-center" style={{ gap: 8, padding: '9px 11px' }}>
+      <span style={{ width: 4, height: 12, background: accent, borderRadius: 1, flexShrink: 0 }} />
+      <span
+        className="mr-auto truncate"
+        style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.8, color: 'var(--cream)', textTransform: 'uppercase' }}
+      >
+        {title}
+      </span>
+      {right}
+    </div>
+  );
+}
+
+/** A large scoreline digit; the winning side reads in --line-white, the loser dimmed. */
+function ScoreNum({ value, win }: { value: number; win: boolean }) {
+  return (
+    <span
+      style={{
+        fontFamily: PIXEL,
+        fontSize: 40,
+        lineHeight: 0.9,
+        color: win ? 'var(--line-white)' : 'var(--cream-soft)',
+        textShadow: win ? '0 3px 0 var(--ink-black)' : '0 2px 0 var(--ink-black)',
+      }}
+    >
+      {value}
+    </span>
+  );
+}
+
+/** A tinted commentary line; tone-coloured when it names an affected player. */
+function ReportLine({ line, tone }: { line: string; tone: GroupTone | null }) {
+  return (
+    <div
+      style={{
+        fontSize: 11,
+        lineHeight: 1.4,
+        color: tone ? tone.color : 'var(--cream-soft)',
+        background: tone ? tone.bg : 'rgba(0,0,0,0.2)',
+        border: `1px solid ${tone ? tone.color : 'var(--border)'}`,
+        borderRadius: 'var(--radius-sm)',
+        padding: '7px 9px',
+        display: 'flex',
+        gap: 7,
+        alignItems: 'flex-start',
+      }}
+    >
+      {tone && (
+        <span style={{ fontFamily: PIXEL, fontSize: 10, color: tone.color, lineHeight: 1.2, flexShrink: 0 }}>
+          {tone.marker}
+        </span>
+      )}
+      <span>{line}</span>
+    </div>
+  );
+}
+
+/** A tappable GameCard tagged with a corner badge for its post-match fate. */
+function FateCard({
+  tone,
+  card,
+  delay,
+  onOpen,
+}: {
+  tone: GroupTone;
+  card: Card;
+  delay: number;
+  onOpen: (card: Card) => void;
+}) {
+  return (
+    <div className="relative">
+      <GameCard
+        model={{ variant: 'player', card }}
+        onClick={() => onOpen(card)}
+        delay={delay}
+        ariaLabel={`${card.name} — ${tone.title}`}
+      />
+      {/* fate badge — a corner ribbon pinned to the card's top-right corner,
+          clear of the position tab (top-left) and rating (which it tucks beside). */}
+      <span
+        style={{
+          position: 'absolute',
+          top: -5,
+          right: -5,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 3,
+          fontFamily: PIXEL,
+          fontSize: 7,
+          letterSpacing: 0.3,
+          color: tone.badgeFg,
+          background: tone.color,
+          border: '1.5px solid var(--ink-black)',
+          borderRadius: 3,
+          padding: '3px 5px',
+          lineHeight: 1,
+          boxShadow: '0 1px 0 0 var(--ink-black)',
+          pointerEvents: 'none',
+        }}
+      >
+        <span style={{ fontSize: 8 }}>{tone.marker}</span>
+        {tone.title.toUpperCase()}
+      </span>
+    </div>
+  );
+}
+
+// ===========================================================================
+// Utils
+// ===========================================================================
+
+/** Compact money/attendance: 12_345 → "12.3k", 1_200_000 → "1.2M". */
+function compact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
+  return n.toLocaleString();
 }

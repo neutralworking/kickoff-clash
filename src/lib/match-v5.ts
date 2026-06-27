@@ -28,10 +28,10 @@ import {
 } from './hand';
 import type { MatchEvent } from './hand';
 import type { DispatchCard, ZoneName, TraitRecord } from './verbs';
-import { dispatchTraits } from './verbs';
+import { dispatchTraits, ZONES } from './verbs';
 import { traitsForCard } from './role-transforms';
 import type { Lane, Cell, Band } from './field';
-import { CELLS, cellOf, bandOf } from './field';
+import { CELLS, BANDS, LANES, cellOf, bandOf } from './field';
 import { generateOpponentXI, opponentScaleTraits, counterPush, reactivityFor } from './opponent';
 import type { CoAppearance } from './chem';
 import { chemistryRecords } from './chem';
@@ -107,6 +107,8 @@ export interface AttackDefenceSplit {
   laneCover: Record<Lane, number>;
   /** Attacking players deep → forward (the move sequence; last is the finisher). */
   attackingOrder: number[];
+  /** The transformed 9×4 grid from the dispatcher (additive — read, never recomputed). */
+  cells: Record<Cell, Record<ZoneName, number>>;
 }
 
 export interface IncrementResult {
@@ -135,6 +137,34 @@ export interface IncrementResult {
   // Per-shot commentary feed (additive, deterministic). One MatchBeat per shot, in
   // engine order: your shots first, then the opponent's. Pure display.
   beats: MatchBeat[];
+  // Per-increment stats readout (additive, deterministic — display only).
+  stats: MatchStats;
+}
+
+/** Per-increment match stats (additive, deterministic — never feeds match math).
+ *  Possession is the 20-possession split; on-target mirrors the beats outcome
+ *  (goal|save); a lane is "won" when that side's push beats the other's effective
+ *  cover in the lane. */
+export interface MatchStats {
+  yourXG: number;
+  opponentXG: number;
+  yourPossessionPct: number;
+  opponentPossessionPct: number;
+  yourShots: number;
+  opponentShots: number;
+  yourShotsOnTarget: number;
+  opponentShotsOnTarget: number;
+  yourZonesWon: Record<Lane, boolean>;
+  opponentZonesWon: Record<Lane, boolean>;
+  /** Full 9-cell control grid (additive, display-only). `true` where that side's total
+   *  presence in the cell strictly exceeds the other's in the mirrored same-lane cell.
+   *  At most one side is `true` per cell; ties leave both `false`. */
+  yourZoneGrid: Record<Cell, boolean>;
+  opponentZoneGrid: Record<Cell, boolean>;
+  /** Signed per-cell control margin = your presence − opponent presence (in the
+   *  mirrored same-lane cell), rounded. Positive = you lead the cell, negative =
+   *  the opponent leads, 0 = level. Additive, display-only. */
+  zoneMargin: Record<Cell, number>;
 }
 
 /** One commentary line per resolved shot. Deterministic; never feeds match math.
@@ -143,6 +173,10 @@ export interface IncrementResult {
  *  else miss. */
 export interface MatchBeat {
   minute: number;
+  /** Integer seconds into the match: a deterministic time inside this shot's 15' window. */
+  clock: number;
+  /** mm:ss zero-padded (e.g. "02:45"), derived from `clock`. */
+  time: string;
   side: 'you' | 'opp';
   lane: Lane;
   xg: number;
@@ -215,6 +249,20 @@ function fitnessOf(card: Card): number {
 
 function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
+}
+
+/** Physical mirror of a band: your attacking third is contested by their defending third
+ *  (same lane), MID maps to MID. Used to align the two sides' grids for the cell contest. */
+function mirrorBand(band: Band): Band {
+  return band === 'ATT' ? 'DEF' : band === 'DEF' ? 'ATT' : 'MID';
+}
+
+/** Total presence in a cell: sum over all four emission kinds. */
+function cellPresence(cells: Record<Cell, Record<ZoneName, number>>, cell: Cell): number {
+  const c = cells[cell];
+  let sum = 0;
+  for (const z of ZONES) sum += c[z];
+  return sum;
 }
 
 function cardToSlotted(card: Card, formation: Formation): SlottedCard {
@@ -556,6 +604,8 @@ export interface SideField {
   shotQuality: number;
   denial: number;       // conversion suppression this side applies to the other
   variance: number;
+  /** The transformed 9×4 grid from the dispatcher (additive — read, never recomputed). */
+  cells: Record<Cell, Record<ZoneName, number>>;
 }
 
 /**
@@ -621,6 +671,7 @@ export function computeSideField(
     shotQuality: Math.max(0, Math.round(finishingProj)),
     denial: dispatched.opponentDenial,
     variance: dispatched.variance,
+    cells: dispatched.cells,
   };
 }
 
@@ -905,6 +956,7 @@ export function evaluateSplit(
     lanePush,
     laneCover,
     attackingOrder: orderedAttackers.map((c) => c.id),
+    cells: dispatched.cells,
   };
 }
 
@@ -1039,6 +1091,11 @@ function buildBeats(
   inc: number,
   committedIds: Set<number> | null,
 ): MatchBeat[] {
+  // Each increment owns a 15-minute match-minute window ending at INCREMENT_MINUTES[inc]
+  // (inc 0 -> 0..15; the increment ending at 60 -> 45..60, leaving the natural half-time
+  // gap). A shot lands at a deterministic fraction inside its window, keyed on
+  // (seed, inc, side, shotIdx) under a NEW salt (14) so existing seeded calls are untouched.
+  const windowStart = INCREMENT_MINUTES[inc] - 15;
   return shots.map((shot, shotIdx) => {
     const outcome: 'goal' | 'save' | 'miss' = shot.goal
       ? 'goal'
@@ -1046,8 +1103,14 @@ function buildBeats(
     const scorer = pickShooter(xi, formation, shot.lane, seed, inc, side, shotIdx, committedIds);
     const scorerId = scorer?.id ?? null;
     const scorerName = scorer?.name ?? null;
+    const f = beatRng(seed, inc, side, shotIdx, 14); // fraction in [0,1) within the window
+    const clock = Math.round(windowStart * 60 + f * 15 * 60);
+    const mm = Math.floor(clock / 60).toString().padStart(2, '0');
+    const ss = (clock % 60).toString().padStart(2, '0');
     return {
       minute,
+      clock,
+      time: `${mm}:${ss}`,
       side: sideLabel,
       lane: shot.lane,
       xg: shot.xg,
@@ -1175,6 +1238,57 @@ export function resolveIncrement(
     ...buildBeats(period.opp.shots, state.opponentXI, state.opponentFormation, 'opp', 1, minute, seed, state.currentIncrement, null),
   ];
 
+  // Per-increment stats (additive, display-only): xG/shots come straight from the
+  // resolved period; possession is the 20-possession split; on-target mirrors the beat
+  // outcome; a lane is "won" when that side out-pushes the other's effective cover.
+  const possTotal = (period.you.possessions + period.opp.possessions) || 1;
+  const yourPossessionPct = Math.round((period.you.possessions / possTotal) * 100);
+  const onTargetFor = (s: 'you' | 'opp') =>
+    beats.filter((b) => b.side === s && (b.outcome === 'goal' || b.outcome === 'save')).length;
+
+  // Full 9-cell control grid (display-only, deterministic, no RNG): for each cell, your
+  // total presence (sum over all emission kinds) vs the opponent's in the mirrored same-
+  // lane cell (your ATT third is physically contested by their DEF third). A side "wins"
+  // a cell only on a strict majority; ties leave both false. (CHANGE 2)
+  const yourZoneGrid = {} as Record<Cell, boolean>;
+  const opponentZoneGrid = {} as Record<Cell, boolean>;
+  const zoneMargin = {} as Record<Cell, number>;
+  for (const band of BANDS) {
+    for (const lane of LANES) {
+      const cell = `${band}_${lane}` as Cell;
+      const oppCell = `${mirrorBand(band)}_${lane}` as Cell;
+      const yourPresence = cellPresence(split.cells, cell);
+      const oppPresence = cellPresence(opp.cells, oppCell);
+      yourZoneGrid[cell] = yourPresence > oppPresence;
+      opponentZoneGrid[cell] = oppPresence > yourPresence;
+      zoneMargin[cell] = Math.round(yourPresence - oppPresence);
+    }
+  }
+
+  const stats: MatchStats = {
+    yourXG: period.you.xg,
+    opponentXG: period.opp.xg,
+    yourPossessionPct,
+    opponentPossessionPct: 100 - yourPossessionPct,
+    yourShots: period.you.shots.length,
+    opponentShots: period.opp.shots.length,
+    yourShotsOnTarget: onTargetFor('you'),
+    opponentShotsOnTarget: onTargetFor('opp'),
+    yourZonesWon: {
+      L: split.lanePush.L > oppEffCover.L,
+      C: split.lanePush.C > oppEffCover.C,
+      R: split.lanePush.R > oppEffCover.R,
+    },
+    opponentZonesWon: {
+      L: oppPush.L > split.laneCover.L,
+      C: oppPush.C > split.laneCover.C,
+      R: oppPush.R > split.laneCover.R,
+    },
+    yourZoneGrid,
+    opponentZoneGrid,
+    zoneMargin,
+  };
+
   return {
     minute,
     split,
@@ -1198,6 +1312,7 @@ export function resolveIncrement(
     opponentShots: period.opp.shots,
     event: { minute, text: eventText, type: eventType },
     beats,
+    stats,
   };
 }
 
