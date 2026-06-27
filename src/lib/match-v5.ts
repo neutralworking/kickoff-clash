@@ -161,6 +161,10 @@ export interface MatchStats {
    *  At most one side is `true` per cell; ties leave both `false`. */
   yourZoneGrid: Record<Cell, boolean>;
   opponentZoneGrid: Record<Cell, boolean>;
+  /** Signed per-cell control margin = your presence − opponent presence (in the
+   *  mirrored same-lane cell), rounded. Positive = you lead the cell, negative =
+   *  the opponent leads, 0 = level. Additive, display-only. */
+  zoneMargin: Record<Cell, number>;
 }
 
 /** One commentary line per resolved shot. Deterministic; never feeds match math.
@@ -1248,6 +1252,7 @@ export function resolveIncrement(
   // a cell only on a strict majority; ties leave both false. (CHANGE 2)
   const yourZoneGrid = {} as Record<Cell, boolean>;
   const opponentZoneGrid = {} as Record<Cell, boolean>;
+  const zoneMargin = {} as Record<Cell, number>;
   for (const band of BANDS) {
     for (const lane of LANES) {
       const cell = `${band}_${lane}` as Cell;
@@ -1256,6 +1261,7 @@ export function resolveIncrement(
       const oppPresence = cellPresence(opp.cells, oppCell);
       yourZoneGrid[cell] = yourPresence > oppPresence;
       opponentZoneGrid[cell] = oppPresence > yourPresence;
+      zoneMargin[cell] = Math.round(yourPresence - oppPresence);
     }
   }
 
@@ -1280,6 +1286,7 @@ export function resolveIncrement(
     },
     yourZoneGrid,
     opponentZoneGrid,
+    zoneMargin,
   };
 
   return {
