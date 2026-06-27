@@ -1,28 +1,33 @@
 'use client';
 
 /**
- * Kickoff Clash — PostMatch (FULL TIME)
+ * Kickoff Clash — PostMatch (SURVIVAL beat)
  *
- * The result screen, in the canonical Sensible-Soccer pixel house style.
+ * v1 permadeath: a single LOSS ends the run and routes straight to the end
+ * screen — so THIS screen is only ever reached after a WIN or a DRAW. It is the
+ * "you survived — on to the next" beat, not a neutral full-time recap.
  *
- * TABBED layout (mirrors ShopPhase): a compact, always-visible result header
- * (FULL TIME · scoreline · verdict · vs opponent), a two-tab body that each
- * fills the viewport, and a fixed CONTINUE-to-shop footer. The page never
- * scrolls; only a tab body may scroll internally when a group runs long.
+ * In the canonical Sensible-Soccer pixel house style. TABBED layout (mirrors
+ * ShopPhase): a compact, always-visible survival header (SURVIVED · scoreline ·
+ * result · vs opponent), a two-tab body that each fills the viewport, and a
+ * fixed CONTINUE-to-shop footer. The page never scrolls; only a tab body may
+ * scroll internally when a group runs long.
  *
- *   • RECAP — the verdict hero treatment + the economy readout (points earned &
- *     season total, revenue, attendance as on-brand tiles) + a short match
- *     report. Content is spread + stretched so the screen never feels sparse.
+ *   • SURVIVAL — the "advanced" hero treatment carrying the result (WIN or
+ *     DRAW), the one-life fixture arc (Match X of 5 + a pip strip of what's
+ *     behind / ahead), and the REWARD EARNED (cash; a draw is flagged as a
+ *     reduced gate). No season-points / board-target framing — that concept is
+ *     gone under permadeath.
  *   • SQUAD — the durability aftermath: shattered / injured / promoted players
  *     as real GameCards under colour-coded headers (or a SQUAD INTACT state).
+ *     In-run attrition still matters, so the aftermath stays.
  *
  * Tapping any aftermath card opens the shared CardModal.
- *
- * Contract (PostMatchProps) is byte-identical — GameShell wiring is untouched.
  */
 
 import { useState } from 'react';
 import type { Card } from '../lib/scoring';
+import type { MatchResult } from '../lib/run';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import { PIXEL } from './cards/cardTokens';
@@ -32,11 +37,11 @@ interface PostMatchProps {
     opponentName: string;
     yourGoals: number;
     opponentGoals: number;
+    // Only 'win' | 'draw' reach this screen (a loss routes to the end screen),
+    // but the union stays faithful to the source MatchResult shape.
     result: 'win' | 'draw' | 'loss';
-    pointsEarned: number;
-    seasonPoints: number;
     attendance: number;
-    revenue: number;
+    revenue: number; // the actual reward earned (a draw is already halved upstream)
   };
   durabilityResult: {
     shattered: Card[];
@@ -44,17 +49,22 @@ interface PostMatchProps {
     promoted: Card[];
     commentary: string[];
   };
+  // --- Run context (one-life arc) — passed from GameShell ----------------------
+  round: number;          // the match just played (1–5)
+  totalRounds: number;    // fixtures in a run (5)
+  wins: number;           // wins so far this run (incl. this one)
+  matchHistory: MatchResult[]; // results so far this run (incl. this one)
   onContinue: () => void;
 }
 
-// Per-result presentation: accent colour + verb + tagline.
+// Per-result presentation: accent colour + verb + survival tagline.
 const RESULT_META: Record<
   PostMatchProps['matchResult']['result'],
   { label: string; color: string; tag: string }
 > = {
-  win: { label: 'WIN', color: 'var(--success)', tag: 'Three points' },
-  draw: { label: 'DRAW', color: 'var(--dust)', tag: 'A point apiece' },
-  loss: { label: 'LOSS', color: 'var(--danger)', tag: 'Back to the drawing board' },
+  win: { label: 'WIN', color: 'var(--success)', tag: 'Full gate' },
+  draw: { label: 'DRAW', color: 'var(--gold)', tag: 'Reduced gate' },
+  loss: { label: 'LOSS', color: 'var(--danger)', tag: 'Run over' },
 };
 
 // Aftermath groups: shattered (gone) → injured → promoted.
@@ -67,10 +77,18 @@ const GROUP_META: Record<'shattered' | 'injured' | 'promoted', GroupTone> = {
   promoted: { key: 'promoted', title: 'Promoted', color: 'var(--gold)', bg: 'rgba(245,197,66,0.12)', marker: '★', badgeFg: 'var(--ink-black)' },
 };
 
-type Tab = 'recap' | 'squad';
+type Tab = 'survival' | 'squad';
 
-export default function PostMatch({ matchResult, durabilityResult, onContinue }: PostMatchProps) {
-  const [tab, setTab] = useState<Tab>('recap');
+export default function PostMatch({
+  matchResult,
+  durabilityResult,
+  round,
+  totalRounds,
+  wins,
+  matchHistory,
+  onContinue,
+}: PostMatchProps) {
+  const [tab, setTab] = useState<Tab>('survival');
   const [modal, setModal] = useState<GameCardModel | null>(null);
 
   const meta = RESULT_META[matchResult.result];
@@ -102,7 +120,7 @@ export default function PostMatch({ matchResult, durabilityResult, onContinue }:
         paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
       }}
     >
-      {/* ── Result head: FULL TIME · scoreline · verdict ──────────────────── */}
+      {/* ── Survival head: SURVIVED · scoreline · result ──────────────────── */}
       <div className="shrink-0 px-3">
         <div
           className="relative overflow-hidden"
@@ -127,20 +145,20 @@ export default function PostMatch({ matchResult, durabilityResult, onContinue }:
 
           <div className="relative flex items-center justify-between" style={{ gap: 8 }}>
             <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 1.4, color: 'var(--dust)' }}>
-              FULL TIME
+              SURVIVED
             </span>
             <span className="truncate" style={{ fontSize: 11, color: 'var(--cream-soft)' }}>
               vs <b style={{ color: 'var(--cream)' }}>{matchResult.opponentName}</b>
             </span>
           </div>
 
-          {/* Scoreline + verdict pill on one tight row */}
+          {/* Scoreline + result pill on one tight row */}
           <div className="relative flex items-center justify-center" style={{ gap: 12, marginTop: 6 }}>
             <ScoreNum value={matchResult.yourGoals} win={matchResult.result === 'win'} />
             <span style={{ fontFamily: PIXEL, fontSize: 18, color: 'var(--ink)', lineHeight: 1, paddingBottom: 6 }}>
               {'–'}
             </span>
-            <ScoreNum value={matchResult.opponentGoals} win={matchResult.result === 'loss'} />
+            <ScoreNum value={matchResult.opponentGoals} win={false} />
           </div>
 
           <div className="relative flex items-center justify-center" style={{ marginTop: 6 }}>
@@ -173,7 +191,7 @@ export default function PostMatch({ matchResult, durabilityResult, onContinue }:
 
       {/* ── Tab bar ───────────────────────────────────────────────────────── */}
       <div className="shrink-0 flex gap-1.5 px-3" style={{ marginTop: 10 }}>
-        <TabButton label="Recap" active={tab === 'recap'} onClick={() => setTab('recap')} />
+        <TabButton label="Survival" active={tab === 'survival'} onClick={() => setTab('survival')} />
         <TabButton
           label="Squad"
           active={tab === 'squad'}
@@ -185,8 +203,15 @@ export default function PostMatch({ matchResult, durabilityResult, onContinue }:
 
       {/* ── Active tab body — the ONLY region that may scroll ──────────────── */}
       <div className="flex-1 min-h-0 px-3" style={{ marginTop: 10 }}>
-        {tab === 'recap' ? (
-          <RecapTab matchResult={matchResult} meta={meta} />
+        {tab === 'survival' ? (
+          <SurvivalTab
+            matchResult={matchResult}
+            meta={meta}
+            round={round}
+            totalRounds={totalRounds}
+            wins={wins}
+            matchHistory={matchHistory}
+          />
         ) : (
           <SquadTab groups={groups} commentary={commentary} lineTone={lineTone} onOpen={(card) => setModal({ variant: 'player', card })} />
         )}
@@ -221,28 +246,42 @@ export default function PostMatch({ matchResult, durabilityResult, onContinue }:
 }
 
 // ===========================================================================
-// RECAP TAB — verdict hero + economy readout
+// SURVIVAL TAB — the "you advanced" beat: hero verdict + one-life fixture arc +
+// reward earned.
 //
-// No durability commentary here (that lives on SQUAD next to its cards). The
-// panel is ONE vertically-centred composition: the verdict poster and the
-// economy ledger are a single stack pinned to the middle of the tab body, with
-// equal flex spacers above and below. The slack is split evenly top/bottom so
-// the screen reads as deliberately composed — never two clusters shoved apart.
+// The panel is ONE vertically-centred composition: the survival poster, the
+// fixture run, and the reward sit as a single stack pinned to the middle of the
+// tab body, with equal flex spacers above and below so the slack is split evenly
+// and the screen reads as deliberately composed — never two clusters shoved
+// apart.
 // ===========================================================================
 
-function RecapTab({
+function SurvivalTab({
   matchResult,
   meta,
+  round,
+  totalRounds,
+  wins,
+  matchHistory,
 }: {
   matchResult: PostMatchProps['matchResult'];
   meta: { label: string; color: string; tag: string };
+  round: number;
+  totalRounds: number;
+  wins: number;
+  matchHistory: MatchResult[];
 }) {
-  const gd = matchResult.yourGoals - matchResult.opponentGoals;
-  const gdLabel = gd > 0 ? `+${gd}` : `${gd}`;
-  const gdColor = gd > 0 ? 'var(--success)' : gd < 0 ? 'var(--danger)' : 'var(--dust)';
+  const isFinal = round >= totalRounds;
+  // Big survival verb — the run continues (unless this was the last fixture).
+  const heroWord = isFinal ? 'CHAMPIONS' : 'SURVIVED';
+  const arcLine = isFinal
+    ? `All ${totalRounds} fixtures survived — the run is yours.`
+    : survivalLine(matchResult, round, totalRounds);
+  const rewardSub = matchResult.result === 'draw' ? 'reduced gate' : 'gate banked';
+
   return (
     <div
-      key="recap"
+      key="survival"
       className="h-full flex flex-col relative overflow-hidden stats-rise"
       style={{
         background: 'var(--surface)',
@@ -258,59 +297,49 @@ function RecapTab({
       />
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: meta.color }} />
 
-      {/* equal top spacer — soaks up half the slack so the cluster sits centred */}
+      {/* Three composed regions distributed across the FULL panel height with
+          equal flex spacers between them (space-around) — no concentrated void:
+          (1) the match marker near the top, (2) the verdict poster + fixture arc
+          in the upper-middle, (3) the books/reward grounded in the lower third. */}
+      <div className="shrink-0" style={{ flex: 0.6 }} />
+
+      {/* (1) Match marker */}
+      <div className="relative shrink-0 flex justify-center" style={{ padding: '0 18px' }}>
+        <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1.4, color: 'var(--dust)' }}>
+          MATCH {round} OF {totalRounds}
+        </span>
+      </div>
+
       <div className="shrink-0" style={{ flex: 1 }} />
 
-      {/* ── Verdict block — the poster, centred as part of the one cluster. ── */}
+      {/* (2) Verdict poster + summary line + one-life fixture arc */}
       <div className="relative shrink-0 flex flex-col items-center text-center" style={{ padding: '0 18px', gap: 14 }}>
-        <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1.4, color: 'var(--dust)' }}>RESULT</span>
         <span
           className="score-pop"
           style={{
             fontFamily: PIXEL,
-            fontSize: 52,
+            fontSize: heroWord.length > 8 ? 32 : 44,
             letterSpacing: 1.5,
             lineHeight: 1,
             color: meta.color,
             textShadow: `0 3px 0 var(--ink-black), 0 0 24px ${meta.color}`,
           }}
         >
-          {meta.label}
-        </span>
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'baseline',
-            gap: 7,
-            fontFamily: PIXEL,
-            fontSize: 9.5,
-            letterSpacing: 0.8,
-            color: 'var(--dust)',
-            background: 'rgba(0,0,0,0.28)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '7px 13px',
-            lineHeight: 1,
-          }}
-        >
-          GOAL DIFF
-          <b style={{ fontSize: 15, color: gdColor }}>{gdLabel}</b>
+          {heroWord}
         </span>
         <span style={{ fontSize: 12.5, color: 'var(--cream-soft)', lineHeight: 1.45, maxWidth: 280 }}>
-          {summaryLine(matchResult)}
+          {arcLine}
         </span>
 
-        {/* Goals pip strip — a small on-brand flourish below the verdict,
-            read honestly from the scoreline. */}
-        <div className="flex items-stretch" style={{ gap: 12, marginTop: 4 }}>
-          <GoalPips label="FOR" count={matchResult.yourGoals} color="var(--success)" />
-          <span style={{ width: 1, background: 'var(--border)' }} />
-          <GoalPips label="AGAINST" count={matchResult.opponentGoals} color="var(--danger)" />
-        </div>
+        {/* One-life fixture arc — a pip per fixture so the run's shape is legible
+            at a glance: played results coloured by outcome, the rest pending. */}
+        <FixtureArc round={round} totalRounds={totalRounds} matchHistory={matchHistory} />
       </div>
 
-      {/* ── Divider — joins the verdict to the books as one composition. ──── */}
-      <div className="relative shrink-0" style={{ padding: '20px 14px 0' }}>
+      <div className="shrink-0" style={{ flex: 1 }} />
+
+      {/* (3) The books — divider + reward readout, grounded in the lower third */}
+      <div className="relative shrink-0" style={{ padding: '0 14px' }}>
         <div className="flex items-center" style={{ gap: 8 }}>
           <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>THE BOOKS</span>
@@ -318,89 +347,85 @@ function RecapTab({
         </div>
       </div>
 
-      {/* ── Economy readout — three inline stats sharing the lower area. ──── */}
       <div className="relative shrink-0 grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', padding: '16px 14px 0' }}>
-        <EconStat label="Points" value={`+${matchResult.pointsEarned}`} sub={`${matchResult.seasonPoints} season`} color="var(--success)" delay={0} divider={false} />
-        <EconStat label="Revenue" value={`£${compact(matchResult.revenue)}`} sub="this gate" color="var(--gold)" delay={60} divider />
-        <EconStat label="Attendance" value={compact(matchResult.attendance)} sub="in seats" color="var(--cream)" delay={120} divider />
+        <EconStat label="Reward" value={`£${compact(matchResult.revenue)}`} sub={rewardSub} color="var(--gold)" delay={0} divider={false} />
+        <EconStat label="Attendance" value={compact(matchResult.attendance)} sub="in seats" color="var(--cream)" delay={60} divider />
+        <EconStat label="Survived" value={`${round}/${totalRounds}`} sub={`${wins} won`} color="var(--success)" delay={120} divider />
       </div>
 
-      {/* equal bottom spacer — mirrors the top so the cluster reads centred */}
-      <div className="shrink-0" style={{ flex: 1 }} />
+      <div className="shrink-0" style={{ flex: 0.6 }} />
     </div>
   );
 }
 
-/** A labelled strip of pixel pips for goals for/against — a small scoreboard
- *  flourish. Clamps the pip count so a freak scoreline never overflows. */
-function GoalPips({ label, count, color }: { label: string; count: number; color: string }) {
-  const pips = Math.min(Math.max(count, 0), 7);
+/** The one-life fixture arc: one pip per fixture in the run. Played fixtures are
+ *  coloured by outcome (win green / draw gold), the most-recent one ringed, and
+ *  upcoming fixtures show as hollow pending slots. Makes the survive-or-die arc
+ *  readable in a glance. */
+function FixtureArc({
+  round,
+  totalRounds,
+  matchHistory,
+}: {
+  round: number;
+  totalRounds: number;
+  matchHistory: MatchResult[];
+}) {
+  const pips = Array.from({ length: totalRounds }, (_, i) => {
+    const fixtureNo = i + 1;
+    const played = matchHistory.find((m) => m.round === fixtureNo);
+    const isCurrent = fixtureNo === round;
+    return { fixtureNo, played, isCurrent };
+  });
+
   return (
-    <div className="flex flex-col items-center" style={{ gap: 6 }}>
-      <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: 'var(--dust)' }}>{label}</span>
-      <div className="flex items-center" style={{ gap: 4, minHeight: 12 }}>
-        {count === 0 ? (
-          <span style={{ width: 12, height: 4, background: 'var(--border)', borderRadius: 1 }} />
-        ) : (
-          Array.from({ length: pips }).map((_, i) => (
+    <div className="flex items-center" style={{ gap: 6, marginTop: 2 }}>
+      {pips.map(({ fixtureNo, played, isCurrent }) => {
+        const color =
+          played?.result === 'win'
+            ? 'var(--success)'
+            : played?.result === 'draw'
+            ? 'var(--gold)'
+            : 'transparent';
+        const filled = Boolean(played);
+        return (
+          <div
+            key={fixtureNo}
+            className="flex flex-col items-center"
+            style={{ gap: 4 }}
+            aria-label={
+              played
+                ? `Fixture ${fixtureNo}: ${played.result} ${played.yourGoals}-${played.opponentGoals}`
+                : `Fixture ${fixtureNo}: upcoming`
+            }
+          >
             <span
-              key={i}
               style={{
-                width: 8,
-                height: 12,
-                background: color,
-                border: '1px solid var(--ink-black)',
-                borderRadius: 1,
-                boxShadow: `0 0 6px ${color}55`,
+                width: 16,
+                height: 16,
+                borderRadius: 4,
+                background: filled ? color : 'rgba(0,0,0,0.32)',
+                border: `2px solid ${isCurrent ? 'var(--line-white)' : 'var(--ink-black)'}`,
+                boxShadow: filled ? `0 0 8px ${color}66` : 'none',
               }}
             />
-          ))
-        )}
-      </div>
+            <span style={{ fontFamily: PIXEL, fontSize: 7, color: isCurrent ? 'var(--cream)' : 'var(--dust)' }}>
+              {fixtureNo}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-/** One economy stat in the recap readout row (label · big value · sub), with an
- *  optional left hairline so the three columns read as a connected ledger. */
-function EconStat({
-  label,
-  value,
-  sub,
-  color,
-  delay,
-  divider,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  color: string;
-  delay: number;
-  divider: boolean;
-}) {
-  return (
-    <div
-      className="stat-row-in flex flex-col items-center text-center"
-      style={{
-        gap: 7,
-        padding: '0 4px',
-        borderLeft: divider ? '1px solid var(--border)' : undefined,
-        animationDelay: `${delay}ms`,
-      }}
-    >
-      <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>{label.toUpperCase()}</span>
-      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 19, lineHeight: 1.05, color, maxWidth: '100%' }}>{value}</span>
-      <span style={{ fontSize: 8.5, color: 'var(--cream-soft)', letterSpacing: 0.2 }}>{sub}</span>
-    </div>
-  );
-}
-
-/** A one-line plain-language summary of the result for the recap band. */
-function summaryLine(m: PostMatchProps['matchResult']): string {
+/** A one-line plain-language survival summary. */
+function survivalLine(m: PostMatchProps['matchResult'], round: number, total: number): string {
   const opp = m.opponentName;
-  if (m.result === 'win') return `Three points banked against ${opp}.`;
-  if (m.result === 'draw') return `Honours even with ${opp} — a point shared.`;
-  return `Beaten by ${opp} — points left on the pitch.`;
+  const ahead = total - round;
+  const tail = ahead === 1 ? '1 fixture stands between you and the title.' : `${ahead} fixtures to go.`;
+  if (m.result === 'win') return `${opp} beaten — you live to fight on. ${tail}`;
+  return `Honours even with ${opp} — but you survive. ${tail}`;
 }
 
 // ===========================================================================
@@ -600,7 +625,7 @@ function PanelHeader({ accent, title, right }: { accent: string; title: string; 
   );
 }
 
-/** A large scoreline digit; the winning side reads in --line-white, the loser dimmed. */
+/** A large scoreline digit; the winning side reads in --line-white, the other dimmed. */
 function ScoreNum({ value, win }: { value: number; win: boolean }) {
   return (
     <span
@@ -703,4 +728,38 @@ function compact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
   return n.toLocaleString();
+}
+
+/** One economy stat in the reward readout row (label · big value · sub), with an
+ *  optional left hairline so the three columns read as a connected ledger. */
+function EconStat({
+  label,
+  value,
+  sub,
+  color,
+  delay,
+  divider,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  color: string;
+  delay: number;
+  divider: boolean;
+}) {
+  return (
+    <div
+      className="stat-row-in flex flex-col items-center text-center"
+      style={{
+        gap: 7,
+        padding: '0 4px',
+        borderLeft: divider ? '1px solid var(--border)' : undefined,
+        animationDelay: `${delay}ms`,
+      }}
+    >
+      <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>{label.toUpperCase()}</span>
+      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 19, lineHeight: 1.05, color, maxWidth: '100%' }}>{value}</span>
+      <span style={{ fontSize: 8.5, color: 'var(--cream-soft)', letterSpacing: 0.2 }}>{sub}</span>
+    </div>
+  );
 }

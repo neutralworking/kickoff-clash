@@ -481,11 +481,15 @@ export default function GameShell() {
       }
 
       case 'postmatch': {
-        if (!lastMatchResult || !durabilityResult) return null;
+        if (!lastMatchResult || !durabilityResult || !runState) return null;
         return (
           <PostMatch
             matchResult={lastMatchResult}
             durabilityResult={durabilityResult}
+            round={lastMatchResult.round}
+            totalRounds={MAX_ROUNDS}
+            wins={runState.wins}
+            matchHistory={runState.matchHistory}
             onContinue={handlePostMatchContinue}
           />
         );
