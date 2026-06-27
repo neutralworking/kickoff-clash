@@ -483,71 +483,82 @@ function StatsScreen({
   const youZonesWon = countGrid(stats.yourZoneGrid);
   const oppZonesWon = countGrid(stats.opponentZoneGrid);
   return (
-    <div className="stats-rise" style={{ position: 'absolute', inset: 0, zIndex: 14, background: 'linear-gradient(180deg, #08130c, #0a160e)', display: 'flex', flexDirection: 'column', padding: '12px 14px 12px', overflow: 'hidden' }}>
-      {/* Header: the period marker + the running score */}
-      <div className="stat-row-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <span style={{ fontFamily: PIXEL, fontSize: 9, color: 'var(--gold)', letterSpacing: 0.6 }}>{isFullTime ? 'FULL TIME' : `${minute}' — ${periodLabel} HALF`}</span>
-        <span style={{ fontFamily: PIXEL, fontSize: 16, color: 'var(--line-white)' }}>
-          <span style={{ color: YOU }}>{scoreYou}</span> – <span style={{ color: OPP }}>{scoreOpp}</span>
-        </span>
-      </div>
+    <div className="stats-rise" style={{ position: 'absolute', inset: 0, zIndex: 14, background: 'linear-gradient(180deg, #08130c, #0a160e)', display: 'flex', flexDirection: 'column', padding: '14px 14px 14px', overflow: 'hidden' }}>
+      {/* The whole readout — header, matchup, four stat bars, the zones map — is
+          ONE centred cluster with even gaps between its groups. It fills the body
+          from the middle outward (no empty top half, no edge-stretched voids).
+          CONTINUE stays a fixed footer below. */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly', paddingTop: 6, paddingBottom: 2 }}>
+        {/* Scoreboard — period marker, running score, and the matchup, as one block. */}
+        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Header: the period marker + the running score */}
+          <div className="stat-row-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 9.5, color: 'var(--gold)', letterSpacing: 0.6 }}>{isFullTime ? 'FULL TIME' : `${minute}' — ${periodLabel} HALF`}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 18, color: 'var(--line-white)' }}>
+              <span style={{ color: YOU }}>{scoreYou}</span> – <span style={{ color: OPP }}>{scoreOpp}</span>
+            </span>
+          </div>
 
-      {/* Side names */}
-      <div className="stat-row-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, marginBottom: 8, flexShrink: 0, animationDelay: '40ms' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 800, color: YOU, overflow: 'hidden' }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: YOU }} />{youName}
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 800, color: OPP, overflow: 'hidden' }}>
-          <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oppName}</span><span style={{ width: 8, height: 8, borderRadius: 2, background: OPP }} />
-        </span>
-      </div>
+          {/* Side names */}
+          <div className="stat-row-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animationDelay: '40ms' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 800, color: YOU, overflow: 'hidden' }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: YOU }} />{youName}
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 800, color: OPP, overflow: 'hidden' }}>
+              <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oppName}</span><span style={{ width: 8, height: 8, borderRadius: 2, background: OPP }} />
+            </span>
+          </div>
+        </div>
 
-      {/* Stat rows — flex-1 so the panel fits without page scroll. */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 }}>
-        <StatLabel delay={80}>EXPECTED GOALS (xG)</StatLabel>
-        <StatBar you={stats.yourXG} opp={stats.opponentXG} fmt={(n) => n.toFixed(2)} delay={90} />
-        <StatLabel delay={130}>POSSESSION %</StatLabel>
-        <StatBar you={stats.yourPossessionPct} opp={stats.opponentPossessionPct} delay={140} />
-        <StatLabel delay={180}>SHOTS</StatLabel>
-        <StatBar you={stats.yourShots} opp={stats.opponentShots} delay={190} />
-        <StatLabel delay={230}>ON TARGET</StatLabel>
-        <StatBar you={stats.yourShotsOnTarget} opp={stats.opponentShotsOnTarget} delay={240} />
+        {/* Four stat bars — their own group, comfortably spaced. */}
+        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <StatLabel delay={80}>EXPECTED GOALS (xG)</StatLabel>
+          <StatBar you={stats.yourXG} opp={stats.opponentXG} fmt={(n) => n.toFixed(2)} delay={90} />
+          <StatLabel delay={130}>POSSESSION %</StatLabel>
+          <StatBar you={stats.yourPossessionPct} opp={stats.opponentPossessionPct} delay={140} />
+          <StatLabel delay={180}>SHOTS</StatLabel>
+          <StatBar you={stats.yourShots} opp={stats.opponentShots} delay={190} />
+          <StatLabel delay={230}>ON TARGET</StatLabel>
+          <StatBar you={stats.yourShotsOnTarget} opp={stats.opponentShotsOnTarget} delay={240} />
+        </div>
 
         {/* FIX 7 — ZONES WON as a pitch-shaped 3×3 mini-heatmap. Oriented from your
             perspective: ATT third at the TOP (toward the opponent's goal), MID in
             the middle, DEF at the BOTTOM (your goal); columns L/C/R left-to-right.
             Green = you won the cell, red = opponent, neutral = contested/tie. */}
-        <StatLabel delay={280}>ZONES WON · <span style={{ color: YOU }}>{youZonesWon}</span>–<span style={{ color: OPP }}>{oppZonesWon}</span></StatLabel>
-        <div className="stat-row-in" style={{ display: 'flex', justifyContent: 'center', animationDelay: '290ms' }}>
-          {/* A pitch-shaped frame: top goal (opponent's) → bottom goal (yours). */}
-          <div style={{ position: 'relative', width: 132, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', background: '#0a1a10', padding: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {/* opponent goal mouth (top) */}
-            <div style={{ position: 'absolute', top: -3, left: '50%', transform: 'translateX(-50%)', width: 26, height: 3, borderRadius: '0 0 2px 2px', background: OPP }} />
-            {/* your goal mouth (bottom) */}
-            <div style={{ position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)', width: 26, height: 3, borderRadius: '2px 2px 0 0', background: YOU }} />
-            {gridZones.map((band) => (
-              <div key={band} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3 }}>
-                {gridLanes.map((lane) => {
-                  const cell = `${band}_${lane}` as Cell;
-                  const youWon = stats.yourZoneGrid[cell];
-                  const oppWon = stats.opponentZoneGrid[cell];
-                  const bg = youWon ? YOU : oppWon ? OPP : 'var(--surface)';
-                  return (
-                    <div key={cell} title={`${band} ${lane}`} style={{ height: 22, borderRadius: 2, background: bg, border: '1px solid var(--ink-black)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {/* band initial only in the centre column keeps it legible, not busy. */}
-                      {lane === 'C' && <span style={{ fontFamily: PIXEL, fontSize: 7, color: youWon || oppWon ? 'var(--ink-black)' : 'var(--dust)', lineHeight: 1 }}>{band[0]}</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+          <StatLabel delay={280}>ZONES WON · <span style={{ color: YOU }}>{youZonesWon}</span>–<span style={{ color: OPP }}>{oppZonesWon}</span></StatLabel>
+          <div className="stat-row-in" style={{ display: 'flex', justifyContent: 'center', animationDelay: '290ms' }}>
+            {/* A pitch-shaped frame: top goal (opponent's) → bottom goal (yours). */}
+            <div style={{ position: 'relative', width: 150, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', background: '#0a1a10', padding: 5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {/* opponent goal mouth (top) */}
+              <div style={{ position: 'absolute', top: -3, left: '50%', transform: 'translateX(-50%)', width: 30, height: 3, borderRadius: '0 0 2px 2px', background: OPP }} />
+              {/* your goal mouth (bottom) */}
+              <div style={{ position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)', width: 30, height: 3, borderRadius: '2px 2px 0 0', background: YOU }} />
+              {gridZones.map((band) => (
+                <div key={band} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+                  {gridLanes.map((lane) => {
+                    const cell = `${band}_${lane}` as Cell;
+                    const youWon = stats.yourZoneGrid[cell];
+                    const oppWon = stats.opponentZoneGrid[cell];
+                    const bg = youWon ? YOU : oppWon ? OPP : 'var(--surface)';
+                    return (
+                      <div key={cell} title={`${band} ${lane}`} style={{ height: 24, borderRadius: 2, background: bg, border: '1px solid var(--ink-black)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {/* band initial only in the centre column keeps it legible, not busy. */}
+                        {lane === 'C' && <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: youWon || oppWon ? 'var(--ink-black)' : 'var(--dust)', lineHeight: 1 }}>{band[0]}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       {/* CONTINUE — the single advance verb proceeds from the stats screen. */}
       <button onClick={onContinue} className="advance-btn-pulse stat-row-in"
-        style={{ flexShrink: 0, marginTop: 10, width: '100%', padding: '12px 0', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 4px 0 0 var(--ink-black)', background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))', color: 'var(--cream)', fontFamily: PIXEL, fontSize: 15, cursor: 'pointer', animationDelay: '320ms' }}>
+        style={{ flexShrink: 0, marginTop: 12, width: '100%', padding: '13px 0', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 4px 0 0 var(--ink-black)', background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))', color: 'var(--cream)', fontFamily: PIXEL, fontSize: 15, cursor: 'pointer', animationDelay: '320ms' }}>
         {isFullTime ? 'FULL TIME →' : 'CONTINUE →'}
       </button>
     </div>

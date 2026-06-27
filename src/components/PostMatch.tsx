@@ -224,8 +224,10 @@ export default function PostMatch({ matchResult, durabilityResult, onContinue }:
 // RECAP TAB — verdict hero + economy readout
 //
 // No durability commentary here (that lives on SQUAD next to its cards). The
-// body is two equal flex regions — a verdict hero and the economy tiles — so it
-// fills the viewport evenly with no concentrated void.
+// panel is ONE vertically-centred composition: the verdict poster and the
+// economy ledger are a single stack pinned to the middle of the tab body, with
+// equal flex spacers above and below. The slack is split evenly top/bottom so
+// the screen reads as deliberately composed — never two clusters shoved apart.
 // ===========================================================================
 
 function RecapTab({
@@ -252,23 +254,25 @@ function RecapTab({
       {/* result-tinted wash + accent rail unify the panel under the verdict colour */}
       <div
         className="absolute inset-0"
-        style={{ background: `radial-gradient(ellipse at 50% 0%, ${meta.color}1f 0%, transparent 55%)`, pointerEvents: 'none' }}
+        style={{ background: `radial-gradient(ellipse at 50% 12%, ${meta.color}22 0%, transparent 58%)`, pointerEvents: 'none' }}
       />
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: meta.color }} />
 
-      {/* ── Verdict block — a poster seated in the upper-third; the flex slack
-            falls as one deliberate band between it and the books below. ────── */}
-      <div className="relative flex-1 min-h-0 flex flex-col items-center text-center" style={{ padding: '30px 18px 14px', gap: 13 }}>
+      {/* equal top spacer — soaks up half the slack so the cluster sits centred */}
+      <div className="shrink-0" style={{ flex: 1 }} />
+
+      {/* ── Verdict block — the poster, centred as part of the one cluster. ── */}
+      <div className="relative shrink-0 flex flex-col items-center text-center" style={{ padding: '0 18px', gap: 14 }}>
         <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1.4, color: 'var(--dust)' }}>RESULT</span>
         <span
           className="score-pop"
           style={{
             fontFamily: PIXEL,
-            fontSize: 44,
+            fontSize: 52,
             letterSpacing: 1.5,
             lineHeight: 1,
             color: meta.color,
-            textShadow: `0 3px 0 var(--ink-black), 0 0 22px ${meta.color}`,
+            textShadow: `0 3px 0 var(--ink-black), 0 0 24px ${meta.color}`,
           }}
         >
           {meta.label}
@@ -279,34 +283,34 @@ function RecapTab({
             alignItems: 'baseline',
             gap: 7,
             fontFamily: PIXEL,
-            fontSize: 9,
+            fontSize: 9.5,
             letterSpacing: 0.8,
             color: 'var(--dust)',
             background: 'rgba(0,0,0,0.28)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-sm)',
-            padding: '6px 12px',
+            padding: '7px 13px',
             lineHeight: 1,
           }}
         >
           GOAL DIFF
-          <b style={{ fontSize: 14, color: gdColor }}>{gdLabel}</b>
+          <b style={{ fontSize: 15, color: gdColor }}>{gdLabel}</b>
         </span>
-        <span style={{ fontSize: 12, color: 'var(--cream-soft)', lineHeight: 1.45, maxWidth: 280 }}>
+        <span style={{ fontSize: 12.5, color: 'var(--cream-soft)', lineHeight: 1.45, maxWidth: 280 }}>
           {summaryLine(matchResult)}
         </span>
 
-        {/* Goals pip strip — a small on-brand flourish that occupies the band
-            below the verdict, read honestly from the scoreline. */}
-        <div className="flex items-stretch" style={{ gap: 10, marginTop: 6 }}>
+        {/* Goals pip strip — a small on-brand flourish below the verdict,
+            read honestly from the scoreline. */}
+        <div className="flex items-stretch" style={{ gap: 12, marginTop: 4 }}>
           <GoalPips label="FOR" count={matchResult.yourGoals} color="var(--success)" />
           <span style={{ width: 1, background: 'var(--border)' }} />
           <GoalPips label="AGAINST" count={matchResult.opponentGoals} color="var(--danger)" />
         </div>
       </div>
 
-      {/* ── Divider ──────────────────────────────────────────────────────── */}
-      <div className="relative shrink-0" style={{ padding: '0 14px' }}>
+      {/* ── Divider — joins the verdict to the books as one composition. ──── */}
+      <div className="relative shrink-0" style={{ padding: '20px 14px 0' }}>
         <div className="flex items-center" style={{ gap: 8 }}>
           <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>THE BOOKS</span>
@@ -315,11 +319,14 @@ function RecapTab({
       </div>
 
       {/* ── Economy readout — three inline stats sharing the lower area. ──── */}
-      <div className="relative shrink-0 grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', padding: '14px 14px 18px' }}>
+      <div className="relative shrink-0 grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', padding: '16px 14px 0' }}>
         <EconStat label="Points" value={`+${matchResult.pointsEarned}`} sub={`${matchResult.seasonPoints} season`} color="var(--success)" delay={0} divider={false} />
         <EconStat label="Revenue" value={`£${compact(matchResult.revenue)}`} sub="this gate" color="var(--gold)" delay={60} divider />
         <EconStat label="Attendance" value={compact(matchResult.attendance)} sub="in seats" color="var(--cream)" delay={120} divider />
       </div>
+
+      {/* equal bottom spacer — mirrors the top so the cluster reads centred */}
+      <div className="shrink-0" style={{ flex: 1 }} />
     </div>
   );
 }
