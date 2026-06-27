@@ -4,15 +4,24 @@
  * Kickoff Clash — PostMatch (FULL TIME)
  *
  * The result screen, in the canonical Sensible-Soccer pixel house style.
- * Mobile-first, no document scroll: a fixed result head + economy tiles, a
- * single internally-scrolling "squad aftermath" panel of real GameCards, and a
- * fixed CONTINUE-to-shop footer. A short staged reveal layers it in without
- * blocking interaction. Tapping any aftermath card opens the shared CardModal.
+ *
+ * TABBED layout (mirrors ShopPhase): a compact, always-visible result header
+ * (FULL TIME · scoreline · verdict · vs opponent), a two-tab body that each
+ * fills the viewport, and a fixed CONTINUE-to-shop footer. The page never
+ * scrolls; only a tab body may scroll internally when a group runs long.
+ *
+ *   • RECAP — the verdict hero treatment + the economy readout (points earned &
+ *     season total, revenue, attendance as on-brand tiles) + a short match
+ *     report. Content is spread + stretched so the screen never feels sparse.
+ *   • SQUAD — the durability aftermath: shattered / injured / promoted players
+ *     as real GameCards under colour-coded headers (or a SQUAD INTACT state).
+ *
+ * Tapping any aftermath card opens the shared CardModal.
  *
  * Contract (PostMatchProps) is byte-identical — GameShell wiring is untouched.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { Card } from '../lib/scoring';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
@@ -49,24 +58,20 @@ const RESULT_META: Record<
 };
 
 // Aftermath groups: shattered (gone) → injured → promoted.
-type GroupTone = { key: string; title: string; color: string; bg: string; marker: string };
+// `badgeFg` is the foreground over the solid `color` fill (contrast law: white on
+// the red/amber fates, ink on the bright gold one).
+type GroupTone = { key: string; title: string; color: string; bg: string; marker: string; badgeFg: string };
 const GROUP_META: Record<'shattered' | 'injured' | 'promoted', GroupTone> = {
-  shattered: { key: 'shattered', title: 'Shattered', color: 'var(--danger)', bg: 'rgba(232,54,47,0.12)', marker: '✕' },
-  injured: { key: 'injured', title: 'Injured', color: 'var(--amber)', bg: 'rgba(255,122,31,0.12)', marker: '+' },
-  promoted: { key: 'promoted', title: 'Promoted', color: 'var(--gold)', bg: 'rgba(245,197,66,0.12)', marker: '★' },
+  shattered: { key: 'shattered', title: 'Shattered', color: 'var(--danger)', bg: 'rgba(232,54,47,0.12)', marker: '✕', badgeFg: 'var(--line-white)' },
+  injured: { key: 'injured', title: 'Injured', color: 'var(--amber)', bg: 'rgba(255,122,31,0.12)', marker: '+', badgeFg: 'var(--line-white)' },
+  promoted: { key: 'promoted', title: 'Promoted', color: 'var(--gold)', bg: 'rgba(245,197,66,0.12)', marker: '★', badgeFg: 'var(--ink-black)' },
 };
 
-export default function PostMatch({ matchResult, durabilityResult, onContinue }: PostMatchProps) {
-  const [step, setStep] = useState(0);
-  const [modal, setModal] = useState<GameCardModel | null>(null);
+type Tab = 'recap' | 'squad';
 
-  // Quick, non-blocking staged reveal: head → tiles → aftermath → footer.
-  useEffect(() => {
-    if (step < 3) {
-      const t = setTimeout(() => setStep((s) => s + 1), 280);
-      return () => clearTimeout(t);
-    }
-  }, [step]);
+export default function PostMatch({ matchResult, durabilityResult, onContinue }: PostMatchProps) {
+  const [tab, setTab] = useState<Tab>('recap');
+  const [modal, setModal] = useState<GameCardModel | null>(null);
 
   const meta = RESULT_META[matchResult.result];
   const { shattered, injured, promoted, commentary } = durabilityResult;
@@ -77,7 +82,7 @@ export default function PostMatch({ matchResult, durabilityResult, onContinue }:
     { tone: GROUP_META.promoted, cards: promoted },
   ].filter((g) => g.cards.length > 0);
 
-  const hasAftermath = groups.length > 0;
+  const affected = groups.reduce((n, g) => n + g.cards.length, 0);
 
   // Find which group a commentary line refers to (for its accent tint).
   const lineTone = (line: string): GroupTone | null => {
@@ -98,13 +103,7 @@ export default function PostMatch({ matchResult, durabilityResult, onContinue }:
       }}
     >
       {/* ── Result head: FULL TIME · scoreline · verdict ──────────────────── */}
-      <div
-        className="shrink-0 px-3"
-        style={{
-          opacity: step >= 0 ? 1 : 0,
-          transition: 'opacity 0.3s ease',
-        }}
-      >
+      <div className="shrink-0 px-3">
         <div
           className="relative overflow-hidden"
           style={{
@@ -112,238 +111,89 @@ export default function PostMatch({ matchResult, durabilityResult, onContinue }:
             border: '2px solid var(--ink-black)',
             boxShadow: '0 3px 0 0 var(--ink-black)',
             background: 'var(--surface)',
-            padding: '12px 14px 14px',
+            padding: '10px 14px 12px',
           }}
         >
           {/* result-tinted glow wash behind the verdict */}
           <div
             className="absolute inset-0 -z-0"
             style={{
-              background: `radial-gradient(ellipse at 50% 120%, ${meta.color}22 0%, transparent 62%)`,
+              background: `radial-gradient(ellipse at 50% 130%, ${meta.color}22 0%, transparent 60%)`,
               pointerEvents: 'none',
             }}
           />
           {/* accent rail in the result colour */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 4,
-              background: meta.color,
-            }}
-          />
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: meta.color }} />
 
           <div className="relative flex items-center justify-between" style={{ gap: 8 }}>
             <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 1.4, color: 'var(--dust)' }}>
               FULL TIME
             </span>
-            <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.8, color: 'var(--dust)' }}>
-              {meta.tag.toUpperCase()}
+            <span className="truncate" style={{ fontSize: 11, color: 'var(--cream-soft)' }}>
+              vs <b style={{ color: 'var(--cream)' }}>{matchResult.opponentName}</b>
             </span>
           </div>
 
-          {/* Scoreline: YOU — OPP */}
-          <div className="relative flex items-end justify-center" style={{ gap: 14, marginTop: 8 }}>
+          {/* Scoreline + verdict pill on one tight row */}
+          <div className="relative flex items-center justify-center" style={{ gap: 12, marginTop: 6 }}>
             <ScoreNum value={matchResult.yourGoals} win={matchResult.result === 'win'} />
-            <span
-              style={{
-                fontFamily: PIXEL,
-                fontSize: 20,
-                color: 'var(--ink)',
-                lineHeight: 1,
-                paddingBottom: 8,
-              }}
-            >
+            <span style={{ fontFamily: PIXEL, fontSize: 18, color: 'var(--ink)', lineHeight: 1, paddingBottom: 6 }}>
               {'–'}
             </span>
             <ScoreNum value={matchResult.opponentGoals} win={matchResult.result === 'loss'} />
           </div>
 
-          {/* Verdict + opponent */}
-          <div className="relative flex items-center justify-center" style={{ gap: 10, marginTop: 6 }}>
+          <div className="relative flex items-center justify-center" style={{ marginTop: 6 }}>
             <span
-              className={step >= 0 ? 'score-pop' : ''}
+              className="score-pop"
               style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
                 fontFamily: PIXEL,
-                fontSize: 26,
+                fontSize: 13,
                 letterSpacing: 1,
                 color: meta.color,
+                background: `${meta.color}1f`,
+                border: `1.5px solid ${meta.color}`,
+                borderRadius: 'var(--radius-sm)',
+                padding: '5px 12px',
                 lineHeight: 1,
-                textShadow: `0 0 18px ${meta.color}`,
               }}
             >
               {meta.label}
-            </span>
-          </div>
-          <div className="relative text-center" style={{ marginTop: 6 }}>
-            <span style={{ fontSize: 11, color: 'var(--cream-soft)' }}>
-              vs <b style={{ color: 'var(--cream)' }}>{matchResult.opponentName}</b>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Economy / standing tiles ──────────────────────────────────────── */}
-      <div
-        className="shrink-0 px-3"
-        style={{
-          marginTop: 10,
-          opacity: step >= 1 ? 1 : 0,
-          transform: step >= 1 ? 'translateY(0)' : 'translateY(10px)',
-          transition: 'opacity 0.3s ease, transform 0.3s ease',
-        }}
-      >
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 8 }}>
-          <StatTile
-            label="Points"
-            value={`+${matchResult.pointsEarned}`}
-            sub={`${matchResult.seasonPoints} total`}
-            color="var(--success)"
-          />
-          <StatTile
-            label="Revenue"
-            value={`£${compact(matchResult.revenue)}`}
-            sub="this gate"
-            color="var(--gold)"
-          />
-          <StatTile
-            label="Attendance"
-            value={compact(matchResult.attendance)}
-            sub="in seats"
-            color="var(--cream)"
-          />
-        </div>
-      </div>
-
-      {/* ── Squad aftermath — the ONLY scrolling region ───────────────────── */}
-      <div
-        className="flex-1 min-h-0 px-3"
-        style={{
-          marginTop: 10,
-          opacity: step >= 2 ? 1 : 0,
-          transition: 'opacity 0.3s ease',
-        }}
-      >
-        <div
-          className="h-full flex flex-col overflow-hidden"
-          style={{
-            background: 'var(--surface)',
-            border: '2px solid var(--ink-black)',
-            borderRadius: 'var(--radius)',
-            boxShadow: '0 2px 0 0 var(--ink-black)',
-          }}
-        >
-          {/* panel header */}
-          <div className="shrink-0 flex items-center" style={{ gap: 8, padding: '9px 11px' }}>
-            <span style={{ width: 4, height: 12, background: 'var(--amber)', borderRadius: 1, flexShrink: 0 }} />
-            <span
-              className="mr-auto"
-              style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.8, color: 'var(--cream)', textTransform: 'uppercase' }}
-            >
-              Durability Check
-            </span>
-            {hasAftermath && (
-              <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)', letterSpacing: 0.4 }}>
-                {groups.reduce((n, g) => n + g.cards.length, 0)} AFFECTED
+              <span style={{ width: 3, height: 11, background: meta.color, opacity: 0.55, borderRadius: 1 }} />
+              <span style={{ fontSize: 8, letterSpacing: 0.6, color: 'var(--cream-soft)' }}>
+                {meta.tag.toUpperCase()}
               </span>
-            )}
-          </div>
-
-          {/* scroll body */}
-          <div
-            className="flex-1 min-h-0 overflow-y-auto"
-            style={{ overscrollBehavior: 'contain', padding: '0 11px 11px' }}
-          >
-            {!hasAftermath ? (
-              <div
-                className="flex flex-col items-center justify-center text-center"
-                style={{
-                  minHeight: 120,
-                  padding: 16,
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px dashed var(--border)',
-                  background: 'rgba(0,0,0,0.18)',
-                }}
-              >
-                <span style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--success)', letterSpacing: 0.5 }}>
-                  SQUAD INTACT
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--dust)', marginTop: 6, lineHeight: 1.4, maxWidth: 220 }}>
-                  No shatters, no injuries — everyone came through ninety minutes unscathed.
-                </span>
-              </div>
-            ) : (
-              <div className="flex flex-col" style={{ gap: 12 }}>
-                {groups.map(({ tone, cards }) => (
-                  <AftermathGroup
-                    key={tone.key}
-                    tone={tone}
-                    cards={cards}
-                    onOpen={(card) => setModal({ variant: 'player', card })}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Commentary — secondary to the cards */}
-            {commentary.length > 0 && (
-              <div className="flex flex-col" style={{ gap: 5, marginTop: hasAftermath ? 12 : 14 }}>
-                <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>
-                  REPORT
-                </span>
-                {commentary.map((line, i) => {
-                  const t = lineTone(line);
-                  return (
-                    <div
-                      key={i}
-                      style={{
-                        fontSize: 11,
-                        lineHeight: 1.4,
-                        color: t ? t.color : 'var(--cream-soft)',
-                        background: t ? t.bg : 'rgba(0,0,0,0.2)',
-                        border: `1px solid ${t ? t.color : 'var(--border)'}`,
-                        borderRadius: 'var(--radius-sm)',
-                        padding: '7px 9px',
-                        display: 'flex',
-                        gap: 7,
-                        alignItems: 'flex-start',
-                      }}
-                    >
-                      {t && (
-                        <span
-                          style={{
-                            fontFamily: PIXEL,
-                            fontSize: 10,
-                            color: t.color,
-                            lineHeight: 1.2,
-                            flexShrink: 0,
-                          }}
-                        >
-                          {t.marker}
-                        </span>
-                      )}
-                      <span>{line}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            </span>
           </div>
         </div>
+      </div>
+
+      {/* ── Tab bar ───────────────────────────────────────────────────────── */}
+      <div className="shrink-0 flex gap-1.5 px-3" style={{ marginTop: 10 }}>
+        <TabButton label="Recap" active={tab === 'recap'} onClick={() => setTab('recap')} />
+        <TabButton
+          label="Squad"
+          active={tab === 'squad'}
+          badge={affected > 0 ? affected : undefined}
+          badgeColor={shattered.length > 0 ? 'var(--danger)' : injured.length > 0 ? 'var(--amber)' : 'var(--gold)'}
+          onClick={() => setTab('squad')}
+        />
+      </div>
+
+      {/* ── Active tab body — the ONLY region that may scroll ──────────────── */}
+      <div className="flex-1 min-h-0 px-3" style={{ marginTop: 10 }}>
+        {tab === 'recap' ? (
+          <RecapTab matchResult={matchResult} meta={meta} />
+        ) : (
+          <SquadTab groups={groups} commentary={commentary} lineTone={lineTone} onOpen={(card) => setModal({ variant: 'player', card })} />
+        )}
       </div>
 
       {/* ── Continue CTA ──────────────────────────────────────────────────── */}
-      <div
-        className="shrink-0 px-3"
-        style={{
-          paddingTop: 10,
-          opacity: step >= 3 ? 1 : 0,
-          transform: step >= 3 ? 'translateY(0)' : 'translateY(8px)',
-          transition: 'opacity 0.3s ease, transform 0.3s ease',
-        }}
-      >
+      <div className="shrink-0 px-3" style={{ paddingTop: 10 }}>
         <button
           onClick={onContinue}
           className="w-full active:scale-[0.99] advance-btn-pulse"
@@ -371,8 +221,377 @@ export default function PostMatch({ matchResult, durabilityResult, onContinue }:
 }
 
 // ===========================================================================
+// RECAP TAB — verdict hero + economy readout
+//
+// No durability commentary here (that lives on SQUAD next to its cards). The
+// body is two equal flex regions — a verdict hero and the economy tiles — so it
+// fills the viewport evenly with no concentrated void.
+// ===========================================================================
+
+function RecapTab({
+  matchResult,
+  meta,
+}: {
+  matchResult: PostMatchProps['matchResult'];
+  meta: { label: string; color: string; tag: string };
+}) {
+  const gd = matchResult.yourGoals - matchResult.opponentGoals;
+  const gdLabel = gd > 0 ? `+${gd}` : `${gd}`;
+  const gdColor = gd > 0 ? 'var(--success)' : gd < 0 ? 'var(--danger)' : 'var(--dust)';
+  return (
+    <div
+      key="recap"
+      className="h-full flex flex-col relative overflow-hidden stats-rise"
+      style={{
+        background: 'var(--surface)',
+        border: '2px solid var(--ink-black)',
+        borderRadius: 'var(--radius)',
+        boxShadow: '0 2px 0 0 var(--ink-black)',
+      }}
+    >
+      {/* result-tinted wash + accent rail unify the panel under the verdict colour */}
+      <div
+        className="absolute inset-0"
+        style={{ background: `radial-gradient(ellipse at 50% 0%, ${meta.color}1f 0%, transparent 55%)`, pointerEvents: 'none' }}
+      />
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: meta.color }} />
+
+      {/* ── Verdict block — a poster seated in the upper-third; the flex slack
+            falls as one deliberate band between it and the books below. ────── */}
+      <div className="relative flex-1 min-h-0 flex flex-col items-center text-center" style={{ padding: '30px 18px 14px', gap: 13 }}>
+        <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1.4, color: 'var(--dust)' }}>RESULT</span>
+        <span
+          className="score-pop"
+          style={{
+            fontFamily: PIXEL,
+            fontSize: 44,
+            letterSpacing: 1.5,
+            lineHeight: 1,
+            color: meta.color,
+            textShadow: `0 3px 0 var(--ink-black), 0 0 22px ${meta.color}`,
+          }}
+        >
+          {meta.label}
+        </span>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'baseline',
+            gap: 7,
+            fontFamily: PIXEL,
+            fontSize: 9,
+            letterSpacing: 0.8,
+            color: 'var(--dust)',
+            background: 'rgba(0,0,0,0.28)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '6px 12px',
+            lineHeight: 1,
+          }}
+        >
+          GOAL DIFF
+          <b style={{ fontSize: 14, color: gdColor }}>{gdLabel}</b>
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--cream-soft)', lineHeight: 1.45, maxWidth: 280 }}>
+          {summaryLine(matchResult)}
+        </span>
+
+        {/* Goals pip strip — a small on-brand flourish that occupies the band
+            below the verdict, read honestly from the scoreline. */}
+        <div className="flex items-stretch" style={{ gap: 10, marginTop: 6 }}>
+          <GoalPips label="FOR" count={matchResult.yourGoals} color="var(--success)" />
+          <span style={{ width: 1, background: 'var(--border)' }} />
+          <GoalPips label="AGAINST" count={matchResult.opponentGoals} color="var(--danger)" />
+        </div>
+      </div>
+
+      {/* ── Divider ──────────────────────────────────────────────────────── */}
+      <div className="relative shrink-0" style={{ padding: '0 14px' }}>
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+          <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>THE BOOKS</span>
+          <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+        </div>
+      </div>
+
+      {/* ── Economy readout — three inline stats sharing the lower area. ──── */}
+      <div className="relative shrink-0 grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', padding: '14px 14px 18px' }}>
+        <EconStat label="Points" value={`+${matchResult.pointsEarned}`} sub={`${matchResult.seasonPoints} season`} color="var(--success)" delay={0} divider={false} />
+        <EconStat label="Revenue" value={`£${compact(matchResult.revenue)}`} sub="this gate" color="var(--gold)" delay={60} divider />
+        <EconStat label="Attendance" value={compact(matchResult.attendance)} sub="in seats" color="var(--cream)" delay={120} divider />
+      </div>
+    </div>
+  );
+}
+
+/** A labelled strip of pixel pips for goals for/against — a small scoreboard
+ *  flourish. Clamps the pip count so a freak scoreline never overflows. */
+function GoalPips({ label, count, color }: { label: string; count: number; color: string }) {
+  const pips = Math.min(Math.max(count, 0), 7);
+  return (
+    <div className="flex flex-col items-center" style={{ gap: 6 }}>
+      <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: 'var(--dust)' }}>{label}</span>
+      <div className="flex items-center" style={{ gap: 4, minHeight: 12 }}>
+        {count === 0 ? (
+          <span style={{ width: 12, height: 4, background: 'var(--border)', borderRadius: 1 }} />
+        ) : (
+          Array.from({ length: pips }).map((_, i) => (
+            <span
+              key={i}
+              style={{
+                width: 8,
+                height: 12,
+                background: color,
+                border: '1px solid var(--ink-black)',
+                borderRadius: 1,
+                boxShadow: `0 0 6px ${color}55`,
+              }}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** One economy stat in the recap readout row (label · big value · sub), with an
+ *  optional left hairline so the three columns read as a connected ledger. */
+function EconStat({
+  label,
+  value,
+  sub,
+  color,
+  delay,
+  divider,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  color: string;
+  delay: number;
+  divider: boolean;
+}) {
+  return (
+    <div
+      className="stat-row-in flex flex-col items-center text-center"
+      style={{
+        gap: 7,
+        padding: '0 4px',
+        borderLeft: divider ? '1px solid var(--border)' : undefined,
+        animationDelay: `${delay}ms`,
+      }}
+    >
+      <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>{label.toUpperCase()}</span>
+      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 19, lineHeight: 1.05, color, maxWidth: '100%' }}>{value}</span>
+      <span style={{ fontSize: 8.5, color: 'var(--cream-soft)', letterSpacing: 0.2 }}>{sub}</span>
+    </div>
+  );
+}
+
+/** A one-line plain-language summary of the result for the recap band. */
+function summaryLine(m: PostMatchProps['matchResult']): string {
+  const opp = m.opponentName;
+  if (m.result === 'win') return `Three points banked against ${opp}.`;
+  if (m.result === 'draw') return `Honours even with ${opp} — a point shared.`;
+  return `Beaten by ${opp} — points left on the pitch.`;
+}
+
+// ===========================================================================
+// SQUAD TAB — durability aftermath (shattered / injured / promoted)
+// ===========================================================================
+
+function SquadTab({
+  groups,
+  commentary,
+  lineTone,
+  onOpen,
+}: {
+  groups: { tone: GroupTone; cards: Card[] }[];
+  commentary: string[];
+  lineTone: (line: string) => GroupTone | null;
+  onOpen: (card: Card) => void;
+}) {
+  const hasAftermath = groups.length > 0;
+  const affected = groups.reduce((n, g) => n + g.cards.length, 0);
+
+  return (
+    <div
+      key="squad"
+      className="h-full flex flex-col overflow-hidden stats-rise"
+      style={{
+        background: 'var(--surface)',
+        border: '2px solid var(--ink-black)',
+        borderRadius: 'var(--radius)',
+        boxShadow: '0 2px 0 0 var(--ink-black)',
+      }}
+    >
+      <PanelHeader
+        accent="var(--amber)"
+        title="Durability Check"
+        right={
+          hasAftermath ? (
+            <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)', letterSpacing: 0.4 }}>
+              {affected} AFFECTED
+            </span>
+          ) : undefined
+        }
+      />
+
+      {/* Compact fate legend — only the fates that actually occurred. */}
+      {hasAftermath && (
+        <div className="shrink-0 flex flex-wrap items-center" style={{ gap: 6, padding: '0 11px 9px' }}>
+          {groups.map(({ tone, cards }) => (
+            <span
+              key={tone.key}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                fontFamily: PIXEL,
+                fontSize: 8,
+                letterSpacing: 0.5,
+                color: tone.color,
+                background: tone.bg,
+                border: `1px solid ${tone.color}`,
+                borderRadius: 'var(--radius-sm)',
+                padding: '4px 7px',
+                lineHeight: 1,
+              }}
+            >
+              <span style={{ fontSize: 9 }}>{tone.marker}</span>
+              {tone.title.toUpperCase()}
+              <span style={{ color: 'var(--dust)' }}>×{cards.length}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div
+        className="flex-1 min-h-0 overflow-y-auto"
+        style={{ overscrollBehavior: 'contain', padding: '0 11px 11px' }}
+      >
+        {!hasAftermath ? (
+          <div
+            className="flex flex-col items-center justify-center text-center h-full"
+            style={{ minHeight: 200, padding: 20 }}
+          >
+            <span style={{ fontSize: 30, lineHeight: 1, marginBottom: 10 }}>{'🛡️'}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 13, color: 'var(--success)', letterSpacing: 0.6 }}>
+              SQUAD INTACT
+            </span>
+            <span style={{ fontSize: 11.5, color: 'var(--cream-soft)', marginTop: 8, lineHeight: 1.5, maxWidth: 240 }}>
+              No shatters, no injuries — everyone came through ninety minutes unscathed and ready for the next fixture.
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 11 }}>
+            {/* One dense grid so cards fill the width regardless of how many share
+                a fate; each card carries a corner badge for its outcome. */}
+            <div className="grid grid-cols-3" style={{ gap: 8 }}>
+              {groups.flatMap(({ tone, cards }) =>
+                cards.map((card, i) => (
+                  <FateCard key={card.id} tone={tone} card={card} delay={i * 40} onOpen={onOpen} />
+                )),
+              )}
+            </div>
+
+            {/* Commentary tied to the aftermath — secondary to the cards. */}
+            {commentary.length > 0 && (
+              <div className="flex flex-col" style={{ gap: 6, marginTop: 1 }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>
+                  REPORT
+                </span>
+                {commentary.map((line, i) => (
+                  <ReportLine key={i} line={line} tone={lineTone(line)} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
 // Pieces
 // ===========================================================================
+
+/** A tab toggle, matching the ShopPhase tab bar with an optional count badge. */
+function TabButton({
+  label,
+  active,
+  badge,
+  badgeColor = 'var(--amber)',
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  badge?: number;
+  badgeColor?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex-1 active:scale-[0.98] relative"
+      style={{
+        height: 38,
+        borderRadius: 'var(--radius-sm)',
+        border: '2px solid var(--ink-black)',
+        background: active ? 'var(--amber)' : 'var(--surface)',
+        boxShadow: '0 2px 0 0 var(--ink-black)',
+        fontFamily: PIXEL,
+        fontSize: 10,
+        letterSpacing: 0.6,
+        color: active ? 'var(--ink-black)' : 'var(--dust)',
+        textTransform: 'uppercase',
+      }}
+    >
+      {label}
+      {badge != null && (
+        <span
+          style={{
+            position: 'absolute',
+            top: -6,
+            right: -5,
+            minWidth: 16,
+            height: 16,
+            padding: '0 3px',
+            borderRadius: 8,
+            border: '1.5px solid var(--ink-black)',
+            background: badgeColor,
+            color: 'var(--line-white)',
+            fontFamily: PIXEL,
+            fontSize: 8,
+            lineHeight: '13px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** Shared panel header chip: accent bar · pixel title · optional right slot. */
+function PanelHeader({ accent, title, right }: { accent: string; title: string; right?: React.ReactNode }) {
+  return (
+    <div className="shrink-0 flex items-center" style={{ gap: 8, padding: '9px 11px' }}>
+      <span style={{ width: 4, height: 12, background: accent, borderRadius: 1, flexShrink: 0 }} />
+      <span
+        className="mr-auto truncate"
+        style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.8, color: 'var(--cream)', textTransform: 'uppercase' }}
+      >
+        {title}
+      </span>
+      {right}
+    </div>
+  );
+}
 
 /** A large scoreline digit; the winning side reads in --line-white, the loser dimmed. */
 function ScoreNum({ value, win }: { value: number; win: boolean }) {
@@ -380,7 +599,7 @@ function ScoreNum({ value, win }: { value: number; win: boolean }) {
     <span
       style={{
         fontFamily: PIXEL,
-        fontSize: 44,
+        fontSize: 40,
         lineHeight: 0.9,
         color: win ? 'var(--line-white)' : 'var(--cream-soft)',
         textShadow: win ? '0 3px 0 var(--ink-black)' : '0 2px 0 var(--ink-black)',
@@ -391,93 +610,79 @@ function ScoreNum({ value, win }: { value: number; win: boolean }) {
   );
 }
 
-/** Economy stat tile: pixel label · big value · soft sub. */
-function StatTile({
-  label,
-  value,
-  sub,
-  color,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  color: string;
-}) {
+/** A tinted commentary line; tone-coloured when it names an affected player. */
+function ReportLine({ line, tone }: { line: string; tone: GroupTone | null }) {
   return (
     <div
-      className="flex flex-col items-center justify-center text-center"
       style={{
-        minHeight: 62,
-        padding: '8px 6px',
+        fontSize: 11,
+        lineHeight: 1.4,
+        color: tone ? tone.color : 'var(--cream-soft)',
+        background: tone ? tone.bg : 'rgba(0,0,0,0.2)',
+        border: `1px solid ${tone ? tone.color : 'var(--border)'}`,
         borderRadius: 'var(--radius-sm)',
-        border: '2px solid var(--ink-black)',
-        background: 'var(--surface)',
-        boxShadow: '0 2px 0 0 var(--ink-black)',
+        padding: '7px 9px',
+        display: 'flex',
+        gap: 7,
+        alignItems: 'flex-start',
       }}
     >
-      <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: 'var(--dust)' }}>
-        {label.toUpperCase()}
-      </span>
-      <span
-        className="truncate"
-        style={{ fontFamily: PIXEL, fontSize: 16, lineHeight: 1.1, color, marginTop: 4, maxWidth: '100%' }}
-      >
-        {value}
-      </span>
-      <span style={{ fontSize: 8, color: 'var(--ink)', marginTop: 3, letterSpacing: 0.2 }}>{sub}</span>
+      {tone && (
+        <span style={{ fontFamily: PIXEL, fontSize: 10, color: tone.color, lineHeight: 1.2, flexShrink: 0 }}>
+          {tone.marker}
+        </span>
+      )}
+      <span>{line}</span>
     </div>
   );
 }
 
-/** A coloured group header + a grid of tappable GameCards for that fate. */
-function AftermathGroup({
+/** A tappable GameCard tagged with a corner badge for its post-match fate. */
+function FateCard({
   tone,
-  cards,
+  card,
+  delay,
   onOpen,
 }: {
   tone: GroupTone;
-  cards: Card[];
+  card: Card;
+  delay: number;
   onOpen: (card: Card) => void;
 }) {
   return (
-    <div className="flex flex-col" style={{ gap: 8 }}>
-      {/* group header chip */}
-      <div className="flex items-center" style={{ gap: 7 }}>
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            fontFamily: PIXEL,
-            fontSize: 9,
-            letterSpacing: 0.6,
-            color: tone.color,
-            background: tone.bg,
-            border: `1px solid ${tone.color}`,
-            borderRadius: 'var(--radius-sm)',
-            padding: '4px 8px',
-            lineHeight: 1,
-          }}
-        >
-          <span style={{ fontSize: 10 }}>{tone.marker}</span>
-          {tone.title.toUpperCase()}
-        </span>
-        <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)' }}>×{cards.length}</span>
-        <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-      </div>
-
-      {/* card grid */}
-      <div className="grid grid-cols-3" style={{ gap: 8 }}>
-        {cards.map((card, i) => (
-          <GameCard
-            key={card.id}
-            model={{ variant: 'player', card }}
-            onClick={() => onOpen(card)}
-            delay={i * 50}
-            ariaLabel={`${card.name} — ${tone.title}`}
-          />
-        ))}
-      </div>
+    <div className="relative">
+      <GameCard
+        model={{ variant: 'player', card }}
+        onClick={() => onOpen(card)}
+        delay={delay}
+        ariaLabel={`${card.name} — ${tone.title}`}
+      />
+      {/* fate badge — a corner ribbon pinned to the card's top-right corner,
+          clear of the position tab (top-left) and rating (which it tucks beside). */}
+      <span
+        style={{
+          position: 'absolute',
+          top: -5,
+          right: -5,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 3,
+          fontFamily: PIXEL,
+          fontSize: 7,
+          letterSpacing: 0.3,
+          color: tone.badgeFg,
+          background: tone.color,
+          border: '1.5px solid var(--ink-black)',
+          borderRadius: 3,
+          padding: '3px 5px',
+          lineHeight: 1,
+          boxShadow: '0 1px 0 0 var(--ink-black)',
+          pointerEvents: 'none',
+        }}
+      >
+        <span style={{ fontSize: 8 }}>{tone.marker}</span>
+        {tone.title.toUpperCase()}
+      </span>
     </div>
   );
 }
