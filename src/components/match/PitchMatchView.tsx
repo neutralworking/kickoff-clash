@@ -4,14 +4,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MatchV5State, IncrementResult, MatchBeat, MatchStats } from '../../lib/match-v5';
 import type { Formation, FormationSlot } from '../../lib/formations';
 import { getFormation } from '../../lib/formations';
-import type { Band, Lane } from '../../lib/field';
+import type { Band, Lane, Cell } from '../../lib/field';
 import { cellOf, bandOf } from '../../lib/field';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard, TacticSlots } from '../../lib/tactics';
 import type { OpponentBuild } from '../../lib/run';
 import type { Card } from '../../lib/scoring';
 import CardModal from '../cards/CardModal';
-import GameCard, { type GameCardModel } from '../cards/GameCard';
+import type { GameCardModel } from '../cards/GameCard';
 import { PIXEL, lastName, POSITION_COLOR, RARITY_COLOR, TACTIC_CAT_COLOR } from '../cards/cardTokens';
 
 interface PitchMatchViewProps {
@@ -71,7 +71,12 @@ const archCode = (archetype?: string) =>
   archetype ? ARCHETYPE_CODE[archetype] ?? archetype.slice(0, 2).toUpperCase() : null;
 
 const LOW_FITNESS = 2.5; // matches the engine's injury-risk threshold (advanceIncrement)
-const INCREMENT_MINUTES_LEN = 5; // INCREMENT_MINUTES = [15,30,60,75,90] — last index is 4 (90', full time)
+// INCREMENT_MINUTES = [15,30,60,75,90] — window END minutes per increment. Index 4
+// (90') is full time. Mirrored here (display-only) so the ticking clock can read
+// the previous increment's end and the current window's bounds. Kept local so the
+// view stays decoupled from the engine module's import surface.
+const INCREMENT_MINUTES_LIST = [15, 30, 60, 75, 90] as const;
+const INCREMENT_MINUTES_LEN = INCREMENT_MINUTES_LIST.length; // 5 (last index 4 = 90', full time)
 
 // ---------------------------------------------------------------------------
 // PitchCard — the compact pixel PLAYING CARD that lives on the pitch.
@@ -86,8 +91,12 @@ const INCREMENT_MINUTES_LEN = 5; // INCREMENT_MINUTES = [15,30,60,75,90] — las
 // elements in the pitch loop, exactly as the old token did.
 // ---------------------------------------------------------------------------
 
-const CARD_W = 44;   // compact face width on the pitch
-const CARD_H = 56;   // ~2.5:3.5-ish, tuned for legibility at 11-a-side
+// FIX 5 — the pitch cards are the headline element now, so they're noticeably
+// bigger. Sized so all 11 stay legible and don't badly overlap at 390×844: a
+// 4-wide attacking band tiles ~4×54 = 216px across a ~358px pitch (margins 16px),
+// leaving comfortable gutters; rating/surname/position all read at arm's length.
+const CARD_W = 54;   // up from 44 — bolder face on the pitch
+const CARD_H = 68;   // up from 56, holds the ~2.5:3.5 card ratio
 
 function PitchCard({
   spot, side, accent, dim, glow,
@@ -123,12 +132,12 @@ function PitchCard({
       {/* Rarity / accent top rail — the card family signature. */}
       <div style={{ height: 3, background: accent, flexShrink: 0 }} />
       {/* Header: position tab · rating */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 3px 0' }}>
-        <span style={{ background: posColor, color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 6.5, lineHeight: 1, padding: '2px 2px', borderRadius: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 4px 0' }}>
+        <span style={{ background: posColor, color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1, padding: '2px 3px', borderRadius: 2 }}>
           {spot.isGK ? 'GK' : spot.position ?? '—'}
         </span>
         {spot.rating !== undefined && (
-          <span style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--line-white)' }}>{spot.rating}</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, color: 'var(--line-white)' }}>{spot.rating}</span>
         )}
       </div>
       {/* Mini sprite — a flat pixel kit block, tinted by side. */}
@@ -136,15 +145,53 @@ function PitchCard({
         <MiniSprite side={side} isGK={spot.isGK} accent={accent} />
       </div>
       {/* Surname + archetype code */}
-      <div style={{ padding: '0 3px 2px' }}>
-        <div style={{ fontSize: 7.5, fontWeight: 800, color: 'var(--cream)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ padding: '0 4px 3px' }}>
+        <div style={{ fontSize: 9, fontWeight: 800, color: 'var(--cream)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {spot.name ?? '—'}
         </div>
         {!spot.isGK && spot.archetype && (
-          <div style={{ fontFamily: PIXEL, fontSize: 5.5, letterSpacing: 0.2, color: 'var(--dust)', lineHeight: 1.1, marginTop: 1 }}>
+          <div style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.2, color: 'var(--dust)', lineHeight: 1.1, marginTop: 1.5 }}>
             {archCode(spot.archetype)}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SubCard — the trimmed bench card (FIX 4).
+//
+// Just NAME · POSITION · LEVEL (+ a compact role line where it fits). No
+// nationality flag, no sprite clutter — a clean identity chip the size of a
+// thumb, tuned to drag reliably. It is a pure <div> with no nested interactive
+// elements, so the wrapping <button>'s pointer capture (begin/move/end) is never
+// swallowed — the cause of the previous GameCard bench drag failure.
+// ---------------------------------------------------------------------------
+function SubCard({ card, dim }: { card: Card; dim?: boolean }) {
+  const posColor = POSITION_COLOR[card.position] ?? 'var(--dust)';
+  const accent = RARITY_COLOR[card.rarity] ?? RARITY_COLOR.Common;
+  return (
+    <div
+      style={{
+        width: '100%', borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)',
+        background: 'linear-gradient(165deg, var(--surface-raised), var(--surface))',
+        boxShadow: '0 2px 0 0 var(--ink-black)', overflow: 'hidden',
+        opacity: dim ? 0.3 : 1, pointerEvents: 'none',
+      }}
+    >
+      {/* Rarity rail */}
+      <div style={{ height: 3, background: accent }} />
+      <div style={{ padding: '4px 5px 5px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {/* Position tab · level */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+          <span style={{ background: posColor, color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 7, lineHeight: 1, padding: '2px 3px', borderRadius: 2 }}>{card.position}</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, color: 'var(--line-white)' }}>{Math.round(card.power)}</span>
+        </div>
+        {/* Surname */}
+        <div style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--cream)', lineHeight: 1.05, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lastName(card.name)}</div>
+        {/* Role (archetype) — fits efficiently on one muted line. */}
+        <div style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.2, color: 'var(--dust)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{archCode(card.archetype) ?? card.archetype}</div>
       </div>
     </div>
   );
@@ -155,7 +202,7 @@ function MiniSprite({ side, isGK, accent }: { side: 'you' | 'opp'; isGK: boolean
   const kit = isGK ? '#5a6b5f' : side === 'you' ? 'var(--kit-blue)' : 'var(--kit-red)';
   const kitDark = isGK ? '#36433a' : side === 'you' ? '#1f5bb0' : '#9e1f1a';
   return (
-    <svg className="pixelated" viewBox="0 0 24 24" shapeRendering="crispEdges" style={{ width: 24, height: 24, display: 'block' }}>
+    <svg className="pixelated" viewBox="0 0 24 24" shapeRendering="crispEdges" style={{ width: 30, height: 30, display: 'block' }}>
       {/* head */}
       <rect x="9" y="3" width="6" height="6" fill="#e8c9a0" />
       <rect x="9" y="3" width="6" height="2" fill="#3a2a1e" />
@@ -428,8 +475,13 @@ function StatsScreen({
   isFullTime: boolean;
   onContinue: () => void;
 }) {
-  const zonesWonCount = (z: Record<Lane, boolean>) => (z.L ? 1 : 0) + (z.C ? 1 : 0) + (z.R ? 1 : 0);
-  const lanes: Lane[] = ['L', 'C', 'R'];
+  // FIX 7 — tally won cells from the full 9-cell grid (was the 3 L/C/R lanes).
+  const gridZones: Band[] = ['ATT', 'MID', 'DEF']; // top → bottom (your perspective)
+  const gridLanes: Lane[] = ['L', 'C', 'R'];        // left → right
+  const countGrid = (g: Record<Cell, boolean>) =>
+    gridZones.reduce((acc, b) => acc + gridLanes.reduce((a, l) => a + (g[`${b}_${l}` as Cell] ? 1 : 0), 0), 0);
+  const youZonesWon = countGrid(stats.yourZoneGrid);
+  const oppZonesWon = countGrid(stats.opponentZoneGrid);
   return (
     <div className="stats-rise" style={{ position: 'absolute', inset: 0, zIndex: 14, background: 'linear-gradient(180deg, #08130c, #0a160e)', display: 'flex', flexDirection: 'column', padding: '12px 14px 12px', overflow: 'hidden' }}>
       {/* Header: the period marker + the running score */}
@@ -461,22 +513,35 @@ function StatsScreen({
         <StatLabel delay={230}>ON TARGET</StatLabel>
         <StatBar you={stats.yourShotsOnTarget} opp={stats.opponentShotsOnTarget} delay={240} />
 
-        {/* Zones won — a 3-cell strip (L/C/R) coloured by who controlled each lane. */}
-        <StatLabel delay={280}>ZONES WON · {zonesWonCount(stats.yourZonesWon)}–{zonesWonCount(stats.opponentZonesWon)}</StatLabel>
-        <div className="stat-row-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, animationDelay: '290ms' }}>
-          {lanes.map((ln) => {
-            const youWon = stats.yourZonesWon[ln];
-            const oppWon = stats.opponentZonesWon[ln];
-            const bg = youWon && !oppWon ? YOU : oppWon && !youWon ? OPP : 'var(--surface)';
-            const fg = youWon || oppWon ? 'var(--ink-black)' : 'var(--dust)';
-            const tag = youWon && !oppWon ? 'YOU' : oppWon && !youWon ? 'OPP' : '—';
-            return (
-              <div key={ln} style={{ borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', background: bg, padding: '6px 0', textAlign: 'center', boxShadow: '0 2px 0 0 var(--ink-black)' }}>
-                <div style={{ fontFamily: PIXEL, fontSize: 9, color: fg, lineHeight: 1 }}>{ln === 'L' ? 'LEFT' : ln === 'C' ? 'CENTRE' : 'RIGHT'}</div>
-                <div style={{ fontFamily: PIXEL, fontSize: 7, color: fg, opacity: 0.85, marginTop: 3 }}>{tag}</div>
+        {/* FIX 7 — ZONES WON as a pitch-shaped 3×3 mini-heatmap. Oriented from your
+            perspective: ATT third at the TOP (toward the opponent's goal), MID in
+            the middle, DEF at the BOTTOM (your goal); columns L/C/R left-to-right.
+            Green = you won the cell, red = opponent, neutral = contested/tie. */}
+        <StatLabel delay={280}>ZONES WON · <span style={{ color: YOU }}>{youZonesWon}</span>–<span style={{ color: OPP }}>{oppZonesWon}</span></StatLabel>
+        <div className="stat-row-in" style={{ display: 'flex', justifyContent: 'center', animationDelay: '290ms' }}>
+          {/* A pitch-shaped frame: top goal (opponent's) → bottom goal (yours). */}
+          <div style={{ position: 'relative', width: 132, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', background: '#0a1a10', padding: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* opponent goal mouth (top) */}
+            <div style={{ position: 'absolute', top: -3, left: '50%', transform: 'translateX(-50%)', width: 26, height: 3, borderRadius: '0 0 2px 2px', background: OPP }} />
+            {/* your goal mouth (bottom) */}
+            <div style={{ position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)', width: 26, height: 3, borderRadius: '2px 2px 0 0', background: YOU }} />
+            {gridZones.map((band) => (
+              <div key={band} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3 }}>
+                {gridLanes.map((lane) => {
+                  const cell = `${band}_${lane}` as Cell;
+                  const youWon = stats.yourZoneGrid[cell];
+                  const oppWon = stats.opponentZoneGrid[cell];
+                  const bg = youWon ? YOU : oppWon ? OPP : 'var(--surface)';
+                  return (
+                    <div key={cell} title={`${band} ${lane}`} style={{ height: 22, borderRadius: 2, background: bg, border: '1px solid var(--ink-black)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {/* band initial only in the centre column keeps it legible, not busy. */}
+                      {lane === 'C' && <span style={{ fontFamily: PIXEL, fontSize: 7, color: youWon || oppWon ? 'var(--ink-black)' : 'var(--dust)', lineHeight: 1 }}>{band[0]}</span>}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       </div>
 
@@ -512,6 +577,10 @@ export default function PitchMatchView({
   const [animGoals, setAnimGoals] = useState<{ you: number; opp: number } | null>(null);
   const [shake, setShake] = useState<'you' | 'opp' | null>(null);
   const [resolveDone, setResolveDone] = useState(false);
+  // FIX 1 — the live match clock, in seconds. Counts UP across the increment
+  // window while resolving (a ticking timer, below); shows the elapsed time while
+  // planning. Held in state so it re-renders smoothly without driving the engine.
+  const [clockSec, setClockSec] = useState(0);
 
   const { bench, yourGoals, opponentGoals, xi, subsRemaining } = matchState;
 
@@ -548,12 +617,15 @@ export default function PitchMatchView({
   // The live animated beat's source commentary (null for build-up beats).
   const liveSource = beat?.source ?? null;
 
-  // ISSUE 3 — the MATCH LOG is the full per-shot beats history: every played
-  // increment's beats, then the live increment's beats so far (up to the current
-  // playhead, so the log fills in lockstep with the animation). Newest-first.
-  type FeedLine = { minute: number; text: string; type: 'goal-yours' | 'goal-opponent' | 'chance'; scorer: string | null; side: 'you' | 'opp' };
+  // FIX 1 — the MATCH LOG / ticker carries each beat's REAL clock (seconds) and
+  // mm:ss `time` from the engine, not the increment minute. Lines are sorted by
+  // `clock` for chronological display, so they read 02:45, 07:02, … Newest-first
+  // in the log overlay. The full played history plus the live increment's beats
+  // up to the current playhead (so the log fills in lockstep with the animation).
+  type FeedLine = { clock: number; time: string; text: string; type: 'goal-yours' | 'goal-opponent' | 'chance'; scorer: string | null; side: 'you' | 'opp' };
   const beatToLine = (b: MatchBeat): FeedLine => ({
-    minute: b.minute,
+    clock: b.clock,
+    time: b.time,
     text: b.text,
     type: b.outcome === 'goal' ? (b.side === 'you' ? 'goal-yours' : 'goal-opponent') : 'chance',
     scorer: b.scorerName,
@@ -572,6 +644,9 @@ export default function PitchMatchView({
         if (src) lines.push(beatToLine(src));
       }
     }
+    // Chronological by real clock so timestamps read in order (your shots then opp
+    // come out of the engine interleaved; sorting fixes the display order).
+    lines.sort((a, b) => a.clock - b.clock);
     return lines;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchState.scores, resolving, currentResult, beatIdx, timeline]);
@@ -588,10 +663,18 @@ export default function PitchMatchView({
   const deployedTactics = tacticSlots.slots.filter((t): t is TacticCard => t !== null);
   const deployedIds = new Set(deployedTactics.map((t) => t.id));
 
-  // PROGRESSIVE MATCH CLOCK — the real increment minutes (15→30→60→75→90). The
-  // clock reads the minute of the increment being played / just queued, so it
-  // visibly advances forward each step. `nextMinute` from the parent is exactly
-  // INCREMENT_MINUTES[currentIncrement]; we mirror it so there is one source.
+  // FIX 1 — A MATCH CLOCK THAT COUNTS (mm:ss).
+  //   • PLANNING: show the elapsed time = the last completed increment's end
+  //     (00:00 before kickoff), so the clock reads where the match currently sits.
+  //   • RESOLVE: tick UP across this increment's 15-minute window as the
+  //     PossessionClock plays the beats. We map the live playhead to a real
+  //     clock time — anchored on the beats' own `clock` seconds where present,
+  //     interpolated smoothly across the window otherwise — so it visibly counts.
+  // `nextMinute` (= INCREMENT_MINUTES[currentIncrement]) is the window END minute.
+  const windowEndMin = nextMinute;                 // 15 | 30 | 60 | 75 | 90
+  const windowStartMin = Math.max(0, windowEndMin - 15);
+  // Elapsed before this increment (planning anchor): the last completed end.
+  const elapsedMin = matchState.currentIncrement === 0 ? 0 : INCREMENT_MINUTES_LIST[matchState.currentIncrement - 1] ?? windowStartMin;
   const clockMinute = nextMinute;
   // First half = first two increments (15', 30'); the rest is the second half.
   const periodLabel = matchState.currentIncrement <= 1 ? '1ST' : '2ND';
@@ -633,6 +716,54 @@ export default function PitchMatchView({
   const moving = !oppView && mode === 'plan' && drag !== null;
 
   const displayGoals = animGoals ?? { you: yourGoals, opp: opponentGoals };
+
+  // FIX 1 — drive the ticking match clock.
+  //   • PLANNING: snap to the elapsed time (last completed increment's end).
+  //   • RESOLVE: count UP across [windowStart, windowEnd]. The target second is
+  //     mapped from the live playhead — anchored on the current beat's real
+  //     `clock` (the engine's seconds) when it has one, else interpolated by the
+  //     playhead fraction. A short interval eases the displayed value toward the
+  //     target, so the readout visibly ticks rather than jumping per beat.
+  const windowStartSec = windowStartMin * 60;
+  const windowEndSec = windowEndMin * 60;
+  useEffect(() => {
+    if (!resolving) {
+      setClockSec(elapsedMin * 60);
+      return;
+    }
+    // Map the playhead to a target time inside the window.
+    const computeTarget = () => {
+      const liveClock = timeline[Math.max(0, beatIdx)]?.source?.clock;
+      if (typeof liveClock === 'number') {
+        return Math.min(windowEndSec, Math.max(windowStartSec, liveClock));
+      }
+      const frac = timeline.length > 0 ? Math.min(1, Math.max(0, (beatIdx + 1) / timeline.length)) : 1;
+      return windowStartSec + (windowEndSec - windowStartSec) * frac;
+    };
+    const id = setInterval(() => {
+      setClockSec((cur) => {
+        const target = computeTarget();
+        if (cur >= target) return Math.min(cur, windowEndSec);
+        // Ease toward the target; never overshoot it, never run past the window.
+        const step = Math.max(1, (target - cur) * 0.25);
+        return Math.min(target, cur + step, windowEndSec);
+      });
+    }, 90);
+    return () => clearInterval(id);
+  }, [resolving, beatIdx, timeline, elapsedMin, windowStartSec, windowEndSec]);
+
+  // When a fresh resolve begins, seed the clock at the window start so it counts up.
+  useEffect(() => {
+    if (resolving) setClockSec(windowStartSec);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolving, matchState.currentIncrement]);
+
+  const clockMMSS = useMemo(() => {
+    const s = Math.max(0, Math.round(clockSec));
+    const mm = Math.floor(s / 60).toString().padStart(2, '0');
+    const ss = (s % 60).toString().padStart(2, '0');
+    return `${mm}:${ss}`;
+  }, [clockSec]);
 
   // Receives the live beat + running score from the keyed PossessionClock.
   const handleClockState = (idx: number, you: number, opp: number, sh: 'you' | 'opp' | null) => {
@@ -746,8 +877,13 @@ export default function PitchMatchView({
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--cream)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opponentBuild.name}</span>
-              {/* Team identity — live engine style (falls back to the build label). */}
-              <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--cream-soft)', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, whiteSpace: 'nowrap', flexShrink: 0 }}>{oppStyleLabel.toUpperCase()}</span>
+              {/* FIX 6 — the opponent's PLAYING STYLE, clearly labelled "PLAY" so it
+                  reads as their approach (Passive/Balanced/Attacking/…), not a tactic
+                  card. A leading STYLE tab distinguishes it from the tactic pills. */}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 0, flexShrink: 0, borderRadius: 3, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--cream-soft)', padding: '2px 3px', lineHeight: 1 }}>PLAY</span>
+                <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--cream)', background: 'rgba(0,0,0,0.35)', padding: '2px 4px', lineHeight: 1, whiteSpace: 'nowrap' }}>{oppStyleLabel.toUpperCase()}</span>
+              </span>
             </div>
             {/* ISSUE 1 — clear average opposition strength badge (real XI mean power) */}
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
@@ -764,7 +900,8 @@ export default function PitchMatchView({
           </div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: resolving ? 'var(--success)' : 'var(--dust)', flexShrink: 0, boxShadow: resolving ? '0 0 5px var(--success)' : undefined }} className={resolving ? 'carrier-glow' : undefined} />
-            <span style={{ fontFamily: PIXEL, fontSize: 11, color: resolving ? 'var(--cream)' : 'var(--dust)', fontVariantNumeric: 'tabular-nums' }}>{clockMinute}{"'"}</span>
+            {/* FIX 1 — a real mm:ss clock: ticks up while resolving, shows elapsed while planning. */}
+            <span style={{ fontFamily: PIXEL, fontSize: 13, color: resolving ? 'var(--cream)' : 'var(--dust)', fontVariantNumeric: 'tabular-nums' }}>{clockMMSS}</span>
             <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)', letterSpacing: 0.4 }}>{periodLabel}</span>
           </div>
         </div>
@@ -785,7 +922,7 @@ export default function PitchMatchView({
             const isLive = resolving && i === 2 && !!liveSource && e?.text === liveSource.text;
             return (
               <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, height: 17, lineHeight: '17px', color: e ? lineColour(e) : 'transparent', opacity: e ? (isLive ? 1 : 0.5 + (i / 2) * 0.45) : 1, transition: 'opacity 160ms' }}>
-                <span style={{ color: 'var(--dust)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, visibility: e ? 'visible' : 'hidden' }}>{e ? `${String(e.minute).padStart(2, '0')}:00` : '00:00'}</span>
+                <span style={{ color: 'var(--dust)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, visibility: e ? 'visible' : 'hidden' }}>{e ? e.time : '00:00'}</span>
                 {e && <span style={{ width: 5, height: 5, borderRadius: '50%', flexShrink: 0, background: e.side === 'you' ? 'var(--success)' : 'var(--danger)' }} />}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: e && e.type !== 'chance' ? 800 : 400 }}>{e ? e.text : ''}</span>
               </div>
@@ -805,8 +942,8 @@ export default function PitchMatchView({
           <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '3px 4px', lineHeight: 1, flexShrink: 0 }}>MGR</span>
           <span style={{ fontSize: 10.5, fontWeight: 800, color: manager ? 'var(--cream)' : 'var(--dust)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{manager ? lastName(manager.name) : 'No gaffer'}</span>
         </button>
-        {/* Deployed tactic pills + a deploy affordance, in a no-wrap scroll strip. */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'stretch', overflowX: 'auto', overflowY: 'hidden', flex: 1, scrollbarWidth: 'none' }} className="match-joker-row">
+        {/* Deployed tactic pills in a no-wrap scroll strip (tap a pill to inspect). */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'stretch', overflowX: 'auto', overflowY: 'hidden', flex: 1, scrollbarWidth: 'none', minWidth: 0 }} className="match-joker-row">
           {deployedTactics.map((t) => {
             const cat = TACTIC_CAT_COLOR[t.category] ?? 'var(--gold)';
             return (
@@ -817,19 +954,25 @@ export default function PitchMatchView({
               </button>
             );
           })}
-          {/* Deploy more — opens the tactical shelf. Shows remaining free slots. */}
-          {mode === 'plan' && !oppView && (
-            <button onClick={() => setTrayOpen(true)} aria-label="Deploy a tactic"
-              className={showTacticPrompt ? 'carrier-glow' : undefined}
-              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 9px', borderRadius: 'var(--radius)', border: `2px dashed ${showTacticPrompt ? 'var(--gold)' : 'var(--border)'}`, background: 'transparent', cursor: 'pointer', flexShrink: 0 }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 12, color: showTacticPrompt ? 'var(--gold)' : 'var(--dust)', lineHeight: 1 }}>+</span>
-              <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)', letterSpacing: 0.3 }}>{deployedTactics.length === 0 ? 'TACTIC' : `${deployedTactics.length}/${tacticSlots.slots.length}`}</span>
-            </button>
-          )}
           {deployedTactics.length === 0 && (mode !== 'plan' || oppView) && (
             <span style={{ fontSize: 10, color: 'var(--dust)', alignSelf: 'center', paddingLeft: 2 }}>No tactics deployed</span>
           )}
+          {deployedTactics.length === 0 && mode === 'plan' && !oppView && (
+            <span style={{ fontSize: 10, color: 'var(--dust)', alignSelf: 'center', paddingLeft: 2, whiteSpace: 'nowrap' }}>No tactics yet</span>
+          )}
         </div>
+        {/* FIX 2 — the tactics tray trigger. An ALWAYS-VISIBLE control beside the
+            active-tactics strip (sits outside the scroll area so deployed pills can
+            never push it off-screen). Opens the tactical shelf to deploy/toggle.
+            Pulses gold when there's a free slot and an undeployed tactic to suggest. */}
+        {mode === 'plan' && !oppView && (
+          <button onClick={() => setTrayOpen(true)} aria-label="Edit tactics"
+            className={showTacticPrompt ? 'carrier-glow' : undefined}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, padding: '4px 10px', borderRadius: 'var(--radius)', border: `2px ${deployedTactics.length === 0 ? 'dashed' : 'solid'} ${showTacticPrompt ? 'var(--gold)' : 'var(--border)'}`, background: showTacticPrompt ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.4, color: showTacticPrompt ? 'var(--gold)' : 'var(--cream-soft)', lineHeight: 1 }}>TACTICS</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)', letterSpacing: 0.3, lineHeight: 1 }}>{deployedTactics.length}/{tacticSlots.slots.length} +</span>
+          </button>
+        )}
       </div>
 
       {/* Pitch */}
@@ -942,13 +1085,22 @@ export default function PitchMatchView({
           </div>
         )}
 
-        {/* Opponent intel strip while viewing the opposition (real shape + scouting). */}
-        {oppView && (<>
-          <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 7, fontFamily: PIXEL, fontSize: 8, color: 'var(--cream)', background: 'rgba(7,16,11,0.7)', border: '1px solid var(--border)', padding: '4px 7px', borderRadius: 'var(--radius-sm)' }}>{oppStyleLabel} · {matchState.opponentFormation.name}</div>
-          <div style={{ position: 'absolute', bottom: 10, left: 10, right: 10, zIndex: 7, fontSize: 10, color: 'var(--cream-soft)', background: 'rgba(7,16,11,0.75)', border: '1px solid var(--border)', padding: '7px 10px', borderRadius: 'var(--radius)', lineHeight: 1.4 }}>
-            <b style={{ color: 'var(--success)', fontFamily: PIXEL, fontSize: 9 }}>SOFT SPOT</b> &nbsp;{opponentBuild.weakness.toLowerCase()} — {opponentBuild.starAbility.toLowerCase()}.
+        {/* FIX 3 — Opponent intel while viewing the opposition. The SOFT SPOT
+            scouting card no longer sits over the keeper: the opponent's GK is at
+            the BOTTOM of the pitch (their own goal), so the intel is anchored at
+            the TOP-LEFT, stacked under the shape chip, in the open corner above
+            their attackers. Both panels are FULLY OPAQUE (no transparency) so no
+            player name can ghost through, and z-index sits above the cards. */}
+        {oppView && (
+          <div style={{ position: 'absolute', top: 10, left: 10, right: 10, zIndex: 12, display: 'flex', flexDirection: 'column', gap: 6, pointerEvents: 'none' }}>
+            <div style={{ alignSelf: 'flex-start', fontFamily: PIXEL, fontSize: 8, color: 'var(--cream)', background: 'var(--surface)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', padding: '5px 8px', borderRadius: 'var(--radius-sm)', letterSpacing: 0.3 }}>
+              <span style={{ color: 'var(--dust)' }}>SHAPE</span>&nbsp; {matchState.opponentFormation.name} &nbsp;<span style={{ color: 'var(--dust)' }}>·</span>&nbsp; <span style={{ color: 'var(--cream-soft)' }}>{oppStyleLabel}</span>
+            </div>
+            <div style={{ maxWidth: 280, fontSize: 10, color: 'var(--cream-soft)', background: 'var(--surface)', border: '2px solid var(--success)', boxShadow: '0 2px 0 0 var(--ink-black)', padding: '7px 10px', borderRadius: 'var(--radius)', lineHeight: 1.4 }}>
+              <b style={{ color: 'var(--success)', fontFamily: PIXEL, fontSize: 9 }}>SOFT SPOT</b> &nbsp;{opponentBuild.weakness.toLowerCase()} — {opponentBuild.starAbility.toLowerCase()}.
+            </div>
           </div>
-        </>)}
+        )}
 
         {/* Side rail — SHAPE (the ONE formation control). Tactics now live in the
             persistent on-screen strip above the pitch. */}
@@ -959,9 +1111,11 @@ export default function PitchMatchView({
         )}
 
         {/* "Deploy a tactic?" pill — contextual nudge toward the opponent's weakness.
-            Sits at the lower-right edge so it never covers central players. */}
+            FIX 3 (related) — anchored to the TOP-LEFT of the pitch (the clear zone
+            by the opponent's goal mouth) so it never covers the GK at the bottom or
+            any central player. Fully opaque; sits below the side rail in z-order. */}
         {showTacticPrompt && (
-          <button onClick={() => setTrayOpen(true)} style={{ position: 'absolute', right: 38, bottom: 10, zIndex: 6, display: 'flex', alignItems: 'center', gap: 6, maxWidth: 168, background: 'rgba(7,16,11,0.94)', border: '1.5px solid var(--gold)', borderRadius: 'var(--radius)', padding: '6px 9px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 2px 0 0 var(--ink-black)' }}>
+          <button onClick={() => setTrayOpen(true)} style={{ position: 'absolute', left: 8, top: 8, zIndex: 6, display: 'flex', alignItems: 'center', gap: 6, maxWidth: 160, background: 'var(--surface)', border: '2px solid var(--gold)', borderRadius: 'var(--radius)', padding: '6px 9px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 2px 0 0 var(--ink-black)' }}>
             <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>TIP</span>
             <span style={{ fontSize: 10, color: 'var(--cream-soft)', lineHeight: 1.25 }}>Deploy a tactic to exploit <b style={{ color: 'var(--gold)' }}>{opponentBuild.weakness.toLowerCase()}</b>.</span>
           </button>
@@ -1002,18 +1156,23 @@ export default function PitchMatchView({
           {bench.slice(0, 7).map((card) => {
             const isDragging = drag?.kind === 'bench' && drag.id === card.id;
             return (
-              <div key={card.id} style={{ width: 48, flexShrink: 0, position: 'relative', opacity: isDragging ? 0.3 : 1, transition: 'opacity 120ms' }}>
-                <button
-                  onPointerDown={(e) => beginPointer('bench', card.id, e)}
-                  onPointerMove={drag ? undefined : movePointer}
-                  onPointerUp={drag ? undefined : endPointer}
-                  disabled={mode !== 'plan' || oppView}
-                  title={card.name}
-                  aria-label={`Substitute ${card.name}`}
-                  style={{ display: 'block', width: '100%', padding: 0, background: 'none', border: 'none', borderRadius: 'var(--radius-sm)', cursor: mode === 'plan' && !oppView ? 'grab' : 'default', touchAction: 'none', boxShadow: showSubPrompt ? '0 0 0 2px var(--amber)' : undefined }}>
-                  <GameCard model={{ variant: 'player', card }} />
-                </button>
-              </div>
+              <button
+                key={card.id}
+                // FIX 4 — the bench drag works again. The pointer handlers live on
+                // THIS button; SubCard below is a pure div (pointerEvents:none), so
+                // pointerdown/move/up always fire on the button and pointer capture
+                // is never swallowed by an inner interactive element (the GameCard
+                // button was the culprit). move/up stay live until `drag` is set,
+                // after which the root container owns them.
+                onPointerDown={(e) => beginPointer('bench', card.id, e)}
+                onPointerMove={drag ? undefined : movePointer}
+                onPointerUp={drag ? undefined : endPointer}
+                disabled={mode !== 'plan' || oppView}
+                title={card.name}
+                aria-label={`Substitute ${card.name}`}
+                style={{ width: 56, flexShrink: 0, padding: 0, background: 'none', border: 'none', borderRadius: 'var(--radius-sm)', cursor: mode === 'plan' && !oppView ? 'grab' : 'default', touchAction: 'none', boxShadow: showSubPrompt ? '0 0 0 2px var(--amber)' : undefined }}>
+                <SubCard card={card} dim={isDragging} />
+              </button>
             );
           })}
         </div>
@@ -1045,7 +1204,7 @@ export default function PitchMatchView({
             </div>
             {feed.length === 0 ? <div style={{ fontSize: 12, color: 'var(--dust)' }}>Kickoff — no events yet.</div> : feed.slice().reverse().map((e, i) => (
               <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13, lineHeight: 1.55, color: lineColour(e), padding: '2px 0' }}>
-                <span style={{ color: 'var(--dust)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{String(e.minute).padStart(2, '0')}:00</span>
+                <span style={{ color: 'var(--dust)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{e.time}</span>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', alignSelf: 'center', flexShrink: 0, background: e.side === 'you' ? 'var(--success)' : 'var(--danger)' }} />
                 <span style={{ flex: 1, fontWeight: e.type !== 'chance' ? 800 : 400 }}>{e.text}</span>
                 {e.scorer && e.type !== 'chance' && <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--cream-soft)', flexShrink: 0 }}>{lastName(e.scorer)}</span>}
