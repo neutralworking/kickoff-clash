@@ -175,7 +175,7 @@ export function openPack(packType: PackType, seed: number): PackContents {
 // All formations are made available so the manager can pick a shape.
 // ---------------------------------------------------------------------------
 
-export const RIP_COUNTS = { players: 25, managers: 2, tactics: 10 } as const;
+export const RIP_COUNTS = { players: 25, managers: 2, tactics: 5 } as const;
 
 export function ripStarterPacks(seed: number): PackContents {
   const players = seededShuffle(ALL_CARDS, seed).slice(0, RIP_COUNTS.players);

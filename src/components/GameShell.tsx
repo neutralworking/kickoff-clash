@@ -18,6 +18,7 @@ import {
   buyTacticPack,
   buyShopItem,
   healInjuredCard,
+  drawRoundTactic,
 } from '../lib/run';
 import { getShopItem } from '../lib/economy';
 import type { HandState } from '../lib/hand';
@@ -429,7 +430,10 @@ export default function GameShell() {
 
   const handleShopNext = useCallback(() => {
     if (!runState) return;
-    const newState = { ...runState, round: runState.round + 1 };
+    const nextRound = runState.round + 1;
+    // v1 tactics progression: one new tactic is drawn each round (the deck starts at 5).
+    const tacticsDeck = drawRoundTactic(runState.tacticsDeck, runState.seed * 31 + nextRound * 7);
+    const newState = { ...runState, round: nextRound, tacticsDeck };
     setRunState(newState);
     setPhase('match');
     saveRun(newState);

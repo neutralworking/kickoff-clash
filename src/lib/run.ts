@@ -1044,6 +1044,19 @@ export function buyTacticPack(state: RunState, seed: number): RunState | null {
   };
 }
 
+/**
+ * Draw one new tactic card for the round, picked deterministically from the tactics
+ * not yet in the deck. v1 progression: the deck starts at 5 (the starter rip) and
+ * gains one per round. Returns the deck unchanged once every tactic is already held.
+ */
+export function drawRoundTactic(deck: TacticCard[], seed: number): TacticCard[] {
+  const held = new Set(deck.map(t => t.id));
+  const available = ALL_TACTICS.filter(t => !held.has(t.id));
+  if (available.length === 0) return deck;
+  const pick = available[Math.floor(seededRandom(seed) * available.length)];
+  return [...deck, pick];
+}
+
 // Re-export commonly used types and constants
 export { PLAYING_STYLES, SHOP_ITEMS };
 export type { Card, SlottedCard, PlayingStyle, ShopItem, ActionCard, Durability };
