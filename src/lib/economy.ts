@@ -183,22 +183,37 @@ export function getAcademyTier(tier: number): Academy {
 }
 
 // ---------------------------------------------------------------------------
-// Stadium Tier
+// Match reward — Option B (Phase 2)
 // ---------------------------------------------------------------------------
+//
+// A flat per-result base by round, multiplied by the purchased stadium payout tier,
+// plus an opt-in Box Office per-goal bonus. The fan-source gate (`calculateAttendance`)
+// is display-only — it no longer feeds cash. Stadium tier is now PLAYER-DRIVEN (bought
+// as a Stadium Expansion Investment), not derived from results; over-banking under
+// permadeath gets you eliminated before the compounding lands (ECONOMY §1, §4).
 
-/**
- * Determine stadium tier from run progress.
- */
-export function getStadiumTier(
-  wins: number,
-  reachedMatch5: boolean,
-  wonRun: boolean,
+/** Per-round win reward (draws derive via DRAW_REWARD_FACTOR; a loss ends the run). */
+export const BASE_WIN_CASH = [8000, 12000, 16000, 22000, 30000];
+
+/** Stadium payout multiplier by tier (1-indexed) — the compounding income axis. */
+export const STADIUM_MULT = [1.0, 1.25, 1.6, 2.0, 2.5];
+
+/** Box Office: cash per goal you score, when the Box Office Investment is unlocked. */
+export const PER_GOAL_CASH = 1500;
+
+export function matchReward(
+  round: number,
+  result: 'win' | 'draw' | 'loss',
+  stadiumTier: number,
+  drawFactor: number,
+  yourGoals = 0,
+  boxOffice = false,
 ): number {
-  if (wonRun) return 5;
-  if (reachedMatch5) return 4;
-  if (wins >= 3) return 3;
-  if (wins >= 1) return 2;
-  return 1;
+  const base = BASE_WIN_CASH[Math.min(Math.max(round - 1, 0), BASE_WIN_CASH.length - 1)];
+  const resultFactor = result === 'win' ? 1 : result === 'draw' ? drawFactor : 0;
+  const mult = STADIUM_MULT[Math.min(Math.max(stadiumTier - 1, 0), STADIUM_MULT.length - 1)];
+  const boxOfficeBonus = boxOffice ? Math.max(0, yourGoals) * PER_GOAL_CASH : 0;
+  return Math.round(base * resultFactor * mult) + boxOfficeBonus;
 }
 
 export function getStadium(tier: number): Stadium {

@@ -26,7 +26,7 @@ import type { JokerCard } from '../lib/jokers';
 import { rehydrateJokers } from '../lib/jokers';
 import { ripStarterPacks } from '../lib/packs';
 import { getTacticById } from '../lib/tactics';
-import { calculateAttendance, getStadiumTier, JOKER_COST } from '../lib/economy';
+import { calculateAttendance, matchReward, JOKER_COST } from '../lib/economy';
 import { findConnections } from '../lib/chemistry';
 import { accrueMatch } from '../lib/chem';
 import type { PackContents } from '../lib/packs';
@@ -230,10 +230,15 @@ export default function GameShell() {
     // Durability check on the XI cards
     const durResult = postMatchDurabilityCheck(slottedXI, runState.seed + runState.round * 999);
 
-    // v1 reward: a win earns the full match gate, a draw earns DRAW_REWARD_FACTOR of it,
-    // a loss earns nothing (the run is over).
-    const rewardFactor = result.result === 'win' ? 1 : result.result === 'draw' ? DRAW_REWARD_FACTOR : 0;
-    const matchReward = Math.round(attendance.revenue * rewardFactor);
+    // Option B reward: a flat per-result base by round × the purchased stadium payout
+    // tier. A win earns the base, a draw DRAW_REWARD_FACTOR of it, a loss nothing (the
+    // run is over). The gate (attendance.revenue) is now a flavour display only.
+    const reward = matchReward(
+      runState.round,
+      result.result,
+      runState.stadiumTier,
+      DRAW_REWARD_FACTOR,
+    );
 
     // Create match result entry
     const matchResult: MatchResult = {
@@ -242,7 +247,7 @@ export default function GameShell() {
       yourGoals: result.yourGoals,
       opponentGoals: result.opponentGoals,
       attendance: attendance.attendance,
-      revenue: matchReward,
+      revenue: reward,
       result: result.result,
       synergiesTriggered: connections.map(c => c.name),
       shattered: durResult.shattered.map(c => c.name),
@@ -256,13 +261,6 @@ export default function GameShell() {
     // Update wins/losses
     const wins = runState.wins + (result.result === 'win' ? 1 : 0);
     const losses = runState.losses + (result.result === 'loss' ? 1 : 0);
-    const reachedFinalFixture = runState.round >= MAX_ROUNDS;
-    // v1 permadeath: surviving the final fixture (no defeat) wins the run.
-    const stadiumTier = getStadiumTier(
-      wins,
-      reachedFinalFixture,
-      reachedFinalFixture && result.result !== 'loss',
-    );
 
     // Run-accumulated chemistry: every pair in the final XI co-appeared this match
     // (CARDS §5; +1 per increment played, ≈ a full match). No decay — churn just
@@ -276,8 +274,9 @@ export default function GameShell() {
     const newState: RunState = {
       ...runState,
       deck: updatedDeck,
-      cash: runState.cash + matchReward,
-      stadiumTier,
+      cash: runState.cash + reward,
+      // stadiumTier persists from runState — now changed only by a Stadium Expansion
+      // Investment purchase (Phase 2 Chunk 2), not derived from results.
       wins,
       losses,
       round: runState.round,

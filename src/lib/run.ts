@@ -12,7 +12,7 @@ import {
 } from './scoring';
 import { ActionCard, ALL_ACTION_CARDS, getActionCardsByType } from './actions';
 import {
-  calculateAttendance, getStadiumTier, getStadium, getTransferFee,
+  calculateAttendance, getStadium, getTransferFee,
   SHOP_ITEMS, ShopItem, ACADEMY_TIERS, ACADEMY_UPGRADE_COST,
   generateAcademyDurability, getAcademyTier,
 } from './economy';
