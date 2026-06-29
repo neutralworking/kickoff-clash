@@ -7,11 +7,10 @@ import type { RunState } from '../lib/run';
 import { getShopCards, ALL_CARDS } from '../lib/run';
 import {
   SHOP_ITEMS, getTransferFee, ACADEMY_UPGRADE_COST, getAcademyTier,
-  generateAcademyDurability,
+  generateAcademyDurability, JOKER_COST,
 } from '../lib/economy';
 import type { JokerCard as JokerCardType } from '../lib/jokers';
 import { getShopJokers } from '../lib/jokers';
-import { ALL_FORMATIONS } from '../lib/formations';
 import type { OpponentBuild } from '../lib/run';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
@@ -28,7 +27,6 @@ interface ShopPhaseProps {
   onBuyAcademy: (card: Card) => void;
   onUpgradeAcademy: () => void;
   onBuyTacticPack: () => void;
-  onBuyFormation: (formationId: string) => void;
   onTrainPlayer: (cardId: number) => void;
   onRerollShop: () => boolean;
   onHealPlayer: (cardId: number) => boolean;
@@ -40,9 +38,7 @@ interface ShopPhaseProps {
 
 const CARD_PICK_COST = 15_000;
 const RARE_PICK_COST = 35_000;
-const JOKER_COST = 25_000;
 const TACTIC_PACK_COST = 10_000;
-const FORMATION_COST = 20_000;
 const TRAINING_COST = 8_000;
 const TRAINING_INCREMENT = 5;
 const TRAINING_MAX = 20;
@@ -57,7 +53,6 @@ export default function ShopPhase({
   onBuyAcademy,
   onUpgradeAcademy,
   onBuyTacticPack,
-  onBuyFormation,
   onTrainPlayer,
   onRerollShop,
   onHealPlayer,
@@ -106,10 +101,6 @@ export default function ShopPhase({
     });
   }
 
-  // Formations the player doesn't own yet
-  const unownedFormations = ALL_FORMATIONS.filter(
-    f => !state.ownedFormations.includes(f.id)
-  );
   const trainableCards = [...state.deck]
     .map((card) => ({
       card,
@@ -159,7 +150,7 @@ export default function ShopPhase({
             </span>
           </div>
 
-          <HeaderStat label="PTS" value={`${state.seasonPoints}/${state.boardTargetPoints}`} />
+          <HeaderStat label="FIXTURE" value={`${state.round}/5`} />
           <div
             className="flex flex-col items-end justify-center shrink-0"
             style={{
@@ -267,12 +258,10 @@ export default function ShopPhase({
             state={state}
             academy={academy}
             academyCards={academyCards}
-            unownedFormations={unownedFormations}
             scoutedOpponent={scoutedOpponent}
             onBuyAcademy={onBuyAcademy}
             onUpgradeAcademy={onUpgradeAcademy}
             onBuyTacticPack={onBuyTacticPack}
-            onBuyFormation={onBuyFormation}
             onScoutOpponent={onScoutOpponent}
             openModal={setModal}
           />
@@ -568,18 +557,16 @@ function SquadTab({
 // ===========================================================================
 
 function BackroomTab({
-  state, academy, academyCards, unownedFormations, scoutedOpponent,
-  onBuyAcademy, onUpgradeAcademy, onBuyTacticPack, onBuyFormation, onScoutOpponent, openModal,
+  state, academy, academyCards, scoutedOpponent,
+  onBuyAcademy, onUpgradeAcademy, onBuyTacticPack, onScoutOpponent, openModal,
 }: {
   state: RunState;
   academy: ReturnType<typeof getAcademyTier>;
   academyCards: Card[];
-  unownedFormations: typeof ALL_FORMATIONS;
   scoutedOpponent: OpponentBuild | null;
   onBuyAcademy: (card: Card) => void;
   onUpgradeAcademy: () => void;
   onBuyTacticPack: () => void;
-  onBuyFormation: (formationId: string) => void;
   onScoutOpponent: () => boolean;
   openModal: (m: GameCardModel) => void;
 }) {
@@ -682,26 +669,6 @@ function BackroomTab({
           affordable={state.cash >= TACTIC_PACK_COST}
           onClick={onBuyTacticPack}
         />
-      </SectionCard>
-
-      {/* Formations */}
-      <SectionCard title="Formation Scouting" accent="var(--kit-blue)">
-        {unownedFormations.length === 0 ? (
-          <EmptyState text="All formations owned." />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {unownedFormations.map(f => (
-              <RowAction
-                key={f.id}
-                title={f.name}
-                sub={f.description}
-                cost={FORMATION_COST}
-                affordable={state.cash >= FORMATION_COST}
-                onClick={() => onBuyFormation(f.id)}
-              />
-            ))}
-          </div>
-        )}
       </SectionCard>
     </div>
   );

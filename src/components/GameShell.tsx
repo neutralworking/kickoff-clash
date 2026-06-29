@@ -14,10 +14,10 @@ import {
   upgradeAcademy,
   buyAcademyPlayer,
   applyTraining,
-  buyFormation,
   buyTacticPack,
   buyShopItem,
   healInjuredCard,
+  drawRoundTactic,
 } from '../lib/run';
 import { getShopItem } from '../lib/economy';
 import type { HandState } from '../lib/hand';
@@ -26,7 +26,7 @@ import type { JokerCard } from '../lib/jokers';
 import { rehydrateJokers } from '../lib/jokers';
 import { ripStarterPacks } from '../lib/packs';
 import { getTacticById } from '../lib/tactics';
-import { calculateAttendance, getStadiumTier } from '../lib/economy';
+import { calculateAttendance, getStadiumTier, JOKER_COST } from '../lib/economy';
 import { findConnections } from '../lib/chemistry';
 import { accrueMatch } from '../lib/chem';
 import type { PackContents } from '../lib/packs';
@@ -74,19 +74,9 @@ function deserializeRun(json: string): RunState | null {
   try {
     const parsed = JSON.parse(json) as SerializedRunState;
     const { jokerIds, tacticIds, ...rest } = parsed;
-    const seasonPoints =
-      typeof (rest as Partial<RunState>).seasonPoints === 'number'
-        ? (rest as Partial<RunState>).seasonPoints
-        : 0;
-    const boardTargetPoints =
-      typeof (rest as Partial<RunState>).boardTargetPoints === 'number'
-        ? (rest as Partial<RunState>).boardTargetPoints
-        : 10;
 
     return {
       ...rest,
-      seasonPoints,
-      boardTargetPoints,
       jokers: rehydrateJokers(jokerIds ?? []),
       tacticsDeck: (tacticIds ?? []).map(id => getTacticById(id)).filter((t): t is NonNullable<typeof t> => t !== undefined),
     } as RunState;
@@ -128,8 +118,6 @@ function saveHistory(state: RunState): void {
       status: state.status,
       wins: state.wins,
       losses: state.losses,
-      seasonPoints: state.seasonPoints,
-      boardTargetPoints: state.boardTargetPoints,
       cash: state.cash,
       rounds: state.round,
       matchHistory: state.matchHistory,
@@ -234,7 +222,6 @@ export default function GameShell() {
       connections,
       result.yourGoals,
       result.opponentGoals,
-      0,
       runState.stadiumTier,
       runState.ticketPriceBonus,
       runState.playingStyle,
@@ -254,8 +241,6 @@ export default function GameShell() {
       opponentName: getOpponent(runState.round).name,
       yourGoals: result.yourGoals,
       opponentGoals: result.opponentGoals,
-      pointsEarned: result.result === 'win' ? 3 : result.result === 'draw' ? 1 : 0,
-      seasonPoints: runState.seasonPoints + (result.result === 'win' ? 3 : result.result === 'draw' ? 1 : 0),
       attendance: attendance.attendance,
       revenue: matchReward,
       result: result.result,
@@ -271,13 +256,12 @@ export default function GameShell() {
     // Update wins/losses
     const wins = runState.wins + (result.result === 'win' ? 1 : 0);
     const losses = runState.losses + (result.result === 'loss' ? 1 : 0);
-    const pointsEarned = result.result === 'win' ? 3 : result.result === 'draw' ? 1 : 0;
-    const seasonPoints = runState.seasonPoints + pointsEarned;
     const reachedFinalFixture = runState.round >= MAX_ROUNDS;
+    // v1 permadeath: surviving the final fixture (no defeat) wins the run.
     const stadiumTier = getStadiumTier(
       wins,
       reachedFinalFixture,
-      reachedFinalFixture && seasonPoints >= runState.boardTargetPoints,
+      reachedFinalFixture && result.result !== 'loss',
     );
 
     // Run-accumulated chemistry: every pair in the final XI co-appeared this match
@@ -296,7 +280,6 @@ export default function GameShell() {
       stadiumTier,
       wins,
       losses,
-      seasonPoints,
       round: runState.round,
       matchHistory: [...runState.matchHistory, matchResult],
       chemistry,
@@ -353,11 +336,11 @@ export default function GameShell() {
 
   const handleBuyJoker = useCallback((joker: JokerCard) => {
     setRunState(prev => {
-      if (!prev || prev.jokers.length >= 3 || prev.cash < 25_000) return prev;
+      if (!prev || prev.jokers.length >= 3 || prev.cash < JOKER_COST) return prev;
       return {
         ...prev,
         jokers: [...prev.jokers, joker],
-        cash: prev.cash - 25_000,
+        cash: prev.cash - JOKER_COST,
       };
     });
   }, []);
@@ -381,12 +364,6 @@ export default function GameShell() {
   const handleBuyTacticPack = useCallback(() => {
     if (!runState) return;
     const result = buyTacticPack(runState, runState.seed + runState.round * 777);
-    if (result) { setRunState(result); saveRun(result); }
-  }, [runState]);
-
-  const handleBuyFormation = useCallback((formationId: string) => {
-    if (!runState) return;
-    const result = buyFormation(runState, formationId);
     if (result) { setRunState(result); saveRun(result); }
   }, [runState]);
 
@@ -429,7 +406,10 @@ export default function GameShell() {
 
   const handleShopNext = useCallback(() => {
     if (!runState) return;
-    const newState = { ...runState, round: runState.round + 1 };
+    const nextRound = runState.round + 1;
+    // v1 tactics progression: one new tactic is drawn each round (the deck starts at 5).
+    const tacticsDeck = drawRoundTactic(runState.tacticsDeck, runState.seed * 31 + nextRound * 7);
+    const newState = { ...runState, round: nextRound, tacticsDeck };
     setRunState(newState);
     setPhase('match');
     saveRun(newState);
@@ -507,14 +487,13 @@ export default function GameShell() {
             onBuyAcademy={handleBuyAcademy}
             onUpgradeAcademy={handleUpgradeAcademy}
             onBuyTacticPack={handleBuyTacticPack}
-            onBuyFormation={handleBuyFormation}
             onTrainPlayer={handleTrainPlayer}
             onRerollShop={handleRerollShop}
             onHealPlayer={handleHealPlayer}
             onScoutOpponent={handleScoutOpponent}
             scoutedOpponent={
               runState.scoutedOpponentRound === runState.round + 1
-                ? getOpponentBuild(runState.round + 1)
+                ? getOpponentBuild(runState.round + 1, runState.seed)
                 : null
             }
             onNext={handleShopNext}

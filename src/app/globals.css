@@ -637,6 +637,20 @@ h1, h2, h3,
 }
 .drawer-slide { animation: drawerSlide 0.22s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
+/* The tactical SHELF rises from the bottom edge as a bottom-sheet. */
+@keyframes sheetRise {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.tactic-sheet { animation: sheetRise 0.24s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* The sheet's list is the only scroller; hide its scrollbar for a clean edge. */
+.tactic-sheet-scroll { scrollbar-width: none; }
+.tactic-sheet-scroll::-webkit-scrollbar { display: none; }
+
+/* Disabled (slots-full) tactic cards never animate a press. */
+.tactic-card-btn:not(:disabled):active { transform: translateY(1px); }
+
 /* A drag ghost lifts off the pitch under the finger. */
 @keyframes ghostLift {
   from { transform: translate(-50%, -50%) scale(1); }

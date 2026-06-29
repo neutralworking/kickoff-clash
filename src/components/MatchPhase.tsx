@@ -43,7 +43,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
   const formation = getFormation(runState.activeFormation);
   const matchSeed = runState.seed + runState.round * 1000;
   const opponent = getOpponent(runState.round);
-  const opponentBuild = getOpponentBuild(runState.round);
+  const opponentBuild = getOpponentBuild(runState.round, runState.seed);
   const [tacticSlots, setTacticSlots] = useState<TacticSlots>(() => createEmptySlots());
 
   // Core state

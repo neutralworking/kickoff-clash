@@ -8,6 +8,7 @@ import type { Band, Lane, Cell } from '../../lib/field';
 import { cellOf, bandOf } from '../../lib/field';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard, TacticSlots } from '../../lib/tactics';
+import { canDeploy, getTacticById } from '../../lib/tactics';
 import type { OpponentBuild } from '../../lib/run';
 import type { Card } from '../../lib/scoring';
 import CardModal from '../cards/CardModal';
@@ -685,6 +686,46 @@ export default function PitchMatchView({
   const deployedTactics = tacticSlots.slots.filter((t): t is TacticCard => t !== null);
   const deployedIds = new Set(deployedTactics.map((t) => t.id));
 
+  // ── TACTIC DECK STATE (display-only) ──────────────────────────────────────
+  // The engine (onToggleTactic + canDeploy in tactics.ts) is the single source of
+  // truth; here we mirror it to a label so a tap is never a silent no-op. Each
+  // card resolves to exactly one of four states, computed from canDeploy() +
+  // its `contradicts` field:
+  //   • deployed   — already in a slot           → tap removes it
+  //   • deployable — a free slot, no conflict     → tap deploys it
+  //   • swap       — canDeploy via auto-removal   → tap REPLACES the named card
+  //   • blocked    — slots full, nothing to swap  → tap is a no-op, so we disable
+  // `replaces` carries the contradicting card's NAME so the swap is explicit
+  // BEFORE it happens; `contradictsName` surfaces the static pairing on the card.
+  type TacticState = 'deployed' | 'deployable' | 'swap' | 'blocked';
+  const tacticView = useMemo(() => {
+    return availableTactics.map((tactic) => {
+      const deployed = deployedIds.has(tactic.id);
+      // The contradiction note (static, regardless of what's deployed).
+      const contradictsName = tactic.contradicts
+        ? getTacticById(tactic.contradicts)?.name ?? null
+        : null;
+      let state: TacticState;
+      let replaces: string | null = null;
+      if (deployed) {
+        state = 'deployed';
+      } else {
+        const { canDeploy: ok, wouldRemove } = canDeploy(tacticSlots, tactic);
+        if (ok && wouldRemove) {
+          state = 'swap';
+          replaces = getTacticById(wouldRemove)?.name ?? null;
+        } else if (ok) {
+          state = 'deployable';
+        } else {
+          state = 'blocked';
+        }
+      }
+      return { tactic, state, replaces, contradictsName };
+    });
+    // deployedIds is derived from tacticSlots, so tacticSlots is the real dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableTactics, tacticSlots]);
+
   // FIX 1 — A MATCH CLOCK THAT COUNTS (mm:ss).
   //   • PLANNING: show the elapsed time = the last completed increment's end
   //     (00:00 before kickoff), so the clock reads where the match currently sits.
@@ -990,9 +1031,18 @@ export default function PitchMatchView({
         {mode === 'plan' && !oppView && (
           <button onClick={() => setTrayOpen(true)} aria-label="Edit tactics"
             className={showTacticPrompt ? 'carrier-glow' : undefined}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, padding: '4px 10px', borderRadius: 'var(--radius)', border: `2px ${deployedTactics.length === 0 ? 'dashed' : 'solid'} ${showTacticPrompt ? 'var(--gold)' : 'var(--border)'}`, background: showTacticPrompt ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0 }}>
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '4px 10px', borderRadius: 'var(--radius)', border: `2px ${deployedTactics.length === 0 ? 'dashed' : 'solid'} ${showTacticPrompt ? 'var(--gold)' : 'var(--border)'}`, background: showTacticPrompt ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0 }}>
             <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.4, color: showTacticPrompt ? 'var(--gold)' : 'var(--cream-soft)', lineHeight: 1 }}>TACTICS</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)', letterSpacing: 0.3, lineHeight: 1 }}>{deployedTactics.length}/{tacticSlots.slots.length} +</span>
+            {/* Slot pips mirror the shelf's meter so deployed capacity reads here too. */}
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, lineHeight: 1 }}>
+              {tacticSlots.slots.map((slot, i) => {
+                const cat = slot ? TACTIC_CAT_COLOR[slot.category] ?? 'var(--amber)' : null;
+                return (
+                  <span key={i} style={{ width: 7, height: 7, borderRadius: 2, flexShrink: 0, background: cat ?? 'transparent', border: `1.5px solid ${cat ?? 'var(--dust)'}` }} />
+                );
+              })}
+              <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', marginLeft: 2, lineHeight: 1 }}>+</span>
+            </span>
           </button>
         )}
       </div>
@@ -1255,39 +1305,132 @@ export default function PitchMatchView({
         </div>
       )}
 
-      {/* Tactical shelf */}
+      {/* ── TACTICAL SHELF — a bottom-sheet (DESIGN.md › Bottom-sheet overlay). ──
+          Pinned to the bottom, internal scroll, the page never document-scrolls.
+          Header carries a live SLOT METER (●●○) so capacity reads at a glance;
+          each deck card is labelled with its engine-derived state so a tap is
+          never a silent no-op. */}
       {trayOpen && (
-        <div onClick={() => setTrayOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'flex-end' }} className="scrim-fade">
-          <div onClick={(e) => e.stopPropagation()} className="drawer-slide" style={{ width: '84%', maxWidth: 340, height: '100%', background: 'var(--felt)', borderLeft: '2px solid var(--amber)', padding: '16px 16px 20px', overflowY: 'auto', overscrollBehavior: 'contain' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--amber)', letterSpacing: 0.8 }}>TACTICAL SHELF</span>
-              <button onClick={() => setTrayOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--dust)', fontSize: 18, cursor: 'pointer' }}>{'×'}</button>
+        <div onClick={() => setTrayOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }} className="scrim-fade">
+          <div onClick={(e) => e.stopPropagation()} className="tactic-sheet" style={{ display: 'flex', flexDirection: 'column', maxHeight: '78%', background: 'var(--felt)', borderTop: '2px solid var(--amber)', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 'env(safe-area-inset-bottom)', boxShadow: '0 -8px 24px rgba(0,0,0,0.5)' }}>
+            {/* Grab handle */}
+            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8, flexShrink: 0 }}>
+              <div style={{ width: 38, height: 4, borderRadius: 2, background: 'var(--border)' }} />
             </div>
-            <div style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.8, marginBottom: 6 }}>MANAGER</div>
-            <div style={{ borderRadius: 'var(--radius)', padding: '11px 13px', marginBottom: 18, background: 'var(--surface)', border: `2px solid ${manager ? 'var(--gold)' : 'var(--ink-black)'}` }}>
-              {manager ? (<>
-                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--cream)' }}>{manager.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--cream-soft)', marginTop: 4, lineHeight: 1.4 }}>{manager.effect}</div>
-              </>) : <div style={{ fontSize: 11, color: 'var(--dust)' }}>No manager — sign one in the shop.</div>}
+
+            {/* Header — title + close, and the live slot meter beneath. */}
+            <div style={{ padding: '8px 16px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--amber)', letterSpacing: 0.8 }}>TACTICAL SHELF</span>
+                <button onClick={() => setTrayOpen(false)} aria-label="Close tactics" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, marginRight: -8, background: 'none', border: 'none', color: 'var(--dust)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>{'×'}</button>
+              </div>
+              {/* SLOT METER — three pips mirror tacticSlots.slots; filled pips carry
+                  the deployed card's category colour, empty ones read as outlines. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 7 }}>
+                  {tacticSlots.slots.map((slot, i) => {
+                    const cat = slot ? TACTIC_CAT_COLOR[slot.category] ?? 'var(--amber)' : null;
+                    return (
+                      <span key={i} title={slot ? slot.name : 'Empty slot'} style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, background: cat ?? 'transparent', border: `2px solid ${cat ?? 'var(--border)'}`, boxShadow: cat ? `0 0 0 0 ${cat}` : 'none' }} />
+                    );
+                  })}
+                </div>
+                <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.5 }}>
+                  {deployedIds.size}/{tacticSlots.slots.length} SLOTS
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--cream-soft)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                  {emptyTacticSlots > 0
+                    ? `${emptyTacticSlots} free`
+                    : 'Full — swap to change'}
+                </span>
+              </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.8 }}>TACTICAL CARDS</span>
-              <span style={{ fontSize: 9, color: 'var(--dust)' }}>{deployedIds.size}/{tacticSlots.slots.length} deployed</span>
-            </div>
-            <div style={{ display: 'grid', gap: 8 }}>
-              {availableTactics.length === 0 && <div style={{ fontSize: 11, color: 'var(--dust)' }}>No tactical cards drafted for this fixture.</div>}
-              {availableTactics.map((tactic) => {
-                const active = deployedIds.has(tactic.id);
-                return (
-                  <button key={tactic.id} onClick={() => onToggleTactic(tactic.id)} style={{ textAlign: 'left', borderRadius: 'var(--radius)', padding: '10px 12px', cursor: 'pointer', background: 'var(--surface)', border: `2px solid ${active ? 'var(--amber)' : 'var(--ink-black)'}` }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--cream)' }}>{tactic.name}</span>
-                      <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: active ? 'var(--amber)' : 'var(--dust)' }}>{active ? 'DEPLOYED' : 'TAP TO DEPLOY'}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--cream-soft)', marginTop: 3, lineHeight: 1.4 }}>{tactic.effect}</div>
-                  </button>
-                );
-              })}
+
+            {/* SCROLL REGION — the only thing that scrolls; the page never does. */}
+            <div className="tactic-sheet-scroll" style={{ overflowY: 'auto', overscrollBehavior: 'contain', padding: '12px 16px 16px', WebkitOverflowScrolling: 'touch' }}>
+              {/* Manager */}
+              <div style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.8, marginBottom: 6 }}>MANAGER</div>
+              <div style={{ borderRadius: 'var(--radius)', padding: '11px 13px', marginBottom: 16, background: 'var(--surface)', border: `2px solid ${manager ? 'var(--gold)' : 'var(--ink-black)'}` }}>
+                {manager ? (<>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--cream)' }}>{manager.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--cream-soft)', marginTop: 4, lineHeight: 1.4 }}>{manager.effect}</div>
+                </>) : <div style={{ fontSize: 11, color: 'var(--dust)' }}>No manager — sign one in the shop.</div>}
+              </div>
+
+              {/* Tactic deck */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.8 }}>TACTICAL CARDS</span>
+                <span style={{ fontSize: 9, color: 'var(--dust)' }}>{availableTactics.length} in deck</span>
+              </div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {tacticView.length === 0 && <div style={{ fontSize: 11, color: 'var(--dust)' }}>No tactical cards drafted for this fixture.</div>}
+                {tacticView.map(({ tactic, state, replaces, contradictsName }) => {
+                  const cat = TACTIC_CAT_COLOR[tactic.category] ?? 'var(--gold)';
+                  const blocked = state === 'blocked';
+                  // The border tells the state apart: amber = deployed, kit-blue
+                  // = swap (a deliberate change), category accent = deployable,
+                  // muted = blocked. Blocked cards dim and disable.
+                  const borderColor =
+                    state === 'deployed' ? 'var(--amber)'
+                      : state === 'swap' ? 'var(--kit-blue)'
+                        : blocked ? 'var(--border)' : 'var(--ink-black)';
+                  // Top-right status label — the action a tap performs RIGHT NOW.
+                  const label =
+                    state === 'deployed' ? 'DEPLOYED'
+                      : state === 'swap' ? 'TAP TO SWAP'
+                        : blocked ? 'SLOTS FULL'
+                          : 'TAP TO DEPLOY';
+                  const labelColor =
+                    state === 'deployed' ? 'var(--amber)'
+                      : state === 'swap' ? 'var(--kit-blue)'
+                        : blocked ? 'var(--dust)' : 'var(--success)';
+                  return (
+                    <button
+                      key={tactic.id}
+                      onClick={() => { if (!blocked) onToggleTactic(tactic.id); }}
+                      disabled={blocked}
+                      aria-disabled={blocked}
+                      className="tactic-card-btn"
+                      style={{
+                        textAlign: 'left', borderRadius: 'var(--radius)', padding: '10px 12px',
+                        cursor: blocked ? 'not-allowed' : 'pointer',
+                        background: state === 'deployed' ? 'rgba(255,122,31,0.08)' : 'var(--surface)',
+                        border: `2px solid ${borderColor}`,
+                        opacity: blocked ? 0.5 : 1,
+                        position: 'relative', overflow: 'hidden',
+                      }}>
+                      {/* category accent rail — the card's identity colour */}
+                      <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: cat }} />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingLeft: 4 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 2, background: cat, flexShrink: 0 }} />
+                          <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tactic.name}</span>
+                        </span>
+                        <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: labelColor, letterSpacing: 0.3, flexShrink: 0, whiteSpace: 'nowrap' }}>{label}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--cream-soft)', marginTop: 3, lineHeight: 1.4, paddingLeft: 4 }}>{tactic.effect}</div>
+                      {/* STATE LINE — make every consequence explicit before a tap:
+                          the swap names the card it replaces; the blocked card says
+                          how to free a slot; otherwise show the static contradiction. */}
+                      {state === 'swap' && replaces && (
+                        <div style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--kit-blue)', letterSpacing: 0.3, marginTop: 6, paddingLeft: 4, lineHeight: 1.3 }}>
+                          {'⇄'} REPLACES {replaces.toUpperCase()}
+                        </div>
+                      )}
+                      {state === 'deployed' && (
+                        <div style={{ fontSize: 9.5, color: 'var(--amber)', marginTop: 6, paddingLeft: 4 }}>Tap to remove</div>
+                      )}
+                      {blocked && (
+                        <div style={{ fontSize: 9.5, color: 'var(--dust)', marginTop: 6, paddingLeft: 4 }}>Slots full — remove one first</div>
+                      )}
+                      {/* Contradiction note (shown when it isn't already the live swap line). */}
+                      {contradictsName && state !== 'swap' && (
+                        <div style={{ fontSize: 9.5, color: 'var(--dust)', marginTop: 6, paddingLeft: 4 }}>Contradicts {contradictsName}</div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
