@@ -18,6 +18,10 @@ import {
   buyInvestment,
   healInjuredCard,
   drawRoundTactic,
+  cupSize,
+  isCupFinal,
+  MAX_CUPS,
+  interestOn,
 } from '../lib/run';
 import { getShopItem } from '../lib/economy';
 import type { InvestmentCard } from '../lib/economy';
@@ -47,9 +51,8 @@ import PhaseTransition from './PhaseTransition';
 
 const STORAGE_KEY = 'kickoff-clash-v4-run';
 const HISTORY_KEY = 'kickoff-clash-v4-history';
-// v1 permadeath: a single loss ends the run. A draw continues but earns a reduced
-// reward. (Multi-loss tolerance + a board target arrive with later game modes.)
-const MAX_ROUNDS = 5;
+// v1 permadeath: a single loss ends the run. A draw advances at a reduced reward.
+// The run is five knockout CUPS (Phase 3B; see MAX_CUPS / CUP_SIZES in run.ts).
 const DRAW_REWARD_FACTOR = 0.5;
 
 // ---------------------------------------------------------------------------
@@ -78,6 +81,8 @@ function deserializeRun(json: string): RunState | null {
 
     return {
       ...rest,
+      // Default for runs saved before the cup structure (Phase 3B).
+      matchInCup: typeof (rest as Partial<RunState>).matchInCup === 'number' ? (rest as Partial<RunState>).matchInCup : 1,
       jokers: rehydrateJokers(jokerIds ?? []),
       tacticsDeck: (tacticIds ?? []).map(id => getTacticById(id)).filter((t): t is NonNullable<typeof t> => t !== undefined),
     } as RunState;
@@ -303,19 +308,32 @@ export default function GameShell() {
     }
   }, [runState]);
 
-  // --- Post Match ---
+  // --- Post Match (cup flow) ---
+  // A loss already routed to 'end' (permadeath). A win/draw here means we advance:
+  //  - won the cup FINAL → the run is complete if it was cup 5, else open the shop (the
+  //    only between-cups gate); fitness resets and the cup advances on shop → next.
+  //  - won a mid-cup tie → straight to the next tie (no shop), carrying fitness forward.
   const handlePostMatchContinue = useCallback(() => {
     if (!runState) return;
 
-    if (runState.round >= MAX_ROUNDS) {
-      // Survived all five fixtures without a defeat — the run is won.
-      const ended: RunState = { ...runState, status: 'won' };
-      setRunState(ended);
-      saveHistory(ended);
-      clearRun();
-      setPhase('end');
+    if (isCupFinal(runState.round, runState.matchInCup)) {
+      if (runState.round >= MAX_CUPS) {
+        // Lifted the final cup — champions, run won.
+        const ended: RunState = { ...runState, status: 'won' };
+        setRunState(ended);
+        saveHistory(ended);
+        clearRun();
+        setPhase('end');
+      } else {
+        setPhase('shop');
+      }
     } else {
-      setPhase('shop');
+      // Next tie of the same cup — the Team Talk lives here (Phase 3B.5); for now the
+      // lineup carries forward and we go straight to the match.
+      const next: RunState = { ...runState, matchInCup: runState.matchInCup + 1 };
+      setRunState(next);
+      setPhase('match');
+      saveRun(next);
     }
   }, [runState]);
 
@@ -405,10 +423,19 @@ export default function GameShell() {
 
   const handleShopNext = useCallback(() => {
     if (!runState) return;
-    const nextRound = runState.round + 1;
-    // v1 tactics progression: one new tactic is drawn each round (the deck starts at 5).
-    const tacticsDeck = drawRoundTactic(runState.tacticsDeck, runState.seed * 31 + nextRound * 7);
-    const newState = { ...runState, round: nextRound, tacticsDeck };
+    // Between cups: advance to the next cup's first tie. One new tactic is drawn per cup
+    // (deck starts at 5 → 9 over five cups), interest is banked, and fitness resets to
+    // fresh for the new cup (the carried fitness only matters within a cup).
+    const nextCup = runState.round + 1;
+    const tacticsDeck = drawRoundTactic(runState.tacticsDeck, runState.seed * 31 + nextCup * 7);
+    const newState: RunState = {
+      ...runState,
+      round: nextCup,
+      matchInCup: 1,
+      cash: runState.cash + interestOn(runState.cash),
+      deck: runState.deck.map(c => ({ ...c, fitness: 6 })),
+      tacticsDeck,
+    };
     setRunState(newState);
     setPhase('match');
     saveRun(newState);
@@ -466,7 +493,7 @@ export default function GameShell() {
             matchResult={lastMatchResult}
             durabilityResult={durabilityResult}
             round={lastMatchResult.round}
-            totalRounds={MAX_ROUNDS}
+            totalRounds={MAX_CUPS}
             wins={runState.wins}
             matchHistory={runState.matchHistory}
             onContinue={handlePostMatchContinue}
@@ -492,7 +519,7 @@ export default function GameShell() {
             onScoutOpponent={handleScoutOpponent}
             scoutedOpponent={
               runState.scoutedOpponentRound === runState.round + 1
-                ? getOpponentBuild(runState.round + 1, runState.seed)
+                ? getOpponentBuild(runState.round + 1, 1, runState.seed)
                 : null
             }
             onNext={handleShopNext}

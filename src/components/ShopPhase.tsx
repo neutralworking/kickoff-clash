@@ -148,11 +148,11 @@ export default function ShopPhase({
               Transfer Window
             </span>
             <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)', marginTop: 2 }}>
-              MATCH {state.round} {'·'} {state.deck.length} SQUAD
+              NEXT: CUP {Math.min(state.round + 1, 5)} {'·'} {state.deck.length} SQUAD
             </span>
           </div>
 
-          <HeaderStat label="FIXTURE" value={`${state.round}/5`} />
+          <HeaderStat label="NEXT CUP" value={`${Math.min(state.round + 1, 5)}/5`} />
           <div
             className="flex flex-col items-end justify-center shrink-0"
             style={{

@@ -58,7 +58,8 @@ export interface RunState {
   academyTier: number;
   boxOffice: boolean;        // Box Office Investment unlocked → goals pay cash (Phase 2)
   scoutedOpponentRound: number | null;
-  round: number;       // match number (1-5)
+  round: number;       // CURRENT CUP (1-5). Per-cup difficulty/economy/scout key off this.
+  matchInCup: number;  // the tie within the cup (1..CUP_SIZES[round-1]); ==size is the final.
   wins: number;
   losses: number;
   status: 'title' | 'packSelect' | 'setup' | 'match' | 'postmatch' | 'shop' | 'won' | 'lost';
@@ -80,6 +81,31 @@ export interface MatchResult {
   shattered: string[];
   injured: string[];
   promoted: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Cup structure (Phase 3B) — each "level" is a knockout cup of CUP_SIZES[cup-1]
+// matches culminating in a final. Lose any → run over (permadeath). See
+// docs/PHASE_3_CUP_SCOPE.md.
+// ---------------------------------------------------------------------------
+
+export const MAX_CUPS = 5;
+export const CUP_SIZES = [2, 3, 4, 5, 6]; // matches per cup (incl. the final) → 20 total
+
+export function cupSize(cup: number): number {
+  return CUP_SIZES[Math.min(Math.max(cup - 1, 0), CUP_SIZES.length - 1)];
+}
+
+/** Is this the cup final (the last, hardest tie of the cup)? */
+export function isCupFinal(cup: number, matchInCup: number): boolean {
+  return matchInCup >= cupSize(cup);
+}
+
+/** The deterministic seed for a specific tie. Single source of truth so the scout
+ *  (getOpponentBuild) reproduces the exact side the engine fields. Each tie within a
+ *  cup gets a distinct opponent via the matchInCup salt. */
+export function buildMatchSeed(seed: number, cup: number, matchInCup: number): number {
+  return seed + cup * 1000 + matchInCup * 149;
 }
 
 export interface Opponent {
@@ -265,12 +291,13 @@ const STAR_ABILITY: Record<string, string> = {
   GK: 'A wall between the sticks',
 };
 
-export function getOpponentBuild(round: number, runSeed: number): OpponentBuild {
-  const meta = OPPONENT_META[Math.min(round - 1, OPPONENT_META.length - 1)];
-  const opp = getOpponent(round);
-  // Reproduce the EXACT side the engine will field: same (round, proto-style, seed)
-  // that MatchPhase feeds to initMatch → generateOpponentXI (matchSeed = seed + round*1000).
-  const { xi: genXI, formation } = generateOpponentXI(round, opp.style, runSeed + round * 1000);
+export function getOpponentBuild(cup: number, matchInCup: number, runSeed: number): OpponentBuild {
+  const meta = OPPONENT_META[Math.min(cup - 1, OPPONENT_META.length - 1)];
+  const opp = getOpponent(cup);
+  // Reproduce the EXACT side the engine will field: same (cup, proto-style, seed) that
+  // MatchPhase feeds to initMatch → generateOpponentXI (via buildMatchSeed), so the tie
+  // within the cup gets the right distinct opponent.
+  const { xi: genXI, formation } = generateOpponentXI(cup, opp.style, buildMatchSeed(runSeed, cup, matchInCup));
 
   const toDisplay = (c: Card): OpponentPlayer => ({
     name: c.name,
@@ -740,6 +767,7 @@ export function createRun(sel: TeamSelection, seed?: number): RunState {
     boxOffice: false,
     scoutedOpponentRound: null,
     round: 1,
+    matchInCup: 1,
     wins: 0,
     losses: 0,
     status: 'match',
@@ -755,7 +783,7 @@ export function createRun(sel: TeamSelection, seed?: number): RunState {
  * Returns the HandState separately — it is managed by MatchPhase locally, not persisted in RunState.
  */
 export function startMatch(state: RunState): { state: RunState; handState: HandState } {
-  const matchSeed = state.seed + state.round * 1000;
+  const matchSeed = buildMatchSeed(state.seed, state.round, state.matchInCup);
 
   // Roll XI using hand-based system
   const formation = getFormation(state.activeFormation);
