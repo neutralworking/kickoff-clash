@@ -11,7 +11,6 @@ import {
   applyDurabilityResults,
   addCardToDeck,
   sellCard,
-  upgradeAcademy,
   buyAcademyPlayer,
   applyTraining,
   buyTacticPack,
@@ -225,7 +224,6 @@ export default function GameShell() {
       result.yourGoals,
       result.opponentGoals,
       runState.stadiumTier,
-      runState.ticketPriceBonus,
       runState.playingStyle,
     );
 
@@ -240,6 +238,8 @@ export default function GameShell() {
       result.result,
       runState.stadiumTier,
       DRAW_REWARD_FACTOR,
+      result.yourGoals,
+      runState.boxOffice ?? false,
     );
 
     // Create match result entry
@@ -350,14 +350,6 @@ export default function GameShell() {
     setRunState(prev => {
       if (!prev) return prev;
       const result = buyAcademyPlayer(prev, card);
-      return result ?? prev;
-    });
-  }, []);
-
-  const handleUpgradeAcademy = useCallback(() => {
-    setRunState(prev => {
-      if (!prev) return prev;
-      const result = upgradeAcademy(prev);
       return result ?? prev;
     });
   }, []);
@@ -492,7 +484,6 @@ export default function GameShell() {
             onSellCard={handleSellCard}
             onBuyJoker={handleBuyJoker}
             onBuyAcademy={handleBuyAcademy}
-            onUpgradeAcademy={handleUpgradeAcademy}
             onBuyTacticPack={handleBuyTacticPack}
             onBuyInvestment={handleBuyInvestment}
             onTrainPlayer={handleTrainPlayer}

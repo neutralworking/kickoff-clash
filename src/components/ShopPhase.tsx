@@ -6,8 +6,9 @@ import { seededRandom } from '../lib/scoring';
 import type { RunState } from '../lib/run';
 import { getShopCards, ALL_CARDS } from '../lib/run';
 import {
-  SHOP_ITEMS, getTransferFee, ACADEMY_UPGRADE_COST, getAcademyTier,
+  SHOP_ITEMS, getTransferFee, getAcademyTier,
   generateAcademyDurability, JOKER_COST, getStadiumInvestment,
+  getAcademyInvestment, BOX_OFFICE_INVESTMENT,
 } from '../lib/economy';
 import type { InvestmentCard } from '../lib/economy';
 import type { JokerCard as JokerCardType } from '../lib/jokers';
@@ -26,7 +27,6 @@ interface ShopPhaseProps {
   onSellCard: (card: Card) => void;
   onBuyJoker: (joker: JokerCardType) => void;
   onBuyAcademy: (card: Card) => void;
-  onUpgradeAcademy: () => void;
   onBuyTacticPack: () => void;
   onBuyInvestment: (card: InvestmentCard) => void;
   onTrainPlayer: (cardId: number) => void;
@@ -53,7 +53,6 @@ export default function ShopPhase({
   onSellCard,
   onBuyJoker,
   onBuyAcademy,
-  onUpgradeAcademy,
   onBuyTacticPack,
   onBuyInvestment,
   onTrainPlayer,
@@ -263,7 +262,6 @@ export default function ShopPhase({
             academyCards={academyCards}
             scoutedOpponent={scoutedOpponent}
             onBuyAcademy={onBuyAcademy}
-            onUpgradeAcademy={onUpgradeAcademy}
             onBuyTacticPack={onBuyTacticPack}
             onBuyInvestment={onBuyInvestment}
             onScoutOpponent={onScoutOpponent}
@@ -562,36 +560,55 @@ function SquadTab({
 
 function BackroomTab({
   state, academy, academyCards, scoutedOpponent,
-  onBuyAcademy, onUpgradeAcademy, onBuyTacticPack, onBuyInvestment, onScoutOpponent, openModal,
+  onBuyAcademy, onBuyTacticPack, onBuyInvestment, onScoutOpponent, openModal,
 }: {
   state: RunState;
   academy: ReturnType<typeof getAcademyTier>;
   academyCards: Card[];
   scoutedOpponent: OpponentBuild | null;
   onBuyAcademy: (card: Card) => void;
-  onUpgradeAcademy: () => void;
   onBuyTacticPack: () => void;
   onBuyInvestment: (card: InvestmentCard) => void;
   onScoutOpponent: () => boolean;
   openModal: (m: GameCardModel) => void;
 }) {
-  const canUpgrade = state.cash >= ACADEMY_UPGRADE_COST;
   const stadiumInvestment = getStadiumInvestment(state.stadiumTier);
+  const academyInvestment = getAcademyInvestment(state.academyTier);
   return (
     <div className="flex flex-col gap-3 pb-2">
-      {/* Boardroom — Stadium Expansion (Investment) */}
+      {/* Boardroom — Investments (one-time unlocks) */}
       <SectionCard title="Boardroom" accent="var(--gold)">
-        {stadiumInvestment ? (
-          <RowAction
-            title={`Stadium Expansion · ${stadiumInvestment.name}`}
-            sub={stadiumInvestment.description}
-            cost={stadiumInvestment.cost}
-            affordable={state.cash >= stadiumInvestment.cost}
-            onClick={() => onBuyInvestment(stadiumInvestment)}
-          />
-        ) : (
-          <EmptyState text="Stadium fully expanded — The Cathedral." />
-        )}
+        <div className="flex flex-col gap-2">
+          {stadiumInvestment ? (
+            <RowAction
+              title={`Stadium Expansion · ${stadiumInvestment.name}`}
+              sub={stadiumInvestment.description}
+              cost={stadiumInvestment.cost}
+              affordable={state.cash >= stadiumInvestment.cost}
+              onClick={() => onBuyInvestment(stadiumInvestment)}
+            />
+          ) : (
+            <EmptyState text="Stadium fully expanded — The Cathedral." />
+          )}
+          {academyInvestment && (
+            <RowAction
+              title={`Youth Academy · ${academyInvestment.name}`}
+              sub={academyInvestment.description}
+              cost={academyInvestment.cost}
+              affordable={state.cash >= academyInvestment.cost}
+              onClick={() => onBuyInvestment(academyInvestment)}
+            />
+          )}
+          {!state.boxOffice && (
+            <RowAction
+              title={BOX_OFFICE_INVESTMENT.name}
+              sub={BOX_OFFICE_INVESTMENT.description}
+              cost={BOX_OFFICE_INVESTMENT.cost}
+              affordable={state.cash >= BOX_OFFICE_INVESTMENT.cost}
+              onClick={() => onBuyInvestment(BOX_OFFICE_INVESTMENT)}
+            />
+          )}
+        </div>
       </SectionCard>
 
       {/* Scout report */}
@@ -629,35 +646,14 @@ function BackroomTab({
         )}
       </SectionCard>
 
-      {/* Academy */}
+      {/* Academy — sign prospects; tier upgrades live in the Boardroom (Youth Academy) */}
       <SectionCard
         title={`Academy · Tier ${state.academyTier}`}
         accent="var(--success)"
         right={
-          state.academyTier < 4 ? (
-            <button
-              onClick={onUpgradeAcademy}
-              disabled={!canUpgrade}
-              className="active:scale-95"
-              style={{
-                height: 30,
-                padding: '0 9px',
-                borderRadius: 'var(--radius-sm)',
-                border: '2px solid var(--ink-black)',
-                background: canUpgrade ? 'var(--surface-raised)' : 'var(--surface)',
-                boxShadow: '0 2px 0 0 var(--ink-black)',
-                fontFamily: PIXEL,
-                fontSize: 7.5,
-                letterSpacing: 0.4,
-                color: canUpgrade ? 'var(--gold)' : 'var(--ink)',
-                cursor: canUpgrade ? 'pointer' : 'not-allowed',
-              }}
-            >
-              UPGRADE {'£'}{(ACADEMY_UPGRADE_COST / 1000).toFixed(0)}K
-            </button>
-          ) : (
-            <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--gold)' }}>MAX TIER</span>
-          )
+          state.academyTier >= 4
+            ? <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--gold)' }}>MAX TIER</span>
+            : undefined
         }
       >
         <p style={{ fontSize: 10, color: 'var(--dust)', lineHeight: 1.4, marginBottom: 8 }}>

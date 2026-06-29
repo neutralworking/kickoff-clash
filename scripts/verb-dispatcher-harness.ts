@@ -481,7 +481,7 @@ console.log('\n11. Economy & run loop');
 
   const slottedXI: SlottedCard[] = cards.slice(0, 11).map((c, i) => ({ card: c, slot: `slot_${i}` }));
   const gate = (style: string, yg: number, og: number) =>
-    calculateAttendance(slottedXI, [], yg, og, 2, 0, style).revenue;
+    calculateAttendance(slottedXI, [], yg, og, 2, style).revenue;
 
   // Entertainment: a spectacle style out-draws a pragmatic one (same result).
   const entertaining = gate('tiki-taka', 1, 0);

@@ -55,8 +55,8 @@ export interface RunState {
   trainingApplied: Record<number, number>; // cardId → total power added (max +20)
   cash: number;
   stadiumTier: number;
-  ticketPriceBonus: number;
   academyTier: number;
+  boxOffice: boolean;        // Box Office Investment unlocked → goals pay cash (Phase 2)
   scoutedOpponentRound: number | null;
   round: number;       // match number (1-5)
   wins: number;
@@ -736,8 +736,8 @@ export function createRun(sel: TeamSelection, seed?: number): RunState {
     trainingApplied: {},
     cash: 0,
     stadiumTier: 1,
-    ticketPriceBonus: 0,
     academyTier: 1,
+    boxOffice: false,
     scoutedOpponentRound: null,
     round: 1,
     wins: 0,
@@ -839,11 +839,9 @@ export function sellCard(state: RunState, card: Card): RunState {
  */
 export function buyShopItem(state: RunState, item: ShopItem): RunState | null {
   if (state.cash < item.cost) return null;
-  let newState = { ...state, cash: state.cash - item.cost };
+  const newState = { ...state, cash: state.cash - item.cost };
 
-  if (item.id === 'food_upgrade') {
-    newState.ticketPriceBonus += 5;
-  } else if (item.id === 'scout_report') {
+  if (item.id === 'scout_report') {
     newState.scoutedOpponentRound = Math.min(state.round + 1, OPPONENTS.length);
   }
 
@@ -864,19 +862,6 @@ export function healInjuredCard(state: RunState, cardId: number): RunState | nul
   };
 }
 
-/**
- * Upgrade academy tier
- */
-export function upgradeAcademy(state: RunState): RunState | null {
-  if (state.academyTier >= 4) return null;
-  if (state.cash < ACADEMY_UPGRADE_COST) return null;
-
-  return {
-    ...state,
-    cash: state.cash - ACADEMY_UPGRADE_COST,
-    academyTier: state.academyTier + 1,
-  };
-}
 
 /**
  * Buy an Investment card (Boardroom). Consumed on purchase — its effect folds straight
@@ -891,6 +876,7 @@ export function buyInvestment(state: RunState, card: InvestmentCard): RunState |
     cash: state.cash - card.cost,
     ...(effect.stadiumTier !== undefined ? { stadiumTier: effect.stadiumTier } : {}),
     ...(effect.academyTier !== undefined ? { academyTier: effect.academyTier } : {}),
+    ...(effect.boxOffice !== undefined ? { boxOffice: effect.boxOffice } : {}),
   };
 }
 

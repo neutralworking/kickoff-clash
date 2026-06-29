@@ -90,7 +90,6 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'reroll',          name: 'Reroll Shop',            description: 'Refresh shop offerings',           cost: 8000,  category: 'utility' },
   { id: 'heal',            name: 'Heal Injured Card',      description: 'Restore an injured card',          cost: 12000, category: 'utility' },
   { id: 'scout_report',    name: 'Scout Report',           description: 'See next opponent style + strength', cost: 10000, category: 'utility' },
-  { id: 'food_upgrade',    name: 'Stadium Food Upgrade',   description: '+£5 ticket price permanently',     cost: 25000, category: 'upgrade' },
 ];
 
 // Fan sources from archetypes in XI
@@ -258,6 +257,36 @@ export function getStadiumInvestment(currentTier: number): InvestmentCard | null
   return STADIUM_INVESTMENTS.find((c) => c.tier === currentTier + 1) ?? null;
 }
 
+/** The Youth Academy ladder — tiers 2..4, a flat ACADEMY_UPGRADE_COST per tier. */
+export const ACADEMY_INVESTMENTS: InvestmentCard[] = ACADEMY_TIERS.slice(1).map((a) => ({
+  id: `academy-${a.tier}`,
+  kind: 'investment',
+  ladder: 'academy',
+  tier: a.tier,
+  name: a.name,
+  cost: ACADEMY_UPGRADE_COST,
+  description: `Upgrade the academy to ${a.name} — ${a.maxRarity}+ intake, ${a.playersOffered}/round.`,
+  effect: { academyTier: a.tier },
+}));
+
+/** The next Youth Academy upgrade for a given current tier, or null if maxed. */
+export function getAcademyInvestment(currentTier: number): InvestmentCard | null {
+  return ACADEMY_INVESTMENTS.find((c) => c.tier === currentTier + 1) ?? null;
+}
+
+/** Box Office — a one-shot unlock (not a ladder) that turns goals into cash. */
+export const BOX_OFFICE_COST = 18000;
+export const BOX_OFFICE_INVESTMENT: InvestmentCard = {
+  id: 'boxoffice',
+  kind: 'investment',
+  ladder: 'boxoffice',
+  tier: 1,
+  name: 'Box Office',
+  cost: BOX_OFFICE_COST,
+  description: `Sell the spectacle — +£${PER_GOAL_CASH.toLocaleString()} for every goal you score.`,
+  effect: { boxOffice: true },
+};
+
 export function getStadium(tier: number): Stadium {
   const clamped = Math.max(1, Math.min(5, tier));
   return STADIUMS[clamped - 1];
@@ -285,7 +314,6 @@ export function calculateAttendance(
   yourGoals: number,
   opponentGoals: number,
   stadiumTier: number,
-  ticketPriceBonus: number = 0,
   playingStyle: string = '',
 ): AttendanceResult {
   const stadium = getStadium(stadiumTier);
@@ -328,7 +356,7 @@ export function calculateAttendance(
   );
   const capacity = stadium.capacity;
   const attendance = Math.min(rawAttendance, capacity);
-  const ticketPrice = stadium.ticketPrice + ticketPriceBonus;
+  const ticketPrice = stadium.ticketPrice;
   const revenue = attendance * ticketPrice;
 
   return {
