@@ -85,7 +85,7 @@ const ROUND_POWER = [72, 77, 82, 86, 90];
 // matches are openers (high survival); difficulty is concentrated in the five finals,
 // and the final being a step up is what makes "rest your stars for the final" correct.
 // Tuned on the cup-sweep (scripts/cup-sweep.ts).
-export const CUP_FINAL_POWER = [64, 70, 76, 81, 85]; // boss power per cup (1-5)
+export const CUP_FINAL_POWER = [61, 67, 73, 78, 82]; // boss power per cup (1-5)
 export const OPENER_DROP = 14;                       // openers this far below the final
 
 /** The opponent base power for a specific tie: ramps openerPower → final across the cup. */
