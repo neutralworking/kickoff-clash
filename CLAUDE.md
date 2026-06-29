@@ -69,7 +69,9 @@ No test framework is installed. The match engine was validated via `scripts/matc
 
 ### Character data
 
-500 fictional players in `public/data/kc_characters.json`. Power values map from `character.level` (range 71–95, narrower than the 50–99 recommended in `MATCH_ENGINE_V5.md §11.2`). Archetype distribution is uneven — Creator is overrepresented (16.8%), Dribbler underrepresented (1.4%).
+**LIVE pool (V3.1 Chief Scout data port):** 540 fictional cards in `public/data/kc_cards.json`, generated from the real Chief Scout distributions by `scripts/generate-cards.ts` (embedded aggregates, no PII). Each card carries skillset (== `archetype`, 13 of them), `best_role`, an evocative cross-role `nickname`, BRS (the power scale **directly** — 52–95, avg 69; `levelToPower` is bypassed), a 4-pillar block, rarity from BRS bands, and a personality theme. `transform.ts transformCards()` bridges it; `run.ts ALL_CARDS` reads it. The old `kc_characters.json` (500 chars, `character.level` 71–95) is **legacy** — retained in `transform.ts` for reference, no live callers.
+
+The skillset mix is now flat (skew fixed: Dribbler 1.4%→8.1%, Creator 16.8%→12%). Regenerate with `npx tsx scripts/generate-cards.ts [count]`.
 
 ### State management
 
@@ -88,16 +90,28 @@ personality `attackMod`, and TOP-vs-WEAK attack divergence — the instrument fo
 matter, and is the win-rate monotonic in deck strength?" Use it (not the determinism harness)
 when tuning `ROUND_POWER`, `OPP_COHESION`, `XG_CONVEX`, the personality cap, or the power scale.
 
+Two companion instruments: `scripts/cup-sweep.ts` simulates full 20-match cup runs under
+best-XI vs rotate policies (the instrument for `CUP_FINAL_POWER`/`OPENER_DROP` and "does
+rotation matter?"), and `scripts/power-probe.ts` sweeps opponent base power against fixed
+squad tiers to read the raw power→win-rate curve (used to place the cup finals).
+
 ## Known tech debt
 
-- **Power compression — FIXED (Phase 3A).** `transform.ts levelToPower()` now remaps the
-  71–95 source band to 50–99 (§11.2), and the opponent curve was recalibrated to match
-  (`ROUND_POWER = [72,77,82,86,90]`, `OPP_COHESION = 1.15`). The sweep win-rate is monotonic
-  in deck strength.
+- **Power scale — V3.1 (data port).** Power is now BRS directly (52–95) from `kc_cards.json`;
+  `levelToPower` decompression is bypassed (legacy path only). The opponent curves were
+  re-grounded to the (effectively ~13-power-weaker) new pool: `ROUND_POWER = [62,68,73,78,82]`
+  (Foundation single-match instrument), `CUP_FINAL_POWER = [48,53,58,63,67]` + `OPENER_DROP 18`
+  (the real cup difficulty — `MatchPhase` always passes `cupMatchPower`). cup-sweep: STRONG
+  rotate ~37% champions; balance-sweep win-rate monotonic in deck strength.
+- **Role coverage — V3.1 (data port).** The new pool's authentic `best_role` names resolve to
+  trait sets via `ROLE_ALIASES` in `role-transforms.ts` (dispatcher coverage 100%), without
+  overwriting the role shown on the card.
 - **Personality stacking — FIXED (Phase 3A).** Perfect Dressing Room is additive (+0.15, was
-  ×1.5) and the combined personality uplift is clamped at 1.30 in `calculatePersonalityBonus`.
+  ×1.5) and the combined personality uplift is clamped at 1.30 in `calculatePersonalityBonus`
+  (balance-sweep confirms `attackMod` peaks ~1.29 on the new pool).
 - **Variance floor — lowered (Phase 3A).** `XG_CONVEX 0.9`, possession share `0.30–0.70` so a
   good build reliably clears the blind; the 90' drama multiplier stays as flavour.
-- **Archetype distribution skew** — Creator 16.8% / Dribbler 1.4% in `kc_characters.json` still
-  warps the counter-web; fix the data before tuning archetype balance.
+- **Archetype distribution skew — FIXED (data port).** The flat skillset mix in `kc_cards.json`
+  (Dribbler 8.1%, Creator 12%) replaces the old Creator-16.8%/Dribbler-1.4% skew, so the
+  counter-web is now evenly grounded.
 - `design/` — contains fbal-era (Python/Flask prototype) docs. `design/CLAUDE.md`, `design/README.md`, `design/ROADMAP.md` describe a different codebase and should be treated as historical only.
