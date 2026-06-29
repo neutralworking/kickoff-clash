@@ -22,6 +22,25 @@ both lenses and reconciles them into a concrete, testable change.
 > Read `MUST-READ` first: `docs/KICKOFF_CLASH_DESIGN.md` (the index, has precedence)
 > and `MATCH_ENGINE_V5.md` (the live engine). Everything below assumes that map.
 
+## Design north star (decided by the owner — non-negotiable)
+
+**Kickoff Clash is a roguelike that happens to be football — the way Balatro is a
+roguelike that happens to be poker.** Football is the *theme/skin*, not the goal.
+We are NOT building a football sim. The Lab optimises for the roguelike, and:
+
+- **Everything is a card.** Upgrades, consumables, and effects are expressed as cards
+  (à la Balatro jokers / vouchers / tarots), not bespoke mechanics or one-off UI.
+- **No league table.** Roguelike-first overrules the standing: there is no
+  season-points total / board target / table. Cash is the currency; a run is
+  survive-or-die. (The Gaffer's "restore the table for authenticity" argument is
+  *overruled* — authenticity is paint.)
+- **Cut legacy.** Prune elements inherited from the earlier (fbal-era) version that
+  don't serve the roguelike loop.
+
+When the two lenses clash, **the Card Shark wins the strategic call; the Gaffer keeps
+the football *feel* authentic within that frame** — so styles, archetypes, and the
+pitch read like football without bending the design toward a sim.
+
 ## The two experts
 
 **🃏 The Card Shark** — a card-game economy & meta designer. Thinks in Balatro,
