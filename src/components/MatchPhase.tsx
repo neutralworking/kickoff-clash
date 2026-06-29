@@ -18,6 +18,7 @@ import {
 } from '../lib/match-v5';
 import type { TacticSlots } from '../lib/tactics';
 import { canDeploy, createEmptySlots, deployTactic, removeTactic } from '../lib/tactics';
+import { autoFillXI } from '../lib/team-select';
 import PitchMatchView from './match/PitchMatchView';
 
 // ---------------------------------------------------------------------------
@@ -129,6 +130,17 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     setMatchState((prev: MatchV5State) => makeSub(prev, xiCardId, benchCardId));
   }, []);
 
+  // ---- Auto-select: fill the strongest fitness-aware XI from the squad ----
+  // Only ever wired before the first kickoff (PitchMatchView gates the button on
+  // breakMoment === 'kickoff' with no period played), so this never amounts to a
+  // free mid-match sub — it just re-picks the starting XI from XI+bench.
+  const handleAutoSelect = useCallback(() => {
+    setMatchState((prev: MatchV5State) => {
+      const { xi, bench } = autoFillXI([...prev.xi, ...prev.bench], prev.formation, true);
+      return { ...prev, xi, bench };
+    });
+  }, []);
+
   const handleFormationChange = useCallback((formationId: string) => {
     const newFormation = getFormation(formationId);
     setMatchState((prev: MatchV5State) => ({ ...prev, formation: newFormation }));
@@ -207,25 +219,40 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       }}
     >
       {/* One screen for the whole match: plan → resolve → next, on the pitch. */}
-      {subPhase !== 'finished' && (
-        <PitchMatchView
-          matchState={matchState}
-          formation={matchState.formation}
-          jokers={runState.jokers}
-          tacticSlots={tacticSlots}
-          availableTactics={runState.tacticsDeck}
-          ownedFormations={runState.ownedFormations}
-          opponentBuild={opponentBuild}
-          nextMinute={nextMinute}
-          mode={subPhase === 'resolving' ? 'resolve' : 'plan'}
-          currentResult={currentResult}
-          onToggleTactic={handleToggleTactic}
-          onSub={handleSub}
-          onReassign={handleReassign}
-          onFormationChange={handleFormationChange}
-          onContinue={subPhase === 'resolving' ? handleResolveComplete : handleKickOff}
-        />
-      )}
+      {subPhase !== 'finished' && (() => {
+        // Which team-talk break this plan screen is. The pre-kickoff plan is the
+        // 'kickoff' talk (no period played); 'halftime' after 30'; everything else
+        // between periods reads as 'between'. Null while resolving (no talk).
+        const breakMoment: 'kickoff' | 'halftime' | 'between' | null =
+          subPhase === 'resolving'
+            ? null
+            : subPhase === 'halftime'
+              ? 'halftime'
+              : matchState.currentIncrement === 0 && matchState.scores.length === 0
+                ? 'kickoff'
+                : 'between';
+        return (
+          <PitchMatchView
+            matchState={matchState}
+            formation={matchState.formation}
+            jokers={runState.jokers}
+            tacticSlots={tacticSlots}
+            availableTactics={runState.tacticsDeck}
+            ownedFormations={runState.ownedFormations}
+            opponentBuild={opponentBuild}
+            nextMinute={nextMinute}
+            mode={subPhase === 'resolving' ? 'resolve' : 'plan'}
+            breakMoment={breakMoment}
+            currentResult={currentResult}
+            onToggleTactic={handleToggleTactic}
+            onSub={handleSub}
+            onReassign={handleReassign}
+            onFormationChange={handleFormationChange}
+            onAutoSelect={handleAutoSelect}
+            onContinue={subPhase === 'resolving' ? handleResolveComplete : handleKickOff}
+          />
+        );
+      })()}
 
       {subPhase === 'finished' && (() => {
         const win = matchState.yourGoals > matchState.opponentGoals;
