@@ -493,7 +493,7 @@ export default function GameShell() {
             onScoutOpponent={handleScoutOpponent}
             scoutedOpponent={
               runState.scoutedOpponentRound === runState.round + 1
-                ? getOpponentBuild(runState.round + 1)
+                ? getOpponentBuild(runState.round + 1, runState.seed)
                 : null
             }
             onNext={handleShopNext}
