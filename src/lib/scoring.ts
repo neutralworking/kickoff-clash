@@ -45,6 +45,9 @@ export interface Card {
   strengths?: string[];
   weaknesses?: string[];
   nation?: string;
+  // V3.1 data port (Chief Scout): evocative cross-role identity + 4-pillar stat block.
+  nickname?: string;
+  pillars?: { technical: number; tactical: number; mental: number; physical: number };
 }
 
 export interface SlottedCard {

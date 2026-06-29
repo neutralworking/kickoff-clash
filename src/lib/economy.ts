@@ -90,7 +90,6 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'reroll',          name: 'Reroll Shop',            description: 'Refresh shop offerings',           cost: 8000,  category: 'utility' },
   { id: 'heal',            name: 'Heal Injured Card',      description: 'Restore an injured card',          cost: 12000, category: 'utility' },
   { id: 'scout_report',    name: 'Scout Report',           description: 'See next opponent style + strength', cost: 10000, category: 'utility' },
-  { id: 'food_upgrade',    name: 'Stadium Food Upgrade',   description: '+£5 ticket price permanently',     cost: 25000, category: 'upgrade' },
 ];
 
 // Fan sources from archetypes in XI
@@ -183,23 +182,110 @@ export function getAcademyTier(tier: number): Academy {
 }
 
 // ---------------------------------------------------------------------------
-// Stadium Tier
+// Match reward — Option B (Phase 2)
 // ---------------------------------------------------------------------------
+//
+// A flat per-result base by round, multiplied by the purchased stadium payout tier,
+// plus an opt-in Box Office per-goal bonus. The fan-source gate (`calculateAttendance`)
+// is display-only — it no longer feeds cash. Stadium tier is now PLAYER-DRIVEN (bought
+// as a Stadium Expansion Investment), not derived from results; over-banking under
+// permadeath gets you eliminated before the compounding lands (ECONOMY §1, §4).
 
-/**
- * Determine stadium tier from run progress.
- */
-export function getStadiumTier(
-  wins: number,
-  reachedMatch5: boolean,
-  wonRun: boolean,
+/** Per-round win reward (draws derive via DRAW_REWARD_FACTOR; a loss ends the run). */
+export const BASE_WIN_CASH = [8000, 12000, 16000, 22000, 30000];
+
+/** Stadium payout multiplier by tier (1-indexed) — the compounding income axis. */
+export const STADIUM_MULT = [1.0, 1.25, 1.6, 2.0, 2.5];
+
+/** Box Office: cash per goal you score, when the Box Office Investment is unlocked. */
+export const PER_GOAL_CASH = 1500;
+
+export function matchReward(
+  round: number,
+  result: 'win' | 'draw' | 'loss',
+  stadiumTier: number,
+  drawFactor: number,
+  yourGoals = 0,
+  boxOffice = false,
 ): number {
-  if (wonRun) return 5;
-  if (reachedMatch5) return 4;
-  if (wins >= 3) return 3;
-  if (wins >= 1) return 2;
-  return 1;
+  const base = BASE_WIN_CASH[Math.min(Math.max(round - 1, 0), BASE_WIN_CASH.length - 1)];
+  const resultFactor = result === 'win' ? 1 : result === 'draw' ? drawFactor : 0;
+  const mult = STADIUM_MULT[Math.min(Math.max(stadiumTier - 1, 0), STADIUM_MULT.length - 1)];
+  const boxOfficeBonus = boxOffice ? Math.max(0, yourGoals) * PER_GOAL_CASH : 0;
+  return Math.round(base * resultFactor * mult) + boxOfficeBonus;
 }
+
+// ---------------------------------------------------------------------------
+// Investment cards (Boardroom) — Phase 2
+// ---------------------------------------------------------------------------
+//
+// One-time-unlock cards (Balatro vouchers). Buying one is consumed into a RunState
+// scalar/flag — there is no owned-Investment array. The shop offers only the NEXT tier
+// in each ladder, read off the current scalar. Pure data (no compute fn) → serialises
+// cleanly. Player-facing names are football (Stadium Expansion / Youth Academy / Box
+// Office); `kind: 'investment'` is the internal discriminator.
+
+export interface InvestmentCard {
+  id: string;
+  kind: 'investment';
+  ladder: 'stadium' | 'academy' | 'boxoffice';
+  tier: number;              // the tier THIS card unlocks (ladders), or 1 (one-shots)
+  name: string;
+  cost: number;
+  description: string;
+  effect: { stadiumTier?: number; academyTier?: number; boxOffice?: boolean };
+}
+
+/** Cost to unlock each stadium tier (1-indexed; tier 1 is the free default). */
+export const STADIUM_INVEST_COST = [0, 10000, 22000, 40000, 70000];
+
+/** The Stadium Expansion ladder — tiers 2..5, each card named after the ground it
+ *  builds and tagged with the payout multiplier it unlocks. */
+export const STADIUM_INVESTMENTS: InvestmentCard[] = STADIUMS.slice(1).map((s) => ({
+  id: `stadium-${s.tier}`,
+  kind: 'investment',
+  ladder: 'stadium',
+  tier: s.tier,
+  name: s.name,
+  cost: STADIUM_INVEST_COST[s.tier - 1],
+  description: `Expand to ${s.name} — ×${STADIUM_MULT[s.tier - 1]} gate on every result.`,
+  effect: { stadiumTier: s.tier },
+}));
+
+/** The next Stadium Expansion offered for a given current tier, or null if maxed. */
+export function getStadiumInvestment(currentTier: number): InvestmentCard | null {
+  return STADIUM_INVESTMENTS.find((c) => c.tier === currentTier + 1) ?? null;
+}
+
+/** The Youth Academy ladder — tiers 2..4, a flat ACADEMY_UPGRADE_COST per tier. */
+export const ACADEMY_INVESTMENTS: InvestmentCard[] = ACADEMY_TIERS.slice(1).map((a) => ({
+  id: `academy-${a.tier}`,
+  kind: 'investment',
+  ladder: 'academy',
+  tier: a.tier,
+  name: a.name,
+  cost: ACADEMY_UPGRADE_COST,
+  description: `Upgrade the academy to ${a.name} — ${a.maxRarity}+ intake, ${a.playersOffered}/round.`,
+  effect: { academyTier: a.tier },
+}));
+
+/** The next Youth Academy upgrade for a given current tier, or null if maxed. */
+export function getAcademyInvestment(currentTier: number): InvestmentCard | null {
+  return ACADEMY_INVESTMENTS.find((c) => c.tier === currentTier + 1) ?? null;
+}
+
+/** Box Office — a one-shot unlock (not a ladder) that turns goals into cash. */
+export const BOX_OFFICE_COST = 18000;
+export const BOX_OFFICE_INVESTMENT: InvestmentCard = {
+  id: 'boxoffice',
+  kind: 'investment',
+  ladder: 'boxoffice',
+  tier: 1,
+  name: 'Box Office',
+  cost: BOX_OFFICE_COST,
+  description: `Sell the spectacle — +£${PER_GOAL_CASH.toLocaleString()} for every goal you score.`,
+  effect: { boxOffice: true },
+};
 
 export function getStadium(tier: number): Stadium {
   const clamped = Math.max(1, Math.min(5, tier));
@@ -228,7 +314,6 @@ export function calculateAttendance(
   yourGoals: number,
   opponentGoals: number,
   stadiumTier: number,
-  ticketPriceBonus: number = 0,
   playingStyle: string = '',
 ): AttendanceResult {
   const stadium = getStadium(stadiumTier);
@@ -271,7 +356,7 @@ export function calculateAttendance(
   );
   const capacity = stadium.capacity;
   const attendance = Math.min(rawAttendance, capacity);
-  const ticketPrice = stadium.ticketPrice + ticketPriceBonus;
+  const ticketPrice = stadium.ticketPrice;
   const revenue = attendance * ticketPrice;
 
   return {

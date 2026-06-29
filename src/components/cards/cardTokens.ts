@@ -62,6 +62,30 @@ export const TACTIC_CAT_COLOR: Record<string, string> = {
 };
 
 /**
+ * Investment ladder → Boardroom identity. One gold-family frame; each ladder is
+ * distinguished by its tab label, a secondary accent, and a one-line summary of
+ * what unlocking it buys. All three share the Boardroom crest (gold) on the card.
+ */
+export const INVESTMENT_META: Record<
+  string,
+  { tab: string; accent: string; kicker: string }
+> = {
+  stadium: { tab: 'STADIUM', accent: 'var(--gold)', kicker: 'Gate revenue' },
+  academy: { tab: 'ACADEMY', accent: 'var(--success)', kicker: 'Youth intake' },
+  boxoffice: { tab: 'BOX OFFICE', accent: 'var(--amber)', kicker: 'Goals → cash' },
+};
+
+/** Compact money label, e.g. 22000 → "£22k", 1500 → "£1.5k", 500 → "£500". */
+export function formatCash(n: number): string {
+  if (n >= 1000) {
+    const k = n / 1000;
+    const s = Number.isInteger(k) ? String(k) : k.toFixed(1).replace(/\.0$/, '');
+    return `£${s}k`;
+  }
+  return `£${n}`;
+}
+
+/**
  * Nation → flag emoji. The full pool spans 60+ nations; we map the well-known
  * ones and otherwise fall back to a short nation code chip (rendered by the
  * card), which is cleaner and more pixel-consistent than a generic globe.

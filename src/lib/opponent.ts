@@ -77,8 +77,32 @@ const STYLE_FORMATION: Record<string, string> = {
   Adaptive: '3-5-2',
 };
 
-/** Round power budget → opponent base power (DESIGN §7 difficulty dial). */
-const ROUND_POWER = [76, 81, 86, 91, 96];
+/** Round power budget → opponent base power (DESIGN §7 difficulty dial).
+ *  Re-grounded for the V3.1 BRS pool (data port D.4): BRS-as-power is a flatter,
+ *  lower-ceiling scale than the old decompressed band, so the budget drops to match.
+ *  This is the single-match Foundation curve (balance-sweep) + the opener fallback;
+ *  the real cup difficulty lives in CUP_FINAL_POWER below. */
+const ROUND_POWER = [62, 68, 73, 78, 82];
+
+// --- Within-cup ramp (Phase 3B.3) ---------------------------------------------------
+// Each cup escalates from soft openers to a boss FINAL. Most of the 20 sudden-death
+// matches are openers (high survival); difficulty is concentrated in the five finals,
+// and the final being a step up is what makes "rest your stars for the final" correct.
+// Tuned on the cup-sweep (scripts/cup-sweep.ts). Re-grounded for the V3.1 BRS pool
+// (data port D.4): the new pool is ~13 power weaker in effective terms, so the boss
+// finals drop to keep a STRONG rotating squad championing at ~37% under naive play
+// (real play adds chemistry/tactics/jokers on top). Cup 5's 6-tie gauntlet is the wall.
+export const CUP_FINAL_POWER = [48, 53, 58, 63, 67]; // boss power per cup (1-5)
+export const OPENER_DROP = 18;                       // openers this far below the final
+
+/** The opponent base power for a specific tie: ramps openerPower → final across the cup. */
+export function cupMatchPower(cup: number, matchInCup: number, size: number): number {
+  const c = Math.min(Math.max(cup - 1, 0), CUP_FINAL_POWER.length - 1);
+  const finalP = CUP_FINAL_POWER[c];
+  if (size <= 1) return finalP;
+  const t = (matchInCup - 1) / (size - 1); // 0 at the opener → 1 at the final
+  return finalP - OPENER_DROP * (1 - t);
+}
 
 /** Fictional surname pool for opponent XI display names. Names only — never feeds
  *  match math. Seeded pick (NEW salt) + per-XI dedup so each opponent reads as a real
@@ -104,9 +128,12 @@ export function generateOpponentXI(
   round: number,
   style: string,
   seed: number,
+  basePowerOverride?: number,
 ): { xi: Card[]; formation: Formation } {
   const formation = getFormation(STYLE_FORMATION[style] ?? '4-3-3');
-  const basePower = ROUND_POWER[Math.min(Math.max(round - 1, 0), ROUND_POWER.length - 1)];
+  // basePowerOverride is the within-cup ramp (cupMatchPower); without it, fall back to the
+  // per-cup base (ROUND_POWER) — used by the harnesses and the cup opener default.
+  const basePower = basePowerOverride ?? ROUND_POWER[Math.min(Math.max(round - 1, 0), ROUND_POWER.length - 1)];
 
   const usedSurnames = new Set<string>();
   const xi: Card[] = formation.slots.map((slot, i) => {
@@ -114,7 +141,7 @@ export function generateOpponentXI(
     const profile = pick(profiles, seededRandom(seed * 31 + i * 97 + round * 13));
     // ±6 seeded jitter around the round's base power.
     const jitter = Math.round((seededRandom(seed * 17 + i * 53 + round * 7) - 0.5) * 12);
-    const power = Math.max(60, Math.min(99, basePower + jitter));
+    const power = Math.max(50, Math.min(99, Math.round(basePower) + jitter));
     // Display surname: NEW salt distinct from the power/profile rolls, deduped within
     // this XI (advance to the next candidate on collision). Name only — no math impact.
     let nameIdx = Math.floor(seededRandom(seed * 911 + i * 2399 + round * 53) * SURNAMES.length);

@@ -69,7 +69,9 @@ No test framework is installed. The match engine was validated via `scripts/matc
 
 ### Character data
 
-500 fictional players in `public/data/kc_characters.json`. Power values map from `character.level` (range 71–95, narrower than the 50–99 recommended in `MATCH_ENGINE_V5.md §11.2`). Archetype distribution is uneven — Creator is overrepresented (16.8%), Dribbler underrepresented (1.4%).
+**LIVE pool (V3.1 Chief Scout data port):** 540 fictional cards in `public/data/kc_cards.json`, generated from the real Chief Scout distributions by `scripts/generate-cards.ts` (embedded aggregates, no PII). Each card carries skillset (== `archetype`, 13 of them), `best_role`, an evocative cross-role `nickname`, BRS (the power scale **directly** — 52–95, avg 69; `levelToPower` is bypassed), a 4-pillar block, rarity from BRS bands, and a personality theme. `transform.ts transformCards()` bridges it; `run.ts ALL_CARDS` reads it. The old `kc_characters.json` (500 chars, `character.level` 71–95) is **legacy** — retained in `transform.ts` for reference, no live callers.
+
+The skillset mix is now flat (skew fixed: Dribbler 1.4%→8.1%, Creator 16.8%→12%). Regenerate with `npx tsx scripts/generate-cards.ts [count]`.
 
 ### State management
 
@@ -79,8 +81,37 @@ No Redux, Zustand, or Context. Pure React hooks. `GameShell.tsx` is the single s
 
 `seededRandom(seed)` (multiplicative hash) is used throughout. Match seeds, card draws, and personality rolls are all deterministic from the run seed, enabling reproducible test scenarios.
 
+## Balance: the seed-sweep instrument
+
+Match-engine balance changes MOVE the meta by design, so byte-identical determinism is
+the wrong test for them. `scripts/balance-sweep.ts` (`npx tsx scripts/balance-sweep.ts [seeds]`)
+sweeps deck-strength tiers × opponent rounds × N seeds and reports win/draw/loss rate,
+personality `attackMod`, and TOP-vs-WEAK attack divergence — the instrument for "do builds
+matter, and is the win-rate monotonic in deck strength?" Use it (not the determinism harness)
+when tuning `ROUND_POWER`, `OPP_COHESION`, `XG_CONVEX`, the personality cap, or the power scale.
+
+Two companion instruments: `scripts/cup-sweep.ts` simulates full 20-match cup runs under
+best-XI vs rotate policies (the instrument for `CUP_FINAL_POWER`/`OPENER_DROP` and "does
+rotation matter?"), and `scripts/power-probe.ts` sweeps opponent base power against fixed
+squad tiers to read the raw power→win-rate curve (used to place the cup finals).
+
 ## Known tech debt
 
-- **Power range compression** — character levels 71–95 compress deck strength differences; top-11 deck hits the 0.50 goal-chance ceiling in most increments. `MATCH_ENGINE_V5.md §11.2` specifies the fix (widen to 50–99).
-- **Personality stacking** — Tier-3 themes + Tier-4 Perfect Dressing Room can compound to ~72–80% uplift. Needs gating audit.
+- **Power scale — V3.1 (data port).** Power is now BRS directly (52–95) from `kc_cards.json`;
+  `levelToPower` decompression is bypassed (legacy path only). The opponent curves were
+  re-grounded to the (effectively ~13-power-weaker) new pool: `ROUND_POWER = [62,68,73,78,82]`
+  (Foundation single-match instrument), `CUP_FINAL_POWER = [48,53,58,63,67]` + `OPENER_DROP 18`
+  (the real cup difficulty — `MatchPhase` always passes `cupMatchPower`). cup-sweep: STRONG
+  rotate ~37% champions; balance-sweep win-rate monotonic in deck strength.
+- **Role coverage — V3.1 (data port).** The new pool's authentic `best_role` names resolve to
+  trait sets via `ROLE_ALIASES` in `role-transforms.ts` (dispatcher coverage 100%), without
+  overwriting the role shown on the card.
+- **Personality stacking — FIXED (Phase 3A).** Perfect Dressing Room is additive (+0.15, was
+  ×1.5) and the combined personality uplift is clamped at 1.30 in `calculatePersonalityBonus`
+  (balance-sweep confirms `attackMod` peaks ~1.29 on the new pool).
+- **Variance floor — lowered (Phase 3A).** `XG_CONVEX 0.9`, possession share `0.30–0.70` so a
+  good build reliably clears the blind; the 90' drama multiplier stays as flavour.
+- **Archetype distribution skew — FIXED (data port).** The flat skillset mix in `kc_cards.json`
+  (Dribbler 8.1%, Creator 12%) replaces the old Creator-16.8%/Dribbler-1.4% skew, so the
+  counter-web is now evenly grounded.
 - `design/` — contains fbal-era (Python/Flask prototype) docs. `design/CLAUDE.md`, `design/README.md`, `design/ROADMAP.md` describe a different codebase and should be treated as historical only.

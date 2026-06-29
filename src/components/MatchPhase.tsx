@@ -2,7 +2,8 @@
 
 import { useState, useCallback } from 'react';
 import type { RunState } from '../lib/run';
-import { getOpponent, getOpponentBuild } from '../lib/run';
+import { getOpponent, getOpponentBuild, buildMatchSeed, cupSize } from '../lib/run';
+import { cupMatchPower } from '../lib/opponent';
 import type { HandState } from '../lib/hand';
 import { rollXI, handFromSelection, INCREMENT_MINUTES } from '../lib/hand';
 import { getFormation } from '../lib/formations';
@@ -41,9 +42,9 @@ type MatchSubPhase = 'planning' | 'resolving' | 'between' | 'halftime' | 'finish
 
 export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProps) {
   const formation = getFormation(runState.activeFormation);
-  const matchSeed = runState.seed + runState.round * 1000;
+  const matchSeed = buildMatchSeed(runState.seed, runState.round, runState.matchInCup);
   const opponent = getOpponent(runState.round);
-  const opponentBuild = getOpponentBuild(runState.round, runState.seed);
+  const opponentBuild = getOpponentBuild(runState.round, runState.matchInCup, runState.seed);
   const [tacticSlots, setTacticSlots] = useState<TacticSlots>(() => createEmptySlots());
 
   // Core state
@@ -65,6 +66,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       opponentBuild.weaknessArchetype,
       runState.chemistry ?? {},
       runState.intent ?? 'balanced',
+      cupMatchPower(runState.round, runState.matchInCup, cupSize(runState.round)),
     );
   });
 

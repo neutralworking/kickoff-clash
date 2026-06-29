@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { transformAllCharacters, type KCCharacter } from '../src/lib/transform';
+import { transformCards, type KCCard } from '../src/lib/transform';
 import { getFormation } from '../src/lib/formations';
 import { createEmptySlots } from '../src/lib/tactics';
 import {
@@ -29,9 +29,9 @@ import type { Card } from '../src/lib/scoring';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const dataPath = path.join(__dirname, '..', 'public', 'data', 'kc_characters.json');
-const raw = JSON.parse(fs.readFileSync(dataPath, 'utf-8')) as KCCharacter[];
-const cards = transformAllCharacters(raw);
+const dataPath = path.join(__dirname, '..', 'public', 'data', 'kc_cards.json');
+const raw = JSON.parse(fs.readFileSync(dataPath, 'utf-8')) as KCCard[];
+const cards = transformCards(raw);
 const sorted = [...cards].sort((a, b) => b.power - a.power);
 
 const slots = createEmptySlots();

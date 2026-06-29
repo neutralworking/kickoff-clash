@@ -11,22 +11,28 @@ import {
   applyDurabilityResults,
   addCardToDeck,
   sellCard,
-  upgradeAcademy,
   buyAcademyPlayer,
   applyTraining,
   buyTacticPack,
   buyShopItem,
+  buyInvestment,
   healInjuredCard,
   drawRoundTactic,
+  cupSize,
+  isCupFinal,
+  MAX_CUPS,
+  interestOn,
+  applyMatchFitness,
 } from '../lib/run';
 import { getShopItem } from '../lib/economy';
+import type { InvestmentCard } from '../lib/economy';
 import type { HandState } from '../lib/hand';
 import { INCREMENT_MINUTES } from '../lib/hand';
 import type { JokerCard } from '../lib/jokers';
 import { rehydrateJokers } from '../lib/jokers';
 import { ripStarterPacks } from '../lib/packs';
 import { getTacticById } from '../lib/tactics';
-import { calculateAttendance, getStadiumTier, JOKER_COST } from '../lib/economy';
+import { calculateAttendance, matchReward, JOKER_COST } from '../lib/economy';
 import { findConnections } from '../lib/chemistry';
 import { accrueMatch } from '../lib/chem';
 import type { PackContents } from '../lib/packs';
@@ -46,9 +52,8 @@ import PhaseTransition from './PhaseTransition';
 
 const STORAGE_KEY = 'kickoff-clash-v4-run';
 const HISTORY_KEY = 'kickoff-clash-v4-history';
-// v1 permadeath: a single loss ends the run. A draw continues but earns a reduced
-// reward. (Multi-loss tolerance + a board target arrive with later game modes.)
-const MAX_ROUNDS = 5;
+// v1 permadeath: a single loss ends the run. A draw advances at a reduced reward.
+// The run is five knockout CUPS (Phase 3B; see MAX_CUPS / CUP_SIZES in run.ts).
 const DRAW_REWARD_FACTOR = 0.5;
 
 // ---------------------------------------------------------------------------
@@ -77,6 +82,8 @@ function deserializeRun(json: string): RunState | null {
 
     return {
       ...rest,
+      // Default for runs saved before the cup structure (Phase 3B).
+      matchInCup: typeof (rest as Partial<RunState>).matchInCup === 'number' ? (rest as Partial<RunState>).matchInCup : 1,
       jokers: rehydrateJokers(jokerIds ?? []),
       tacticsDeck: (tacticIds ?? []).map(id => getTacticById(id)).filter((t): t is NonNullable<typeof t> => t !== undefined),
     } as RunState;
@@ -223,17 +230,23 @@ export default function GameShell() {
       result.yourGoals,
       result.opponentGoals,
       runState.stadiumTier,
-      runState.ticketPriceBonus,
       runState.playingStyle,
     );
 
     // Durability check on the XI cards
     const durResult = postMatchDurabilityCheck(slottedXI, runState.seed + runState.round * 999);
 
-    // v1 reward: a win earns the full match gate, a draw earns DRAW_REWARD_FACTOR of it,
-    // a loss earns nothing (the run is over).
-    const rewardFactor = result.result === 'win' ? 1 : result.result === 'draw' ? DRAW_REWARD_FACTOR : 0;
-    const matchReward = Math.round(attendance.revenue * rewardFactor);
+    // Option B reward: a flat per-result base by round × the purchased stadium payout
+    // tier. A win earns the base, a draw DRAW_REWARD_FACTOR of it, a loss nothing (the
+    // run is over). The gate (attendance.revenue) is now a flavour display only.
+    const reward = matchReward(
+      runState.round,
+      result.result,
+      runState.stadiumTier,
+      DRAW_REWARD_FACTOR,
+      result.yourGoals,
+      runState.boxOffice ?? false,
+    );
 
     // Create match result entry
     const matchResult: MatchResult = {
@@ -242,7 +255,7 @@ export default function GameShell() {
       yourGoals: result.yourGoals,
       opponentGoals: result.opponentGoals,
       attendance: attendance.attendance,
-      revenue: matchReward,
+      revenue: reward,
       result: result.result,
       synergiesTriggered: connections.map(c => c.name),
       shattered: durResult.shattered.map(c => c.name),
@@ -250,19 +263,18 @@ export default function GameShell() {
       promoted: durResult.promoted.map(c => c.name),
     };
 
-    // Apply durability to deck
-    const updatedDeck = applyDurabilityResults(runState.deck, durResult);
+    // Apply durability to deck, then fold in cross-match fitness (Phase 3B.2): the XI
+    // that played carries its drained fitness into the next cup tie (extra-time hit on a
+    // draw); rested players recover. Fitness resets to fresh between cups (handleShopNext).
+    const updatedDeck = applyMatchFitness(
+      applyDurabilityResults(runState.deck, durResult),
+      result.handState.xi,
+      result.result,
+    );
 
     // Update wins/losses
     const wins = runState.wins + (result.result === 'win' ? 1 : 0);
     const losses = runState.losses + (result.result === 'loss' ? 1 : 0);
-    const reachedFinalFixture = runState.round >= MAX_ROUNDS;
-    // v1 permadeath: surviving the final fixture (no defeat) wins the run.
-    const stadiumTier = getStadiumTier(
-      wins,
-      reachedFinalFixture,
-      reachedFinalFixture && result.result !== 'loss',
-    );
 
     // Run-accumulated chemistry: every pair in the final XI co-appeared this match
     // (CARDS §5; +1 per increment played, ≈ a full match). No decay — churn just
@@ -276,8 +288,9 @@ export default function GameShell() {
     const newState: RunState = {
       ...runState,
       deck: updatedDeck,
-      cash: runState.cash + matchReward,
-      stadiumTier,
+      cash: runState.cash + reward,
+      // stadiumTier persists from runState — now changed only by a Stadium Expansion
+      // Investment purchase (Phase 2 Chunk 2), not derived from results.
       wins,
       losses,
       round: runState.round,
@@ -302,19 +315,32 @@ export default function GameShell() {
     }
   }, [runState]);
 
-  // --- Post Match ---
+  // --- Post Match (cup flow) ---
+  // A loss already routed to 'end' (permadeath). A win/draw here means we advance:
+  //  - won the cup FINAL → the run is complete if it was cup 5, else open the shop (the
+  //    only between-cups gate); fitness resets and the cup advances on shop → next.
+  //  - won a mid-cup tie → straight to the next tie (no shop), carrying fitness forward.
   const handlePostMatchContinue = useCallback(() => {
     if (!runState) return;
 
-    if (runState.round >= MAX_ROUNDS) {
-      // Survived all five fixtures without a defeat — the run is won.
-      const ended: RunState = { ...runState, status: 'won' };
-      setRunState(ended);
-      saveHistory(ended);
-      clearRun();
-      setPhase('end');
+    if (isCupFinal(runState.round, runState.matchInCup)) {
+      if (runState.round >= MAX_CUPS) {
+        // Lifted the final cup — champions, run won.
+        const ended: RunState = { ...runState, status: 'won' };
+        setRunState(ended);
+        saveHistory(ended);
+        clearRun();
+        setPhase('end');
+      } else {
+        setPhase('shop');
+      }
     } else {
-      setPhase('shop');
+      // Next tie of the same cup — the Team Talk lives here (Phase 3B.5); for now the
+      // lineup carries forward and we go straight to the match.
+      const next: RunState = { ...runState, matchInCup: runState.matchInCup + 1 };
+      setRunState(next);
+      setPhase('match');
+      saveRun(next);
     }
   }, [runState]);
 
@@ -353,17 +379,15 @@ export default function GameShell() {
     });
   }, []);
 
-  const handleUpgradeAcademy = useCallback(() => {
-    setRunState(prev => {
-      if (!prev) return prev;
-      const result = upgradeAcademy(prev);
-      return result ?? prev;
-    });
-  }, []);
-
   const handleBuyTacticPack = useCallback(() => {
     if (!runState) return;
     const result = buyTacticPack(runState, runState.seed + runState.round * 777);
+    if (result) { setRunState(result); saveRun(result); }
+  }, [runState]);
+
+  const handleBuyInvestment = useCallback((card: InvestmentCard) => {
+    if (!runState) return;
+    const result = buyInvestment(runState, card);
     if (result) { setRunState(result); saveRun(result); }
   }, [runState]);
 
@@ -406,10 +430,21 @@ export default function GameShell() {
 
   const handleShopNext = useCallback(() => {
     if (!runState) return;
-    const nextRound = runState.round + 1;
-    // v1 tactics progression: one new tactic is drawn each round (the deck starts at 5).
-    const tacticsDeck = drawRoundTactic(runState.tacticsDeck, runState.seed * 31 + nextRound * 7);
-    const newState = { ...runState, round: nextRound, tacticsDeck };
+    // Between cups: advance to the next cup's first tie. One new tactic is drawn per cup
+    // (deck starts at 5 → 9 over five cups), interest is banked, and fitness resets to
+    // fresh for the new cup (the carried fitness only matters within a cup).
+    const nextCup = runState.round + 1;
+    const tacticsDeck = drawRoundTactic(runState.tacticsDeck, runState.seed * 31 + nextCup * 7);
+    const newState: RunState = {
+      ...runState,
+      round: nextCup,
+      matchInCup: 1,
+      cash: runState.cash + interestOn(runState.cash),
+      // Between cups everyone starts fresh: fitness reset and in-cup injuries cleared, so
+      // each cup is a self-contained puzzle. (Permanent durability shatter still sticks.)
+      deck: runState.deck.map(c => ({ ...c, fitness: 6, injured: false })),
+      tacticsDeck,
+    };
     setRunState(newState);
     setPhase('match');
     saveRun(newState);
@@ -467,7 +502,7 @@ export default function GameShell() {
             matchResult={lastMatchResult}
             durabilityResult={durabilityResult}
             round={lastMatchResult.round}
-            totalRounds={MAX_ROUNDS}
+            totalRounds={MAX_CUPS}
             wins={runState.wins}
             matchHistory={runState.matchHistory}
             onContinue={handlePostMatchContinue}
@@ -485,15 +520,15 @@ export default function GameShell() {
             onSellCard={handleSellCard}
             onBuyJoker={handleBuyJoker}
             onBuyAcademy={handleBuyAcademy}
-            onUpgradeAcademy={handleUpgradeAcademy}
             onBuyTacticPack={handleBuyTacticPack}
+            onBuyInvestment={handleBuyInvestment}
             onTrainPlayer={handleTrainPlayer}
             onRerollShop={handleRerollShop}
             onHealPlayer={handleHealPlayer}
             onScoutOpponent={handleScoutOpponent}
             scoutedOpponent={
               runState.scoutedOpponentRound === runState.round + 1
-                ? getOpponentBuild(runState.round + 1, runState.seed)
+                ? getOpponentBuild(runState.round + 1, 1, runState.seed)
                 : null
             }
             onNext={handleShopNext}

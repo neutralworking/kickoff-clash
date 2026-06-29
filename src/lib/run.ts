@@ -12,20 +12,21 @@ import {
 } from './scoring';
 import { ActionCard, ALL_ACTION_CARDS, getActionCardsByType } from './actions';
 import {
-  calculateAttendance, getStadiumTier, getStadium, getTransferFee,
+  calculateAttendance, getStadium, getTransferFee,
   SHOP_ITEMS, ShopItem, ACADEMY_TIERS, ACADEMY_UPGRADE_COST,
   generateAcademyDurability, getAcademyTier,
+  type InvestmentCard,
 } from './economy';
 import { findConnections } from './chemistry';
-import { transformAllCharacters, type KCCharacter } from './transform';
-import kcCharactersData from '../../public/data/kc_characters.json';
+import { transformCards, type KCCard } from './transform';
+import kcCardsData from '../../public/data/kc_cards.json';
 import type { HandState } from './hand';
 import { rollXI } from './hand';
 import type { JokerCard } from './jokers';
 import { getExtraDiscards } from './jokers';
 import { ALL_TACTICS, type TacticCard } from './tactics';
 import { getFormation, ALL_FORMATIONS } from './formations';
-import { generateOpponentXI } from './opponent';
+import { generateOpponentXI, cupMatchPower } from './opponent';
 import type { CoAppearance } from './chem';
 import { pruneCard } from './chem';
 
@@ -54,10 +55,11 @@ export interface RunState {
   trainingApplied: Record<number, number>; // cardId → total power added (max +20)
   cash: number;
   stadiumTier: number;
-  ticketPriceBonus: number;
   academyTier: number;
+  boxOffice: boolean;        // Box Office Investment unlocked → goals pay cash (Phase 2)
   scoutedOpponentRound: number | null;
-  round: number;       // match number (1-5)
+  round: number;       // CURRENT CUP (1-5). Per-cup difficulty/economy/scout key off this.
+  matchInCup: number;  // the tie within the cup (1..CUP_SIZES[round-1]); ==size is the final.
   wins: number;
   losses: number;
   status: 'title' | 'packSelect' | 'setup' | 'match' | 'postmatch' | 'shop' | 'won' | 'lost';
@@ -79,6 +81,61 @@ export interface MatchResult {
   shattered: string[];
   injured: string[];
   promoted: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Cup structure (Phase 3B) — each "level" is a knockout cup of CUP_SIZES[cup-1]
+// matches culminating in a final. Lose any → run over (permadeath). See
+// docs/PHASE_3_CUP_SCOPE.md.
+// ---------------------------------------------------------------------------
+
+export const MAX_CUPS = 5;
+export const CUP_SIZES = [2, 3, 4, 5, 6]; // matches per cup (incl. the final) → 20 total
+
+export function cupSize(cup: number): number {
+  return CUP_SIZES[Math.min(Math.max(cup - 1, 0), CUP_SIZES.length - 1)];
+}
+
+/** Is this the cup final (the last, hardest tie of the cup)? */
+export function isCupFinal(cup: number, matchInCup: number): boolean {
+  return matchInCup >= cupSize(cup);
+}
+
+/** The deterministic seed for a specific tie. Single source of truth so the scout
+ *  (getOpponentBuild) reproduces the exact side the engine fields. Each tie within a
+ *  cup gets a distinct opponent via the matchInCup salt. */
+export function buildMatchSeed(seed: number, cup: number, matchInCup: number): number {
+  return seed + cup * 1000 + matchInCup * 149;
+}
+
+// --- Cross-match fitness (Phase 3B.2) ---
+// Fitness persists across a cup's ties: players who featured carry their drained
+// fitness forward; rested players recover; a drawn tie went to extra time and drains
+// everyone who played a little more. Fitness resets to fresh between cups (handled at
+// the shop). This is what makes squad rotation a real decision.
+export const REST_RECOVERY = 2.5;   // a rested (benched) player recovers this per tie
+export const EXTRA_TIME_DRAIN = 1.0; // a drawn tie costs everyone who played this much
+
+/**
+ * Fold a match's fitness back onto the deck: the XI that finished carries its drained
+ * fitness (minus extra-time on a draw, floored at 1) AND any injury picked up in the tie;
+ * everyone else recovers toward 6. Injuries persist through the cup (cleared only at the
+ * between-cup reset) — overplaying a fragile star can lose him for the final.
+ */
+export function applyMatchFitness(
+  deck: Card[],
+  playedXi: Card[],
+  result: 'win' | 'draw' | 'loss',
+): Card[] {
+  const played = new Map(playedXi.map((c) => [c.id, { fitness: c.fitness ?? 6, injured: !!c.injured }]));
+  const etDrain = result === 'draw' ? EXTRA_TIME_DRAIN : 0;
+  return deck.map((c) => {
+    const p = played.get(c.id);
+    if (p) {
+      return { ...c, fitness: Math.max(1, p.fitness - etDrain), injured: c.injured || p.injured };
+    }
+    return { ...c, fitness: Math.min(6, (c.fitness ?? 6) + REST_RECOVERY) };
+  });
 }
 
 export interface Opponent {
@@ -264,12 +321,16 @@ const STAR_ABILITY: Record<string, string> = {
   GK: 'A wall between the sticks',
 };
 
-export function getOpponentBuild(round: number, runSeed: number): OpponentBuild {
-  const meta = OPPONENT_META[Math.min(round - 1, OPPONENT_META.length - 1)];
-  const opp = getOpponent(round);
-  // Reproduce the EXACT side the engine will field: same (round, proto-style, seed)
-  // that MatchPhase feeds to initMatch → generateOpponentXI (matchSeed = seed + round*1000).
-  const { xi: genXI, formation } = generateOpponentXI(round, opp.style, runSeed + round * 1000);
+export function getOpponentBuild(cup: number, matchInCup: number, runSeed: number): OpponentBuild {
+  const meta = OPPONENT_META[Math.min(cup - 1, OPPONENT_META.length - 1)];
+  const opp = getOpponent(cup);
+  // Reproduce the EXACT side the engine will field: same (cup, proto-style, seed) that
+  // MatchPhase feeds to initMatch → generateOpponentXI (via buildMatchSeed), so the tie
+  // within the cup gets the right distinct opponent.
+  const { xi: genXI, formation } = generateOpponentXI(
+    cup, opp.style, buildMatchSeed(runSeed, cup, matchInCup),
+    cupMatchPower(cup, matchInCup, cupSize(cup)),
+  );
 
   const toDisplay = (c: Card): OpponentPlayer => ({
     name: c.name,
@@ -619,10 +680,10 @@ export function applyDurabilityResults(deck: Card[], result: DurabilityResult): 
 }
 
 // ---------------------------------------------------------------------------
-// Card Pool (500 characters from kc_characters.json)
+// Card Pool — fictional cards generated from the Chief Scout distributions (V3.1 port)
 // ---------------------------------------------------------------------------
 
-export const ALL_CARDS: Card[] = transformAllCharacters(kcCharactersData as KCCharacter[]);
+export const ALL_CARDS: Card[] = transformCards(kcCardsData as KCCard[]);
 
 /** @deprecated Alias for backward compat — use ALL_CARDS */
 export const SAMPLE_CARDS = ALL_CARDS;
@@ -735,10 +796,11 @@ export function createRun(sel: TeamSelection, seed?: number): RunState {
     trainingApplied: {},
     cash: 0,
     stadiumTier: 1,
-    ticketPriceBonus: 0,
     academyTier: 1,
+    boxOffice: false,
     scoutedOpponentRound: null,
     round: 1,
+    matchInCup: 1,
     wins: 0,
     losses: 0,
     status: 'match',
@@ -754,7 +816,7 @@ export function createRun(sel: TeamSelection, seed?: number): RunState {
  * Returns the HandState separately — it is managed by MatchPhase locally, not persisted in RunState.
  */
 export function startMatch(state: RunState): { state: RunState; handState: HandState } {
-  const matchSeed = state.seed + state.round * 1000;
+  const matchSeed = buildMatchSeed(state.seed, state.round, state.matchInCup);
 
   // Roll XI using hand-based system
   const formation = getFormation(state.activeFormation);
@@ -838,11 +900,9 @@ export function sellCard(state: RunState, card: Card): RunState {
  */
 export function buyShopItem(state: RunState, item: ShopItem): RunState | null {
   if (state.cash < item.cost) return null;
-  let newState = { ...state, cash: state.cash - item.cost };
+  const newState = { ...state, cash: state.cash - item.cost };
 
-  if (item.id === 'food_upgrade') {
-    newState.ticketPriceBonus += 5;
-  } else if (item.id === 'scout_report') {
+  if (item.id === 'scout_report') {
     newState.scoutedOpponentRound = Math.min(state.round + 1, OPPONENTS.length);
   }
 
@@ -863,17 +923,21 @@ export function healInjuredCard(state: RunState, cardId: number): RunState | nul
   };
 }
 
-/**
- * Upgrade academy tier
- */
-export function upgradeAcademy(state: RunState): RunState | null {
-  if (state.academyTier >= 4) return null;
-  if (state.cash < ACADEMY_UPGRADE_COST) return null;
 
+/**
+ * Buy an Investment card (Boardroom). Consumed on purchase — its effect folds straight
+ * into the relevant RunState scalar/flag (no owned-Investment array). The shop only ever
+ * offers the next valid tier, so the cash check is the only guard needed.
+ */
+export function buyInvestment(state: RunState, card: InvestmentCard): RunState | null {
+  if (state.cash < card.cost) return null;
+  const { effect } = card;
   return {
     ...state,
-    cash: state.cash - ACADEMY_UPGRADE_COST,
-    academyTier: state.academyTier + 1,
+    cash: state.cash - card.cost,
+    ...(effect.stadiumTier !== undefined ? { stadiumTier: effect.stadiumTier } : {}),
+    ...(effect.academyTier !== undefined ? { academyTier: effect.academyTier } : {}),
+    ...(effect.boxOffice !== undefined ? { boxOffice: effect.boxOffice } : {}),
   };
 }
 
