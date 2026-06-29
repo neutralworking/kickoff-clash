@@ -41,7 +41,6 @@ export interface AttendanceResult {
   personalityFans: number;
   durabilityFans: number;
   goalFans: number;          // flat result bonus (win/draw/loss) — anti-snowball (§1)
-  actionFans: number;
   synergyFans: number;
   totalGoalsBonus: number;   // capped goal spectacle
   entertainmentMod: number;  // style crowd multiplier (§1)
@@ -87,7 +86,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'moment_pack',     name: 'Moment Pack',            description: '2 random moment cards',            cost: 20000, category: 'action_pack' },
   { id: 'mind_games_pack', name: 'Mind Games Pack',        description: '2 random mind game cards',         cost: 15000, category: 'action_pack' },
   { id: 'mixed_pack',      name: 'Mixed Pack',             description: '3 random from all types',          cost: 8000,  category: 'action_pack' },
-  { id: 'manager_card',    name: 'Manager Card',           description: 'Random manager modifier',          cost: 20000, category: 'manager' },
+  { id: 'manager_card',    name: 'Manager Card',           description: 'Random manager modifier',          cost: 25000, category: 'manager' },
   { id: 'reroll',          name: 'Reroll Shop',            description: 'Refresh shop offerings',           cost: 8000,  category: 'utility' },
   { id: 'heal',            name: 'Heal Injured Card',      description: 'Restore an injured card',          cost: 12000, category: 'utility' },
   { id: 'scout_report',    name: 'Scout Report',           description: 'See next opponent style + strength', cost: 10000, category: 'utility' },
@@ -147,6 +146,9 @@ export const ACADEMY_TIERS: Academy[] = [
 ];
 
 export const ACADEMY_UPGRADE_COST = 30000;
+
+/** Manager (joker) card price — single source of truth for the direct-buy. */
+export const JOKER_COST = 25000;
 
 /**
  * Generate academy player cards from a pool.
@@ -225,7 +227,6 @@ export function calculateAttendance(
   connections: Connection[],
   yourGoals: number,
   opponentGoals: number,
-  actionFanAccumulator: number,
   stadiumTier: number,
   ticketPriceBonus: number = 0,
   playingStyle: string = '',
@@ -252,9 +253,6 @@ export function calculateAttendance(
   // well as a rout (anti-snowball under permadeath, ECONOMY §1).
   const goalFans = yourGoals > opponentGoals ? 400 : yourGoals === opponentGoals ? 150 : 50;
 
-  // Action card spectacle (accumulated fan impact from all rounds)
-  const actionFans = Math.max(0, actionFanAccumulator); // Floor at 0
-
   // Synergy fans
   const synergyFans = connections.reduce((sum, conn) => {
     return sum + (SYNERGY_FAN_PULL[conn.tier] ?? 0);
@@ -269,7 +267,7 @@ export function calculateAttendance(
 
   const rawAttendance = Math.round(
     (archetypeFans + personalityFans + durabilityFans +
-      goalFans + actionFans + synergyFans + totalGoalsBonus) * entertainmentMod,
+      goalFans + synergyFans + totalGoalsBonus) * entertainmentMod,
   );
   const capacity = stadium.capacity;
   const attendance = Math.min(rawAttendance, capacity);
@@ -281,7 +279,6 @@ export function calculateAttendance(
     personalityFans,
     durabilityFans,
     goalFans,
-    actionFans,
     synergyFans,
     totalGoalsBonus,
     entertainmentMod,

@@ -57,8 +57,6 @@ export interface RunState {
   academyTier: number;
   scoutedOpponentRound: number | null;
   round: number;       // match number (1-5)
-  seasonPoints: number;
-  boardTargetPoints: number;
   wins: number;
   losses: number;
   status: 'title' | 'packSelect' | 'setup' | 'match' | 'postmatch' | 'shop' | 'won' | 'lost';
@@ -73,8 +71,6 @@ export interface MatchResult {
   opponentName: string;
   yourGoals: number;
   opponentGoals: number;
-  pointsEarned: number;
-  seasonPoints: number;
   attendance: number;
   revenue: number;
   result: 'win' | 'draw' | 'loss';
@@ -759,8 +755,6 @@ export function createRun(sel: TeamSelection, seed?: number): RunState {
     academyTier: 1,
     scoutedOpponentRound: null,
     round: 1,
-    seasonPoints: 0,
-    boardTargetPoints: 10,
     wins: 0,
     losses: 0,
     status: 'match',
@@ -1001,21 +995,6 @@ export function applyTraining(state: RunState, cardId: number): RunState | null 
     cash: state.cash - TRAINING_COST,
     deck: state.deck.map(c => c.id === cardId ? { ...c, power: c.power + 5 } : c),
     trainingApplied: { ...state.trainingApplied, [cardId]: current + 5 },
-  };
-}
-
-/**
- * Buy a new formation (costs 20000)
- */
-export function buyFormation(state: RunState, formationId: string): RunState | null {
-  const FORMATION_COST = 20000;
-  if (state.cash < FORMATION_COST) return null;
-  if (state.ownedFormations.includes(formationId)) return null;
-
-  return {
-    ...state,
-    cash: state.cash - FORMATION_COST,
-    ownedFormations: [...state.ownedFormations, formationId],
   };
 }
 
