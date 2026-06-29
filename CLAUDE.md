@@ -79,8 +79,25 @@ No Redux, Zustand, or Context. Pure React hooks. `GameShell.tsx` is the single s
 
 `seededRandom(seed)` (multiplicative hash) is used throughout. Match seeds, card draws, and personality rolls are all deterministic from the run seed, enabling reproducible test scenarios.
 
+## Balance: the seed-sweep instrument
+
+Match-engine balance changes MOVE the meta by design, so byte-identical determinism is
+the wrong test for them. `scripts/balance-sweep.ts` (`npx tsx scripts/balance-sweep.ts [seeds]`)
+sweeps deck-strength tiers × opponent rounds × N seeds and reports win/draw/loss rate,
+personality `attackMod`, and TOP-vs-WEAK attack divergence — the instrument for "do builds
+matter, and is the win-rate monotonic in deck strength?" Use it (not the determinism harness)
+when tuning `ROUND_POWER`, `OPP_COHESION`, `XG_CONVEX`, the personality cap, or the power scale.
+
 ## Known tech debt
 
-- **Power range compression** — character levels 71–95 compress deck strength differences; top-11 deck hits the 0.50 goal-chance ceiling in most increments. `MATCH_ENGINE_V5.md §11.2` specifies the fix (widen to 50–99).
-- **Personality stacking** — Tier-3 themes + Tier-4 Perfect Dressing Room can compound to ~72–80% uplift. Needs gating audit.
+- **Power compression — FIXED (Phase 3A).** `transform.ts levelToPower()` now remaps the
+  71–95 source band to 50–99 (§11.2), and the opponent curve was recalibrated to match
+  (`ROUND_POWER = [72,77,82,86,90]`, `OPP_COHESION = 1.15`). The sweep win-rate is monotonic
+  in deck strength.
+- **Personality stacking — FIXED (Phase 3A).** Perfect Dressing Room is additive (+0.15, was
+  ×1.5) and the combined personality uplift is clamped at 1.30 in `calculatePersonalityBonus`.
+- **Variance floor — lowered (Phase 3A).** `XG_CONVEX 0.9`, possession share `0.30–0.70` so a
+  good build reliably clears the blind; the 90' drama multiplier stays as flavour.
+- **Archetype distribution skew** — Creator 16.8% / Dribbler 1.4% in `kc_characters.json` still
+  warps the counter-web; fix the data before tuning archetype balance.
 - `design/` — contains fbal-era (Python/Flask prototype) docs. `design/CLAUDE.md`, `design/README.md`, `design/ROADMAP.md` describe a different codebase and should be treated as historical only.
