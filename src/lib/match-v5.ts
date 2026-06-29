@@ -501,13 +501,21 @@ function calculatePersonalityBonus(xi: Card[], seed: number): PersonalityBonus {
     labels.push(`${resonance.name} (${count}× ${theme})`);
   }
 
-  // Perfect Dressing Room: all 5 themes present
+  // Perfect Dressing Room: all 5 themes present — a real edge, but ADDITIVE (not the old
+  // ×1.5 multiplier) so a great dressing room sharpens the XI rather than dwarfing it.
   const perfectDressingRoom = PERSONALITY_THEMES.every((t) => themesPresent.has(t));
   if (perfectDressingRoom) {
-    attackMod *= 1.5;
-    defenceMod *= 1.5;
+    attackMod += 0.15;
+    defenceMod += 0.15;
     labels.push('Perfect Dressing Room');
   }
+
+  // Cap the combined personality uplift (Phase 3 Foundation): the one-time, can't-change
+  // personality roll must not dwarf the in-match decision layer. Themes are a top-up, not
+  // the whole story. The downside (a bad Catalyst roll) is left uncapped — it's the gamble.
+  const PERSONALITY_CAP = 1.30;
+  attackMod = Math.min(attackMod, PERSONALITY_CAP);
+  defenceMod = Math.min(defenceMod, PERSONALITY_CAP);
 
   return {
     attackMod,
