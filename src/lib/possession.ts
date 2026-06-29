@@ -47,8 +47,8 @@ export interface PossessionSide {
 
 // --- Tuning dials (§7) ---
 const POSS_POOL = 20;        // total possessions per 15' period, split by control
-const SHARE_MIN = 0.36;
-const SHARE_MAX = 0.64;
+const SHARE_MIN = 0.30;     // Phase 3 Foundation: widen the share band so control matters
+const SHARE_MAX = 0.70;     // more (a dominant side now takes up to 70% of possessions)
 const SHOT_BASE = 0.30;      // P(shot) at lane parity
 const SHOT_MIN = 0.04;
 const SHOT_MAX = 0.55;
@@ -56,7 +56,8 @@ const XG_BASE = 0.195;       // xG scale
 const XG_MIN = 0.02;
 const XG_MAX = 0.70;
 const DEF_W = 1.2;           // weight on the defender's resistance in the xG ratio
-const XG_CONVEX = 0.7;       // <1 compresses the quality ratio: lifts weak attacks more
+const XG_CONVEX = 0.9;       // Phase 3 Foundation: nearer 1 → less weak-side lift, so a
+                            // quality edge converts (good builds reliably clear the blind)
                              // than strong ones, so even matchups still create chances.
 const DENIAL_CAP = 0.5;
 
