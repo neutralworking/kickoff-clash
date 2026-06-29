@@ -574,41 +574,36 @@ function BackroomTab({
 }) {
   const stadiumInvestment = getStadiumInvestment(state.stadiumTier);
   const academyInvestment = getAcademyInvestment(state.academyTier);
+  const boxOfficeInvestment = state.boxOffice ? null : BOX_OFFICE_INVESTMENT;
+  const boardroomCards = [stadiumInvestment, academyInvestment, boxOfficeInvestment]
+    .filter((c): c is InvestmentCard => c != null);
   return (
     <div className="flex flex-col gap-3 pb-2">
-      {/* Boardroom — Investments (one-time unlocks) */}
-      <SectionCard title="Boardroom" accent="var(--gold)">
-        <div className="flex flex-col gap-2">
-          {stadiumInvestment ? (
-            <RowAction
-              title={`Stadium Expansion · ${stadiumInvestment.name}`}
-              sub={stadiumInvestment.description}
-              cost={stadiumInvestment.cost}
-              affordable={state.cash >= stadiumInvestment.cost}
-              onClick={() => onBuyInvestment(stadiumInvestment)}
-            />
-          ) : (
-            <EmptyState text="Stadium fully expanded — The Cathedral." />
-          )}
-          {academyInvestment && (
-            <RowAction
-              title={`Youth Academy · ${academyInvestment.name}`}
-              sub={academyInvestment.description}
-              cost={academyInvestment.cost}
-              affordable={state.cash >= academyInvestment.cost}
-              onClick={() => onBuyInvestment(academyInvestment)}
-            />
-          )}
-          {!state.boxOffice && (
-            <RowAction
-              title={BOX_OFFICE_INVESTMENT.name}
-              sub={BOX_OFFICE_INVESTMENT.description}
-              cost={BOX_OFFICE_INVESTMENT.cost}
-              affordable={state.cash >= BOX_OFFICE_INVESTMENT.cost}
-              onClick={() => onBuyInvestment(BOX_OFFICE_INVESTMENT)}
-            />
-          )}
-        </div>
+      {/* Boardroom — chairman's one-time-unlock Investments, rendered as cards. */}
+      <SectionCard
+        title="Boardroom"
+        accent="var(--gold)"
+        right={
+          <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)', letterSpacing: 0.5 }}>
+            BOARD DECISIONS
+          </span>
+        }
+      >
+        {boardroomCards.length === 0 ? (
+          <EmptyState text="Every board lever pulled — the empire is built." />
+        ) : (
+          <div className="grid grid-cols-3 gap-3">
+            {boardroomCards.map((inv) => (
+              <InvestmentCell
+                key={inv.id}
+                investment={inv}
+                affordable={state.cash >= inv.cost}
+                onAction={() => { if (state.cash >= inv.cost) onBuyInvestment(inv); }}
+                onInspect={() => openModal({ variant: 'investment', investment: inv })}
+              />
+            ))}
+          </div>
+        )}
       </SectionCard>
 
       {/* Scout report */}
@@ -813,6 +808,54 @@ function CardCell({
           {actionLabel}
         </span>
         <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: active ? accentBorder : 'var(--ink)' }}>{priceLabel}</span>
+      </button>
+    </div>
+  );
+}
+
+/** A Boardroom investment card + a BUY action. The cost lives on the card face,
+ *  so the button is a clean verb in the Boardroom gold. */
+function InvestmentCell({
+  investment, affordable, onAction, onInspect,
+}: {
+  investment: InvestmentCard;
+  affordable: boolean;
+  onAction: () => void;
+  onInspect: () => void;
+}) {
+  return (
+    <div className="flex flex-col" style={{ gap: 5 }}>
+      <GameCard
+        model={{ variant: 'investment', investment }}
+        onClick={onInspect}
+        dimmed={!affordable}
+        ariaLabel={`Inspect ${investment.name}`}
+      />
+      <button
+        onClick={onAction}
+        disabled={!affordable}
+        className="active:scale-95"
+        style={{
+          height: 40,
+          borderRadius: 'var(--radius-sm)',
+          border: '2px solid var(--ink-black)',
+          background: affordable ? 'rgba(245,197,66,0.18)' : 'var(--surface-raised)',
+          boxShadow: '0 2px 0 0 var(--ink-black)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 1,
+          cursor: affordable ? 'pointer' : 'not-allowed',
+          opacity: affordable ? 1 : 0.55,
+        }}
+      >
+        <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.4, color: affordable ? 'var(--cream)' : 'var(--ink)', textTransform: 'uppercase' }}>
+          Buy
+        </span>
+        <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: affordable ? 'var(--gold)' : 'var(--ink)' }}>
+          {`£${investment.cost.toLocaleString()}`}
+        </span>
       </button>
     </div>
   );

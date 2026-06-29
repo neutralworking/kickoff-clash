@@ -3,10 +3,11 @@
 /**
  * Kickoff Clash — GameCard
  *
- * The reusable, pixel-art PLAYING CARD. One shared frame, three variants:
- *   • PLAYER  — sprite portrait, position tab, big rating, surname, archetype.
- *   • MANAGER — gaffer crest, name, philosophy flavour, trait pills.
- *   • TACTIC  — category crest, name, effect, category tab.
+ * The reusable, pixel-art PLAYING CARD. One shared frame, four variants:
+ *   • PLAYER     — sprite portrait, position tab, big rating, surname, archetype.
+ *   • MANAGER    — gaffer crest, name, philosophy flavour, trait pills.
+ *   • TACTIC     — category crest, name, effect, category tab.
+ *   • INVESTMENT — Boardroom crest, ladder tab, cost, football name, effect line.
  *
  * Two sizes: `grid` (the dense token in a list/pack/sheet) and `full` (the
  * expanded card rendered inside CardModal). Both share the same frame so a
@@ -19,11 +20,14 @@
 import type { Card } from '../../lib/scoring';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard } from '../../lib/tactics';
+import type { InvestmentCard } from '../../lib/economy';
 import {
   PIXEL,
   RARITY_COLOR,
   POSITION_COLOR,
   TACTIC_CAT_COLOR,
+  INVESTMENT_META,
+  formatCash,
   nationFlag,
   nationCode,
   lastName,
@@ -34,7 +38,8 @@ export type CardSize = 'grid' | 'full';
 export type GameCardModel =
   | { variant: 'player'; card: Card }
   | { variant: 'manager'; manager: JokerCard }
-  | { variant: 'tactic'; tactic: TacticCard };
+  | { variant: 'tactic'; tactic: TacticCard }
+  | { variant: 'investment'; investment: InvestmentCard };
 
 interface GameCardProps {
   model: GameCardModel;
@@ -92,8 +97,10 @@ export default function GameCard({
       <PlayerBody card={model.card} full={full} accent={accent} />
     ) : model.variant === 'manager' ? (
       <ManagerBody manager={model.manager} full={full} accent={accent} />
-    ) : (
+    ) : model.variant === 'tactic' ? (
       <TacticBody tactic={model.tactic} full={full} accent={accent} />
+    ) : (
+      <InvestmentBody investment={model.investment} full={full} accent={accent} />
     );
 
   const content = (
@@ -133,7 +140,8 @@ export default function GameCard({
 function accentFor(model: GameCardModel): string {
   if (model.variant === 'player') return RARITY_COLOR[model.card.rarity] ?? RARITY_COLOR.Common;
   if (model.variant === 'manager') return 'var(--kit-red)';
-  return TACTIC_CAT_COLOR[model.tactic.category] ?? 'var(--gold)';
+  if (model.variant === 'tactic') return TACTIC_CAT_COLOR[model.tactic.category] ?? 'var(--gold)';
+  return INVESTMENT_META[model.investment.ladder]?.accent ?? 'var(--gold)';
 }
 
 // ===========================================================================
@@ -411,6 +419,123 @@ function TacticSprite({ accent, full }: { accent: string; full: boolean }) {
       {/* node markers */}
       <rect x="5" y="5" width="2" height="2" fill="var(--line-white)" opacity="0.6" />
       <rect x="17" y="5" width="2" height="2" fill="var(--line-white)" opacity="0.6" />
+    </svg>
+  );
+}
+
+// ===========================================================================
+// INVESTMENT body (Boardroom)
+// ===========================================================================
+
+function InvestmentBody({ investment, full, accent }: { investment: InvestmentCard; full: boolean; accent: string }) {
+  const meta = INVESTMENT_META[investment.ladder] ?? INVESTMENT_META.stadium;
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: full ? 10 : '5px 6px' }}>
+      {/* Header: ladder tab · cost */}
+      <div className="flex items-center justify-between" style={{ gap: 4 }}>
+        <span
+          style={{
+            background: accent,
+            color: 'var(--ink-black)',
+            fontFamily: PIXEL,
+            fontSize: full ? 9 : 6.5,
+            lineHeight: 1,
+            padding: full ? '5px 6px' : '3px 4px',
+            borderRadius: 3,
+            letterSpacing: 0.5,
+            flexShrink: 0,
+          }}
+        >
+          {meta.tab}
+        </span>
+        <span style={{ fontFamily: PIXEL, fontSize: full ? 15 : 10, lineHeight: 1, color: 'var(--gold)', flexShrink: 0 }}>
+          {formatCash(investment.cost)}
+        </span>
+      </div>
+
+      {/* Boardroom crest sprite — distinct per ladder */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: full ? '8px 0' : '4px 0' }}>
+        <InvestmentSprite ladder={investment.ladder} accent={accent} full={full} />
+      </div>
+
+      {/* Name + effect line */}
+      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: full ? 12 : 9.5, color: 'var(--cream)', lineHeight: 1.2 }}>
+        {investment.name}
+      </span>
+      <span
+        style={{
+          fontSize: full ? 11 : 8.5,
+          lineHeight: 1.35,
+          color: 'var(--cream-soft)',
+          marginTop: 3,
+          display: '-webkit-box',
+          WebkitLineClamp: full ? 5 : 3,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}
+      >
+        {investment.description}
+      </span>
+    </div>
+  );
+}
+
+/** Boardroom crest: a gold chairman's seal framing a per-ladder pixel glyph
+ *  (stadium stands / academy sapling / box-office ticket). */
+function InvestmentSprite({ ladder, accent, full }: { ladder: string; accent: string; full: boolean }) {
+  return (
+    <svg
+      className="pixelated"
+      viewBox="0 0 24 24"
+      style={{ width: full ? '58%' : '72%', maxWidth: full ? 92 : 50, aspectRatio: '1', display: 'block' }}
+      shapeRendering="crispEdges"
+    >
+      {/* seal plate */}
+      <rect x="2" y="2" width="20" height="20" fill="rgba(0,0,0,0.25)" />
+      {/* gold crest ring */}
+      <rect x="3" y="3" width="18" height="18" fill="none" stroke="var(--gold)" strokeWidth="1" opacity="0.55" />
+      {ladder === 'stadium' ? (
+        <>
+          {/* terraced stand: three tiers + floodlight */}
+          <rect x="5" y="14" width="14" height="5" fill={accent} />
+          <rect x="5" y="14" width="14" height="1" fill="var(--line-white)" opacity="0.6" />
+          <rect x="6" y="11" width="12" height="3" fill={accent} opacity="0.8" />
+          <rect x="7" y="9" width="10" height="2" fill={accent} opacity="0.6" />
+          {/* seat pixels */}
+          <rect x="7" y="16" width="2" height="2" fill="var(--ink-black)" opacity="0.4" />
+          <rect x="11" y="16" width="2" height="2" fill="var(--ink-black)" opacity="0.4" />
+          <rect x="15" y="16" width="2" height="2" fill="var(--ink-black)" opacity="0.4" />
+          {/* floodlight */}
+          <rect x="11" y="4" width="2" height="5" fill="var(--dust)" />
+          <rect x="9" y="4" width="6" height="2" fill="var(--line-white)" />
+        </>
+      ) : ladder === 'academy' ? (
+        <>
+          {/* sapling in a pot: youth growth */}
+          <rect x="10" y="14" width="4" height="5" fill={accent} />
+          <rect x="11" y="6" width="2" height="9" fill="#6b4a2b" />
+          {/* leaves */}
+          <rect x="7" y="8" width="3" height="3" fill={accent} />
+          <rect x="14" y="8" width="3" height="3" fill={accent} />
+          <rect x="9" y="5" width="6" height="3" fill={accent} />
+          <rect x="11" y="4" width="2" height="2" fill="var(--line-white)" opacity="0.7" />
+          {/* pot rim */}
+          <rect x="9" y="14" width="6" height="1" fill="var(--line-white)" opacity="0.5" />
+        </>
+      ) : (
+        <>
+          {/* admission ticket: box office */}
+          <rect x="5" y="8" width="14" height="8" fill={accent} />
+          <rect x="5" y="8" width="14" height="1" fill="var(--line-white)" opacity="0.6" />
+          {/* perforation notch */}
+          <rect x="13" y="8" width="1" height="8" fill="var(--ink-black)" opacity="0.45" />
+          {/* stub stars */}
+          <rect x="7" y="11" width="2" height="2" fill="var(--ink-black)" opacity="0.45" />
+          <rect x="10" y="11" width="2" height="2" fill="var(--ink-black)" opacity="0.45" />
+          <rect x="15" y="10" width="3" height="1" fill="var(--ink-black)" opacity="0.45" />
+          <rect x="15" y="13" width="3" height="1" fill="var(--ink-black)" opacity="0.45" />
+        </>
+      )}
     </svg>
   );
 }

@@ -10,16 +10,18 @@
  * Escape.
  *
  * Detail content per variant:
- *   • Player  — position (long), archetype (+secondary), rating, rarity, nation,
- *               durability, tags, strengths, weaknesses, quirk, bio.
- *   • Manager — nation, philosophy, trait pills.
- *   • Tactic  — category, effect, flavour, contradiction note.
+ *   • Player     — position (long), archetype (+secondary), rating, rarity, nation,
+ *                  durability, tags, strengths, weaknesses, quirk, bio.
+ *   • Manager    — nation, philosophy, trait pills.
+ *   • Tactic     — category, effect, flavour, contradiction note.
+ *   • Investment — ladder, tier, cost, Boardroom effect, flavour.
  */
 
 import { useEffect } from 'react';
 import type { Card } from '../../lib/scoring';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard } from '../../lib/tactics';
+import type { InvestmentCard } from '../../lib/economy';
 import { getTacticById } from '../../lib/tactics';
 import GameCard, { type GameCardModel } from './GameCard';
 import {
@@ -28,6 +30,8 @@ import {
   POSITION_LABEL,
   DURABILITY_META,
   TACTIC_CAT_COLOR,
+  INVESTMENT_META,
+  formatCash,
   nationFlag,
   nationCode,
 } from './cardTokens';
@@ -54,7 +58,9 @@ export default function CardModal({ model, onClose }: CardModalProps) {
       ? RARITY_COLOR[model.card.rarity] ?? RARITY_COLOR.Common
       : model.variant === 'manager'
         ? 'var(--kit-red)'
-        : TACTIC_CAT_COLOR[model.tactic.category] ?? 'var(--gold)';
+        : model.variant === 'tactic'
+          ? TACTIC_CAT_COLOR[model.tactic.category] ?? 'var(--gold)'
+          : INVESTMENT_META[model.investment.ladder]?.accent ?? 'var(--gold)';
 
   return (
     <div
@@ -114,8 +120,10 @@ export default function CardModal({ model, onClose }: CardModalProps) {
             <PlayerDetail card={model.card} accent={accent} />
           ) : model.variant === 'manager' ? (
             <ManagerDetail manager={model.manager} accent={accent} />
-          ) : (
+          ) : model.variant === 'tactic' ? (
             <TacticDetail tactic={model.tactic} accent={accent} />
+          ) : (
+            <InvestmentDetail investment={model.investment} accent={accent} />
           )}
         </div>
       </div>
@@ -401,6 +409,80 @@ function TacticDetail({ tactic, accent }: { tactic: TacticCard; accent: string }
             Replaces <b style={{ color: 'var(--cream)' }}>{contradicts.name}</b> if deployed together.
           </span>
         )}
+      </Panel>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// INVESTMENT detail (Boardroom)
+// ---------------------------------------------------------------------------
+
+const INVESTMENT_FLAVOUR: Record<string, string> = {
+  stadium: 'Bricks and roar. Every result pays a little more.',
+  academy: 'The future is grown, not bought.',
+  boxoffice: 'Give them goals and they will pay at the gate.',
+};
+
+function InvestmentDetail({ investment, accent }: { investment: InvestmentCard; accent: string }) {
+  const meta = INVESTMENT_META[investment.ladder] ?? INVESTMENT_META.stadium;
+  const ladderLabel =
+    investment.ladder === 'stadium'
+      ? 'Stadium Expansion'
+      : investment.ladder === 'academy'
+        ? 'Youth Academy'
+        : 'Box Office';
+  return (
+    <div className="flex flex-col" style={{ gap: 10 }}>
+      <Panel>
+        <div className="flex items-center justify-between" style={{ gap: 8 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'var(--cream)', lineHeight: 1.15 }}>{investment.name}</span>
+          <span
+            style={{
+              fontFamily: PIXEL,
+              fontSize: 8,
+              letterSpacing: 0.5,
+              color: 'var(--ink-black)',
+              background: accent,
+              borderRadius: 3,
+              padding: '4px 6px',
+              flexShrink: 0,
+            }}
+          >
+            {meta.tab}
+          </span>
+        </div>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 6 }}>
+          <StatCell label="LADDER" value={ladderLabel} color={accent} />
+          <StatCell label="COST" value={formatCash(investment.cost)} color="var(--gold)" />
+          {investment.ladder !== 'boxoffice' && (
+            <StatCell label="TIER" value={String(investment.tier)} />
+          )}
+          <StatCell label="TYPE" value={meta.kicker} />
+        </div>
+      </Panel>
+
+      <Panel>
+        <Label>BOARDROOM EFFECT</Label>
+        <span style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--cream-soft)' }}>{investment.description}</span>
+      </Panel>
+
+      <Panel>
+        <p
+          style={{
+            fontFamily: 'var(--font-flavour, serif)',
+            fontStyle: 'italic',
+            fontSize: 12.5,
+            lineHeight: 1.45,
+            color: 'var(--dust)',
+            margin: 0,
+          }}
+        >
+          {'“'}{INVESTMENT_FLAVOUR[investment.ladder] ?? ''}{'”'}
+        </p>
+        <span style={{ fontSize: 10.5, color: 'var(--gold)', lineHeight: 1.35 }}>
+          One-time unlock. Consumed on purchase.
+        </span>
       </Panel>
     </div>
   );
