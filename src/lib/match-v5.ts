@@ -222,7 +222,7 @@ const zeroEmit = (): Record<ZoneName, number> => ({ attack: 0, defence: 0, creat
  *  cascade the lean opponent side path skips, AND for the player's own inflated
  *  defence it attacks into, so a comparably-powered opponent is a real threat.
  *  (DESIGN §7 difficulty dial; calibrated against the deck-strength sweep.) */
-const OPP_COHESION = 1.3;
+const OPP_COHESION = 1.15;
 
 // --- Fitness (MATCH_ENGINE §3.1; §7 dials) ---
 // Dynamic 1–6 condition. fitnessFactor scales emission: fresh (6) = full, spent (1) =

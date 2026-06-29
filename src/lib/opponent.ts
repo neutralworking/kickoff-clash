@@ -78,7 +78,7 @@ const STYLE_FORMATION: Record<string, string> = {
 };
 
 /** Round power budget → opponent base power (DESIGN §7 difficulty dial). */
-const ROUND_POWER = [76, 81, 86, 91, 96];
+const ROUND_POWER = [72, 77, 82, 86, 90];
 
 /** Fictional surname pool for opponent XI display names. Names only — never feeds
  *  match math. Seeded pick (NEW salt) + per-XI dedup so each opponent reads as a real

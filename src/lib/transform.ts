@@ -210,6 +210,24 @@ function levelToRarity(level: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Power from level — decompress the 71–95 source band to 50–99 (MATCH_ENGINE_V5
+// §11.2 / Phase 3 Foundation). The raw levels are bunched in a 24-point band, which
+// flattened deck-strength differences (adjacent decks resolved near-identically, so
+// drafting barely registered). Spreading to a 49-point band re-opens the curve so a
+// stronger XI is meaningfully stronger. Opponent ROUND_POWER is recalibrated to match.
+// ---------------------------------------------------------------------------
+
+const LEVEL_MIN = 71;
+const LEVEL_MAX = 95;
+const POWER_MIN = 50;
+const POWER_MAX = 99;
+
+export function levelToPower(level: number): number {
+  const t = Math.max(0, Math.min(1, (level - LEVEL_MIN) / (LEVEL_MAX - LEVEL_MIN)));
+  return Math.round(POWER_MIN + t * (POWER_MAX - POWER_MIN));
+}
+
+// ---------------------------------------------------------------------------
 // Durability — seeded random per rarity tier
 // ---------------------------------------------------------------------------
 
@@ -272,7 +290,7 @@ export function transformCharacter(char: KCCharacter, index: number): Card {
     tacticalRole: deriveTacticalRole(char.model, position),
     personalityType,
     personalityTheme: theme,
-    power: char.level,
+    power: levelToPower(char.level),
     rarity,
     gatePull,
     durability,
