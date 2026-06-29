@@ -440,7 +440,9 @@ export default function GameShell() {
       round: nextCup,
       matchInCup: 1,
       cash: runState.cash + interestOn(runState.cash),
-      deck: runState.deck.map(c => ({ ...c, fitness: 6 })),
+      // Between cups everyone starts fresh: fitness reset and in-cup injuries cleared, so
+      // each cup is a self-contained puzzle. (Permanent durability shatter still sticks.)
+      deck: runState.deck.map(c => ({ ...c, fitness: 6, injured: false })),
       tacticsDeck,
     };
     setRunState(newState);

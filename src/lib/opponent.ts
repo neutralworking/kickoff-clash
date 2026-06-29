@@ -134,7 +134,7 @@ export function generateOpponentXI(
     const profile = pick(profiles, seededRandom(seed * 31 + i * 97 + round * 13));
     // ±6 seeded jitter around the round's base power.
     const jitter = Math.round((seededRandom(seed * 17 + i * 53 + round * 7) - 0.5) * 12);
-    const power = Math.max(60, Math.min(99, Math.round(basePower) + jitter));
+    const power = Math.max(50, Math.min(99, Math.round(basePower) + jitter));
     // Display surname: NEW salt distinct from the power/profile rolls, deduped within
     // this XI (advance to the next candidate on collision). Name only — no math impact.
     let nameIdx = Math.floor(seededRandom(seed * 911 + i * 2399 + round * 53) * SURNAMES.length);

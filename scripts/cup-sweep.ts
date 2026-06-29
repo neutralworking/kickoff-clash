@@ -80,11 +80,11 @@ function playTie(xi: Card[], cup: number, matchInCup: number, seed: number): 'wi
     state = commitAttackers(state, pickAttackers(state));
     state = advanceIncrement(state, resolveIncrement(state, evaluateSplit(state, [], slots), seed));
   }
-  // Persist the played XI's drained fitness back into the caller's squad cards by reference
-  // is avoided — caller applies applyMatchFitness with the returned XI.
+  // Copy the played XI's drained fitness AND any in-match injury back onto the caller's
+  // squad cards, so applyMatchFitness sees them (injuries are a real cross-tie punishment).
   for (const played of state.xi) {
     const src = xi.find(c => c.id === played.id);
-    if (src) src.fitness = played.fitness;
+    if (src) { src.fitness = played.fitness; src.injured = played.injured; }
   }
   return getMatchResult(state).result;
 }
@@ -94,7 +94,7 @@ function runOnce(squadSeed: number, policy: Policy): { cupReached: number; won: 
   // Fresh squad copy (fitness mutates).
   const squad: Card[] = squadCards.map(c => ({ ...c, fitness: 6, injured: false }));
   for (let cup = 1; cup <= MAX_CUPS; cup++) {
-    for (const c of squad) c.fitness = 6; // reset between cups
+    for (const c of squad) { c.fitness = 6; c.injured = false; } // reset between cups
     const size = CUP_SIZES[cup - 1];
     for (let m = 1; m <= size; m++) {
       const isFinal = m === size;
@@ -102,9 +102,9 @@ function runOnce(squadSeed: number, policy: Policy): { cupReached: number; won: 
       const seed = buildMatchSeed(squadSeed, cup, m);
       const result = playTie(xi, cup, m, seed);
       if (result === 'loss') return { cupReached: cup - 1 + (m - 1) / size, won: false };
-      // fold fitness back onto the squad (the playTie mutation set XI fitness; apply rest+ET)
+      // fold fitness + injuries back onto the squad (playTie set them on the XI cards)
       const updated = applyMatchFitness(squad, xi, result);
-      for (let i = 0; i < squad.length; i++) squad[i].fitness = updated[i].fitness;
+      for (let i = 0; i < squad.length; i++) { squad[i].fitness = updated[i].fitness; squad[i].injured = updated[i].injured; }
     }
   }
   return { cupReached: 5, won: true };

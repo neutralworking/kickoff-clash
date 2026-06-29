@@ -113,23 +113,26 @@ export function buildMatchSeed(seed: number, cup: number, matchInCup: number): n
 // fitness forward; rested players recover; a drawn tie went to extra time and drains
 // everyone who played a little more. Fitness resets to fresh between cups (handled at
 // the shop). This is what makes squad rotation a real decision.
-export const REST_RECOVERY = 3.0;   // a rested (benched) player recovers this per tie
+export const REST_RECOVERY = 2.5;   // a rested (benched) player recovers this per tie
 export const EXTRA_TIME_DRAIN = 1.0; // a drawn tie costs everyone who played this much
 
 /**
  * Fold a match's fitness back onto the deck: the XI that finished carries its drained
- * fitness (minus extra-time on a draw, floored at 1); everyone else recovers toward 6.
+ * fitness (minus extra-time on a draw, floored at 1) AND any injury picked up in the tie;
+ * everyone else recovers toward 6. Injuries persist through the cup (cleared only at the
+ * between-cup reset) — overplaying a fragile star can lose him for the final.
  */
 export function applyMatchFitness(
   deck: Card[],
   playedXi: Card[],
   result: 'win' | 'draw' | 'loss',
 ): Card[] {
-  const played = new Map(playedXi.map((c) => [c.id, c.fitness ?? 6]));
+  const played = new Map(playedXi.map((c) => [c.id, { fitness: c.fitness ?? 6, injured: !!c.injured }]));
   const etDrain = result === 'draw' ? EXTRA_TIME_DRAIN : 0;
   return deck.map((c) => {
-    if (played.has(c.id)) {
-      return { ...c, fitness: Math.max(1, (played.get(c.id) ?? 6) - etDrain) };
+    const p = played.get(c.id);
+    if (p) {
+      return { ...c, fitness: Math.max(1, p.fitness - etDrain), injured: c.injured || p.injured };
     }
     return { ...c, fitness: Math.min(6, (c.fitness ?? 6) + REST_RECOVERY) };
   });
