@@ -7,8 +7,9 @@ import type { RunState } from '../lib/run';
 import { getShopCards, ALL_CARDS } from '../lib/run';
 import {
   SHOP_ITEMS, getTransferFee, ACADEMY_UPGRADE_COST, getAcademyTier,
-  generateAcademyDurability, JOKER_COST,
+  generateAcademyDurability, JOKER_COST, getStadiumInvestment,
 } from '../lib/economy';
+import type { InvestmentCard } from '../lib/economy';
 import type { JokerCard as JokerCardType } from '../lib/jokers';
 import { getShopJokers } from '../lib/jokers';
 import type { OpponentBuild } from '../lib/run';
@@ -27,6 +28,7 @@ interface ShopPhaseProps {
   onBuyAcademy: (card: Card) => void;
   onUpgradeAcademy: () => void;
   onBuyTacticPack: () => void;
+  onBuyInvestment: (card: InvestmentCard) => void;
   onTrainPlayer: (cardId: number) => void;
   onRerollShop: () => boolean;
   onHealPlayer: (cardId: number) => boolean;
@@ -53,6 +55,7 @@ export default function ShopPhase({
   onBuyAcademy,
   onUpgradeAcademy,
   onBuyTacticPack,
+  onBuyInvestment,
   onTrainPlayer,
   onRerollShop,
   onHealPlayer,
@@ -262,6 +265,7 @@ export default function ShopPhase({
             onBuyAcademy={onBuyAcademy}
             onUpgradeAcademy={onUpgradeAcademy}
             onBuyTacticPack={onBuyTacticPack}
+            onBuyInvestment={onBuyInvestment}
             onScoutOpponent={onScoutOpponent}
             openModal={setModal}
           />
@@ -558,7 +562,7 @@ function SquadTab({
 
 function BackroomTab({
   state, academy, academyCards, scoutedOpponent,
-  onBuyAcademy, onUpgradeAcademy, onBuyTacticPack, onScoutOpponent, openModal,
+  onBuyAcademy, onUpgradeAcademy, onBuyTacticPack, onBuyInvestment, onScoutOpponent, openModal,
 }: {
   state: RunState;
   academy: ReturnType<typeof getAcademyTier>;
@@ -567,12 +571,29 @@ function BackroomTab({
   onBuyAcademy: (card: Card) => void;
   onUpgradeAcademy: () => void;
   onBuyTacticPack: () => void;
+  onBuyInvestment: (card: InvestmentCard) => void;
   onScoutOpponent: () => boolean;
   openModal: (m: GameCardModel) => void;
 }) {
   const canUpgrade = state.cash >= ACADEMY_UPGRADE_COST;
+  const stadiumInvestment = getStadiumInvestment(state.stadiumTier);
   return (
     <div className="flex flex-col gap-3 pb-2">
+      {/* Boardroom — Stadium Expansion (Investment) */}
+      <SectionCard title="Boardroom" accent="var(--gold)">
+        {stadiumInvestment ? (
+          <RowAction
+            title={`Stadium Expansion · ${stadiumInvestment.name}`}
+            sub={stadiumInvestment.description}
+            cost={stadiumInvestment.cost}
+            affordable={state.cash >= stadiumInvestment.cost}
+            onClick={() => onBuyInvestment(stadiumInvestment)}
+          />
+        ) : (
+          <EmptyState text="Stadium fully expanded — The Cathedral." />
+        )}
+      </SectionCard>
+
       {/* Scout report */}
       <SectionCard title="Scout Report" accent="var(--kit-blue)">
         {scoutedOpponent ? (

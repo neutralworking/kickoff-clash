@@ -16,10 +16,12 @@ import {
   applyTraining,
   buyTacticPack,
   buyShopItem,
+  buyInvestment,
   healInjuredCard,
   drawRoundTactic,
 } from '../lib/run';
 import { getShopItem } from '../lib/economy';
+import type { InvestmentCard } from '../lib/economy';
 import type { HandState } from '../lib/hand';
 import { INCREMENT_MINUTES } from '../lib/hand';
 import type { JokerCard } from '../lib/jokers';
@@ -366,6 +368,12 @@ export default function GameShell() {
     if (result) { setRunState(result); saveRun(result); }
   }, [runState]);
 
+  const handleBuyInvestment = useCallback((card: InvestmentCard) => {
+    if (!runState) return;
+    const result = buyInvestment(runState, card);
+    if (result) { setRunState(result); saveRun(result); }
+  }, [runState]);
+
   const handleTrainPlayer = useCallback((cardId: number) => {
     if (!runState) return;
     const result = applyTraining(runState, cardId);
@@ -486,6 +494,7 @@ export default function GameShell() {
             onBuyAcademy={handleBuyAcademy}
             onUpgradeAcademy={handleUpgradeAcademy}
             onBuyTacticPack={handleBuyTacticPack}
+            onBuyInvestment={handleBuyInvestment}
             onTrainPlayer={handleTrainPlayer}
             onRerollShop={handleRerollShop}
             onHealPlayer={handleHealPlayer}

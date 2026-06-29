@@ -15,6 +15,7 @@ import {
   calculateAttendance, getStadium, getTransferFee,
   SHOP_ITEMS, ShopItem, ACADEMY_TIERS, ACADEMY_UPGRADE_COST,
   generateAcademyDurability, getAcademyTier,
+  type InvestmentCard,
 } from './economy';
 import { findConnections } from './chemistry';
 import { transformAllCharacters, type KCCharacter } from './transform';
@@ -874,6 +875,22 @@ export function upgradeAcademy(state: RunState): RunState | null {
     ...state,
     cash: state.cash - ACADEMY_UPGRADE_COST,
     academyTier: state.academyTier + 1,
+  };
+}
+
+/**
+ * Buy an Investment card (Boardroom). Consumed on purchase — its effect folds straight
+ * into the relevant RunState scalar/flag (no owned-Investment array). The shop only ever
+ * offers the next valid tier, so the cash check is the only guard needed.
+ */
+export function buyInvestment(state: RunState, card: InvestmentCard): RunState | null {
+  if (state.cash < card.cost) return null;
+  const { effect } = card;
+  return {
+    ...state,
+    cash: state.cash - card.cost,
+    ...(effect.stadiumTier !== undefined ? { stadiumTier: effect.stadiumTier } : {}),
+    ...(effect.academyTier !== undefined ? { academyTier: effect.academyTier } : {}),
   };
 }
 

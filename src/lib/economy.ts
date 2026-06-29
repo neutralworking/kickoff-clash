@@ -216,6 +216,48 @@ export function matchReward(
   return Math.round(base * resultFactor * mult) + boxOfficeBonus;
 }
 
+// ---------------------------------------------------------------------------
+// Investment cards (Boardroom) — Phase 2
+// ---------------------------------------------------------------------------
+//
+// One-time-unlock cards (Balatro vouchers). Buying one is consumed into a RunState
+// scalar/flag — there is no owned-Investment array. The shop offers only the NEXT tier
+// in each ladder, read off the current scalar. Pure data (no compute fn) → serialises
+// cleanly. Player-facing names are football (Stadium Expansion / Youth Academy / Box
+// Office); `kind: 'investment'` is the internal discriminator.
+
+export interface InvestmentCard {
+  id: string;
+  kind: 'investment';
+  ladder: 'stadium' | 'academy' | 'boxoffice';
+  tier: number;              // the tier THIS card unlocks (ladders), or 1 (one-shots)
+  name: string;
+  cost: number;
+  description: string;
+  effect: { stadiumTier?: number; academyTier?: number; boxOffice?: boolean };
+}
+
+/** Cost to unlock each stadium tier (1-indexed; tier 1 is the free default). */
+export const STADIUM_INVEST_COST = [0, 10000, 22000, 40000, 70000];
+
+/** The Stadium Expansion ladder — tiers 2..5, each card named after the ground it
+ *  builds and tagged with the payout multiplier it unlocks. */
+export const STADIUM_INVESTMENTS: InvestmentCard[] = STADIUMS.slice(1).map((s) => ({
+  id: `stadium-${s.tier}`,
+  kind: 'investment',
+  ladder: 'stadium',
+  tier: s.tier,
+  name: s.name,
+  cost: STADIUM_INVEST_COST[s.tier - 1],
+  description: `Expand to ${s.name} — ×${STADIUM_MULT[s.tier - 1]} gate on every result.`,
+  effect: { stadiumTier: s.tier },
+}));
+
+/** The next Stadium Expansion offered for a given current tier, or null if maxed. */
+export function getStadiumInvestment(currentTier: number): InvestmentCard | null {
+  return STADIUM_INVESTMENTS.find((c) => c.tier === currentTier + 1) ?? null;
+}
+
 export function getStadium(tier: number): Stadium {
   const clamped = Math.max(1, Math.min(5, tier));
   return STADIUMS[clamped - 1];
