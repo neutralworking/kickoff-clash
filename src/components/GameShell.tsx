@@ -22,6 +22,7 @@ import {
   isCupFinal,
   MAX_CUPS,
   interestOn,
+  applyMatchFitness,
 } from '../lib/run';
 import { getShopItem } from '../lib/economy';
 import type { InvestmentCard } from '../lib/economy';
@@ -262,8 +263,14 @@ export default function GameShell() {
       promoted: durResult.promoted.map(c => c.name),
     };
 
-    // Apply durability to deck
-    const updatedDeck = applyDurabilityResults(runState.deck, durResult);
+    // Apply durability to deck, then fold in cross-match fitness (Phase 3B.2): the XI
+    // that played carries its drained fitness into the next cup tie (extra-time hit on a
+    // draw); rested players recover. Fitness resets to fresh between cups (handleShopNext).
+    const updatedDeck = applyMatchFitness(
+      applyDurabilityResults(runState.deck, durResult),
+      result.handState.xi,
+      result.result,
+    );
 
     // Update wins/losses
     const wins = runState.wins + (result.result === 'win' ? 1 : 0);

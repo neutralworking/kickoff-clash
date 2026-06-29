@@ -26,7 +26,7 @@ import type { JokerCard } from './jokers';
 import { getExtraDiscards } from './jokers';
 import { ALL_TACTICS, type TacticCard } from './tactics';
 import { getFormation, ALL_FORMATIONS } from './formations';
-import { generateOpponentXI } from './opponent';
+import { generateOpponentXI, cupMatchPower } from './opponent';
 import type { CoAppearance } from './chem';
 import { pruneCard } from './chem';
 
@@ -106,6 +106,33 @@ export function isCupFinal(cup: number, matchInCup: number): boolean {
  *  cup gets a distinct opponent via the matchInCup salt. */
 export function buildMatchSeed(seed: number, cup: number, matchInCup: number): number {
   return seed + cup * 1000 + matchInCup * 149;
+}
+
+// --- Cross-match fitness (Phase 3B.2) ---
+// Fitness persists across a cup's ties: players who featured carry their drained
+// fitness forward; rested players recover; a drawn tie went to extra time and drains
+// everyone who played a little more. Fitness resets to fresh between cups (handled at
+// the shop). This is what makes squad rotation a real decision.
+export const REST_RECOVERY = 3.0;   // a rested (benched) player recovers this per tie
+export const EXTRA_TIME_DRAIN = 1.0; // a drawn tie costs everyone who played this much
+
+/**
+ * Fold a match's fitness back onto the deck: the XI that finished carries its drained
+ * fitness (minus extra-time on a draw, floored at 1); everyone else recovers toward 6.
+ */
+export function applyMatchFitness(
+  deck: Card[],
+  playedXi: Card[],
+  result: 'win' | 'draw' | 'loss',
+): Card[] {
+  const played = new Map(playedXi.map((c) => [c.id, c.fitness ?? 6]));
+  const etDrain = result === 'draw' ? EXTRA_TIME_DRAIN : 0;
+  return deck.map((c) => {
+    if (played.has(c.id)) {
+      return { ...c, fitness: Math.max(1, (played.get(c.id) ?? 6) - etDrain) };
+    }
+    return { ...c, fitness: Math.min(6, (c.fitness ?? 6) + REST_RECOVERY) };
+  });
 }
 
 export interface Opponent {
@@ -297,7 +324,10 @@ export function getOpponentBuild(cup: number, matchInCup: number, runSeed: numbe
   // Reproduce the EXACT side the engine will field: same (cup, proto-style, seed) that
   // MatchPhase feeds to initMatch → generateOpponentXI (via buildMatchSeed), so the tie
   // within the cup gets the right distinct opponent.
-  const { xi: genXI, formation } = generateOpponentXI(cup, opp.style, buildMatchSeed(runSeed, cup, matchInCup));
+  const { xi: genXI, formation } = generateOpponentXI(
+    cup, opp.style, buildMatchSeed(runSeed, cup, matchInCup),
+    cupMatchPower(cup, matchInCup, cupSize(cup)),
+  );
 
   const toDisplay = (c: Card): OpponentPlayer => ({
     name: c.name,

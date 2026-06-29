@@ -222,7 +222,7 @@ const zeroEmit = (): Record<ZoneName, number> => ({ attack: 0, defence: 0, creat
  *  cascade the lean opponent side path skips, AND for the player's own inflated
  *  defence it attacks into, so a comparably-powered opponent is a real threat.
  *  (DESIGN §7 difficulty dial; calibrated against the deck-strength sweep.) */
-const OPP_COHESION = 1.15;
+const OPP_COHESION = 1.05;
 
 // --- Fitness (MATCH_ENGINE §3.1; §7 dials) ---
 // Dynamic 1–6 condition. fitnessFactor scales emission: fresh (6) = full, spent (1) =
@@ -542,13 +542,16 @@ export function initMatch(
   opponentWeakness: string,
   chemistry: CoAppearance = {},
   intent: TeamIntent = 'balanced',
+  opponentPower?: number,
 ): MatchV5State {
   // The opponent is now a real positioned side (step 4), generated deterministically
-  // from the round budget + style. It plays through the same dispatcher as you do.
+  // from the round budget + style. opponentPower is the within-cup ramp (cupMatchPower);
+  // without it the per-cup base is used. It plays through the same dispatcher as you do.
   const { xi: opponentXI, formation: opponentFormation } = generateOpponentXI(
     opponentRound,
     opponentStyle,
     seed,
+    opponentPower,
   );
   return {
     // Each starter begins the match fresh (or low if carrying an injury); fitness

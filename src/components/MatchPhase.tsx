@@ -2,7 +2,8 @@
 
 import { useState, useCallback } from 'react';
 import type { RunState } from '../lib/run';
-import { getOpponent, getOpponentBuild, buildMatchSeed } from '../lib/run';
+import { getOpponent, getOpponentBuild, buildMatchSeed, cupSize } from '../lib/run';
+import { cupMatchPower } from '../lib/opponent';
 import type { HandState } from '../lib/hand';
 import { rollXI, handFromSelection, INCREMENT_MINUTES } from '../lib/hand';
 import { getFormation } from '../lib/formations';
@@ -65,6 +66,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       opponentBuild.weaknessArchetype,
       runState.chemistry ?? {},
       runState.intent ?? 'balanced',
+      cupMatchPower(runState.round, runState.matchInCup, cupSize(runState.round)),
     );
   });
 
