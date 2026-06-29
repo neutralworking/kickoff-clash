@@ -1430,15 +1430,28 @@ export function advanceIncrement(state: MatchV5State, result: IncrementResult): 
 // 7. makeSub
 // ---------------------------------------------------------------------------
 
+/**
+ * Why a substitution would be rejected, or null if it is legal. Lets the UI explain a
+ * blocked sub (a toast) instead of the engine silently returning the unchanged state —
+ * the "subs don't always work" feel. Subs are allowed at any point in the match (capped
+ * at `subsRemaining`); there is no first-half restriction.
+ */
+export function subBlockReason(
+  state: MatchV5State,
+  xiCardId: number,
+  benchCardId: number,
+): string | null {
+  if (state.subsRemaining <= 0) return 'No substitutions left';
+  if (!state.xi.some((c) => c.id === xiCardId)) return 'That player is not on the pitch';
+  if (!state.bench.some((c) => c.id === benchCardId)) return 'That player is not on the bench';
+  return null;
+}
+
 export function makeSub(state: MatchV5State, xiCardId: number, benchCardId: number): MatchV5State {
-  if (state.subsRemaining <= 0) return state;
+  if (subBlockReason(state, xiCardId, benchCardId) !== null) return state;
 
-  const xiCard = state.xi.find((c) => c.id === xiCardId);
-  const benchCard = state.bench.find((c) => c.id === benchCardId);
-  if (!xiCard || !benchCard) return state;
-
-  // First half: injury subs only
-  if (state.isFirstHalf && !xiCard.injured) return state;
+  const xiCard = state.xi.find((c) => c.id === xiCardId)!;
+  const benchCard = state.bench.find((c) => c.id === benchCardId)!;
 
   const minute = INCREMENT_MINUTES[state.currentIncrement] ?? 90;
   const newXi = state.xi.map((c) => (c.id === xiCardId ? benchCard : c));
@@ -1500,5 +1513,65 @@ export function getMatchResult(state: MatchV5State): MatchV5Result {
     result,
     scores: state.scores,
     matchState: state,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Cumulative match stats — running totals across all played increments.
+// The per-increment `stats` block is for THIS 15' window only; the team-talk break
+// wants the match-to-date totals too. Pure aggregation over `scores` (display-only).
+// ---------------------------------------------------------------------------
+
+export interface CumulativeStats {
+  periodsPlayed: number;
+  yourGoals: number;
+  opponentGoals: number;
+  yourXG: number;
+  opponentXG: number;
+  yourShots: number;
+  opponentShots: number;
+  yourShotsOnTarget: number;
+  opponentShotsOnTarget: number;
+  yourPossessionPct: number;   // share of total possessions across the match
+  opponentPossessionPct: number;
+  yourZonesWon: number;        // lane-wins tallied across every period (max 3 × periods)
+  opponentZonesWon: number;
+  zoneMargin: Record<Cell, number>; // signed per-cell control margin, summed over periods
+}
+
+export function cumulativeStats(scores: IncrementResult[]): CumulativeStats {
+  const zoneMargin = Object.fromEntries(CELLS.map((c) => [c, 0])) as Record<Cell, number>;
+  let yX = 0, oX = 0, yS = 0, oS = 0, ySoT = 0, oSoT = 0, yPoss = 0, oPoss = 0;
+  let yGoals = 0, oGoals = 0, yZW = 0, oZW = 0;
+
+  for (const s of scores) {
+    yGoals += s.yourGoalCount; oGoals += s.opponentGoalCount;
+    yX += s.yourXG; oX += s.opponentXG;
+    yS += s.yourShots.length; oS += s.opponentShots.length;
+    ySoT += s.stats.yourShotsOnTarget; oSoT += s.stats.opponentShotsOnTarget;
+    yPoss += s.yourPossessions; oPoss += s.opponentPossessions;
+    for (const lane of LANES) {
+      if (s.stats.yourZonesWon[lane]) yZW++;
+      if (s.stats.opponentZonesWon[lane]) oZW++;
+    }
+    for (const cell of CELLS) zoneMargin[cell] += s.stats.zoneMargin[cell] ?? 0;
+  }
+
+  const totPoss = yPoss + oPoss;
+  return {
+    periodsPlayed: scores.length,
+    yourGoals: yGoals,
+    opponentGoals: oGoals,
+    yourXG: Math.round(yX * 100) / 100,
+    opponentXG: Math.round(oX * 100) / 100,
+    yourShots: yS,
+    opponentShots: oS,
+    yourShotsOnTarget: ySoT,
+    opponentShotsOnTarget: oSoT,
+    yourPossessionPct: totPoss ? Math.round((yPoss / totPoss) * 100) : 50,
+    opponentPossessionPct: totPoss ? Math.round((oPoss / totPoss) * 100) : 50,
+    yourZonesWon: yZW,
+    opponentZonesWon: oZW,
+    zoneMargin,
   };
 }
