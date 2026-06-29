@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { transformAllCharacters, type KCCharacter } from '../src/lib/transform';
+import { transformCards, type KCCard } from '../src/lib/transform';
 import { getFormation } from '../src/lib/formations';
 import { createEmptySlots } from '../src/lib/tactics';
 import {
@@ -34,8 +34,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const SEEDS = Number(process.argv[2] ?? 40);
-const dataPath = path.join(__dirname, '..', 'public', 'data', 'kc_characters.json');
-const cards = transformAllCharacters(JSON.parse(fs.readFileSync(dataPath, 'utf-8')) as KCCharacter[]);
+const dataPath = path.join(__dirname, '..', 'public', 'data', 'kc_cards.json');
+const cards = transformCards(JSON.parse(fs.readFileSync(dataPath, 'utf-8')) as KCCard[]);
 const sorted = [...cards].sort((a, b) => b.power - a.power);
 
 // Deck-strength tiers by power rank (each a band of 11). S5 strongest → S1 weakest.

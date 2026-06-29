@@ -177,7 +177,34 @@ export const ROLE_TRANSFORMS: Record<string, TraitRecord[]> = {
   ],
 };
 
-/** Resolve a card's TraitRecords from its tactical role (empty if none). */
+/**
+ * Role aliases (data port D.4). The V3.1 Chief Scout pool emits authentic `best_role`
+ * names that don't all map 1:1 onto the §9 role vocabulary above. Rather than overwrite
+ * the evocative role on the card (it's shown to the player), we alias each new role to the
+ * closest existing trait set so the dispatcher still fires. Without this ~44% of the pool
+ * (Playmaker, Wide Playmaker, Distributor, Fullback, Sweeper, …) would emit no role traits.
+ */
+const ROLE_ALIASES: Record<string, string> = {
+  Playmaker: 'Regista',            // deep tempo creator → Metronome (+creation)
+  'Wide Playmaker': 'Fantasista',  // creative wide mid → Half-Space Magic (Creators)
+  Distributor: 'Ball-Playing GK',  // sweeper-keeper distribution → starts attacks
+  Fullback: 'Lateral',             // overlapping fullback → Overlap
+  'Wing-back': 'Fluidificante',    // attacking wing-back → Surge + Underlap
+  Sweeper: 'Libero',               // sweeping CB → Surgical Pass (releases forwards)
+  'Vertical Forward': 'Poacher',   // direct runner → Box Presence (finishing)
+  Colossus: 'Stopper',             // dominant CB → Front Foot
+  Centrale: 'Zagueiro',            // central defender → Commander
+  'Auxiliary CB': 'Zagueiro',      // makeshift CB → Commander
+  'Segundo Volante': 'Volante',    // ball-winning mid → Tackle & Go
+  Pivote: 'Anchor',                // holding pivot → The Shield
+  Mediapunta: 'Trequartista',      // central #10 → Moment of Genius
+  'Half-Space Creator': 'Mezzala', // half-space runner → Half-Space Run
+};
+
+/** Resolve a card's TraitRecords from its tactical role (empty if none). Falls back to a
+ *  role alias so the V3.1 pool's authentic role names still drive the dispatcher. */
 export function traitsForCard(card: Card): TraitRecord[] {
-  return card.tacticalRole ? (ROLE_TRANSFORMS[card.tacticalRole] ?? []) : [];
+  const role = card.tacticalRole;
+  if (!role) return [];
+  return ROLE_TRANSFORMS[role] ?? ROLE_TRANSFORMS[ROLE_ALIASES[role] ?? ''] ?? [];
 }

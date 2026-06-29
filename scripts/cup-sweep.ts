@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { transformAllCharacters, type KCCharacter } from '../src/lib/transform';
+import { transformCards, type KCCard } from '../src/lib/transform';
 import { getFormation } from '../src/lib/formations';
 import { createEmptySlots } from '../src/lib/tactics';
 import {
@@ -33,8 +33,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SEEDS = Number(process.argv[2] ?? 40);
 
-const cards = transformAllCharacters(
-  JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'data', 'kc_characters.json'), 'utf-8')) as KCCharacter[],
+const cards = transformCards(
+  JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'data', 'kc_cards.json'), 'utf-8')) as KCCard[],
 );
 const sorted = [...cards].sort((a, b) => b.power - a.power);
 

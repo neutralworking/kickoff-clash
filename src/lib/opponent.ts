@@ -77,16 +77,23 @@ const STYLE_FORMATION: Record<string, string> = {
   Adaptive: '3-5-2',
 };
 
-/** Round power budget → opponent base power (DESIGN §7 difficulty dial). */
-const ROUND_POWER = [72, 77, 82, 86, 90];
+/** Round power budget → opponent base power (DESIGN §7 difficulty dial).
+ *  Re-grounded for the V3.1 BRS pool (data port D.4): BRS-as-power is a flatter,
+ *  lower-ceiling scale than the old decompressed band, so the budget drops to match.
+ *  This is the single-match Foundation curve (balance-sweep) + the opener fallback;
+ *  the real cup difficulty lives in CUP_FINAL_POWER below. */
+const ROUND_POWER = [62, 68, 73, 78, 82];
 
 // --- Within-cup ramp (Phase 3B.3) ---------------------------------------------------
 // Each cup escalates from soft openers to a boss FINAL. Most of the 20 sudden-death
 // matches are openers (high survival); difficulty is concentrated in the five finals,
 // and the final being a step up is what makes "rest your stars for the final" correct.
-// Tuned on the cup-sweep (scripts/cup-sweep.ts).
-export const CUP_FINAL_POWER = [61, 67, 73, 78, 82]; // boss power per cup (1-5)
-export const OPENER_DROP = 14;                       // openers this far below the final
+// Tuned on the cup-sweep (scripts/cup-sweep.ts). Re-grounded for the V3.1 BRS pool
+// (data port D.4): the new pool is ~13 power weaker in effective terms, so the boss
+// finals drop to keep a STRONG rotating squad championing at ~37% under naive play
+// (real play adds chemistry/tactics/jokers on top). Cup 5's 6-tie gauntlet is the wall.
+export const CUP_FINAL_POWER = [48, 53, 58, 63, 67]; // boss power per cup (1-5)
+export const OPENER_DROP = 18;                       // openers this far below the final
 
 /** The opponent base power for a specific tie: ramps openerPower → final across the cup. */
 export function cupMatchPower(cup: number, matchInCup: number, size: number): number {

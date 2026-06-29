@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { transformAllCharacters, type KCCharacter } from '../src/lib/transform';
+import { transformCards, type KCCard } from '../src/lib/transform';
 import { getFormation } from '../src/lib/formations';
 import { createEmptySlots } from '../src/lib/tactics';
 import {
@@ -27,13 +27,13 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dataPath = path.join(__dirname, '..', 'public', 'data', 'kc_characters.json');
-const raw = JSON.parse(fs.readFileSync(dataPath, 'utf-8')) as KCCharacter[];
+const dataPath = path.join(__dirname, '..', 'public', 'data', 'kc_cards.json');
+const raw = JSON.parse(fs.readFileSync(dataPath, 'utf-8')) as KCCard[];
 
 console.log(`\n=== kickoff-clash match-v5 harness ===`);
-console.log(`Loaded ${raw.length} characters from kc_characters.json`);
+console.log(`Loaded ${raw.length} characters from kc_cards.json`);
 
-const cards = transformAllCharacters(raw);
+const cards = transformCards(raw);
 console.log(`Transformed to ${cards.length} Cards`);
 console.log(`Power range: ${Math.min(...cards.map(c => c.power))}–${Math.max(...cards.map(c => c.power))}`);
 console.log(`Archetype counts:`, cards.reduce<Record<string, number>>((acc, c) => {

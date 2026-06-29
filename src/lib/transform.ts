@@ -1,8 +1,13 @@
 /**
  * Kickoff Clash — Data Bridge
  *
- * Transforms kc_characters.json → Card[] for the game engine.
- * 500 fictional characters with bios, tags, quirks.
+ * LIVE source (data port, V3.1 Chief Scout): kc_cards.json → Card[] via transformCards()
+ * / transformCard(). 540 fictional cards carrying skillset, role, BRS-as-power, 4 pillars,
+ * nickname and personality theme, generated from the real distributions (scripts/generate-cards.ts).
+ *
+ * LEGACY source (retained, no live callers): the kc_characters.json path below
+ * (KCCharacter / transformAllCharacters) — the original 500 fictional characters with
+ * bios/tags/quirks. Kept for reference; the engine no longer reads it.
  */
 
 import type { Card, Durability } from './scoring';
@@ -310,4 +315,52 @@ export function transformCharacter(char: KCCharacter, index: number): Card {
 
 export function transformAllCharacters(characters: KCCharacter[]): Card[] {
   return characters.map((char, i) => transformCharacter(char, i));
+}
+
+// ---------------------------------------------------------------------------
+// V3.1 card pool (Chief Scout data port) — kc_cards.json → Card[]
+// ---------------------------------------------------------------------------
+//
+// The generated fictional pool already carries the canonical stack: Skillset (the 13,
+// == the game's `archetype`), Role (best_role), the evocative Archetype `nickname`, BRS
+// (== power directly, no decompression), and the 4-pillar block. Position codes match.
+
+export interface KCCard {
+  name: string;
+  position: string;            // GK/CD/WD/DM/CM/AM/WM/WF/CF (already the game's codes)
+  skillset: string;            // one of the 13 Skillsets
+  secondarySkillset?: string;
+  role: string;                // canonical Role (best_role)
+  nickname: string;            // cross-role Archetype identity
+  brs: number;                 // 50–99, the sanctioned power/rarity metric
+  rarity: string;
+  pillars: { technical: number; tactical: number; mental: number; physical: number };
+  theme: string;               // personality theme (5-theme chemistry layer)
+  nation: string;
+}
+
+export function transformCard(raw: KCCard, index: number): Card {
+  // Keepers use the game's "GK" archetype convention; their Skillset is Shotstopper.
+  const archetype = raw.skillset === 'Shotstopper' ? 'GK' : raw.skillset;
+  return {
+    id: index + 1,
+    name: raw.name,
+    position: raw.position,
+    archetype,
+    secondaryArchetype: raw.secondarySkillset,
+    tacticalRole: raw.role,
+    personalityType: derivePersonalityType(raw.name, raw.theme),
+    personalityTheme: raw.theme,
+    power: raw.brs,                              // BRS is the power scale — no levelToPower
+    rarity: raw.rarity,
+    gatePull: gatePullFor(archetype, raw.theme),
+    durability: rollDurability(raw.rarity, index * 7919 + raw.brs * 31),
+    nickname: raw.nickname,
+    pillars: raw.pillars,
+    nation: raw.nation,
+  };
+}
+
+export function transformCards(cards: KCCard[]): Card[] {
+  return cards.map((c, i) => transformCard(c, i));
 }

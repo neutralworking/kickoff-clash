@@ -18,8 +18,8 @@ import {
   type InvestmentCard,
 } from './economy';
 import { findConnections } from './chemistry';
-import { transformAllCharacters, type KCCharacter } from './transform';
-import kcCharactersData from '../../public/data/kc_characters.json';
+import { transformCards, type KCCard } from './transform';
+import kcCardsData from '../../public/data/kc_cards.json';
 import type { HandState } from './hand';
 import { rollXI } from './hand';
 import type { JokerCard } from './jokers';
@@ -680,10 +680,10 @@ export function applyDurabilityResults(deck: Card[], result: DurabilityResult): 
 }
 
 // ---------------------------------------------------------------------------
-// Card Pool (500 characters from kc_characters.json)
+// Card Pool — fictional cards generated from the Chief Scout distributions (V3.1 port)
 // ---------------------------------------------------------------------------
 
-export const ALL_CARDS: Card[] = transformAllCharacters(kcCharactersData as KCCharacter[]);
+export const ALL_CARDS: Card[] = transformCards(kcCardsData as KCCard[]);
 
 /** @deprecated Alias for backward compat — use ALL_CARDS */
 export const SAMPLE_CARDS = ALL_CARDS;

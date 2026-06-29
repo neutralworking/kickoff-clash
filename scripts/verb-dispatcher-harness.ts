@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { transformAllCharacters, type KCCharacter } from '../src/lib/transform';
+import { transformCards, type KCCard } from '../src/lib/transform';
 import { getFormation } from '../src/lib/formations';
 import { createEmptySlots, getTacticById } from '../src/lib/tactics';
 import { getJokerById } from '../src/lib/jokers';
@@ -45,9 +45,9 @@ import { simulatePeriod, type PossessionSide } from '../src/lib/possession';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const dataPath = path.join(__dirname, '..', 'public', 'data', 'kc_characters.json');
-const raw = JSON.parse(fs.readFileSync(dataPath, 'utf-8')) as KCCharacter[];
-const cards = transformAllCharacters(raw);
+const dataPath = path.join(__dirname, '..', 'public', 'data', 'kc_cards.json');
+const raw = JSON.parse(fs.readFileSync(dataPath, 'utf-8')) as KCCard[];
+const cards = transformCards(raw);
 
 const SEED = 12345;
 const formation = getFormation('4-3-3');
@@ -223,8 +223,11 @@ console.log('\n3. Verb-level checks');
 console.log('\n4. Real-data wiring (roles derived by transform.ts, not stamped)');
 {
   const pick = (role: string) => cards.find((c) => c.tacticalRole === role);
-  const roled = ['Regista', 'Volante', 'Anchor', 'Inverted Winger', 'Falso Nove'].map(pick);
-  check('all five step-1 roles exist in the transformed pool', roled.every(Boolean), roled.map((c) => c?.tacticalRole).join(', '));
+  // V3.1 pool roles (data port D.4). 'Playmaker' exercises the role-alias path (→ Regista's
+  // Metronome); the rest map directly. These are the roles whose trait names the assertions
+  // below look for in the breakdown.
+  const roled = ['Regista', 'Playmaker', 'Anchor', 'Inverted Winger', 'Prima Punta'].map(pick);
+  check('the step-1 dispatcher roles exist in the transformed pool', roled.every(Boolean), roled.map((c) => c?.tacticalRole).join(', '));
 
   // A realistic XI: the five roled cards + fillers, attackers = the wide/forward roles.
   const fillers = cards.filter((c) => !roled.includes(c)).sort((a, b) => b.power - a.power).slice(0, 6);
