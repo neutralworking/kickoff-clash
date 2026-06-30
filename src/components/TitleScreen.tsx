@@ -9,46 +9,77 @@ interface TitleScreenProps {
 export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: TitleScreenProps) {
   return (
     <div
-      className="flex flex-col items-center justify-center min-h-screen text-center px-6"
-      style={{ background: 'var(--felt)' }}
+      className="kc-app-bg flex flex-col items-center justify-center text-center px-6 relative overflow-hidden"
+      style={{ height: '100dvh' }}
     >
-      {/* Title — Silkscreen pixel hero, sized to fit a phone without overflow */}
-      <div className="mb-12">
+      {/* Crest plate — a glass panel behind the pixel wordmark so the hero reads
+          as engraved on lit glass. The title text itself stays pure pixel. */}
+      <div
+        className="glass-surface sheen depth-2 relative mb-12"
+        style={{
+          borderRadius: 'var(--radius-lg)',
+          padding: '26px 30px 30px',
+        }}
+      >
+        {/* Title — Silkscreen pixel hero, sized to fit a phone without overflow.
+            Pixel content: never blurred, hard --ink-black drop shadow intact. */}
         <h1
-          className="uppercase leading-none"
+          className="uppercase leading-none relative"
           style={{
             fontFamily: 'var(--font-display)',
             fontSize: 'clamp(34px, 12vw, 56px)',
             color: 'var(--amber)',
             textShadow: '0 3px 0 var(--ink-black)',
+            zIndex: 2,
           }}
         >
           KICKOFF
         </h1>
         <h1
-          className="uppercase leading-none mt-2"
+          className="uppercase leading-none mt-2 relative"
           style={{
             fontFamily: 'var(--font-display)',
             fontSize: 'clamp(34px, 12vw, 56px)',
             color: 'var(--cream)',
             textShadow: '0 3px 0 var(--ink-black)',
+            zIndex: 2,
           }}
         >
           CLASH
         </h1>
+        <span
+          className="block relative"
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 10,
+            letterSpacing: 3,
+            color: 'var(--dust)',
+            marginTop: 14,
+            zIndex: 2,
+          }}
+        >
+          MANAGEMENT ROGUELIKE
+        </span>
       </div>
 
-      {/* Buttons */}
+      {/* Buttons — glass CTAs with sheen, depth and a tight accent glow. The
+          amber primary keeps its kit gradient; glass framing adds the gloss. */}
       <div className="flex flex-col gap-3 w-full max-w-xs">
         <button
           onClick={onNewRun}
-          className="w-full py-4 rounded-[var(--radius)] text-base uppercase tracking-wide transition-all hover:brightness-110 hover:scale-[1.03] active:scale-95"
+          className="sheen-strong glow-edge w-full py-4 transition-all hover:brightness-110 active:scale-[0.97] relative overflow-hidden"
           style={{
             fontFamily: 'var(--font-display)',
-            background: `linear-gradient(135deg, var(--amber), var(--amber-soft))`,
-            color: 'var(--cream)',
+            fontSize: 16,
+            letterSpacing: 0.6,
+            textTransform: 'uppercase',
+            borderRadius: 'var(--radius)',
+            background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))',
+            color: 'var(--line-white)',
             border: '2px solid var(--ink-black)',
-            boxShadow: '0 4px 0 0 var(--ink-black), 0 6px 18px var(--amber-glow)',
+            boxShadow:
+              'inset 0 1px 0 0 var(--glass-highlight), 0 4px 0 0 var(--ink-black), var(--depth-2)',
+            ['--glow' as string]: 'var(--amber-glow)',
           }}
         >
           New Season
@@ -57,13 +88,16 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
         {hasExistingRun && onContinue && (
           <button
             onClick={onContinue}
-            className="w-full py-4 rounded-[var(--radius)] text-base uppercase tracking-wide transition-all hover:brightness-110 hover:scale-[1.03] active:scale-95"
+            className="glass-raised sheen w-full py-4 transition-all hover:brightness-110 active:scale-[0.97] relative overflow-hidden"
             style={{
               fontFamily: 'var(--font-display)',
-              background: 'var(--surface)',
+              fontSize: 16,
+              letterSpacing: 0.6,
+              textTransform: 'uppercase',
+              borderRadius: 'var(--radius)',
               color: 'var(--gold)',
-              border: '2px solid var(--gold)',
-              boxShadow: '0 4px 0 0 var(--ink-black), 0 4px 16px var(--gold-glow)',
+              boxShadow:
+                'inset 0 1px 0 0 var(--glass-highlight), 0 4px 0 0 var(--ink-black), var(--depth-2)',
             }}
           >
             Continue Run
