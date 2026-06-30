@@ -30,6 +30,7 @@ import {
 } from '../lib/team-select';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
+import SquadGallery from './SquadGallery';
 import { PIXEL, RARITY_COLOR, POSITION_COLOR, lastName } from './cards/cardTokens';
 
 interface TeamTalkProps {
@@ -86,6 +87,7 @@ export default function TeamTalk({ runState, onConfirm }: TeamTalkProps) {
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [placedSlot, setPlacedSlot] = useState<number | null>(null);
   const [modal, setModal] = useState<GameCardModel | null>(null);
+  const [showGallery, setShowGallery] = useState(false);
 
   const formations = useMemo(() => {
     const ids = runState.ownedFormations?.length ? runState.ownedFormations : [runState.activeFormation];
@@ -253,15 +255,22 @@ export default function TeamTalk({ runState, onConfirm }: TeamTalkProps) {
         </button>
       </div>
 
-      {/* ── Fitness nudge bar ─────────────────────────────────────────────── */}
-      <div className="shrink-0 px-3 mt-2">
+      {/* ── Fitness nudge bar + squad gallery entry ───────────────────────── */}
+      <div className="shrink-0 px-3 mt-2 flex items-center gap-1.5">
         <div
-          className="flex items-center gap-2 px-2.5"
-          style={{ height: 26, borderRadius: 'var(--radius-sm)', background: 'var(--surface)', border: `2px solid ${nudge.color}` }}
+          className="flex items-center gap-2 px-2.5 flex-1 min-w-0"
+          style={{ height: 28, borderRadius: 'var(--radius-sm)', background: 'var(--surface)', border: `2px solid ${nudge.color}` }}
         >
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: nudge.color, flexShrink: 0 }} />
-          <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: nudge.color }}>{nudge.text}</span>
+          <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: nudge.color }}>{nudge.text}</span>
         </div>
+        <button
+          onClick={() => setShowGallery(true)}
+          className="active:scale-95 glass-surface shrink-0"
+          style={{ height: 28, padding: '0 11px', borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: 'var(--cream)' }}
+        >
+          SQUAD
+        </button>
       </div>
 
       {/* ── Control bar: shape · intent · auto/reset ──────────────────────── */}
@@ -383,6 +392,8 @@ export default function TeamTalk({ runState, onConfirm }: TeamTalkProps) {
       )}
 
       <CardModal model={modal} onClose={() => setModal(null)} />
+
+      {showGallery && <SquadGallery deck={pool} onClose={() => setShowGallery(false)} title="YOUR SQUAD" />}
     </div>
   );
 }
