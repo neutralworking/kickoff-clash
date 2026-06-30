@@ -47,9 +47,8 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD' }: SquadGa
   const [sort, setSort] = useState<SortKey>('power');
   const [modal, setModal] = useState<GameCardModel | null>(null);
 
-  const groupPositions = POS_GROUPS.find((g) => g.id === group)?.positions ?? [];
-
   const cards = useMemo(() => {
+    const groupPositions = POS_GROUPS.find((g) => g.id === group)?.positions ?? [];
     const filtered = groupPositions.length ? deck.filter((c) => groupPositions.includes(c.position)) : deck;
     const sorted = [...filtered];
     sorted.sort((a, b) => {
@@ -65,7 +64,7 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD' }: SquadGa
       }
     });
     return sorted;
-  }, [deck, groupPositions, sort]);
+  }, [deck, group, sort]);
 
   return (
     <div
