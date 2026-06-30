@@ -18,3 +18,18 @@ Scope notes for the first-milestone burn-down. Each file is a self-contained del
 - **Conflict with 01:** 04 (both edit `kc_characters.json`) — do one after the other
 
 Source: `../BASELINE.md`.
+
+## 0.3-deferred (next round)
+
+System-design work noted during the 0.1→0.3 push (which shipped flow, the glass design
+system, the squad gallery, and the match-info overhaul). These are bigger reworks the
+owner asked to hold for the next round:
+
+7. `07-shop-redesign.md` — coherent, seeded, rerollable shop offer + unified purchase path
+8. `08-player-upgrade-rework.md` — replace the flat +5/+20 training with bounded, real choices
+9. `09-manager-traits-rework.md` — parametrised, conditional, palette-expressed gaffer effects
+10. `10-player-card-rework.md` — surface pillars/personality; decide if depth feeds the engine
+
+**Independence:** 07 (economy/UI), 09 (jokers/dispatcher), 10 (card model) are largely
+independent; 08 and 10 share the `pillars` surface — coordinate. All four want a
+`balance-lab` pass before shipping. Source: 0.3 owner feedback.
