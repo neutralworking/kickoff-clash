@@ -567,6 +567,26 @@ h1, h2, h3,
   image-rendering: pixelated;
 }
 
+/* ---------------------------------------------------------------------------
+   Card foil — Legendary-only animated sheen sweep (card layer; owned by the
+   card-designer agent). Drives the diagonal gloss band that travels across a
+   gold card so the foil reads as live light, not a static gradient. The sweep
+   lives on the GLASS frame overlay only — it never touches the pixel interior.
+   --------------------------------------------------------------------------- */
+@keyframes cardFoilSweep {
+  0% { transform: translateX(-120%) skewX(-18deg); opacity: 0; }
+  12% { opacity: 1; }
+  45% { opacity: 1; }
+  60% { transform: translateX(120%) skewX(-18deg); opacity: 0; }
+  100% { transform: translateX(120%) skewX(-18deg); opacity: 0; }
+}
+.card-foil {
+  animation: cardFoilSweep 4.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-foil { animation: none; opacity: 0.5; transform: skewX(-18deg); }
+}
+
 /* The sealed pack idles with a tiny breathing wobble, inviting a tap. */
 @keyframes packIdle {
   0%, 100% { transform: translateY(0) rotate(-1deg); }

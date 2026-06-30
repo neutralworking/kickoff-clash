@@ -13,8 +13,14 @@
  * expanded card rendered inside CardModal). Both share the same frame so a
  * tapped grid card visibly grows into its full self.
  *
- * Visuals are pure CSS/SVG pixel blocks — no external image assets. Tokens come
- * from cardTokens.ts and DESIGN.md. See DESIGN.md › Cards.
+ * The reconciliation (LOCKED): GLASSY FRAME, PIXEL INTERIOR. The frame carries
+ * the depth — an inner top-edge highlight, a rarity-tinted diagonal sheen sweep,
+ * a soft rarity glow on Epic/Legendary, and real stacked elevation. The interior
+ * (sprite + flat blocks + Silkscreen) stays crisp pixel art: `pixelated`,
+ * `shapeRendering="crispEdges"`, no blur, no soft shadow on a sprite — depth on a
+ * sprite comes from MORE pixels (a 3-value ramp + rim-light), never a filter.
+ *
+ * Tokens come from cardTokens.ts and DESIGN.md. See DESIGN.md › Cards + Glass.
  */
 
 import type { Card } from '../../lib/scoring';
@@ -24,9 +30,11 @@ import type { InvestmentCard } from '../../lib/economy';
 import {
   PIXEL,
   RARITY_COLOR,
+  RARITY_GLASS,
   POSITION_COLOR,
   TACTIC_CAT_COLOR,
   INVESTMENT_META,
+  fitnessMeter,
   formatCash,
   nationFlag,
   nationCode,
@@ -58,6 +66,32 @@ interface GameCardProps {
 // Card aspect is a true playing-card 2.5:3.5 ratio.
 const ASPECT = 2.5 / 3.5;
 
+/**
+ * The glass treatment for a card, derived from its accent + (for players) the
+ * rarity glass companion. Non-player families fall back to a quiet glass with a
+ * faint accent sheen and no glow halo, so a gaffer/tactic/investment reads as the
+ * same material without the rarity escalation.
+ */
+interface CardGlass {
+  /** 3-value rim ramp [shadow, base, highlight] for the inner frame edges. */
+  ramp: [string, string, string];
+  /** Outer glow token, or null for none. */
+  glow: string | null;
+  /** Diagonal sheen strength 0–1. */
+  sheen: number;
+  /** Legendary animated foil. */
+  foil: boolean;
+}
+
+function glassFor(model: GameCardModel, accent: string): CardGlass {
+  if (model.variant === 'player') {
+    const g = RARITY_GLASS[model.card.rarity] ?? RARITY_GLASS.Common;
+    return { ramp: g.ramp, glow: g.glow, sheen: g.sheen, foil: g.foil };
+  }
+  // Gaffer / tactic / investment: quiet glass, faint accent sheen, no glow halo.
+  return { ramp: [accent, accent, accent], glow: null, sheen: 0.45, foil: false };
+}
+
 export default function GameCard({
   model,
   size = 'grid',
@@ -69,7 +103,17 @@ export default function GameCard({
   ariaLabel,
 }: GameCardProps) {
   const accent = accentFor(model);
+  const glass = glassFor(model, accent);
   const full = size === 'full';
+
+  // Stacked elevation: the hard ink-black pixel drop (the flat-sprite tell) PLUS
+  // a soft ambient shadow underneath (real height). Selected adds an accent ring;
+  // Epic/Legendary add a coloured glow halo to the same stack.
+  const inkDrop = `0 ${full ? 6 : 3}px 0 0 var(--ink-black)`;
+  const ambient = `0 ${full ? 12 : 5}px ${full ? 26 : 10}px rgba(2,9,5,0.5)`;
+  const glow = glass.glow ? `0 0 ${full ? 22 : 14}px ${full ? 3 : 1}px ${glass.glow}` : null;
+  const ring = selected ? `0 0 0 2px ${accent}` : null;
+  const boxShadow = [ring, inkDrop, ambient, glow].filter(Boolean).join(', ');
 
   const frameStyle: React.CSSProperties = {
     position: 'relative',
@@ -78,9 +122,7 @@ export default function GameCard({
     borderRadius: full ? 'var(--radius)' : 'var(--radius-sm)',
     border: `${full ? 3 : 2}px solid var(--ink-black)`,
     background: 'linear-gradient(165deg, var(--surface-raised) 0%, var(--surface) 55%, #0c1d12 100%)',
-    boxShadow: selected
-      ? `0 0 0 2px ${accent}, 0 ${full ? 6 : 3}px 0 0 var(--ink-black), 0 ${full ? 10 : 4}px ${full ? 22 : 8}px rgba(0,0,0,0.45)`
-      : `0 ${full ? 6 : 3}px 0 0 var(--ink-black), 0 ${full ? 10 : 4}px ${full ? 22 : 8}px rgba(0,0,0,0.45)`,
+    boxShadow,
     overflow: 'hidden',
     opacity: dimmed ? 0.42 : 1,
     display: 'flex',
@@ -105,11 +147,20 @@ export default function GameCard({
 
   const content = (
     <>
-      {/* Accent top rail — the family signature. */}
-      <div style={{ height: full ? 5 : 3, background: accent, flexShrink: 0 }} />
-      {body}
-      {/* Accent bottom rail. */}
-      <div style={{ height: full ? 5 : 3, background: accent, flexShrink: 0 }} />
+      {/* Accent top rail — the family signature, lit on its top edge. */}
+      <div style={{ position: 'relative', height: full ? 5 : 3, background: accent, flexShrink: 0, zIndex: 2 }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.55), transparent)' }} />
+      </div>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', zIndex: 2 }}>
+        {body}
+      </div>
+      {/* Accent bottom rail — shaded on its top edge for a seated look. */}
+      <div style={{ position: 'relative', height: full ? 5 : 3, background: accent, flexShrink: 0, zIndex: 2 }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(0deg, rgba(0,0,0,0.4), transparent)' }} />
+      </div>
+
+      {/* --- GLASS CHROME OVERLAYS (under the content z-index, never on pixels) --- */}
+      <GlassChrome glass={glass} full={full} />
     </>
   );
 
@@ -134,6 +185,91 @@ export default function GameCard({
 }
 
 // ---------------------------------------------------------------------------
+// Glass chrome — the lit-glass tells layered behind the pixel content. All at
+// z-index 1 (content sits at 2), pointer-events none, never blurring a pixel.
+// ---------------------------------------------------------------------------
+
+function GlassChrome({ glass, full }: { glass: CardGlass; full: boolean }) {
+  const [, , highlight] = glass.ramp;
+  return (
+    <>
+      {/* Inner top-edge highlight — the "lit glass" tell, brightest at the top. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: full ? 40 : 22,
+          background: `linear-gradient(180deg, rgba(242,246,239,0.18) 0%, transparent 100%)`,
+          pointerEvents: 'none',
+          zIndex: 1,
+        }}
+      />
+      {/* A 1px rim-light hairline just inside the ink border, rarity-tinted. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: 'inherit',
+          boxShadow: `inset 0 0 0 1px ${withAlpha(highlight, glass.sheen > 0 ? 0.34 : 0.16)}, inset 0 1px 0 0 rgba(242,246,239,0.22)`,
+          pointerEvents: 'none',
+          zIndex: 1,
+        }}
+      />
+      {/* Rarity-tinted diagonal sheen sweep (static on Common→Epic; absent on Common). */}
+      {glass.sheen > 0 && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: `linear-gradient(118deg, transparent 30%, ${withAlpha(highlight, 0.06 * glass.sheen)} 44%, ${withAlpha(highlight, 0.22 * glass.sheen)} 50%, ${withAlpha(highlight, 0.05 * glass.sheen)} 56%, transparent 70%)`,
+            pointerEvents: 'none',
+            zIndex: 1,
+            mixBlendMode: 'screen',
+          }}
+        />
+      )}
+      {/* Legendary foil: an animated travelling gloss band over the static sheen. */}
+      {glass.foil && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'inherit', pointerEvents: 'none', zIndex: 1 }}>
+          <div
+            className="card-foil"
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              width: '46%',
+              background: `linear-gradient(90deg, transparent, ${withAlpha(highlight, 0.34)} 50%, transparent)`,
+              mixBlendMode: 'screen',
+            }}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Apply an alpha to a colour. Hex (#rgb/#rrggbb) → rgba; otherwise wrap as-is. */
+function withAlpha(color: string, a: number): string {
+  if (color.startsWith('#')) {
+    let hex = color.slice(1);
+    if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
+    const n = parseInt(hex, 16);
+    const r = (n >> 16) & 255;
+    const g = (n >> 8) & 255;
+    const b = n & 255;
+    return `rgba(${r},${g},${b},${a})`;
+  }
+  // CSS var or named colour — fall back to a neutral light so the effect survives.
+  return `rgba(242,246,239,${a})`;
+}
+
+// ---------------------------------------------------------------------------
 // Accent per variant
 // ---------------------------------------------------------------------------
 
@@ -151,6 +287,7 @@ function accentFor(model: GameCardModel): string {
 function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent: string }) {
   const posColor = POSITION_COLOR[card.position] ?? 'var(--dust)';
   const flag = nationFlag(card.nation);
+  const hasFitness = typeof card.fitness === 'number';
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: full ? 10 : '5px 6px' }}>
       {/* Header row: position tab · rating */}
@@ -165,11 +302,12 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
             padding: full ? '5px 6px' : '3px 4px',
             borderRadius: 3,
             flexShrink: 0,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.3)',
           }}
         >
           {card.position}
         </span>
-        <span style={{ fontFamily: PIXEL, fontSize: full ? 24 : 13, lineHeight: 1, color: 'var(--line-white)' }}>
+        <span style={{ fontFamily: PIXEL, fontSize: full ? 24 : 13, lineHeight: 1, color: 'var(--line-white)', textShadow: '0 1px 0 var(--ink-black)' }}>
           {Math.round(card.power)}
         </span>
       </div>
@@ -179,10 +317,13 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
         <PlayerSprite accent={accent} posColor={posColor} isGK={card.position === 'GK'} full={full} />
       </div>
 
+      {/* Fitness pip meter (where condition is tracked). Crisp pixel cells. */}
+      {hasFitness && <FitnessMeter fitness={card.fitness as number} full={full} />}
+
       {/* Name + archetype */}
       <span
         className="truncate"
-        style={{ fontSize: full ? 14 : 11, fontWeight: 700, color: 'var(--cream)', lineHeight: 1.15 }}
+        style={{ fontSize: full ? 14 : 11, fontWeight: 700, color: 'var(--cream)', lineHeight: 1.15, marginTop: hasFitness ? (full ? 4 : 2) : 0 }}
       >
         {lastName(card.name)}
       </span>
@@ -202,10 +343,51 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
   );
 }
 
-/** Sprite-y player portrait built from flat pixel blocks (head + shirt + crest). */
+/** Small crisp pixel fitness meter — N filled cells of 6, banded by condition. */
+function FitnessMeter({ fitness, full }: { fitness: number; full: boolean }) {
+  const { filled, total, color } = fitnessMeter(fitness);
+  const cellW = full ? 9 : 5;
+  const cellH = full ? 6 : 4;
+  const gap = full ? 2 : 1.5;
+  return (
+    <div className="flex items-center" style={{ gap: full ? 5 : 3, marginTop: full ? 6 : 3 }}>
+      <span style={{ fontFamily: PIXEL, fontSize: full ? 7 : 5.5, letterSpacing: 0.4, color: 'var(--dust)', lineHeight: 1, flexShrink: 0 }}>FIT</span>
+      <div className="flex" style={{ gap }}>
+        {Array.from({ length: total }).map((_, i) => (
+          <span
+            key={i}
+            style={{
+              width: cellW,
+              height: cellH,
+              background: i < filled ? color : 'rgba(255,255,255,0.10)',
+              boxShadow: i < filled
+                ? `inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(0,0,0,0.35), 0 0 0 1px var(--ink-black)`
+                : 'inset 0 0 0 1px rgba(0,0,0,0.35)',
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Sprite-y player portrait. One light source TOP-LEFT: highlights on top/left
+ * faces, base in the middle, shadow on bottom/right, a 1px rim-light on the lit
+ * edge. Limited palette derived from the kit colour. Reads at grid size.
+ */
 function PlayerSprite({ accent, posColor, isGK, full }: { accent: string; posColor: string; isGK: boolean; full: boolean }) {
-  const kit = isGK ? '#16a34a' : 'var(--kit-red)';
-  const kitDark = isGK ? '#0f7a35' : '#b62520';
+  // Kit ramp (3-value): outfield red, keeper green.
+  const kitHi = isGK ? '#3fcf6e' : '#ff5a52';
+  const kit = isGK ? '#1f9d4f' : '#e8362f';
+  const kitSh = isGK ? '#0f6e34' : '#a52520';
+  // Skin ramp.
+  const skinHi = '#f4dcb8';
+  const skin = '#e0b486';
+  const skinSh = '#b88a5e';
+  // Hair ramp.
+  const hairHi = '#5a4636';
+  const hair = '#3a2a1e';
   return (
     <svg
       className="pixelated"
@@ -213,25 +395,51 @@ function PlayerSprite({ accent, posColor, isGK, full }: { accent: string; posCol
       style={{ width: full ? '60%' : '74%', maxWidth: full ? 96 : 52, aspectRatio: '1', display: 'block' }}
       shapeRendering="crispEdges"
     >
-      {/* halo plate */}
-      <rect x="2" y="2" width="20" height="20" fill="rgba(0,0,0,0.25)" />
-      {/* head */}
-      <rect x="9" y="3" width="6" height="6" fill="#e8c9a0" />
-      <rect x="9" y="3" width="6" height="2" fill="#3a2a1e" />
-      {/* shoulders / shirt */}
-      <rect x="6" y="10" width="12" height="9" fill={kit} />
-      <rect x="6" y="10" width="12" height="2" fill={kitDark} />
-      {/* sleeves */}
-      <rect x="4" y="11" width="2" height="6" fill={kitDark} />
-      <rect x="18" y="11" width="2" height="6" fill={kitDark} />
-      {/* collar */}
-      <rect x="10" y="9" width="4" height="2" fill="var(--line-white)" />
-      {/* crest block in accent */}
-      <rect x="11" y="13" width="3" height="3" fill={accent} />
-      {/* shorts hint */}
+      {/* seat plate — a soft dark disc so the sprite reads off the card fill */}
+      <rect x="3" y="3" width="18" height="18" fill="rgba(0,0,0,0.22)" />
+
+      {/* HEAD — base, then top-left highlight, then bottom-right shadow */}
+      <rect x="9" y="4" width="6" height="6" fill={skin} />
+      <rect x="9" y="4" width="3" height="3" fill={skinHi} />
+      <rect x="13" y="8" width="2" height="2" fill={skinSh} />
+      {/* HAIR — caps the head, lit on top-left */}
+      <rect x="9" y="3" width="6" height="2" fill={hair} />
+      <rect x="9" y="3" width="3" height="1" fill={hairHi} />
+      <rect x="9" y="4" width="1" height="2" fill={hair} />
+      {/* ear shadow on the right */}
+      <rect x="14" y="6" width="1" height="2" fill={skinSh} />
+
+      {/* NECK */}
+      <rect x="10" y="10" width="4" height="1" fill={skinSh} />
+
+      {/* SHIRT — base block, top-left highlight band, bottom shadow band */}
+      <rect x="6" y="11" width="12" height="8" fill={kit} />
+      <rect x="6" y="11" width="12" height="2" fill={kitHi} />
+      <rect x="6" y="17" width="12" height="2" fill={kitSh} />
+      {/* rim-light on the lit (left) edge */}
+      <rect x="6" y="11" width="1" height="6" fill={kitHi} />
+      {/* shaded right edge */}
+      <rect x="17" y="11" width="1" height="8" fill={kitSh} />
+
+      {/* SLEEVES — left lit, right shadowed */}
+      <rect x="4" y="12" width="2" height="5" fill={kit} />
+      <rect x="4" y="12" width="1" height="5" fill={kitHi} />
+      <rect x="18" y="12" width="2" height="5" fill={kitSh} />
+
+      {/* COLLAR — white V, top-lit */}
+      <rect x="10" y="11" width="4" height="1" fill="var(--line-white)" />
+      <rect x="11" y="12" width="2" height="2" fill={kitSh} />
+
+      {/* CREST in accent — a small lit chip on the left chest */}
+      <rect x="8" y="13" width="3" height="3" fill={accent} />
+      <rect x="8" y="13" width="3" height="1" fill="rgba(255,255,255,0.55)" />
+      <rect x="10" y="15" width="1" height="1" fill="rgba(0,0,0,0.4)" />
+
+      {/* SHORTS hint — white band, lit top */}
       <rect x="8" y="19" width="8" height="2" fill="var(--line-white)" />
-      {/* position pip */}
-      <rect x="6" y="19" width="2" height="2" fill={posColor} />
+      <rect x="8" y="19" width="8" height="1" fill="#ffffff" />
+      {/* position pip on the shorts */}
+      <rect x="14" y="19" width="2" height="2" fill={posColor} />
     </svg>
   );
 }
@@ -258,6 +466,7 @@ function ManagerBody({ manager, full, accent }: { manager: JokerCard; full: bool
             borderRadius: 3,
             letterSpacing: 0.5,
             flexShrink: 0,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.3)',
           }}
         >
           GAFFER
@@ -321,8 +530,19 @@ function ManagerBody({ manager, full, accent }: { manager: JokerCard; full: bool
   );
 }
 
-/** Gaffer crest: pixel suit + tie sprite. */
+/**
+ * Gaffer crest: pixel suit + tie. Lit top-left — collar highlight, lapel shadow
+ * on the right, rim-light on the left shoulder. Tie in the family accent.
+ */
 function ManagerSprite({ accent, full }: { accent: string; full: boolean }) {
+  // Suit ramp (navy).
+  const suitHi = '#2c3d4c';
+  const suit = '#1b2730';
+  const suitSh = '#0d141a';
+  // Skin ramp.
+  const skinHi = '#f4dcb8';
+  const skin = '#e0b486';
+  const skinSh = '#b88a5e';
   return (
     <svg
       className="pixelated"
@@ -330,20 +550,36 @@ function ManagerSprite({ accent, full }: { accent: string; full: boolean }) {
       style={{ width: full ? '60%' : '74%', maxWidth: full ? 96 : 52, aspectRatio: '1', display: 'block' }}
       shapeRendering="crispEdges"
     >
-      <rect x="2" y="2" width="20" height="20" fill="rgba(0,0,0,0.25)" />
-      {/* head */}
-      <rect x="9" y="3" width="6" height="6" fill="#e8c9a0" />
+      <rect x="3" y="3" width="18" height="18" fill="rgba(0,0,0,0.22)" />
+
+      {/* HEAD */}
+      <rect x="9" y="4" width="6" height="6" fill={skin} />
+      <rect x="9" y="4" width="3" height="3" fill={skinHi} />
+      <rect x="13" y="8" width="2" height="2" fill={skinSh} />
+      {/* HAIR */}
       <rect x="9" y="3" width="6" height="2" fill="#2a2018" />
-      {/* suit jacket */}
-      <rect x="6" y="10" width="12" height="11" fill="#1b2730" />
-      <rect x="6" y="10" width="12" height="2" fill="#0f171d" />
-      {/* shirt V */}
-      <polygon points="10,10 14,10 12,16" fill="var(--line-white)" />
-      {/* tie in accent */}
-      <rect x="11" y="11" width="2" height="6" fill={accent} />
-      {/* lapels */}
-      <polygon points="9,10 11,10 9,15" fill="#0f171d" />
-      <polygon points="15,10 13,10 15,15" fill="#0f171d" />
+      <rect x="9" y="3" width="3" height="1" fill="#43342a" />
+
+      {/* SUIT JACKET — base, top-left highlight, bottom shadow */}
+      <rect x="6" y="11" width="12" height="9" fill={suit} />
+      <rect x="6" y="11" width="12" height="2" fill={suitHi} />
+      <rect x="6" y="18" width="12" height="2" fill={suitSh} />
+      {/* rim-light left shoulder, shaded right shoulder */}
+      <rect x="6" y="11" width="1" height="8" fill={suitHi} />
+      <rect x="17" y="11" width="1" height="9" fill={suitSh} />
+
+      {/* SHIRT V (white), lit top */}
+      <polygon points="10,11 14,11 12,17" fill="var(--line-white)" />
+      <polygon points="10,11 14,11 12,13" fill="#ffffff" />
+
+      {/* LAPELS — darker, the right one fully shadowed */}
+      <polygon points="9,11 11,11 9,16" fill={suitSh} />
+      <polygon points="15,11 13,11 15,16" fill="#070d11" />
+
+      {/* TIE in accent — lit knot, shaded tail */}
+      <rect x="11" y="12" width="2" height="6" fill={accent} />
+      <rect x="11" y="12" width="2" height="1" fill="rgba(255,255,255,0.5)" />
+      <rect x="11" y="16" width="2" height="2" fill="rgba(0,0,0,0.3)" />
     </svg>
   );
 }
@@ -368,6 +604,7 @@ function TacticBody({ tactic, full, accent }: { tactic: TacticCard; full: boolea
             borderRadius: 3,
             letterSpacing: 0.5,
             flexShrink: 0,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -1px 0 rgba(0,0,0,0.25)',
           }}
         >
           {tactic.category.toUpperCase()}
@@ -401,7 +638,11 @@ function TacticBody({ tactic, full, accent }: { tactic: TacticCard; full: boolea
   );
 }
 
-/** Tactic crest: pixel chevron/arrow board sprite. */
+/**
+ * Tactic crest: a pixel tactic board with a chalk chevron. Light top-left — the
+ * board has a lit top rail and a shaded base; the chevron is the accent with a
+ * white highlight edge and a dark seated shadow under it.
+ */
 function TacticSprite({ accent, full }: { accent: string; full: boolean }) {
   return (
     <svg
@@ -410,15 +651,25 @@ function TacticSprite({ accent, full }: { accent: string; full: boolean }) {
       style={{ width: full ? '58%' : '70%', maxWidth: full ? 92 : 48, aspectRatio: '1', display: 'block' }}
       shapeRendering="crispEdges"
     >
-      <rect x="2" y="2" width="20" height="20" fill="rgba(0,0,0,0.22)" />
-      {/* tactic board grid hint */}
-      <rect x="4" y="4" width="16" height="16" fill="rgba(31,157,79,0.18)" />
-      {/* chevrons */}
-      <polygon points="6,16 12,8 18,16 15,16 12,12 9,16" fill={accent} />
-      <polygon points="6,20 12,12 18,20 15,20 12,16 9,20" fill="var(--line-white)" opacity="0.5" />
-      {/* node markers */}
-      <rect x="5" y="5" width="2" height="2" fill="var(--line-white)" opacity="0.6" />
-      <rect x="17" y="5" width="2" height="2" fill="var(--line-white)" opacity="0.6" />
+      <rect x="3" y="3" width="18" height="18" fill="rgba(0,0,0,0.22)" />
+
+      {/* tactic board — green field, lit top rail, shaded bottom */}
+      <rect x="4" y="4" width="16" height="16" fill="#15402a" />
+      <rect x="4" y="4" width="16" height="2" fill="#1f5e3c" />
+      <rect x="4" y="18" width="16" height="2" fill="#0c2419" />
+      {/* board rim-light left edge */}
+      <rect x="4" y="4" width="1" height="16" fill="#236b45" />
+      {/* halfway line */}
+      <rect x="4" y="11" width="16" height="1" fill="rgba(242,246,239,0.28)" />
+
+      {/* CHEVRON — accent body, white lit edge on top, dark seated shadow below */}
+      <polygon points="6,15 12,8 18,15 15,15 12,11 9,15" fill={accent} />
+      <polygon points="6,15 12,8 18,15 16,15 12,9 8,15" fill="rgba(255,255,255,0.35)" />
+      <polygon points="9,16 12,12 15,16 14,16 12,13 10,16" fill="rgba(0,0,0,0.35)" />
+
+      {/* node markers — lit dots top corners */}
+      <rect x="6" y="6" width="2" height="2" fill="var(--line-white)" opacity="0.7" />
+      <rect x="16" y="6" width="2" height="2" fill="var(--line-white)" opacity="0.45" />
     </svg>
   );
 }
@@ -444,11 +695,12 @@ function InvestmentBody({ investment, full, accent }: { investment: InvestmentCa
             borderRadius: 3,
             letterSpacing: 0.5,
             flexShrink: 0,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -1px 0 rgba(0,0,0,0.25)',
           }}
         >
           {meta.tab}
         </span>
-        <span style={{ fontFamily: PIXEL, fontSize: full ? 15 : 10, lineHeight: 1, color: 'var(--gold)', flexShrink: 0 }}>
+        <span style={{ fontFamily: PIXEL, fontSize: full ? 15 : 10, lineHeight: 1, color: 'var(--gold)', flexShrink: 0, textShadow: '0 1px 0 var(--ink-black)' }}>
           {formatCash(investment.cost)}
         </span>
       </div>
@@ -480,8 +732,11 @@ function InvestmentBody({ investment, full, accent }: { investment: InvestmentCa
   );
 }
 
-/** Boardroom crest: a gold chairman's seal framing a per-ladder pixel glyph
- *  (stadium stands / academy sapling / box-office ticket). */
+/**
+ * Boardroom crest: a gold chairman's seal framing a per-ladder pixel glyph
+ * (stadium stands / academy sapling / box-office ticket). Light top-left — each
+ * glyph carries a lit top face and a shadowed base; the gold ring is rim-lit.
+ */
 function InvestmentSprite({ ladder, accent, full }: { ladder: string; accent: string; full: boolean }) {
   return (
     <svg
@@ -491,49 +746,63 @@ function InvestmentSprite({ ladder, accent, full }: { ladder: string; accent: st
       shapeRendering="crispEdges"
     >
       {/* seal plate */}
-      <rect x="2" y="2" width="20" height="20" fill="rgba(0,0,0,0.25)" />
-      {/* gold crest ring */}
-      <rect x="3" y="3" width="18" height="18" fill="none" stroke="var(--gold)" strokeWidth="1" opacity="0.55" />
+      <rect x="3" y="3" width="18" height="18" fill="rgba(0,0,0,0.24)" />
+      {/* gold crest ring — lit top/left, shaded bottom/right */}
+      <rect x="3" y="3" width="18" height="1" fill="#ffe79a" />
+      <rect x="3" y="3" width="1" height="18" fill="#ffe79a" />
+      <rect x="3" y="20" width="18" height="1" fill="#9c7414" />
+      <rect x="20" y="3" width="1" height="18" fill="#9c7414" />
       {ladder === 'stadium' ? (
         <>
-          {/* terraced stand: three tiers + floodlight */}
+          {/* terraced stand: three tiers, each lit on top + shaded base */}
           <rect x="5" y="14" width="14" height="5" fill={accent} />
-          <rect x="5" y="14" width="14" height="1" fill="var(--line-white)" opacity="0.6" />
-          <rect x="6" y="11" width="12" height="3" fill={accent} opacity="0.8" />
-          <rect x="7" y="9" width="10" height="2" fill={accent} opacity="0.6" />
-          {/* seat pixels */}
-          <rect x="7" y="16" width="2" height="2" fill="var(--ink-black)" opacity="0.4" />
-          <rect x="11" y="16" width="2" height="2" fill="var(--ink-black)" opacity="0.4" />
-          <rect x="15" y="16" width="2" height="2" fill="var(--ink-black)" opacity="0.4" />
-          {/* floodlight */}
-          <rect x="11" y="4" width="2" height="5" fill="var(--dust)" />
+          <rect x="5" y="14" width="14" height="1" fill="#ffe79a" />
+          <rect x="5" y="18" width="14" height="1" fill="#9c7414" />
+          <rect x="6" y="11" width="12" height="3" fill={accent} />
+          <rect x="6" y="11" width="12" height="1" fill="#ffe79a" />
+          <rect x="7" y="9" width="10" height="2" fill={accent} />
+          <rect x="7" y="9" width="10" height="1" fill="#ffe79a" />
+          {/* seat shadow pixels */}
+          <rect x="7" y="16" width="2" height="2" fill="rgba(0,0,0,0.4)" />
+          <rect x="11" y="16" width="2" height="2" fill="rgba(0,0,0,0.4)" />
+          <rect x="15" y="16" width="2" height="2" fill="rgba(0,0,0,0.4)" />
+          {/* floodlight — lit head */}
+          <rect x="11" y="5" width="2" height="4" fill="#88a08c" />
           <rect x="9" y="4" width="6" height="2" fill="var(--line-white)" />
+          <rect x="9" y="4" width="6" height="1" fill="#ffffff" />
         </>
       ) : ladder === 'academy' ? (
         <>
-          {/* sapling in a pot: youth growth */}
-          <rect x="10" y="14" width="4" height="5" fill={accent} />
-          <rect x="11" y="6" width="2" height="9" fill="#6b4a2b" />
-          {/* leaves */}
-          <rect x="7" y="8" width="3" height="3" fill={accent} />
-          <rect x="14" y="8" width="3" height="3" fill={accent} />
+          {/* sapling in a pot: youth growth, light top-left */}
+          <rect x="10" y="15" width="4" height="4" fill="#b9722e" />
+          <rect x="10" y="15" width="4" height="1" fill="#d68f49" />
+          <rect x="9" y="14" width="6" height="1" fill="#e0a35c" />
+          {/* stem */}
+          <rect x="11" y="7" width="2" height="8" fill="#6b4a2b" />
+          <rect x="11" y="7" width="1" height="8" fill="#8a6238" />
+          {/* leaves — accent, lit top-left, shaded base */}
+          <rect x="7" y="9" width="3" height="3" fill={accent} />
+          <rect x="7" y="9" width="3" height="1" fill="rgba(255,255,255,0.5)" />
+          <rect x="14" y="9" width="3" height="3" fill={accent} />
+          <rect x="14" y="11" width="3" height="1" fill="rgba(0,0,0,0.3)" />
           <rect x="9" y="5" width="6" height="3" fill={accent} />
-          <rect x="11" y="4" width="2" height="2" fill="var(--line-white)" opacity="0.7" />
-          {/* pot rim */}
-          <rect x="9" y="14" width="6" height="1" fill="var(--line-white)" opacity="0.5" />
+          <rect x="9" y="5" width="6" height="1" fill="rgba(255,255,255,0.5)" />
+          <rect x="9" y="7" width="6" height="1" fill="rgba(0,0,0,0.25)" />
         </>
       ) : (
         <>
-          {/* admission ticket: box office */}
+          {/* admission ticket: box office, lit top, shaded base */}
           <rect x="5" y="8" width="14" height="8" fill={accent} />
-          <rect x="5" y="8" width="14" height="1" fill="var(--line-white)" opacity="0.6" />
+          <rect x="5" y="8" width="14" height="1" fill="#ffe79a" />
+          <rect x="5" y="15" width="14" height="1" fill="#9c7414" />
+          <rect x="5" y="8" width="1" height="8" fill="#ffe79a" />
           {/* perforation notch */}
-          <rect x="13" y="8" width="1" height="8" fill="var(--ink-black)" opacity="0.45" />
-          {/* stub stars */}
-          <rect x="7" y="11" width="2" height="2" fill="var(--ink-black)" opacity="0.45" />
-          <rect x="10" y="11" width="2" height="2" fill="var(--ink-black)" opacity="0.45" />
-          <rect x="15" y="10" width="3" height="1" fill="var(--ink-black)" opacity="0.45" />
-          <rect x="15" y="13" width="3" height="1" fill="var(--ink-black)" opacity="0.45" />
+          <rect x="13" y="8" width="1" height="8" fill="rgba(0,0,0,0.45)" />
+          {/* stub marks */}
+          <rect x="7" y="11" width="2" height="2" fill="rgba(0,0,0,0.4)" />
+          <rect x="10" y="11" width="2" height="2" fill="rgba(0,0,0,0.4)" />
+          <rect x="15" y="10" width="3" height="1" fill="rgba(0,0,0,0.4)" />
+          <rect x="15" y="13" width="3" height="1" fill="rgba(0,0,0,0.4)" />
         </>
       )}
     </svg>
