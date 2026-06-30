@@ -210,7 +210,6 @@ export default function TeamTalk({ runState, onConfirm }: TeamTalkProps) {
       className="flex flex-col overflow-hidden relative phase-setup"
       style={{
         height: '100dvh',
-        background: 'var(--felt)',
         paddingTop: 'max(env(safe-area-inset-top), 10px)',
         paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
       }}
@@ -230,8 +229,8 @@ export default function TeamTalk({ runState, onConfirm }: TeamTalkProps) {
         </div>
 
         <div
-          className="flex flex-col items-center justify-center shrink-0"
-          style={{ width: 46, height: 40, borderRadius: 'var(--radius-sm)', background: 'var(--surface)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)' }}
+          className="glass-surface flex flex-col items-center justify-center shrink-0 relative overflow-hidden"
+          style={{ width: 46, height: 40, borderRadius: 'var(--radius-sm)', boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)' }}
         >
           <span style={{ fontFamily: PIXEL, fontSize: 15, lineHeight: 1, color: 'var(--line-white)' }}>{xiAvg || '--'}</span>
           <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)', marginTop: 2 }}>AVG</span>
@@ -240,15 +239,18 @@ export default function TeamTalk({ runState, onConfirm }: TeamTalkProps) {
         <button
           onClick={confirm}
           disabled={!ready}
-          className="active:scale-95 shrink-0"
+          className={`active:scale-95 shrink-0 relative overflow-hidden ${ready ? 'sheen-strong glow-edge' : 'glass-surface sheen'}`}
           style={{
             fontFamily: PIXEL, fontSize: 13, letterSpacing: 0.5,
-            color: ready ? 'var(--cream)' : 'var(--ink)',
+            color: ready ? 'var(--line-white)' : 'var(--ink)',
             height: 40, padding: '0 12px', borderRadius: 'var(--radius-sm)',
-            border: '2px solid var(--ink-black)',
-            background: ready ? 'linear-gradient(135deg, var(--amber), var(--amber-soft))' : 'var(--surface)',
-            boxShadow: ready ? '0 3px 0 0 var(--ink-black), 0 5px 14px var(--amber-glow)' : '0 3px 0 0 var(--ink-black)',
+            border: ready ? '2px solid var(--ink-black)' : undefined,
+            background: ready ? 'linear-gradient(135deg, var(--amber), var(--amber-soft))' : undefined,
+            boxShadow: ready
+              ? 'inset 0 1px 0 0 var(--glass-highlight), 0 3px 0 0 var(--ink-black), var(--depth-2)'
+              : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
             transition: 'transform 0.12s ease', cursor: ready ? 'pointer' : 'default',
+            ...(ready ? { ['--glow' as string]: 'var(--amber-glow)' } : {}),
           }}
         >
           KICK OFF
@@ -258,18 +260,18 @@ export default function TeamTalk({ runState, onConfirm }: TeamTalkProps) {
       {/* ── Fitness nudge bar + squad gallery entry ───────────────────────── */}
       <div className="shrink-0 px-3 mt-2 flex items-center gap-1.5">
         <div
-          className="flex items-center gap-2 px-2.5 flex-1 min-w-0"
-          style={{ height: 28, borderRadius: 'var(--radius-sm)', background: 'var(--surface)', border: `2px solid ${nudge.color}` }}
+          className="glass-surface flex items-center gap-2 px-2.5 flex-1 min-w-0 relative overflow-hidden"
+          style={{ height: 28, borderRadius: 'var(--radius-sm)', border: `1px solid ${nudge.color}`, boxShadow: `inset 0 1px 0 0 var(--glass-highlight), 0 0 10px ${nudge.color}33, var(--depth-1)` }}
         >
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: nudge.color, flexShrink: 0 }} />
-          <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: nudge.color }}>{nudge.text}</span>
+          <span className="relative" style={{ width: 8, height: 8, borderRadius: '50%', background: nudge.color, flexShrink: 0, zIndex: 2 }} />
+          <span className="truncate relative" style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: nudge.color, zIndex: 2 }}>{nudge.text}</span>
         </div>
         <button
           onClick={() => setShowGallery(true)}
-          className="active:scale-95 glass-surface shrink-0"
-          style={{ height: 28, padding: '0 11px', borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: 'var(--cream)' }}
+          className="active:scale-95 glass-surface sheen shrink-0 relative overflow-hidden"
+          style={{ height: 28, padding: '0 11px', borderRadius: 'var(--radius-sm)', boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)', fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: 'var(--cream)' }}
         >
-          SQUAD
+          <span className="relative" style={{ zIndex: 2 }}>SQUAD</span>
         </button>
       </div>
 
@@ -277,22 +279,22 @@ export default function TeamTalk({ runState, onConfirm }: TeamTalkProps) {
       <div className="shrink-0 flex items-stretch gap-1.5 px-3 mt-2">
         <button
           onClick={() => setOverlay({ kind: 'formation' })}
-          className="flex flex-col items-start justify-center px-2.5 active:scale-95"
-          style={{ borderRadius: 'var(--radius-sm)', background: 'var(--surface)', border: '2px solid var(--ink-black)', transition: 'transform 0.12s ease', minWidth: 60 }}
+          className="glass-surface sheen flex flex-col items-start justify-center px-2.5 active:scale-95 relative overflow-hidden"
+          style={{ borderRadius: 'var(--radius-sm)', boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)', transition: 'transform 0.12s ease', minWidth: 60 }}
         >
-          <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: 'var(--dust)' }}>SHAPE</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1.1, color: 'var(--cream)' }}>{formation.name}</span>
+          <span className="relative" style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: 'var(--dust)', zIndex: 2 }}>SHAPE</span>
+          <span className="relative" style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1.1, color: 'var(--cream)', zIndex: 2 }}>{formation.name}</span>
         </button>
 
-        <div className="flex" style={{ borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}>
+        <div className="glass-surface flex relative overflow-hidden" style={{ borderRadius: 'var(--radius-sm)', boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)' }}>
           {INTENTS.map((it) => {
             const on = intent === it.id;
             return (
               <button
                 key={it.id}
                 onClick={() => setIntent(it.id)}
-                className="px-2.5 active:scale-95"
-                style={{ fontFamily: PIXEL, fontSize: 10, letterSpacing: 0.5, background: on ? it.accent : 'var(--surface)', color: on ? 'var(--ink-black)' : 'var(--cream-soft)', transition: 'background 0.15s ease' }}
+                className="px-2.5 active:scale-95 relative"
+                style={{ fontFamily: PIXEL, fontSize: 10, letterSpacing: 0.5, background: on ? it.accent : 'transparent', color: on ? 'var(--ink-black)' : 'var(--cream-soft)', boxShadow: on ? 'inset 0 1px 0 0 rgba(242,246,239,0.35)' : undefined, transition: 'background 0.15s ease', zIndex: 2 }}
               >
                 {it.label}
               </button>
@@ -332,20 +334,20 @@ export default function TeamTalk({ runState, onConfirm }: TeamTalkProps) {
               <button
                 key={i}
                 onClick={() => (card ? setModal({ variant: 'player', card }) : setOverlay({ kind: 'bench' }))}
-                className="relative flex flex-col items-center justify-center active:scale-95"
-                style={{ height: 46, borderRadius: 'var(--radius-sm)', background: card ? 'var(--surface)' : 'rgba(0,0,0,0.28)', border: card ? `2px solid ${ring}` : '2px dashed var(--border)', transition: 'transform 0.12s ease', minWidth: 0 }}
+                className={`relative flex flex-col items-center justify-center active:scale-95 ${card ? 'glass-surface' : ''}`}
+                style={{ height: 46, borderRadius: 'var(--radius-sm)', background: card ? undefined : 'rgba(0,0,0,0.28)', border: card ? `1px solid ${ring}` : '2px dashed var(--border)', boxShadow: card ? `inset 0 1px 0 0 var(--glass-highlight), 0 0 8px ${ring}33, var(--depth-1)` : undefined, transition: 'transform 0.12s ease', minWidth: 0 }}
               >
                 {card ? (
                   <>
-                    <span style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--line-white)' }}>{Math.round(card.power)}</span>
-                    <span className="truncate w-full text-center px-0.5" style={{ fontSize: 7.5, color: 'var(--cream-soft)', marginTop: 1 }}>{lastName(card.name)}</span>
-                    <FitnessBar card={card} width={26} />
+                    <span className="relative" style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--line-white)', zIndex: 2 }}>{Math.round(card.power)}</span>
+                    <span className="truncate w-full text-center px-0.5 relative" style={{ fontSize: 7.5, color: 'var(--cream-soft)', marginTop: 1, zIndex: 2 }}>{lastName(card.name)}</span>
+                    <span className="relative" style={{ zIndex: 2 }}><FitnessBar card={card} width={26} /></span>
                     <span
                       role="button"
                       aria-label={`Remove ${lastName(card.name)} from bench`}
                       onClick={(e) => { e.stopPropagation(); removeBench(card.id); }}
                       className="absolute flex items-center justify-center"
-                      style={{ top: -5, right: -5, width: 16, height: 16, borderRadius: '50%', background: 'var(--danger)', border: '1.5px solid var(--ink-black)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 9, lineHeight: 1 }}
+                      style={{ top: -5, right: -5, width: 16, height: 16, borderRadius: '50%', background: 'var(--danger)', border: '1.5px solid var(--ink-black)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 9, lineHeight: 1, zIndex: 3 }}
                     >
                       {'×'}
                     </span>
@@ -361,25 +363,27 @@ export default function TeamTalk({ runState, onConfirm }: TeamTalkProps) {
 
       {/* ── Overlays ──────────────────────────────────────────────────────── */}
       {overlay && (
-        <div className="absolute inset-0 flex flex-col justify-end scrim-fade" style={{ background: 'rgba(0,0,0,0.55)', zIndex: 40 }} onClick={() => setOverlay(null)}>
+        <div className="absolute inset-0 flex flex-col justify-end scrim-fade" style={{ background: 'rgba(2,9,5,0.62)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', zIndex: 40 }} onClick={() => setOverlay(null)}>
           <div
-            className="sheet-rise rounded-t-[16px] flex flex-col"
-            style={{ background: 'var(--felt)', borderTop: `3px solid ${overlay.kind === 'formation' ? 'var(--kit-blue)' : 'var(--gold)'}`, maxHeight: '64%', paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}
+            className="glass-raised sheen sheet-rise flex flex-col relative overflow-hidden"
+            style={{ borderTopLeftRadius: 'var(--radius-lg)', borderTopRightRadius: 'var(--radius-lg)', borderTop: `3px solid ${overlay.kind === 'formation' ? 'var(--kit-blue)' : 'var(--gold)'}`, boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-3)', maxHeight: '64%', paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-center pt-2 pb-1 shrink-0">
-              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)' }} />
+            <div className="flex justify-center pt-2 pb-1 shrink-0 relative" style={{ zIndex: 2 }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--glass-border)' }} />
             </div>
-            <div className="flex items-center justify-between px-3 pb-2 shrink-0">
+            <div className="flex items-center justify-between px-3 pb-2 shrink-0 relative" style={{ zIndex: 2 }}>
               <span style={{ fontFamily: PIXEL, fontSize: 13, letterSpacing: 0.5, color: 'var(--cream)' }}>
                 {overlay.kind === 'formation' ? 'PICK SHAPE' : overlay.kind === 'bench' ? 'ADD TO BENCH' : `FILL ${(activeSlot?.label ?? '').toUpperCase()}`}
               </span>
-              {overlay.kind === 'slot' && sel.starters[overlay.index] != null && (
-                <button onClick={() => { clearSlot(overlay.index); setOverlay(null); }} style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--danger)', padding: '4px 6px' }}>
-                  CLEAR SLOT
-                </button>
-              )}
-              <button onClick={() => setOverlay(null)} style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--dust)', padding: '4px 6px' }}>CLOSE</button>
+              <div className="flex items-center gap-1.5">
+                {overlay.kind === 'slot' && sel.starters[overlay.index] != null && (
+                  <button onClick={() => { clearSlot(overlay.index); setOverlay(null); }} className="glass-surface active:scale-90 relative overflow-hidden" style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--danger)', padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}>
+                    CLEAR
+                  </button>
+                )}
+                <button onClick={() => setOverlay(null)} className="glass-surface active:scale-90 relative overflow-hidden" style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)', padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}>CLOSE</button>
+              </div>
             </div>
 
             {overlay.kind === 'formation' ? (
@@ -534,10 +538,10 @@ function ActionBtn({ label, accent, onClick }: { label: string; accent: string; 
   return (
     <button
       onClick={onClick}
-      className="active:scale-95"
-      style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: accent, padding: '6px 9px', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', transition: 'transform 0.12s ease' }}
+      className="glass-surface sheen active:scale-95 relative overflow-hidden"
+      style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: accent, padding: '6px 9px', borderRadius: 'var(--radius-sm)', boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)', transition: 'transform 0.12s ease' }}
     >
-      {label}
+      <span className="relative" style={{ zIndex: 2 }}>{label}</span>
     </button>
   );
 }
@@ -564,7 +568,7 @@ function PlayerSheet({
   }, [available, activeSlot]);
 
   return (
-    <div className="grid grid-cols-3 gap-2 overflow-y-auto px-3 pt-1 pb-2" style={{ overscrollBehavior: 'contain' }}>
+    <div className="grid grid-cols-3 gap-2 overflow-y-auto px-3 pt-1 pb-2 relative" style={{ overscrollBehavior: 'contain', zIndex: 2 }}>
       {sorted.map((c) => {
         const eligible = !activeSlot || positionFitsSlot(c.position, activeSlot);
         return (
@@ -592,18 +596,18 @@ function PlayerSheet({
 
 function FormationSheet({ formations, current, onPick }: { formations: Formation[]; current: string; onPick: (id: string) => void }) {
   return (
-    <div className="grid grid-cols-2 gap-1.5 overflow-y-auto px-3 pt-1 pb-2" style={{ overscrollBehavior: 'contain' }}>
+    <div className="grid grid-cols-2 gap-1.5 overflow-y-auto px-3 pt-1 pb-2 relative" style={{ overscrollBehavior: 'contain', zIndex: 2 }}>
       {formations.map((f) => {
         const on = f.id === current;
         return (
           <button
             key={f.id}
             onClick={() => onPick(f.id)}
-            className="text-left active:scale-[0.98] pixel-edge"
-            style={{ background: 'linear-gradient(160deg, var(--surface-raised), var(--surface))', border: `2px solid ${on ? 'var(--kit-blue)' : 'var(--ink-black)'}`, borderRadius: 'var(--radius-sm)', padding: '10px 11px', transition: 'transform 0.1s ease', minWidth: 0 }}
+            className={`text-left active:scale-[0.98] relative overflow-hidden ${on ? 'glass-raised sheen glow-edge' : 'glass-surface sheen'}`}
+            style={{ border: on ? '1px solid var(--kit-blue)' : undefined, borderRadius: 'var(--radius-sm)', padding: '10px 11px', boxShadow: on ? 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-2)' : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)', transition: 'transform 0.1s ease', minWidth: 0, ...(on ? { ['--glow' as string]: 'var(--glow-rare)' } : {}) }}
           >
-            <span style={{ fontFamily: PIXEL, fontSize: 15, color: on ? 'var(--kit-blue)' : 'var(--cream)', lineHeight: 1 }}>{f.name}</span>
-            <p style={{ fontSize: 9, lineHeight: 1.35, color: 'var(--dust)', margin: '5px 0 0' }}>{f.description}</p>
+            <span className="relative" style={{ fontFamily: PIXEL, fontSize: 15, color: on ? 'var(--kit-blue)' : 'var(--cream)', lineHeight: 1, zIndex: 2 }}>{f.name}</span>
+            <p className="relative" style={{ fontSize: 9, lineHeight: 1.35, color: 'var(--dust)', margin: '5px 0 0', zIndex: 2 }}>{f.description}</p>
           </button>
         );
       })}

@@ -16,6 +16,7 @@ import { getShopJokers } from '../lib/jokers';
 import type { OpponentBuild } from '../lib/run';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
+import SquadGallery from './SquadGallery';
 import { PIXEL } from './cards/cardTokens';
 
 // SHOP_ITEMS kept imported to preserve the module surface; not referenced directly.
@@ -81,6 +82,7 @@ export default function ShopPhase({
   const [sellSheet, setSellSheet] = useState(false);
   const [sellConfirm, setSellConfirm] = useState<Card | null>(null);
   const [modal, setModal] = useState<GameCardModel | null>(null);
+  const [showGallery, setShowGallery] = useState(false);
 
   const academy = getAcademyTier(state.academyTier);
   const acSeed = shopSeed + 777;
@@ -248,6 +250,7 @@ export default function ShopPhase({
             onHealPlayer={onHealPlayer}
             openModal={setModal}
             openSell={() => setSellSheet(true)}
+            openGallery={() => setShowGallery(true)}
           />
         )}
 
@@ -369,6 +372,11 @@ export default function ShopPhase({
 
       {/* Single CardModal mounted at shop root (renders absolute inset-0). */}
       <CardModal model={modal} onClose={() => setModal(null)} />
+
+      {/* Squad Gallery — full-screen overlay over the shop (renders absolute inset-0). */}
+      {showGallery && (
+        <SquadGallery deck={state.deck} onClose={() => setShowGallery(false)} title="YOUR SQUAD" />
+      )}
     </div>
   );
 }
@@ -462,7 +470,7 @@ function MarketTab({
 // ===========================================================================
 
 function SquadTab({
-  state, trainableCards, injuredCards, onTrainPlayer, onHealPlayer, openModal, openSell,
+  state, trainableCards, injuredCards, onTrainPlayer, onHealPlayer, openModal, openSell, openGallery,
 }: {
   state: RunState;
   trainableCards: { card: Card; applied: number }[];
@@ -471,10 +479,22 @@ function SquadTab({
   onHealPlayer: (cardId: number) => boolean;
   openModal: (m: GameCardModel) => void;
   openSell: () => void;
+  openGallery: () => void;
 }) {
   const canHeal = state.cash >= 12000;
   return (
     <div className="flex flex-col gap-3 pb-2">
+      {/* Squad gallery shortcut — browse every owned card in the full overlay. */}
+      <SectionCard title="Your Squad" accent="var(--kit-blue)">
+        <RowAction
+          title="View all cards"
+          sub={`${state.deck.length} owned · filter & inspect`}
+          actionLabel="View All"
+          affordable={state.deck.length > 0}
+          onClick={openGallery}
+        />
+      </SectionCard>
+
       {/* Medical room */}
       <SectionCard title="Medical Room" accent="var(--danger)">
         {injuredCards.length === 0 ? (
