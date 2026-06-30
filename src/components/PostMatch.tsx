@@ -28,6 +28,7 @@
 import { useState } from 'react';
 import type { Card } from '../lib/scoring';
 import type { MatchResult } from '../lib/run';
+import { cupSize, isCupFinal } from '../lib/run';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import { PIXEL } from './cards/cardTokens';
@@ -50,8 +51,9 @@ interface PostMatchProps {
     commentary: string[];
   };
   // --- Run context (one-life arc) — passed from GameShell ----------------------
-  round: number;          // the match just played (1–5)
-  totalRounds: number;    // fixtures in a run (5)
+  round: number;          // the CUP just played in (1–5)
+  matchInCup: number;     // the tie within the cup that was just played
+  totalRounds: number;    // number of cups in a run (5)
   wins: number;           // wins so far this run (incl. this one)
   matchHistory: MatchResult[]; // results so far this run (incl. this one)
   onContinue: () => void;
@@ -83,6 +85,7 @@ export default function PostMatch({
   matchResult,
   durabilityResult,
   round,
+  matchInCup,
   totalRounds,
   wins,
   matchHistory,
@@ -205,6 +208,7 @@ export default function PostMatch({
             matchResult={matchResult}
             meta={meta}
             round={round}
+            matchInCup={matchInCup}
             totalRounds={totalRounds}
             wins={wins}
             matchHistory={matchHistory}
@@ -259,6 +263,7 @@ function SurvivalTab({
   matchResult,
   meta,
   round,
+  matchInCup,
   totalRounds,
   wins,
   matchHistory,
@@ -266,16 +271,21 @@ function SurvivalTab({
   matchResult: PostMatchProps['matchResult'];
   meta: { label: string; color: string; tag: string };
   round: number;
+  matchInCup: number;
   totalRounds: number;
   wins: number;
   matchHistory: MatchResult[];
 }) {
-  const isFinal = round >= totalRounds;
-  // Big survival verb — the run continues (unless this was the last fixture).
-  const heroWord = isFinal ? 'CHAMPIONS' : 'SURVIVED';
-  const arcLine = isFinal
-    ? `All ${totalRounds} fixtures survived — the run is yours.`
-    : survivalLine(matchResult, round, totalRounds);
+  const ties = cupSize(round);
+  const cupFinal = isCupFinal(round, matchInCup);
+  // Big survival verb: a cup final clears the cup; a mid-cup tie just survives. (The true
+  // championship is the EndScreen — winning the LAST cup's final routes there.)
+  const heroWord = cupFinal ? (matchResult.result === 'win' ? 'CUP WON' : 'CUP CLEARED') : 'SURVIVED';
+  const arcLine = cupFinal
+    ? round >= totalRounds
+      ? 'The last cup is yours — champions.'
+      : `Cup ${round} cleared — into the shop, then Cup ${round + 1}.`
+    : survivalLine(matchResult, round, matchInCup, ties);
   const rewardSub = matchResult.result === 'draw' ? 'reduced gate' : 'gate banked';
 
   return (
@@ -303,7 +313,7 @@ function SurvivalTab({
       {/* (1) Match marker */}
       <div className="relative shrink-0 flex justify-center" style={{ padding: '0 18px', zIndex: 2 }}>
         <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1.4, color: 'var(--dust)' }}>
-          MATCH {round} OF {totalRounds}
+          CUP {round}/{totalRounds} {'·'} TIE {matchInCup}/{ties}
         </span>
       </div>
 
@@ -328,9 +338,9 @@ function SurvivalTab({
           {arcLine}
         </span>
 
-        {/* One-life fixture arc — a pip per fixture so the run's shape is legible
-            at a glance: played results coloured by outcome, the rest pending. */}
-        <FixtureArc round={round} totalRounds={totalRounds} matchHistory={matchHistory} />
+        {/* Tie arc for THIS cup — a pip per tie so the cup's shape is legible at a
+            glance: played ties coloured by outcome, the current one ringed, rest pending. */}
+        <FixtureArc round={round} matchInCup={matchInCup} matchHistory={matchHistory} />
       </div>
 
       <div className="shrink-0" style={{ flex: 1 }} />
@@ -347,7 +357,7 @@ function SurvivalTab({
       <div className="relative shrink-0 grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', padding: '16px 14px 0', zIndex: 2 }}>
         <EconStat label="Reward" value={`£${compact(matchResult.revenue)}`} sub={rewardSub} color="var(--gold)" delay={0} divider={false} />
         <EconStat label="Attendance" value={compact(matchResult.attendance)} sub="in seats" color="var(--cream)" delay={60} divider />
-        <EconStat label="Survived" value={`${round}/${totalRounds}`} sub={`${wins} won`} color="var(--success)" delay={120} divider />
+        <EconStat label="Cup" value={`${round}/${totalRounds}`} sub={`${wins} won`} color="var(--success)" delay={120} divider />
       </div>
 
       <div className="shrink-0" style={{ flex: 0.6 }} />
@@ -361,23 +371,27 @@ function SurvivalTab({
  *  readable in a glance. */
 function FixtureArc({
   round,
-  totalRounds,
+  matchInCup,
   matchHistory,
 }: {
   round: number;
-  totalRounds: number;
+  matchInCup: number;
   matchHistory: MatchResult[];
 }) {
-  const pips = Array.from({ length: totalRounds }, (_, i) => {
-    const fixtureNo = i + 1;
-    const played = matchHistory.find((m) => m.round === fixtureNo);
-    const isCurrent = fixtureNo === round;
-    return { fixtureNo, played, isCurrent };
+  const ties = cupSize(round);
+  // Ties of THIS cup, in the order they were played (incl. the one just played). The
+  // i-th played result fills tie i+1; the current tie is `matchInCup`.
+  const cupResults = matchHistory.filter((m) => m.round === round);
+  const pips = Array.from({ length: ties }, (_, i) => {
+    const tieNo = i + 1;
+    const played = cupResults[i];
+    const isCurrent = tieNo === matchInCup;
+    return { tieNo, played, isCurrent };
   });
 
   return (
     <div className="flex items-center" style={{ gap: 6, marginTop: 2 }}>
-      {pips.map(({ fixtureNo, played, isCurrent }) => {
+      {pips.map(({ tieNo, played, isCurrent }) => {
         const color =
           played?.result === 'win'
             ? 'var(--success)'
@@ -387,13 +401,13 @@ function FixtureArc({
         const filled = Boolean(played);
         return (
           <div
-            key={fixtureNo}
+            key={tieNo}
             className="flex flex-col items-center"
             style={{ gap: 4 }}
             aria-label={
               played
-                ? `Fixture ${fixtureNo}: ${played.result} ${played.yourGoals}-${played.opponentGoals}`
-                : `Fixture ${fixtureNo}: upcoming`
+                ? `Tie ${tieNo}: ${played.result} ${played.yourGoals}-${played.opponentGoals}`
+                : `Tie ${tieNo}: upcoming`
             }
           >
             <span
@@ -407,7 +421,7 @@ function FixtureArc({
               }}
             />
             <span style={{ fontFamily: PIXEL, fontSize: 7, color: isCurrent ? 'var(--cream)' : 'var(--dust)' }}>
-              {fixtureNo}
+              {tieNo}
             </span>
           </div>
         );
@@ -416,13 +430,13 @@ function FixtureArc({
   );
 }
 
-/** A one-line plain-language survival summary. */
-function survivalLine(m: PostMatchProps['matchResult'], round: number, total: number): string {
+/** A one-line plain-language survival summary for a mid-cup tie. */
+function survivalLine(m: PostMatchProps['matchResult'], round: number, matchInCup: number, ties: number): string {
   const opp = m.opponentName;
-  const ahead = total - round;
-  const tail = ahead === 1 ? '1 fixture stands between you and the title.' : `${ahead} fixtures to go.`;
-  if (m.result === 'win') return `${opp} beaten — you live to fight on. ${tail}`;
-  return `Honours even with ${opp} — but you survive. ${tail}`;
+  const left = ties - matchInCup;
+  const tail = left === 1 ? 'One more tie to the cup final.' : `${left} ties left in Cup ${round}.`;
+  if (m.result === 'win') return `${opp} beaten — Cup ${round}, tie ${matchInCup}/${ties}. ${tail}`;
+  return `Honours even with ${opp} — you survive Cup ${round}, tie ${matchInCup}/${ties}. ${tail}`;
 }
 
 // ===========================================================================
