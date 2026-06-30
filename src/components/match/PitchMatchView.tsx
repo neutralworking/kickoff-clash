@@ -9,7 +9,7 @@ import { cellOf, bandOf } from '../../lib/field';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard, TacticSlots } from '../../lib/tactics';
 import { canDeploy, getTacticById } from '../../lib/tactics';
-import type { OpponentBuild } from '../../lib/run';
+import type { OpponentBuild, TeamIntent } from '../../lib/run';
 import type { Card } from '../../lib/scoring';
 import { subBlockReason, cumulativeStats } from '../../lib/match-v5';
 import type { CumulativeStats } from '../../lib/match-v5';
@@ -42,8 +42,18 @@ interface PitchMatchViewProps {
    *  for the pre-kickoff team talk (currentIncrement 0, no periods played) — pulling
    *  bench players on mid-match would be a free sub. */
   onAutoSelect?: () => void;
+  /** Change the team's attacking intent (ATT/BAL/DEF) mid-match. The engine reads
+   *  `state.intent` fresh each increment, so it takes effect from the next period. */
+  onIntentChange?: (intent: TeamIntent) => void;
   onContinue: () => void;
 }
+
+/** Intent options for the team-talk toggle — mirrors TeamSelect's segmented control. */
+const INTENT_OPTIONS: { id: TeamIntent; label: string; accent: string }[] = [
+  { id: 'defensive', label: 'DEF', accent: 'var(--kit-blue)' },
+  { id: 'balanced', label: 'BAL', accent: 'var(--gold)' },
+  { id: 'attacking', label: 'ATT', accent: 'var(--kit-red)' },
+];
 
 // ---------------------------------------------------------------------------
 // Tokens & geometry
@@ -707,7 +717,7 @@ function CoachPanel({ notes }: { notes: CoachNote[] }) {
 export default function PitchMatchView({
   matchState, formation, jokers, tacticSlots, availableTactics, ownedFormations,
   opponentBuild, nextMinute, mode, breakMoment, currentResult,
-  onToggleTactic, onSub, onReassign, onFormationChange, onAutoSelect, onContinue,
+  onToggleTactic, onSub, onReassign, onFormationChange, onAutoSelect, onIntentChange, onContinue,
 }: PitchMatchViewProps) {
   const [trayOpen, setTrayOpen] = useState(false);
   const [oppView, setOppView] = useState(false);
@@ -1240,6 +1250,41 @@ export default function PitchMatchView({
           </button>
         )}
       </div>
+
+      {/* INTENT — the attacking lean (DEF/BAL/ATT). Surfaced in the team talk so the
+          player can change it between periods; the engine reads state.intent fresh each
+          increment, so it bites from the next period. A change mid-talk also refreshes
+          the coach's momentum read. */}
+      {isBreak && onIntentChange && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 16px 6px', flexShrink: 0 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: 'var(--dust)', flexShrink: 0 }}>INTENT</span>
+          <div className="flex" style={{ flex: 1, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}>
+            {INTENT_OPTIONS.map((it) => {
+              const on = matchState.intent === it.id;
+              return (
+                <button
+                  key={it.id}
+                  onClick={() => onIntentChange(it.id)}
+                  className="active:scale-95"
+                  style={{
+                    flex: 1,
+                    padding: '6px 0',
+                    fontFamily: PIXEL,
+                    fontSize: 10,
+                    letterSpacing: 0.5,
+                    background: on ? it.accent : 'var(--surface)',
+                    color: on ? 'var(--ink-black)' : 'var(--cream-soft)',
+                    transition: 'background 0.15s ease',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {it.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* FIX 1 + FIX 4 — the TEAM-TALK action row. At a break the player's three
           levers are surfaced together as proper buttons rather than buried in a

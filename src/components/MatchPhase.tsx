@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import type { RunState } from '../lib/run';
+import type { RunState, TeamIntent } from '../lib/run';
 import { getOpponent, getOpponentBuild, buildMatchSeed, cupSize } from '../lib/run';
 import { cupMatchPower } from '../lib/opponent';
 import type { HandState } from '../lib/hand';
@@ -146,6 +146,12 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     setMatchState((prev: MatchV5State) => ({ ...prev, formation: newFormation }));
   }, []);
 
+  // ---- Intent: change the attacking lean between periods. The engine reads
+  // state.intent fresh in evaluateSplit each increment, so it bites from the next period.
+  const handleIntentChange = useCallback((intent: TeamIntent) => {
+    setMatchState((prev: MatchV5State) => ({ ...prev, intent }));
+  }, []);
+
   const handleToggleTactic = useCallback((tacticId: string) => {
     const tactic = runState.tacticsDeck.find((card) => card.id === tacticId);
     if (!tactic) return;
@@ -249,6 +255,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
             onReassign={handleReassign}
             onFormationChange={handleFormationChange}
             onAutoSelect={handleAutoSelect}
+            onIntentChange={handleIntentChange}
             onContinue={subPhase === 'resolving' ? handleResolveComplete : handleKickOff}
           />
         );
