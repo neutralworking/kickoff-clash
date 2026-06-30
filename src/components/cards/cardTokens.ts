@@ -8,6 +8,10 @@
  * centralised so we change them once.
  */
 
+import type { Card } from '../../lib/scoring';
+import { pickDefiningTraits, SIGNATURE_OVERRIDES } from '../../lib/defining-traits';
+import { traitCopy, type TraitCopy } from '../../lib/trait-copy';
+
 export const PIXEL = 'var(--font-pixel, monospace)';
 
 // Rarity rings the card; ratings stay --line-white for legibility (contrast law).
@@ -62,6 +66,69 @@ export const RARITY_SHEEN: Record<string, number> = {
   Epic: 0.85,
   Legendary: 1,
 };
+
+// ---------------------------------------------------------------------------
+// Defining-trait pill palette (CARDS_V1 §4). A card carries N defining traits
+// (N = rarity), each with a `kind` from trait-copy.ts. This is the single source
+// of truth for how a kind reads on a pill: an accent colour the pill borders +
+// tints in, so a `cross` always looks like a cross, an `aura` like an aura, etc.
+// Two attacking-threat kinds (cross/shot/setpiece/poach) skew warm; the denials
+// (tackle/offside) skew cool; the persistent lifts (aura/engine) skew gold. The
+// `bg` is a low-alpha wash of `color` so the pill stays quiet behind the label.
+// ---------------------------------------------------------------------------
+export interface TraitPillStyle {
+  /** Pill border + glyph colour. */
+  color: string;
+  /** Low-alpha fill behind the pill (a wash of `color`). */
+  bg: string;
+}
+
+export const TRAIT_KIND_STYLE: Record<string, TraitPillStyle> = {
+  cross: { color: '#f59e0b', bg: 'rgba(245,158,11,0.14)' }, // whipped delivery — warm amber
+  shot: { color: '#e23b35', bg: 'rgba(226,59,53,0.14)' }, // long strike — kit red
+  setpiece: { color: '#f5c542', bg: 'rgba(245,197,66,0.13)' }, // dead-ball — gold
+  poach: { color: '#ff7a1f', bg: 'rgba(255,122,31,0.15)' }, // six-yard pounce — hot amber
+  tackle: { color: '#3d7bd6', bg: 'rgba(61,123,214,0.16)' }, // big tackle — kit blue
+  offside: { color: '#7fb0ee', bg: 'rgba(127,176,238,0.14)' }, // sprung trap — pale blue
+  aura: { color: '#a855f7', bg: 'rgba(168,85,247,0.15)' }, // leadership lift — epic purple
+  engine: { color: '#34c46a', bg: 'rgba(52,196,106,0.14)' }, // late surge — engine green
+};
+
+/** Pill style for a trait kind, with a neutral cream fallback for unknowns. */
+export function traitPillStyle(kind: string): TraitPillStyle {
+  return TRAIT_KIND_STYLE[kind] ?? { color: 'var(--cream-soft)', bg: 'rgba(195,210,192,0.12)' };
+}
+
+/**
+ * A resolved defining trait, ready to render: the mechanical record's name carries
+ * across (for keys), plus the player-facing copy and the kind's pill style. The
+ * resolution is deterministic — a bespoke signature loadout if the card has one,
+ * else the seeded pick (N = rarity). Both come from the read-only trait layer.
+ */
+export interface ResolvedTrait {
+  /** Stable key for React lists (the trait's mechanical name). */
+  name: string;
+  copy: TraitCopy;
+  style: TraitPillStyle;
+  /** True for a hand-authored signature/legend trait — these sort first. */
+  signature: boolean;
+}
+
+/**
+ * The card's DEFINING traits, resolved for display. Signature-override cards keep
+ * their bespoke loadout (rarity count intentionally overridden) and their traits
+ * are surfaced first as the marquee identity; everyone else gets the seeded pick.
+ * Pure render selection — the magnitudes/order come straight from the trait layer.
+ */
+export function definingTraitsFor(card: Card): ResolvedTrait[] {
+  const override = SIGNATURE_OVERRIDES[card.id];
+  const records = override ?? pickDefiningTraits(card);
+  const isSignature = override != null;
+  return records.map((r) => {
+    const copy = traitCopy(r.name);
+    return { name: r.name, copy, style: traitPillStyle(copy.kind), signature: isSignature };
+  });
+}
 
 // Position family → accent colour, shared by every card surface.
 export const POSITION_COLOR: Record<string, string> = {

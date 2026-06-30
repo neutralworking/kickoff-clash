@@ -82,7 +82,7 @@ const STYLE_FORMATION: Record<string, string> = {
  *  lower-ceiling scale than the old decompressed band, so the budget drops to match.
  *  This is the single-match Foundation curve (balance-sweep) + the opener fallback;
  *  the real cup difficulty lives in CUP_FINAL_POWER below. */
-const ROUND_POWER = [62, 68, 73, 78, 82];
+const ROUND_POWER = [62, 68, 73, 78, 84];
 
 // --- Within-cup ramp (Phase 3B.3) ---------------------------------------------------
 // Each cup escalates from soft openers to a boss FINAL. Most of the 20 sudden-death

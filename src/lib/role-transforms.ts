@@ -23,6 +23,7 @@
 
 import type { Card } from './scoring';
 import type { TraitRecord } from './verbs';
+import { pickDefiningTraits, SIGNATURE_OVERRIDES } from './defining-traits';
 
 export const ROLE_TRANSFORMS: Record<string, TraitRecord[]> = {
   // ---- §9 starting set ----------------------------------------------------
@@ -201,10 +202,30 @@ const ROLE_ALIASES: Record<string, string> = {
   'Half-Space Creator': 'Mezzala', // half-space runner → Half-Space Run
 };
 
-/** Resolve a card's TraitRecords from its tactical role (empty if none). Falls back to a
- *  role alias so the V3.1 pool's authentic role names still drive the dispatcher. */
-export function traitsForCard(card: Card): TraitRecord[] {
+/** Just the role-% baseline (the invisible body) — no defining action-traits on top. */
+function roleBaselineFor(card: Card): TraitRecord[] {
   const role = card.tacticalRole;
-  if (!role) return [];
-  return ROLE_TRANSFORMS[role] ?? ROLE_TRANSFORMS[ROLE_ALIASES[role] ?? ''] ?? [];
+  return role ? (ROLE_TRANSFORMS[role] ?? ROLE_TRANSFORMS[ROLE_ALIASES[role] ?? ''] ?? []) : [];
+}
+
+/**
+ * Resolve a card's TraitRecords: the role-% BASELINE (the invisible body) + the card's
+ * N rarity-scaled DEFINING action-traits on top (CARDS_V1 §4). The role baseline falls
+ * back through `ROLE_ALIASES` so the V3.1 pool's authentic role names still drive the
+ * dispatcher; the defining layer is a bespoke showcase override (by card id) or the
+ * deterministic per-archetype picker.
+ *
+ * `includeDefining = false` returns ONLY the role baseline — used for the faceless
+ * generated opponent XI (ids 9000+), whose difficulty is already carried by the
+ * calibrated ROUND_POWER/opponentScaleTraits budget. Stacking the player-facing
+ * defining suite (Marvel-Snap generates/denies) on top of that pre-defining baseline
+ * double-counted the difficulty (balance-lab: ga→4.7, top deck 33% vs R5). The player
+ * keeps the full punchy suite; only the nameless opponent opts out (it has no trait
+ * pills/animations on screen, so nothing is lost visually).
+ */
+export function traitsForCard(card: Card, includeDefining = true): TraitRecord[] {
+  const baseline = roleBaselineFor(card);
+  if (!includeDefining) return baseline;
+  const defining = SIGNATURE_OVERRIDES[card.id] ?? pickDefiningTraits(card);
+  return [...baseline, ...defining];
 }

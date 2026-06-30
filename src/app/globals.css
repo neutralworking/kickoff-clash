@@ -861,3 +861,131 @@ h1, h2, h3,
   to { opacity: 1; transform: translateX(0); }
 }
 .coach-line-in { opacity: 0; animation: coachLineIn 0.28s ease-out forwards; }
+
+/* ---------------------------------------------------------------------------
+   Match — DEFINING-TRAIT FIRINGS (Marvel-Snap "actions" on the pitch)
+   When a card's defining trait fires this increment the engine surfaces it in
+   split.traitEvents; the view anchors a beat on that card's pitch coordinate.
+   Two families: a one-shot MOMENT flash (cross/shot/setpiece/poach/tackle/
+   offside) and a held AURA glow (aura/engine). The glyph comes from trait-copy.
+   GPU-cheap (transform/opacity/box-shadow), staggered by event index inline.
+   --------------------------------------------------------------------------- */
+
+/* The trait label chip lifts off the card and fades — the "what fired" caption.
+   Sits above the card so several stacked firings still read in sequence. */
+@keyframes traitTag {
+  0% { opacity: 0; transform: translate(-50%, 2px) scale(0.7); }
+  22% { opacity: 1; transform: translate(-50%, -10px) scale(1.04); }
+  70% { opacity: 1; transform: translate(-50%, -13px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -22px) scale(0.96); }
+}
+.trait-tag { opacity: 0; animation: traitTag 0.82s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* A short whipped arc toward the box — the CROSS delivery (glyph rides up & over). */
+@keyframes traitCross {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6) rotate(-12deg); }
+  25% { opacity: 1; transform: translate(-50%, -120%) scale(1.1) rotate(0deg); }
+  60% { opacity: 1; transform: translate(-50%, -210%) scale(1) rotate(10deg); }
+  100% { opacity: 0; transform: translate(-50%, -300%) scale(0.85) rotate(16deg); }
+}
+.trait-cross { opacity: 0; animation: traitCross 0.78s cubic-bezier(0.33, 0, 0.4, 1) both; }
+
+/* A long-range strike streak — the glyph elongates and rockets up the lane. */
+@keyframes traitShot {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5) translateY(0); }
+  18% { opacity: 1; transform: translate(-50%, -50%) scale(1.3) translateY(0); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9) translateY(-58px); }
+}
+.trait-shot { opacity: 0; animation: traitShot 0.7s cubic-bezier(0.4, 0, 0.6, 1) both; }
+
+/* A dead-ball flag pops up and holds — the SET-PIECE threat planted. */
+@keyframes traitSetpiece {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4) rotate(-18deg); }
+  35% { opacity: 1; transform: translate(-50%, -50%) scale(1.18) rotate(6deg); }
+  55% { transform: translate(-50%, -50%) scale(1) rotate(-3deg); }
+  78% { opacity: 1; transform: translate(-50%, -50%) scale(1.04) rotate(0deg); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+}
+.trait-setpiece { opacity: 0; animation: traitSetpiece 0.86s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* A sharp pounce — the POACHER snaps in tight, a quick double-beat. */
+@keyframes traitPoach {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.7); }
+  22% { opacity: 1; transform: translate(-50%, -50%) scale(0.78); }
+  44% { transform: translate(-50%, -50%) scale(1.16); }
+  64% { transform: translate(-50%, -50%) scale(0.92); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.05); }
+}
+.trait-poach { opacity: 0; animation: traitPoach 0.7s cubic-bezier(0.5, 0, 0.5, 1) both; }
+
+/* A STOP shield slams shut — the timed TACKLE that snuffs the attack. */
+@keyframes traitTackle {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.9); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scale(0.88); }
+  46% { transform: translate(-50%, -50%) scale(1.06); }
+  62% { transform: translate(-50%, -50%) scale(0.97); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+.trait-tackle { opacity: 0; animation: traitTackle 0.74s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* A linesman's flag raised — the OFFSIDE trap sprung (hinge up and held). */
+@keyframes traitOffside {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(48deg) scale(0.7); transform-origin: bottom left; }
+  30% { opacity: 1; transform: translate(-50%, -50%) rotate(-8deg) scale(1.1); transform-origin: bottom left; }
+  50% { transform: translate(-50%, -50%) rotate(2deg) scale(1); transform-origin: bottom left; }
+  78% { opacity: 1; transform: translate(-50%, -50%) rotate(0deg) scale(1.03); transform-origin: bottom left; }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(0deg) scale(1); transform-origin: bottom left; }
+}
+.trait-offside { opacity: 0; animation: traitOffside 0.82s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* A held AURA ring — a persistent breathing halo while the trait is active this
+   increment (Leadership / Engine Room). Held state, not a one-shot. */
+@keyframes traitAura {
+  0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(0.96); }
+  50% { opacity: 0.95; transform: translate(-50%, -50%) scale(1.08); }
+}
+.trait-aura { animation: traitAura 1.5s ease-in-out infinite; }
+
+/* The aura glyph sits centred on the card and pulses gently with the ring. */
+@keyframes traitAuraGlyph {
+  0%, 100% { opacity: 0.7; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+}
+.trait-aura-glyph { animation: traitAuraGlyph 1.5s ease-in-out infinite; }
+
+/* The resolving CTA's "PLAYING" ellipsis breathes so the tap-gate never reads
+   as a frozen dead frame — the dead-air fix. Three dots cascade. */
+@keyframes playingDot {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
+}
+.playing-dot { animation: playingDot 1.1s ease-in-out infinite; }
+
+/* A slow sheen sweeps the resolving CTA so it reads as live, not disabled. */
+@keyframes playingSweep {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+.playing-sweep { animation: playingSweep 1.4s ease-in-out infinite; }
+
+/* Reduced motion: trait firings degrade to an instant, still glyph (no travel,
+   no infinite pulse). They still APPEAR and clear with the increment, so the
+   information is preserved — only the large motion is removed. */
+@media (prefers-reduced-motion: reduce) {
+  .trait-tag,
+  .trait-cross,
+  .trait-shot,
+  .trait-setpiece,
+  .trait-poach,
+  .trait-tackle,
+  .trait-offside {
+    animation: none;
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  .trait-tag { transform: translate(-50%, -12px) scale(1); opacity: 1; }
+  .trait-aura,
+  .trait-aura-glyph { animation: none; opacity: 0.9; transform: translate(-50%, -50%) scale(1); }
+  .playing-dot { animation: none; opacity: 0.9; }
+  .playing-sweep { animation: none; opacity: 0; }
+}

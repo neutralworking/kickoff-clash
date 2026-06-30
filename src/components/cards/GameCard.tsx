@@ -39,6 +39,8 @@ import {
   nationFlag,
   nationCode,
   lastName,
+  definingTraitsFor,
+  type ResolvedTrait,
 } from './cardTokens';
 
 export type CardSize = 'grid' | 'full';
@@ -288,6 +290,8 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
   const posColor = POSITION_COLOR[card.position] ?? 'var(--dust)';
   const flag = nationFlag(card.nation);
   const hasFitness = typeof card.fitness === 'number';
+  // Defining traits — N pills where N = rarity (so rarity reads as trait depth).
+  const traits = definingTraitsFor(card);
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: full ? 10 : '5px 6px' }}>
       {/* Header row: position tab · rating */}
@@ -339,6 +343,49 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
           </span>
         ) : null}
       </div>
+
+      {/* Defining-trait pills — the action-buff signature. Count = rarity, so a
+          Legendary visibly carries more than a Common. Coloured by trait kind. */}
+      {traits.length > 0 && <TraitPillStrip traits={traits} full={full} />}
+    </div>
+  );
+}
+
+/**
+ * The on-card defining-trait strip. Reuses the manager trait-pill look (PIXEL,
+ * kind-accent border, low-alpha kind wash, hard rounded chip) but keyed by trait
+ * KIND rather than a single family accent. On the dense `grid` card the pill is
+ * glyph-only (the label would mush at ~52px wide); on `full` it carries glyph +
+ * label. Pills wrap, capped so 4 (a Legendary) never crowd the name/fitness data.
+ */
+function TraitPillStrip({ traits, full }: { traits: ResolvedTrait[]; full: boolean }) {
+  return (
+    <div className="flex flex-wrap" style={{ gap: full ? 4 : 3, marginTop: full ? 7 : 4 }}>
+      {traits.map((t, i) => (
+        <span
+          key={`${t.name}-${i}`}
+          title={full ? undefined : t.copy.label}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: full ? 3 : 0,
+            fontFamily: PIXEL,
+            fontSize: full ? 8 : 7,
+            letterSpacing: full ? 0.3 : 0,
+            lineHeight: 1,
+            color: t.style.color,
+            background: t.style.bg,
+            border: `1px solid ${t.style.color}`,
+            borderRadius: 3,
+            padding: full ? '4px 5px' : '3px',
+            minWidth: full ? undefined : 13,
+            justifyContent: 'center',
+          }}
+        >
+          <span aria-hidden style={{ fontSize: full ? 9 : 8, lineHeight: 1 }}>{t.copy.glyph}</span>
+          {full && <span style={{ lineHeight: 1 }}>{t.copy.label.toUpperCase()}</span>}
+        </span>
+      ))}
     </div>
   );
 }
