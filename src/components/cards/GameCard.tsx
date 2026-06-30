@@ -40,8 +40,15 @@ import {
   nationCode,
   lastName,
   definingTraitsFor,
+  shortTraitLabel,
   type ResolvedTrait,
 } from './cardTokens';
+
+// The trait glyphs (✦ ➴ ⚑ ◣ …) live outside the Silkscreen glyph set, so render
+// them in a Unicode-complete fallback stack. The READABLE pixel-font label is the
+// signal; the glyph is a small accent that degrades gracefully if a symbol is
+// missing. (Why the old glyph-only grid chip read as a blank box.)
+const GLYPH_FONT = "'DejaVu Sans', 'Noto Sans Symbols', 'Segoe UI Symbol', sans-serif";
 
 export type CardSize = 'grid' | 'full';
 
@@ -293,97 +300,125 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
   // Defining traits — N pills where N = rarity (so rarity reads as trait depth).
   const traits = definingTraitsFor(card);
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: full ? 10 : '5px 6px' }}>
-      {/* Header row: position tab · rating */}
-      <div className="flex items-center justify-between" style={{ gap: 4 }}>
-        <span
-          style={{
-            background: posColor,
-            color: 'var(--line-white)',
-            fontFamily: PIXEL,
-            fontSize: full ? 11 : 8,
-            lineHeight: 1,
-            padding: full ? '5px 6px' : '3px 4px',
-            borderRadius: 3,
-            flexShrink: 0,
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.3)',
-          }}
-        >
-          {card.position}
-        </span>
-        <span style={{ fontFamily: PIXEL, fontSize: full ? 24 : 13, lineHeight: 1, color: 'var(--line-white)', textShadow: '0 1px 0 var(--ink-black)' }}>
-          {Math.round(card.power)}
-        </span>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: full ? 11 : '5px 6px' }}>
+      {/* Header row: position tab (+ nation) · rating. The rating is the strongest
+          single signal, so it sits largest, top-right, always --line-white. */}
+      <div className="flex items-start justify-between" style={{ gap: 4 }}>
+        <div className="flex items-center" style={{ gap: full ? 5 : 3, minWidth: 0 }}>
+          <span
+            style={{
+              background: posColor,
+              color: 'var(--line-white)',
+              fontFamily: PIXEL,
+              fontSize: full ? 11 : 8,
+              lineHeight: 1,
+              padding: full ? '5px 6px' : '3px 4px',
+              borderRadius: 3,
+              flexShrink: 0,
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.3)',
+            }}
+          >
+            {card.position}
+          </span>
+          {flag ? (
+            <span style={{ fontSize: full ? 14 : 10, flexShrink: 0, lineHeight: 1 }}>{flag}</span>
+          ) : card.nation ? (
+            <span style={{ fontFamily: PIXEL, fontSize: full ? 8 : 6.5, color: 'var(--dust)', flexShrink: 0, lineHeight: 1 }}>
+              {nationCode(card.nation)}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex flex-col items-end" style={{ flexShrink: 0 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: full ? 26 : 14, lineHeight: 0.9, color: 'var(--line-white)', textShadow: '0 2px 0 var(--ink-black)' }}>
+            {Math.round(card.power)}
+          </span>
+          {full && (
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)', lineHeight: 1, marginTop: 2 }}>
+              OVR
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Sprite portrait — pixel-block kit + head, drawn in CSS/SVG. */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: full ? '8px 0' : '4px 0' }}>
+      {/* Sprite portrait — pixel-block kit + head, drawn in CSS/SVG. Height-capped
+          so a dense grid card (4 traits + name + fitness) never overflows and stacks
+          the nameplate on top of the sprite (the collision the first pass shipped). */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: full ? '8px 0' : '2px 0', overflow: 'hidden' }}>
         <PlayerSprite accent={accent} posColor={posColor} isGK={card.position === 'GK'} full={full} />
+      </div>
+
+      {/* Nameplate — surname is the second-strongest signal, so it reads large and
+          bright; the archetype is the quiet sub-line. A hard accent rule under the
+          name seats it as the card's identity band. */}
+      <div style={{ borderTop: `2px solid ${accent}`, paddingTop: full ? 6 : 3, marginTop: full ? 4 : 2 }}>
+        <span
+          className="truncate"
+          style={{ display: 'block', fontFamily: PIXEL, fontSize: full ? 14 : 10, color: 'var(--cream)', lineHeight: 1.05, textShadow: '0 1px 0 var(--ink-black)' }}
+        >
+          {lastName(card.name).toUpperCase()}
+        </span>
+        <span className="truncate" style={{ display: 'block', fontSize: full ? 10 : 8, color: 'var(--dust)', letterSpacing: 0.2, lineHeight: 1.1, marginTop: 1 }}>
+          {card.archetype}
+        </span>
       </div>
 
       {/* Fitness pip meter (where condition is tracked). Crisp pixel cells. */}
       {hasFitness && <FitnessMeter fitness={card.fitness as number} full={full} />}
 
-      {/* Name + archetype */}
-      <span
-        className="truncate"
-        style={{ fontSize: full ? 14 : 11, fontWeight: 700, color: 'var(--cream)', lineHeight: 1.15, marginTop: hasFitness ? (full ? 4 : 2) : 0 }}
-      >
-        {lastName(card.name)}
-      </span>
-      <div className="flex items-center justify-between" style={{ gap: 4, marginTop: 1 }}>
-        <span className="truncate" style={{ fontSize: full ? 10 : 8.5, color: 'var(--dust)', letterSpacing: 0.2, lineHeight: 1 }}>
-          {card.archetype}
-        </span>
-        {flag ? (
-          <span style={{ fontSize: full ? 13 : 10, flexShrink: 0, lineHeight: 1 }}>{flag}</span>
-        ) : card.nation ? (
-          <span style={{ fontFamily: PIXEL, fontSize: full ? 7.5 : 6.5, color: 'var(--dust)', flexShrink: 0, lineHeight: 1 }}>
-            {nationCode(card.nation)}
-          </span>
-        ) : null}
-      </div>
-
-      {/* Defining-trait pills — the action-buff signature. Count = rarity, so a
-          Legendary visibly carries more than a Common. Coloured by trait kind. */}
+      {/* Defining-trait rail — the action-buff signature, now READABLE: every pill
+          carries its pixel-font word at BOTH sizes (the old glyph-only grid chip
+          read as a blank box). Count = rarity, so a Legendary visibly carries more
+          than a Common. Coloured by trait kind. */}
       {traits.length > 0 && <TraitPillStrip traits={traits} full={full} />}
     </div>
   );
 }
 
 /**
- * The on-card defining-trait strip. Reuses the manager trait-pill look (PIXEL,
- * kind-accent border, low-alpha kind wash, hard rounded chip) but keyed by trait
- * KIND rather than a single family accent. On the dense `grid` card the pill is
- * glyph-only (the label would mush at ~52px wide); on `full` it carries glyph +
- * label. Pills wrap, capped so 4 (a Legendary) never crowd the name/fitness data.
+ * The on-card defining-trait rail. Each pill is glyph + WORD, coloured by trait
+ * KIND. The word is the signal (pixel font renders A–Z reliably); the glyph is a
+ * small accent in a Unicode-complete fallback face so a missing symbol never
+ * blanks the chip. On `grid` the word is a short identifier (POACHER, OFFSIDE);
+ * on `full` it is the complete label. Pills wrap, capped so 4 (a Legendary) never
+ * crowd the data above.
  */
 function TraitPillStrip({ traits, full }: { traits: ResolvedTrait[]; full: boolean }) {
+  // On the dense grid card, pack pills two-up so a 4-trait Legendary takes TWO rows,
+  // not four — that keeps vertical room for the sprite to stay present (a Legendary
+  // must still feel like a portrait, not a list). `full` keeps each pill on its own
+  // generous row inside the modal-sized card.
+  const grid2up = !full && traits.length >= 3;
   return (
     <div className="flex flex-wrap" style={{ gap: full ? 4 : 3, marginTop: full ? 7 : 4 }}>
       {traits.map((t, i) => (
         <span
           key={`${t.name}-${i}`}
-          title={full ? undefined : t.copy.label}
+          title={t.copy.label}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: full ? 3 : 0,
+            gap: full ? 4 : 2,
             fontFamily: PIXEL,
-            fontSize: full ? 8 : 7,
-            letterSpacing: full ? 0.3 : 0,
+            fontSize: full ? 8.5 : grid2up ? 6 : 7,
+            letterSpacing: full ? 0.3 : 0.1,
             lineHeight: 1,
             color: t.style.color,
             background: t.style.bg,
             border: `1px solid ${t.style.color}`,
             borderRadius: 3,
-            padding: full ? '4px 5px' : '3px',
-            minWidth: full ? undefined : 13,
+            padding: full ? '4px 6px' : grid2up ? '3px 3px' : '3px 4px',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
+            flex: grid2up ? '1 1 44%' : undefined,
+            minWidth: 0,
             justifyContent: 'center',
           }}
         >
-          <span aria-hidden style={{ fontSize: full ? 9 : 8, lineHeight: 1 }}>{t.copy.glyph}</span>
-          {full && <span style={{ lineHeight: 1 }}>{t.copy.label.toUpperCase()}</span>}
+          {/* On the 2-up grid the word is the whole budget — drop the glyph so the
+              label never clips (POSTMAN, OFFSIDE need the room). */}
+          {!grid2up && (
+            <span aria-hidden style={{ fontFamily: GLYPH_FONT, fontSize: full ? 9 : 7.5, lineHeight: 1, opacity: 0.95, flexShrink: 0 }}>{t.copy.glyph}</span>
+          )}
+          <span className="truncate" style={{ lineHeight: 1 }}>{full ? t.copy.label.toUpperCase() : shortTraitLabel(t.name, t.copy.label)}</span>
         </span>
       ))}
     </div>
@@ -439,7 +474,7 @@ function PlayerSprite({ accent, posColor, isGK, full }: { accent: string; posCol
     <svg
       className="pixelated"
       viewBox="0 0 24 24"
-      style={{ width: full ? '60%' : '74%', maxWidth: full ? 96 : 52, aspectRatio: '1', display: 'block' }}
+      style={{ width: full ? '58%' : '72%', maxWidth: full ? 92 : 50, maxHeight: '100%', aspectRatio: '1', display: 'block' }}
       shapeRendering="crispEdges"
     >
       {/* seat plate — a soft dark disc so the sprite reads off the card fill */}
@@ -532,27 +567,32 @@ function ManagerBody({ manager, full, accent }: { manager: JokerCard; full: bool
         <ManagerSprite accent={accent} full={full} />
       </div>
 
-      {/* Name + philosophy */}
-      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: full ? 13 : 9.5, color: 'var(--cream)', lineHeight: 1.2 }}>
-        {manager.name}
-      </span>
-      <p
-        style={{
-          fontFamily: 'var(--font-flavour, serif)',
-          fontStyle: 'italic',
-          fontSize: full ? 12 : 8.5,
-          lineHeight: 1.3,
-          color: 'var(--cream-soft)',
-          margin: '3px 0 0',
-          display: '-webkit-box',
-          WebkitLineClamp: full ? 3 : 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-        }}
-      >
-        {'“'}{manager.philosophy}{'”'}
-      </p>
-      {/* Trait pills */}
+      {/* Nameplate — gaffer name seated on a hard accent rule (matches the player
+          card's identity band), then the philosophy as the quiet flavour line. */}
+      <div style={{ borderTop: `2px solid ${accent}`, paddingTop: full ? 6 : 3, marginTop: full ? 4 : 2 }}>
+        <span className="truncate" style={{ display: 'block', fontFamily: PIXEL, fontSize: full ? 13 : 9.5, color: 'var(--cream)', lineHeight: 1.1, textShadow: '0 1px 0 var(--ink-black)' }}>
+          {manager.name.toUpperCase()}
+        </span>
+        <p
+          style={{
+            fontFamily: 'var(--font-flavour, serif)',
+            fontStyle: 'italic',
+            fontSize: full ? 12 : 8.5,
+            lineHeight: 1.3,
+            color: 'var(--cream-soft)',
+            margin: '3px 0 0',
+            display: '-webkit-box',
+            WebkitLineClamp: full ? 3 : 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
+          {'“'}{manager.philosophy}{'”'}
+        </p>
+      </div>
+      {/* Trait tags — a gaffer's identity (Direct Play, Low Block, …). These read
+          clearly at BOTH sizes now: even the dense grid card shows up to two full
+          tags so a manager is never a faceless crest. */}
       <div className="flex flex-wrap" style={{ gap: full ? 5 : 3, marginTop: full ? 8 : 4 }}>
         {visibleTraits.map((t) => (
           <span
@@ -562,11 +602,12 @@ function ManagerBody({ manager, full, accent }: { manager: JokerCard; full: bool
               fontSize: full ? 8.5 : 6.5,
               letterSpacing: 0.3,
               color: accent,
-              background: 'rgba(232,54,47,0.14)',
+              background: 'rgba(232,54,47,0.16)',
               border: `1px solid ${accent}`,
               borderRadius: 4,
               padding: full ? '4px 6px' : '3px 4px',
               lineHeight: 1,
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
             }}
           >
             {t.toUpperCase()}

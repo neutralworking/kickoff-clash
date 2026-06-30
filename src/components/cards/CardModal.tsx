@@ -41,6 +41,10 @@ import {
   type ResolvedTrait,
 } from './cardTokens';
 
+// Trait glyphs (✦ ➴ ⚑ …) sit outside the Silkscreen glyph set; render them in a
+// Unicode-complete fallback stack so a symbol never renders as a blank tofu box.
+const GLYPH_FONT = "'DejaVu Sans', 'Noto Sans Symbols', 'Segoe UI Symbol', sans-serif";
+
 interface CardModalProps {
   model: GameCardModel | null;
   onClose: () => void;
@@ -69,67 +73,86 @@ export default function CardModal({ model, onClose }: CardModalProps) {
 
   return (
     <div
-      className="absolute inset-0 flex flex-col scrim-fade"
+      className="absolute inset-0 scrim-fade"
       style={{
         background: 'rgba(0,0,0,0.66)',
         backdropFilter: 'blur(2px)',
         zIndex: 60,
-        padding: 'max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 16px)',
       }}
-      onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
-      {/* Close control */}
-      <div className="flex justify-end shrink-0" style={{ marginBottom: 10 }}>
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className="active:scale-90"
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 'var(--radius-sm)',
-            border: '2px solid var(--ink-black)',
-            background: 'var(--surface)',
-            boxShadow: '0 3px 0 0 var(--ink-black)',
-            color: 'var(--cream)',
-            fontFamily: PIXEL,
-            fontSize: 16,
-            lineHeight: 1,
-            transition: 'transform 0.12s ease',
-          }}
-        >
-          {'×'}
-        </button>
-      </div>
-
-      {/* Card + detail */}
+      {/* DEDICATED CLOSE BACKDROP — a full-bleed dismiss layer UNDER the content. Any
+          tap that is not on the card or the detail panel lands here and closes the
+          overlay. Making the dismiss a real, full-size hit target (rather than
+          relying on whatever scrim a near-fullscreen card leaves over) is the fix
+          for "clicking outside doesn't reliably close" — every variant inherits it.
+          A plain div (not a button) avoids a second focusable "Close" control; the
+          × button and Escape are the labelled affordances. */}
       <div
-        className="flex-1 min-h-0 flex flex-col items-center justify-start"
-        onClick={(e) => e.stopPropagation()}
-        style={{ gap: 14 }}
+        aria-hidden
+        onClick={onClose}
+        style={{ position: 'absolute', inset: 0, zIndex: 0 }}
+      />
+
+      {/* Foreground content — pointer-events pass THROUGH the empty parts of this
+          layer to the backdrop button; only the card and detail re-enable events. */}
+      <div
+        className="absolute inset-0 flex flex-col"
+        style={{
+          padding: 'max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 16px)',
+          pointerEvents: 'none',
+          zIndex: 1,
+        }}
       >
-        <div className="hero-pop shrink-0" style={{ width: 168, maxWidth: '46%' }}>
-          <GameCard model={model} size="full" />
+        {/* Close control row — the hint + the × button (both re-enable events). */}
+        <div className="flex items-center justify-between shrink-0" style={{ marginBottom: 10, pointerEvents: 'auto' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.8, color: 'var(--dust)' }}>
+            TAP OUTSIDE TO CLOSE
+          </span>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="active:scale-90"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 'var(--radius-sm)',
+              border: '2px solid var(--ink-black)',
+              background: 'var(--surface)',
+              boxShadow: '0 3px 0 0 var(--ink-black)',
+              color: 'var(--cream)',
+              fontFamily: PIXEL,
+              fontSize: 16,
+              lineHeight: 1,
+              transition: 'transform 0.12s ease',
+            }}
+          >
+            {'×'}
+          </button>
         </div>
 
-        <div
-          className="w-full min-h-0 overflow-y-auto"
-          style={{
-            maxWidth: 360,
-            overscrollBehavior: 'contain',
-          }}
-        >
-          {model.variant === 'player' ? (
-            <PlayerDetail card={model.card} accent={accent} />
-          ) : model.variant === 'manager' ? (
-            <ManagerDetail manager={model.manager} accent={accent} />
-          ) : model.variant === 'tactic' ? (
-            <TacticDetail tactic={model.tactic} accent={accent} />
-          ) : (
-            <InvestmentDetail investment={model.investment} accent={accent} />
-          )}
+        {/* Card + detail. Each re-enables pointer events; the gaps between/around
+            them stay click-through, so a tap on empty space hits the backdrop. */}
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-start" style={{ gap: 14, pointerEvents: 'none' }}>
+          <div className="hero-pop shrink-0" style={{ width: 168, maxWidth: '46%', pointerEvents: 'auto' }}>
+            <GameCard model={model} size="full" />
+          </div>
+
+          <div
+            className="w-full min-h-0 overflow-y-auto"
+            style={{ maxWidth: 360, overscrollBehavior: 'contain', pointerEvents: 'auto' }}
+          >
+            {model.variant === 'player' ? (
+              <PlayerDetail card={model.card} accent={accent} />
+            ) : model.variant === 'manager' ? (
+              <ManagerDetail manager={model.manager} accent={accent} />
+            ) : model.variant === 'tactic' ? (
+              <TacticDetail tactic={model.tactic} accent={accent} />
+            ) : (
+              <InvestmentDetail investment={model.investment} accent={accent} />
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -352,18 +375,20 @@ function TraitRow({ trait }: { trait: ResolvedTrait }) {
   const { color, bg } = trait.style;
   return (
     <div className="flex" style={{ gap: 9, alignItems: 'flex-start' }}>
-      {/* Kind glyph badge — a hard pixel chip in the trait's kind colour. */}
+      {/* Kind glyph badge — a hard chip in the trait's kind colour. The glyph is
+          drawn in a Unicode-complete face (it falls outside the pixel font's set,
+          which is why the on-card chips used to read blank). */}
       <span
         aria-hidden
         style={{
           flexShrink: 0,
-          width: 24,
-          height: 24,
+          width: 26,
+          height: 26,
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontFamily: PIXEL,
-          fontSize: 13,
+          fontFamily: GLYPH_FONT,
+          fontSize: 14,
           lineHeight: 1,
           color,
           background: bg,
