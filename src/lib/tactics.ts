@@ -41,7 +41,7 @@ const WING_POSITIONS = new Set(['WD', 'WM', 'WF']);
 const CENTRAL_POSITIONS = new Set(['GK', 'CD', 'DM', 'CM', 'AM', 'CF']);
 
 // ---------------------------------------------------------------------------
-// All 12 Tactic Cards
+// All 16 Tactic Cards
 // ---------------------------------------------------------------------------
 
 export const ALL_TACTICS: TacticCard[] = [
@@ -178,6 +178,44 @@ export const ALL_TACTICS: TacticCard[] = [
     flavour: '"They\'re hungry. They have nothing to lose and everything to prove."',
     category: 'specialist',
     compute: (xi) => xi.filter(c => c.rarity === 'Common').length * 20,
+  },
+
+  // ---- LANE OVERLOADS + VARIETY (v2 expansion) -----------------------------
+  // The overloads concentrate attacking threat in ONE lane (mechanically, via the
+  // zonal field) — pick the flank where the opponent's cover is thin.
+  {
+    id: 'overload_left',
+    name: 'Overload Left',
+    effect: 'Pile attacking threat down the LEFT. Drown their right side.',
+    flavour: '"Everything down the left. Make that touchline ours."',
+    contradicts: 'overload_right',
+    category: 'attacking',
+    compute: () => 30,
+  },
+  {
+    id: 'overload_right',
+    name: 'Overload Right',
+    effect: 'Pile attacking threat down the RIGHT. Pin their left-back.',
+    flavour: '"Swing it right and keep it there. Stretch them until they snap."',
+    contradicts: 'overload_left',
+    category: 'attacking',
+    compute: () => 30,
+  },
+  {
+    id: 'route_one',
+    name: 'Route One',
+    effect: 'Bypass the midfield — a direct ball makes a central chance up top.',
+    flavour: '"Why pass it through them when you can go over them?"',
+    category: 'attacking',
+    compute: () => 26,
+  },
+  {
+    id: 'man_marking',
+    name: 'Man-to-Man Marking',
+    effect: 'Opponent attack −13%, your defence +12%. Everyone gets a shadow.',
+    flavour: '"Pick a man. Stay with him. Nobody runs free today."',
+    category: 'defensive',
+    compute: () => 0,
   },
 ];
 

@@ -238,7 +238,9 @@ export default function PostMatch({
             ['--glow' as string]: 'var(--amber-glow)',
           }}
         >
-          <span className="relative" style={{ zIndex: 2 }}>Continue to Shop {'→'}</span>
+          <span className="relative" style={{ zIndex: 2 }}>
+            {isCupFinal(round, matchInCup) && round >= totalRounds ? 'Claim the Trophy' : 'Continue to Shop'} {'→'}
+          </span>
         </button>
       </div>
 

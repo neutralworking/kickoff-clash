@@ -871,15 +871,17 @@ h1, h2, h3,
    GPU-cheap (transform/opacity/box-shadow), staggered by event index inline.
    --------------------------------------------------------------------------- */
 
-/* The trait label chip lifts off the card and fades — the "what fired" caption.
-   Sits above the card so several stacked firings still read in sequence. */
+/* The trait label BANNER pops off the card, HOLDS legibly, then clears — the
+   "what fired" headline. Held long so a player can read the name on a busy pitch;
+   a punchy overshoot in, a long plateau, a gentle lift-off out. */
 @keyframes traitTag {
-  0% { opacity: 0; transform: translate(-50%, 2px) scale(0.7); }
-  22% { opacity: 1; transform: translate(-50%, -10px) scale(1.04); }
-  70% { opacity: 1; transform: translate(-50%, -13px) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -22px) scale(0.96); }
+  0% { opacity: 0; transform: translate(-50%, 4px) scale(0.6); }
+  12% { opacity: 1; transform: translate(-50%, -12px) scale(1.12); }
+  20% { transform: translate(-50%, -14px) scale(1); }
+  78% { opacity: 1; transform: translate(-50%, -14px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -26px) scale(0.96); }
 }
-.trait-tag { opacity: 0; animation: traitTag 0.82s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.trait-tag { opacity: 0; animation: traitTag 1.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
 /* A short whipped arc toward the box — the CROSS delivery (glyph rides up & over). */
 @keyframes traitCross {

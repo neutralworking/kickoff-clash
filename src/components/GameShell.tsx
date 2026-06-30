@@ -325,26 +325,23 @@ export default function GameShell() {
   const handlePostMatchContinue = useCallback(() => {
     if (!runState) return;
 
-    if (isCupFinal(runState.round, runState.matchInCup)) {
-      if (runState.round >= MAX_CUPS) {
-        // Lifted the final cup — champions, run won.
-        const ended: RunState = { ...runState, status: 'won' };
-        setRunState(ended);
-        saveHistory(ended);
-        clearRun();
-        setPhase('end');
-      } else {
-        setPhase('shop');
-      }
-    } else {
-      // Next tie of the same cup → the pre-match Team Talk (Phase 3B.5): fitness carries
-      // forward, so the player reviews condition and adjusts the XI/shape/intent before
-      // kickoff. matchInCup advances HERE only (the Team Talk confirm must not bump it).
-      const next: RunState = { ...runState, matchInCup: runState.matchInCup + 1, status: 'teamTalk' };
-      setRunState(next);
-      setPhase('teamTalk');
-      saveRun(next);
+    // Lifting the FINAL cup's final tie wins the run (a loss already routed to 'end' via
+    // permadeath). EVERY other match — mid-cup tie OR a non-final cup final — now opens the
+    // shop: it is an after-every-match gate. The round/cup advance is deferred to
+    // handleShopNext so the shop sits between the match just played and the next one.
+    if (isCupFinal(runState.round, runState.matchInCup) && runState.round >= MAX_CUPS) {
+      const ended: RunState = { ...runState, status: 'won' };
+      setRunState(ended);
+      saveHistory(ended);
+      clearRun();
+      setPhase('end');
+      return;
     }
+
+    const toShop: RunState = { ...runState, status: 'shop' };
+    setRunState(toShop);
+    setPhase('shop');
+    saveRun(toShop);
   }, [runState]);
 
   // --- Team Talk (pre-match) → Match ---
@@ -450,26 +447,37 @@ export default function GameShell() {
 
   const handleShopNext = useCallback(() => {
     if (!runState) return;
-    // Between cups: advance to the next cup's first tie. One new tactic is drawn per cup
-    // (deck starts at 5 → 9 over five cups), interest is banked, and fitness resets to
-    // fresh for the new cup (the carried fitness only matters within a cup).
-    const nextCup = runState.round + 1;
-    const tacticsDeck = drawRoundTactic(runState.tacticsDeck, runState.seed * 31 + nextCup * 7);
-    const newState: RunState = {
-      ...runState,
-      round: nextCup,
-      matchInCup: 1,
-      cash: runState.cash + interestOn(runState.cash),
-      // Between cups everyone starts fresh: fitness reset and in-cup injuries cleared, so
-      // each cup is a self-contained puzzle. (Permanent durability shatter still sticks.)
-      deck: runState.deck.map(c => ({ ...c, fitness: 6, injured: false })),
-      tacticsDeck,
-      // Open the new cup on the Team Talk so the player sets the XI/shape for tie 1.
-      status: 'teamTalk',
-    };
-    setRunState(newState);
+    // The shop now follows EVERY match, so this is where the run advances to the next one.
+    // Two cases, by whether the match just played closed out a cup:
+    //   • cup final (never the last cup — that already routed to 'end') → roll into the
+    //     next cup: matchInCup resets to 1, fitness resets fresh + in-cup injuries clear,
+    //     one tactic is drawn (deck 5 → 9 over five cups), and interest is banked.
+    //   • mid-cup tie → the next tie of the same cup: fitness carries (already applied
+    //     post-match), no tactic draw, no interest; matchInCup advances by one.
+    // Either way we open the Team Talk so the player sets the XI/shape for the next match.
+    const finishedCup = isCupFinal(runState.round, runState.matchInCup);
+    let next: RunState;
+    if (finishedCup) {
+      const nextCup = runState.round + 1;
+      const tacticsDeck = drawRoundTactic(runState.tacticsDeck, runState.seed * 31 + nextCup * 7);
+      next = {
+        ...runState,
+        round: nextCup,
+        matchInCup: 1,
+        cash: runState.cash + interestOn(runState.cash),
+        // Between cups everyone starts fresh: fitness reset and in-cup injuries cleared, so
+        // each cup is a self-contained puzzle. (Permanent durability shatter still sticks.)
+        deck: runState.deck.map(c => ({ ...c, fitness: 6, injured: false })),
+        tacticsDeck,
+        status: 'teamTalk',
+      };
+    } else {
+      // Same cup, next tie: matchInCup advances HERE (the Team Talk confirm must not bump it).
+      next = { ...runState, matchInCup: runState.matchInCup + 1, status: 'teamTalk' };
+    }
+    setRunState(next);
     setPhase('teamTalk');
-    saveRun(newState);
+    saveRun(next);
   }, [runState]);
 
   // --- End ---

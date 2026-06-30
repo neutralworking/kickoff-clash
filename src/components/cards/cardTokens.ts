@@ -115,6 +115,36 @@ export interface ResolvedTrait {
 }
 
 /**
+ * A compact, ALL-CAPS label for the dense `grid` trait rail. The full label
+ * ("Engine Room", "Poacher's Instinct", "Offside Trap") would mush at gallery
+ * width, so we collapse multi-word names to their identifying word and clip a
+ * long single word. The pixel font (Silkscreen) renders A–Z reliably, so a TEXT
+ * label is legible where the obscure glyph-only chip was not — this is the fix
+ * for "cards don't show their traits": the player reads a WORD, not a tofu box.
+ */
+const SHORT_TRAIT_LABEL: Record<string, string> = {
+  Postman: 'POSTMAN',
+  Sniper: 'SNIPER',
+  Deadeye: 'DEADEYE',
+  Leadership: 'LEADER',
+  Stopper: 'STOPPER',
+  'Offside Trap': 'OFFSIDE',
+  "Poacher's Instinct": 'POACHER',
+  'Engine Room': 'ENGINE',
+  'Right Flank': 'FLANK',
+  'Box Presence': 'BOX',
+  'Big Game': 'BIG GAME',
+  Organiser: 'ORGANISE',
+};
+
+/** Short uppercase rail label for a defining trait (compact `grid` card). */
+export function shortTraitLabel(name: string, fallbackLabel: string): string {
+  if (SHORT_TRAIT_LABEL[name]) return SHORT_TRAIT_LABEL[name];
+  const first = fallbackLabel.split(/[\s'’-]/)[0].toUpperCase();
+  return first.slice(0, 8);
+}
+
+/**
  * The card's DEFINING traits, resolved for display. Signature-override cards keep
  * their bespoke loadout (rarity count intentionally overridden) and their traits
  * are surfaced first as the marquee identity; everyone else gets the seeded pick.

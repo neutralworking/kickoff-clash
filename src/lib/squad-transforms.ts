@@ -55,13 +55,23 @@ function denyOpponent(name: string, amount: number): TraitRecord {
   return { name, verb: 'deny', params: { amount }, scope: 'zone', target: { kind: 'zone', zone: 'attack' } };
 }
 
+/** Manufacture attacking threat down ONE flank (a lane overload) — `generate` deposits
+ *  into the explicit destination cell, so a squad-source record can stack a single lane.
+ *  Attack lands up top in the lane; the build-up creation feeds it from midfield. */
+function overloadLane(name: string, lane: 'L' | 'R', attack: number, creation: number): TraitRecord[] {
+  return [
+    { name, verb: 'generate', params: { amount: attack }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, to: { band: 'ATT', lane } },
+    { name, verb: 'generate', params: { amount: creation }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'MID', lane } },
+  ];
+}
+
 // A "power lift" touches the score and the chance mix together.
 function powerLift(name: string, amount: number): TraitRecord[] {
   return [ampZone(name, amount, 'attack'), ampZone(name, amount, 'creation'), ampZone(name, amount, 'finishing')];
 }
 
 // ---------------------------------------------------------------------------
-// Tactics — all 12
+// Tactics — all 16
 // ---------------------------------------------------------------------------
 
 export function tacticTraits(tactic: TacticCard, ctx: SquadContext): TraitRecord[] {
@@ -82,6 +92,18 @@ export function tacticTraits(tactic: TacticCard, ctx: SquadContext): TraitRecord
     case 'narrow':
       // Reward the central combiners.
       return [ampArchetype(n, 0.10, 'Controller'), ampArchetype(n, 0.10, 'Passer')];
+    case 'overload_left':
+      // Stack the LEFT lane — concentrate threat where their cover is thin.
+      return overloadLane(n, 'L', 38, 20);
+    case 'overload_right':
+      // Stack the RIGHT lane.
+      return overloadLane(n, 'R', 38, 20);
+    case 'route_one':
+      // Bypass the midfield: a direct ball makes a central finishing chance up top.
+      return [
+        { name: n, verb: 'generate', params: { amount: 26 }, scope: 'global', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' } },
+        { name: n, verb: 'generate', params: { amount: 16 }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, to: { band: 'ATT', lane: 'C' } },
+      ];
 
     // ---- defensive (now wired through `deny`) ----
     case 'low_block':
@@ -113,6 +135,9 @@ export function tacticTraits(tactic: TacticCard, ctx: SquadContext): TraitRecord
       const commons = ctx.xi.filter((c) => c.rarity === 'Common').length;
       return commons > 0 ? [ampZone(n, Math.min(0.20, commons * 0.03), 'attack')] : [];
     }
+    case 'man_marking':
+      // Disciplined marking: a clean −13% to them and a +12% to your own back line.
+      return [denyOpponent(n, 0.13), ampZone(n, 0.12, 'defence')];
 
     default:
       return [];

@@ -190,7 +190,6 @@ function PitchCard({
   // Effective (fitness-adjusted) power is the headline level the engine actually uses;
   // when it's below base power, flag it tired so the drop is legible (req 1).
   const effShown = showStats && typeof spot.effPower === 'number';
-  const ga = showStats ? (spot.goals ?? 0) + (spot.assists ?? 0) : 0; // any goal contribution (req 4)
   return (
     <div
       className={glow ? 'carrier-glow' : undefined}
@@ -238,13 +237,9 @@ function PitchCard({
             </span>
           );
         })()}
-        {/* G/A pip (req 4) — a gold pip on a scorer/assister, bottom-right over the sprite. */}
-        {ga > 0 && (
-          <span aria-label={`${spot.goals ?? 0} goals, ${spot.assists ?? 0} assists`} style={{ position: 'absolute', right: 2, bottom: 0, display: 'inline-flex', alignItems: 'center', gap: 1, fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1, color: 'var(--ink-black)', background: 'var(--gold)', border: '1px solid var(--ink-black)', borderRadius: 2, padding: '1.5px 2.5px' }}>
-            {(spot.goals ?? 0) > 0 && <span>{`⚽${spot.goals}`}</span>}
-            {(spot.assists ?? 0) > 0 && <span style={{ opacity: 0.85 }}>{`A${spot.assists}`}</span>}
-          </span>
-        )}
+        {/* Goal/assist badges live OUTSIDE the card frame (rendered by the pitch loop,
+            GoalAssistBadges) so the sprite stays clean — a running record of who's done
+            what, persisting all match (req 4). */}
       </div>
       {/* Surname + archetype code */}
       <div style={{ padding: '0 4px 2px' }}>
@@ -301,6 +296,79 @@ function SubCard({ card, dim }: { card: Card; dim?: boolean }) {
         {/* Role (archetype) — fits efficiently on one muted line. */}
         <div style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.2, color: 'var(--dust)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{archCode(card.archetype) ?? card.archetype}</div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Goal / assist badges (req 4) — a persistent running record that reads as
+// BADGES OUTSIDE the card frame: a ⚽ BALL on a scorer, a 👟 BOOT on an assister
+// (with a count when >1). Crisp pixel-art SVG glyphs (emoji clash with the pixel
+// font), hard --ink-black edge — they are CONTENT, never blurred. Rendered by the
+// pitch loop as a sibling of PitchCard so they can overflow the card's clipped
+// frame and sit on the top corners.
+// ---------------------------------------------------------------------------
+
+/** A flat pixel-art football, sized for a corner badge. */
+function BallGlyph({ size = 14 }: { size?: number }) {
+  return (
+    <svg className="pixelated" viewBox="0 0 12 12" shapeRendering="crispEdges" style={{ width: size, height: size, display: 'block' }} aria-hidden>
+      <rect x="2" y="2" width="8" height="8" fill="var(--line-white)" />
+      <rect x="3" y="1" width="6" height="1" fill="var(--line-white)" />
+      <rect x="3" y="10" width="6" height="1" fill="var(--line-white)" />
+      <rect x="1" y="3" width="1" height="6" fill="var(--line-white)" />
+      <rect x="10" y="3" width="1" height="6" fill="var(--line-white)" />
+      {/* pentagon panels — the classic ball spots */}
+      <rect x="5" y="4" width="2" height="2" fill="var(--ink-black)" />
+      <rect x="3" y="6" width="2" height="2" fill="var(--ink-black)" />
+      <rect x="7" y="6" width="2" height="2" fill="var(--ink-black)" />
+      <rect x="5" y="8" width="2" height="1" fill="var(--ink-black)" />
+    </svg>
+  );
+}
+
+/** A flat pixel-art boot (cleat), sized for a corner badge. */
+function BootGlyph({ size = 14 }: { size?: number }) {
+  return (
+    <svg className="pixelated" viewBox="0 0 12 12" shapeRendering="crispEdges" style={{ width: size, height: size, display: 'block' }} aria-hidden>
+      {/* upper */}
+      <rect x="3" y="2" width="4" height="5" fill="var(--ink-black)" />
+      {/* ankle laces highlight */}
+      <rect x="4" y="3" width="2" height="1" fill="var(--line-white)" />
+      <rect x="4" y="5" width="2" height="1" fill="var(--line-white)" />
+      {/* foot/toe */}
+      <rect x="3" y="7" width="7" height="2" fill="var(--ink-black)" />
+      {/* sole + studs */}
+      <rect x="3" y="9" width="7" height="1" fill="var(--line-white)" />
+      <rect x="4" y="10" width="1" height="1" fill="var(--ink-black)" />
+      <rect x="6" y="10" width="1" height="1" fill="var(--ink-black)" />
+      <rect x="8" y="10" width="1" height="1" fill="var(--ink-black)" />
+    </svg>
+  );
+}
+
+function GoalAssistBadges({ goals, assists }: { goals: number; assists: number }) {
+  if (goals <= 0 && assists <= 0) return null;
+  return (
+    <div
+      aria-label={`${goals} goals, ${assists} assists`}
+      style={{
+        position: 'absolute', bottom: -9, right: -10, zIndex: 8,
+        display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end', pointerEvents: 'none',
+      }}
+    >
+      {goals > 0 && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: 'var(--gold)', border: '2px solid var(--ink-black)', borderRadius: 5, padding: '2px 3px', boxShadow: '0 2px 0 0 var(--ink-black)', lineHeight: 1 }}>
+          <BallGlyph size={13} />
+          {goals > 1 && <span style={{ fontFamily: PIXEL, fontSize: 8.5, color: 'var(--ink-black)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{goals}</span>}
+        </span>
+      )}
+      {assists > 0 && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: 'var(--kit-blue)', border: '2px solid var(--ink-black)', borderRadius: 5, padding: '2px 3px', boxShadow: '0 2px 0 0 var(--ink-black)', lineHeight: 1 }}>
+          <BootGlyph size={13} />
+          {assists > 1 && <span style={{ fontFamily: PIXEL, fontSize: 8.5, color: 'var(--line-white)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{assists}</span>}
+        </span>
+      )}
     </div>
   );
 }
@@ -362,6 +430,8 @@ interface TraitFiring {
   y: number;            // pitch % top
   glyph: string;
   label: string;
+  blurb: string;        // one-line action description (for the feed callout)
+  player: string | null; // firing player's surname (for the feed callout)
   kind: TraitKind;
   index: number;        // stagger order among the moment firings
 }
@@ -374,29 +444,34 @@ function TraitMarker({ firing, dur }: { firing: TraitFiring; dur: (ms: number) =
   const delay = delayMs ? `${delayMs}ms` : undefined;
 
   if (!moment) {
-    // AURA — a persistent breathing ring + centred glyph, held all increment.
+    // AURA — a held, breathing glow ring AND a clearly-readable trait LABEL chip held
+    // for the whole increment, so the player reads e.g. "LEADERSHIP" not a tiny glyph.
     return (
-      <div style={{ position: 'absolute', left: `${firing.x}%`, top: `${firing.y}%`, zIndex: 7, pointerEvents: 'none' }}>
-        {/* Held ring around the card. */}
-        <div className="trait-aura" style={{ position: 'absolute', left: 0, top: 0, width: CARD_W + 14, height: CARD_H + 14, transform: 'translate(-50%,-50%)', borderRadius: 'var(--radius)', border: `2px solid ${accent}`, boxShadow: `0 0 12px ${accent}`, opacity: 0.7 }} />
-        {/* Glyph badge pinned just above the card head. */}
-        <div className="trait-aura-glyph" style={{ position: 'absolute', left: 0, top: -(CARD_H / 2) - 10, transform: 'translate(-50%,-50%)', fontFamily: PIXEL, fontSize: 13, color: 'var(--ink-black)', background: accent, border: '2px solid var(--ink-black)', borderRadius: 4, padding: '2px 4px', lineHeight: 1, boxShadow: '0 2px 0 0 var(--ink-black)', whiteSpace: 'nowrap' }}>
-          {firing.glyph}
+      <div style={{ position: 'absolute', left: `${firing.x}%`, top: `${firing.y}%`, zIndex: 8, pointerEvents: 'none' }}>
+        {/* Held ring around the card — bigger + brighter so it reads as a clear glow. */}
+        <div className="trait-aura" style={{ position: 'absolute', left: 0, top: 0, width: CARD_W + 18, height: CARD_H + 18, transform: 'translate(-50%,-50%)', borderRadius: 'var(--radius)', border: `3px solid ${accent}`, boxShadow: `0 0 18px ${accent}, inset 0 0 10px ${accent}`, opacity: 0.85 }} />
+        {/* Named label chip pinned above the card head — glyph + the trait NAME. */}
+        <div className="trait-aura-glyph" data-trait-label style={{ position: 'absolute', left: 0, top: -(CARD_H / 2) - 12, transform: 'translate(-50%,-50%)', display: 'inline-flex', alignItems: 'center', gap: 3, fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.3, color: 'var(--ink-black)', background: accent, border: '2px solid var(--ink-black)', borderRadius: 4, padding: '3px 5px', lineHeight: 1, boxShadow: '0 2px 0 0 var(--ink-black)', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 11 }}>{firing.glyph}</span>
+          <span>{firing.label.toUpperCase()}</span>
         </div>
       </div>
     );
   }
 
-  // MOMENT — a one-shot glyph burst + a lifting label caption, anchored on the card.
+  // MOMENT — a big one-shot glyph burst + a BOLD held label banner, anchored on the
+  // card. The banner is the headline: a large named pill that pops, holds, then clears
+  // so a player can clearly READ "POSTMAN" / "SNIPER" fire off the card.
   return (
     <div style={{ position: 'absolute', left: `${firing.x}%`, top: `${firing.y}%`, zIndex: 9, pointerEvents: 'none' }}>
-      {/* The kind-motion glyph burst. */}
-      <div className={anim} style={{ position: 'absolute', left: 0, top: 0, transform: 'translate(-50%,-50%)', fontFamily: PIXEL, fontSize: 22, lineHeight: 1, color: accent, textShadow: '0 2px 0 var(--ink-black)', animationDelay: delay, animationDuration: dur(820) }}>
+      {/* The kind-motion glyph burst — bigger so the action reads even peripherally. */}
+      <div className={anim} style={{ position: 'absolute', left: 0, top: 0, transform: 'translate(-50%,-50%)', fontFamily: PIXEL, fontSize: 30, lineHeight: 1, color: accent, textShadow: '0 0 12px ' + accent + ', 0 2px 0 var(--ink-black)', animationDelay: delay, animationDuration: dur(1400) }}>
         {firing.glyph}
       </div>
-      {/* The trait-name caption lifts off the card so a player reads WHAT fired. */}
-      <div className="trait-tag" style={{ position: 'absolute', left: 0, top: -(CARD_H / 2) - 2, transform: 'translate(-50%,0)', fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.3, color: 'var(--ink-black)', background: accent, border: '1.5px solid var(--ink-black)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, whiteSpace: 'nowrap', boxShadow: '0 1px 0 0 var(--ink-black)', animationDelay: delay, animationDuration: dur(820) }}>
-        {firing.label}
+      {/* The trait-name banner lifts off the card — large, high-contrast, held. */}
+      <div className="trait-tag" data-trait-label style={{ position: 'absolute', left: 0, top: -(CARD_H / 2) - 4, transform: 'translate(-50%,0)', display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: PIXEL, fontSize: 11, letterSpacing: 0.4, color: 'var(--ink-black)', background: accent, border: '2px solid var(--ink-black)', borderRadius: 4, padding: '4px 6px', lineHeight: 1, whiteSpace: 'nowrap', boxShadow: '0 2px 0 0 var(--ink-black), 0 0 14px ' + accent, animationDelay: delay, animationDuration: dur(1400) }}>
+        <span style={{ fontSize: 12 }}>{firing.glyph}</span>
+        <span>{firing.label.toUpperCase()}</span>
       </div>
     </div>
   );
@@ -868,15 +943,19 @@ function StatsScreen({
             </span>
           </div>
 
-          {/* GOALS FEED (req 4) — scorer + assister per goal, the match record. Most
-              recent few shown here; the full ledger lives in the RATINGS sheet. */}
+          {/* GOALS FEED (req 4, FIX 2) — scorer + assister + minute for EVERY goal, no
+              truncation. The list scrolls INTERNALLY when long so the page never does;
+              the full record is always visible here, not just the last few. */}
           {goals.length > 0 && (
             <div className="stat-row-in" style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', background: 'var(--surface)', animationDelay: '55ms' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.6, color: 'var(--gold)' }}>GOALS</span>
-                {goals.length > 3 && <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)' }}>{`+${goals.length - 3} earlier`}</span>}
+                <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)' }}>{goals.length}</span>
               </div>
-              <GoalsFeed goals={goals.slice(-3)} surnameOf={surnameOf} delay={60} />
+              {/* Scroll region: caps at ~5 rows tall, scrolls internally beyond that. */}
+              <div style={{ maxHeight: 116, overflowY: 'auto', overscrollBehavior: 'contain', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }} className="tactic-sheet-scroll">
+                <GoalsFeed goals={goals} surnameOf={surnameOf} delay={60} />
+              </div>
             </div>
           )}
         </div>
@@ -1134,12 +1213,31 @@ export default function PitchMatchView({
         y: spot.slot.y,
         glyph: copy.glyph,
         label: copy.label,
+        blurb: copy.blurb,
+        player: spot.name,
         kind: copy.kind,
         index: isMoment ? momentIdx++ : 0,
       });
     }
     return out;
   }, [mode, currentResult, spots]);
+
+  // ── TRAIT CALLOUTS (Fix 1) — the same firings, surfaced as styled commentary
+  // lines in the ticker while resolving, so a missed on-pitch flash is still
+  // captured in the running feed ("⚑ DEADEYE — set-piece threat"). Auras lead
+  // (they hold all increment), then moments in firing order. Capped for the strip. ──
+  const traitCallouts = useMemo(
+    () => traitFirings.map((f) => ({
+      key: f.key,
+      glyph: f.glyph,
+      label: f.label,
+      blurb: f.blurb,
+      player: f.player,
+      accent: TRAIT_KIND_STYLE[f.kind].accent,
+      moment: TRAIT_KIND_STYLE[f.kind].moment,
+    })),
+    [traitFirings],
+  );
 
   // Reset the playhead when we leave resolve mode (back to planning).
   useEffect(() => {
@@ -1559,13 +1657,36 @@ export default function PitchMatchView({
           )}
         </>
       ) : (
-      /* Ticker — three lines, tap to expand. Pre-kickoff shows a coach prompt. */
-      <button onClick={() => setTickerOpen(true)} style={{ textAlign: 'left', margin: '0 16px 10px', padding: '8px 12px', borderRadius: 'var(--radius)', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', flexShrink: 0, cursor: 'pointer', display: 'grid', gap: 2 }}>
+      /* Ticker — three lines, tap to expand. Pre-kickoff shows a coach prompt.
+         While resolving, the firing TRAITS take the ticker as styled callouts so
+         a missed on-pitch flash is still captured in the running commentary. */
+      <button onClick={() => setTickerOpen(true)} style={{ textAlign: 'left', margin: '0 16px 10px', padding: '8px 12px', borderRadius: 'var(--radius)', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', flexShrink: 0, cursor: 'pointer', display: 'grid', gap: 3 }}>
         {preKickoff ? (
           // ISSUE 6 — guidance, not a fake match event (no minute stamp).
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 51 }}>
             <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--amber)', borderRadius: 3, padding: '3px 5px', lineHeight: 1, flexShrink: 0 }}>COACH</span>
             <span style={{ fontSize: 12, color: 'var(--cream-soft)', lineHeight: 1.35 }}>Set your XI and shape, then kick off. Drag a player to swap; tap to inspect.</span>
+          </div>
+        ) : resolving && traitCallouts.length > 0 ? (
+          // FIX 1 — TRAIT CALLOUTS: the firings as commentary. A leading ⚑ TRAITS tag,
+          // then up to 3 styled lines (accent glyph · PLAYER · TRAIT — what it does).
+          <div style={{ display: 'grid', gap: 3, minHeight: 51 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>TRAITS</span>
+              <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--dust)' }}>{traitCallouts.length} FIRED THIS SPELL</span>
+            </div>
+            {traitCallouts.slice(0, 2).map((c) => (
+              <div key={c.key} data-trait-callout className="coach-line-in" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, height: 16, lineHeight: '16px' }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 11, color: c.accent, flexShrink: 0, width: 13, textAlign: 'center' }}>{c.glyph}</span>
+                <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.3, color: c.accent, flexShrink: 0 }}>{c.label.toUpperCase()}</span>
+                <span style={{ color: 'var(--cream-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                  {c.player ? `${c.player} — ` : ''}{c.blurb}
+                </span>
+              </div>
+            ))}
+            {traitCallouts.length > 2 && (
+              <div style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)', letterSpacing: 0.3, paddingLeft: 19 }}>+{traitCallouts.length - 2} more — tap for the full log</div>
+            )}
           </div>
         ) : (
           tickerLines.map((e, i) => {
@@ -1584,34 +1705,64 @@ export default function PitchMatchView({
       </button>
       )}
 
-      {/* TACTICS + MANAGER ON SCREEN — the active gaffer and deployed tactics are
-          mirrored here persistently, so synergies read at a glance without opening
-          the drawer. Tap a pill to inspect; the + opens the shelf to deploy more. */}
+      {/* TACTICS + MANAGER ON SCREEN — FIX 3: the strip now carries real info, not
+          just names. A leading opponent-read chip (their PLAY style + SOFT SPOT), then
+          per-deployed-tactic rich pills (category tab · name · what it DOES · what it
+          can't pair with), and a clear empty/deployable slot chip. Tap a pill to
+          inspect; the TACTICS trigger opens the full shelf to deploy/swap. */}
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 6, margin: '0 16px 8px', flexShrink: 0 }}>
         {/* Manager pill */}
         <button
           onClick={() => { if (manager) setModal({ variant: 'manager', manager }); else setTrayOpen(true); }}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 'var(--radius)', border: `2px solid ${manager ? 'var(--gold)' : 'var(--border)'}`, background: manager ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0, maxWidth: 138, textAlign: 'left' }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '3px 4px', lineHeight: 1, flexShrink: 0 }}>MGR</span>
-          <span style={{ fontSize: 10.5, fontWeight: 800, color: manager ? 'var(--cream)' : 'var(--dust)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{manager ? lastName(manager.name) : 'No gaffer'}</span>
+          style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3, padding: '5px 8px', borderRadius: 'var(--radius)', border: `2px solid ${manager ? 'var(--gold)' : 'var(--border)'}`, background: manager ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0, width: 82, textAlign: 'left' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, alignSelf: 'flex-start' }}>MGR</span>
+          <span style={{ fontSize: 10, fontWeight: 800, color: manager ? 'var(--cream)' : 'var(--dust)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.1 }}>{manager ? lastName(manager.name) : 'No gaffer'}</span>
         </button>
-        {/* Deployed tactic pills in a no-wrap scroll strip (tap a pill to inspect). */}
+        {/* Rich tactic strip — opponent read first, then deployed effects, then the
+            free/deployable slot. No-wrap horizontal scroll keeps it one band tall. */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'stretch', overflowX: 'auto', overflowY: 'hidden', flex: 1, scrollbarWidth: 'none', minWidth: 0 }} className="match-joker-row">
+          {/* OPPONENT READ — their playing style + the soft spot to exploit. */}
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '4px 8px', borderRadius: 'var(--radius)', border: '2px solid var(--success)', background: 'rgba(52,196,106,0.08)', flexShrink: 0, width: 132 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, lineHeight: 1 }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--ink-black)', background: 'var(--success)', borderRadius: 2, padding: '2px 3px', lineHeight: 1, flexShrink: 0 }}>VS</span>
+              <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--cream-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oppStyleLabel.toUpperCase()}</span>
+            </span>
+            <span style={{ fontSize: 9, color: 'var(--success)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.1 }}>
+              <span style={{ color: 'var(--dust)' }}>soft spot </span><b>{opponentBuild.weakness.toLowerCase()}</b>
+            </span>
+          </div>
+          {/* DEPLOYED tactics — each pill: category tab · name · effect summary. */}
           {deployedTactics.map((t) => {
             const cat = TACTIC_CAT_COLOR[t.category] ?? 'var(--gold)';
+            const contra = t.contradicts ? getTacticById(t.contradicts)?.name ?? null : null;
             return (
               <button key={t.id} onClick={() => setModal({ variant: 'tactic', tactic: t })}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 8px', borderRadius: 'var(--radius)', border: `2px solid ${cat}`, background: 'rgba(0,0,0,0.3)', cursor: 'pointer', flexShrink: 0, maxWidth: 130, textAlign: 'left' }}>
-                <span style={{ width: 6, height: 6, borderRadius: 2, background: cat, flexShrink: 0 }} />
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '5px 8px', borderRadius: 'var(--radius)', border: `2px solid ${cat}`, background: 'rgba(0,0,0,0.32)', cursor: 'pointer', flexShrink: 0, width: 168, textAlign: 'left', overflow: 'hidden' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                  <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.2, color: 'var(--ink-black)', background: cat, borderRadius: 2, padding: '2px 3px', lineHeight: 1, flexShrink: 0 }}>{t.category.slice(0, 3).toUpperCase()}</span>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                </span>
+                {/* WHAT IT DOES — the effect, clamped to two lines so the pill stays short. */}
+                <span style={{ fontSize: 9, color: 'var(--cream-soft)', lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.effect}</span>
+                {/* CONTRADICTION — what it can't pair with (only when it has one). */}
+                {contra && (
+                  <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.2, color: 'var(--danger)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✕ NO {contra.toUpperCase()}</span>
+                )}
               </button>
             );
           })}
-          {deployedTactics.length === 0 && (mode !== 'plan' || oppView) && (
-            <span style={{ fontSize: 10, color: 'var(--dust)', alignSelf: 'center', paddingLeft: 2 }}>No tactics deployed</span>
+          {/* EMPTY / DEPLOYABLE slot — legible state when there's room (req: empty-slot
+              state). A dashed deployable chip in plan; a muted "no tactics" otherwise. */}
+          {emptyTacticSlots > 0 && mode === 'plan' && !oppView && (
+            <button onClick={() => setTrayOpen(true)}
+              className={showTacticPrompt ? 'carrier-glow' : undefined}
+              style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '5px 9px', borderRadius: 'var(--radius)', border: `2px dashed ${showTacticPrompt ? 'var(--gold)' : 'var(--border)'}`, background: showTacticPrompt ? 'rgba(245,197,66,0.08)' : 'rgba(0,0,0,0.2)', cursor: 'pointer', flexShrink: 0, width: 96, textAlign: 'left' }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.3, color: showTacticPrompt ? 'var(--gold)' : 'var(--dust)', lineHeight: 1 }}>+ {emptyTacticSlots} FREE</span>
+              <span style={{ fontSize: 9, color: 'var(--cream-soft)', lineHeight: 1.15 }}>{hasUndeployedTactic ? 'Deploy a tactic' : 'Slot open'}</span>
+            </button>
           )}
-          {deployedTactics.length === 0 && mode === 'plan' && !oppView && (
-            <span style={{ fontSize: 10, color: 'var(--dust)', alignSelf: 'center', paddingLeft: 2, whiteSpace: 'nowrap' }}>No tactics yet</span>
+          {deployedTactics.length === 0 && (mode !== 'plan' || oppView) && (
+            <span style={{ fontSize: 10, color: 'var(--dust)', alignSelf: 'center', paddingLeft: 2, whiteSpace: 'nowrap' }}>No tactics deployed</span>
           )}
         </div>
         {/* FIX 2 — the tactics tray trigger. An ALWAYS-VISIBLE control beside the
@@ -1771,6 +1922,12 @@ export default function PitchMatchView({
                   borderRadius: 'var(--radius-sm)',
                 }}>
                 <PitchCard spot={spot} side={oppView ? 'opp' : 'you'} accent={rarityAccent} dim={isDragging} glow={carrier} />
+                {/* Goal/assist badges (req 4) — a ⚽ ball on a scorer, a 👟 boot on an
+                    assister, sitting OUTSIDE the card frame (bottom-right). Persist all
+                    match. Yours only (rivals carry no per-match record). */}
+                {!oppView && !isDragging && (
+                  <GoalAssistBadges goals={spot.goals ?? 0} assists={spot.assists ?? 0} />
+                )}
                 {/* fitness / injury flag, top-left corner. */}
                 {condition && (
                   <span aria-label={condition === 'injured' ? 'Injured' : 'Low fitness'}
@@ -2076,6 +2233,14 @@ export default function PitchMatchView({
                   {emptyTacticSlots > 0
                     ? `${emptyTacticSlots} free`
                     : 'Full — swap to change'}
+                </span>
+              </div>
+              {/* FIX 3 — the opponent read in the shelf: their PLAY style + the SOFT
+                  SPOT to exploit, so the player picks a tactic with the rival in mind. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 9, padding: '6px 9px', borderRadius: 'var(--radius-sm)', border: '2px solid var(--success)', background: 'rgba(52,196,106,0.08)' }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--success)', borderRadius: 3, padding: '3px 4px', lineHeight: 1, flexShrink: 0 }}>SCOUT</span>
+                <span style={{ fontSize: 10, color: 'var(--cream-soft)', lineHeight: 1.3, overflow: 'hidden' }}>
+                  <b style={{ color: 'var(--cream)' }}>{opponentBuild.name}</b> play <b style={{ color: 'var(--cream)' }}>{oppStyleLabel}</b> — soft spot <b style={{ color: 'var(--success)' }}>{opponentBuild.weakness.toLowerCase()}</b>.
                 </span>
               </div>
             </div>
