@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import type { RunState, TeamIntent } from '../lib/run';
 import { getOpponent, getOpponentBuild, buildMatchSeed, cupSize } from '../lib/run';
 import { cupMatchPower } from '../lib/opponent';
@@ -15,6 +15,7 @@ import {
   advanceIncrement,
   makeSub,
   getMatchResult,
+  playerMatchStats,
 } from '../lib/match-v5';
 import type { TacticSlots } from '../lib/tactics';
 import { canDeploy, createEmptySlots, deployTactic, removeTactic } from '../lib/tactics';
@@ -78,6 +79,19 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     matchState.currentIncrement < INCREMENT_MINUTES.length
       ? INCREMENT_MINUTES[matchState.currentIncrement]
       : 90;
+
+  // Per-player in-match stats + 0–10 ratings (read-side, deterministic — never feeds
+  // match math). Includes `currentResult` while resolving so ratings reflect the
+  // just-resolved period during the resolve beat, then settle on the played history.
+  const playerStats = useMemo(
+    () =>
+      playerMatchStats(
+        currentResult ? [...matchState.scores, currentResult] : matchState.scores,
+        matchState.xi,
+        matchState.formation,
+      ),
+    [matchState.scores, matchState.xi, matchState.formation, currentResult],
+  );
 
   // ---- Reposition: swap two players' formation slots (the allocation lever) ----
   const handleReassign = useCallback((cardA: number, cardB: number) => {
@@ -250,6 +264,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
             mode={subPhase === 'resolving' ? 'resolve' : 'plan'}
             breakMoment={breakMoment}
             currentResult={currentResult}
+            playerStats={playerStats}
             onToggleTactic={handleToggleTactic}
             onSub={handleSub}
             onReassign={handleReassign}
