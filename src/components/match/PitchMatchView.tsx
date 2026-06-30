@@ -9,8 +9,12 @@ import { cellOf, bandOf } from '../../lib/field';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard, TacticSlots } from '../../lib/tactics';
 import { canDeploy, getTacticById } from '../../lib/tactics';
-import type { OpponentBuild } from '../../lib/run';
+import type { OpponentBuild, TeamIntent } from '../../lib/run';
 import type { Card } from '../../lib/scoring';
+import { subBlockReason, cumulativeStats } from '../../lib/match-v5';
+import type { CumulativeStats } from '../../lib/match-v5';
+import { coachNotes } from '../../lib/assistant';
+import type { CoachNote } from '../../lib/assistant';
 import CardModal from '../cards/CardModal';
 import type { GameCardModel } from '../cards/GameCard';
 import { PIXEL, lastName, POSITION_COLOR, RARITY_COLOR, TACTIC_CAT_COLOR } from '../cards/cardTokens';
@@ -25,13 +29,31 @@ interface PitchMatchViewProps {
   opponentBuild: OpponentBuild;
   nextMinute: number;
   mode: 'plan' | 'resolve';
+  /** Which team-talk break this plan screen is: 'kickoff' before the first whistle,
+   *  'halftime' after 30', 'between' after 60'/75'. Null while resolving. Drives the
+   *  prominence of the team-talk affordances (coach panel, tactics + shape entry). */
+  breakMoment: 'kickoff' | 'halftime' | 'between' | null;
   currentResult: IncrementResult | null;
   onToggleTactic: (tacticId: string) => void;
   onSub: (xiCardId: number, benchCardId: number) => void;
   onReassign: (cardA: number, cardB: number) => void;
   onFormationChange: (formationId: string) => void;
+  /** Fill the strongest fitness-aware XI from the current XI+bench. Only ever wired
+   *  for the pre-kickoff team talk (currentIncrement 0, no periods played) — pulling
+   *  bench players on mid-match would be a free sub. */
+  onAutoSelect?: () => void;
+  /** Change the team's attacking intent (ATT/BAL/DEF) mid-match. The engine reads
+   *  `state.intent` fresh each increment, so it takes effect from the next period. */
+  onIntentChange?: (intent: TeamIntent) => void;
   onContinue: () => void;
 }
+
+/** Intent options for the team-talk toggle — mirrors TeamSelect's segmented control. */
+const INTENT_OPTIONS: { id: TeamIntent; label: string; accent: string }[] = [
+  { id: 'defensive', label: 'DEF', accent: 'var(--kit-blue)' },
+  { id: 'balanced', label: 'BAL', accent: 'var(--gold)' },
+  { id: 'attacking', label: 'ATT', accent: 'var(--kit-red)' },
+];
 
 // ---------------------------------------------------------------------------
 // Tokens & geometry
@@ -463,10 +485,42 @@ function StatLabel({ children, delay }: { children: React.ReactNode; delay: numb
   );
 }
 
+/** A compact PERIOD / MATCH pairing for one stat: the live 15' window value beside
+ *  the running match-to-date total, so the team-talk reads both at a glance. */
+function StatPair({
+  label, you, opp, matchYou, matchOpp, fmt, delay,
+}: {
+  label: string;
+  you: number; opp: number;          // this period
+  matchYou: number; matchOpp: number; // match to date
+  fmt?: (n: number) => string;
+  delay: number;
+}) {
+  const show = (n: number) => (fmt ? fmt(n) : String(n));
+  return (
+    <div className="stat-row-in" style={{ animationDelay: `${delay}ms` }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', columnGap: 8 }}>
+        {/* This period — the headline value, the diverging bar */}
+        <span style={{ fontFamily: PIXEL, fontSize: 11, color: YOU, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{show(you)}</span>
+        <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--dust)' }}>{label}</span>
+        <span style={{ fontFamily: PIXEL, fontSize: 11, color: OPP, textAlign: 'left', fontVariantNumeric: 'tabular-nums' }}>{show(opp)}</span>
+      </div>
+      <StatBar you={you} opp={opp} fmt={fmt} delay={delay} />
+      {/* Match-to-date total — a faint sub-line beneath, clearly tagged MATCH. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', columnGap: 8, marginTop: 1 }}>
+        <span style={{ fontSize: 8.5, color: YOU, opacity: 0.7, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{show(matchYou)}</span>
+        <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: 'var(--ink)' }}>MATCH</span>
+        <span style={{ fontSize: 8.5, color: OPP, opacity: 0.7, textAlign: 'left', fontVariantNumeric: 'tabular-nums' }}>{show(matchOpp)}</span>
+      </div>
+    </div>
+  );
+}
+
 function StatsScreen({
-  stats, minute, periodLabel, youName, oppName, scoreYou, scoreOpp, isFullTime, onContinue,
+  stats, cumulative, minute, periodLabel, youName, oppName, scoreYou, scoreOpp, isFullTime, onContinue,
 }: {
   stats: MatchStats;
+  cumulative: CumulativeStats;
   minute: number;
   periodLabel: string;
   youName: string;
@@ -511,16 +565,20 @@ function StatsScreen({
           </div>
         </div>
 
-        {/* Four stat bars — their own group, comfortably spaced. */}
-        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <StatLabel delay={80}>EXPECTED GOALS (xG)</StatLabel>
-          <StatBar you={stats.yourXG} opp={stats.opponentXG} fmt={(n) => n.toFixed(2)} delay={90} />
-          <StatLabel delay={130}>POSSESSION %</StatLabel>
-          <StatBar you={stats.yourPossessionPct} opp={stats.opponentPossessionPct} delay={140} />
-          <StatLabel delay={180}>SHOTS</StatLabel>
-          <StatBar you={stats.yourShots} opp={stats.opponentShots} delay={190} />
-          <StatLabel delay={230}>ON TARGET</StatLabel>
-          <StatBar you={stats.yourShotsOnTarget} opp={stats.opponentShotsOnTarget} delay={240} />
+        {/* Four stats — each a PERIOD value (headline + diverging bar) over its
+            MATCH-to-date total, so the team-talk reads this 15' window and the whole
+            match at once. The MATCH totals come from cumulativeStats(scores). */}
+        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {/* Caption: which column is which. */}
+          <div className="stat-row-in" style={{ display: 'flex', justifyContent: 'center', gap: 6, animationDelay: '70ms' }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--cream-soft)' }}>THIS 15{"'"}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--dust)' }}>·</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--ink)' }}>MATCH SO FAR</span>
+          </div>
+          <StatPair label="xG" you={stats.yourXG} opp={stats.opponentXG} matchYou={cumulative.yourXG} matchOpp={cumulative.opponentXG} fmt={(n) => n.toFixed(2)} delay={90} />
+          <StatPair label="POSS %" you={stats.yourPossessionPct} opp={stats.opponentPossessionPct} matchYou={cumulative.yourPossessionPct} matchOpp={cumulative.opponentPossessionPct} delay={140} />
+          <StatPair label="SHOTS" you={stats.yourShots} opp={stats.opponentShots} matchYou={cumulative.yourShots} matchOpp={cumulative.opponentShots} delay={190} />
+          <StatPair label="ON TARGET" you={stats.yourShotsOnTarget} opp={stats.opponentShotsOnTarget} matchYou={cumulative.yourShotsOnTarget} matchOpp={cumulative.opponentShotsOnTarget} delay={240} />
         </div>
 
         {/* FIX 7 — ZONES WON as a pitch-shaped 3×3 mini-heatmap. Oriented from your
@@ -531,7 +589,7 @@ function StatsScreen({
             -n the opponent leads, 0 level. A slim DEF/MID/ATT caption column sits
             to the LEFT of every row so each cell is free for its number. */}
         <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-          <StatLabel delay={280}>ZONES WON · <span style={{ color: YOU }}>{youZonesWon}</span>–<span style={{ color: OPP }}>{oppZonesWon}</span></StatLabel>
+          <StatLabel delay={280}>ZONES WON · <span style={{ color: YOU }}>{youZonesWon}</span>–<span style={{ color: OPP }}>{oppZonesWon}</span> <span style={{ color: 'var(--ink)' }}>· MATCH <span style={{ color: YOU, opacity: 0.8 }}>{cumulative.yourZonesWon}</span>–<span style={{ color: OPP, opacity: 0.8 }}>{cumulative.opponentZonesWon}</span></span></StatLabel>
           <div className="stat-row-in" style={{ display: 'flex', justifyContent: 'center', animationDelay: '290ms' }}>
             {/* A pitch-shaped frame: top goal (opponent's) → bottom goal (yours).
                 LABEL_W reserves a slim row-caption column; the 3 lanes fill the rest. */}
@@ -577,16 +635,105 @@ function StatsScreen({
   );
 }
 
+// ---------------------------------------------------------------------------
+// MatchToast — a brief, on-brand banner for a blocked action (a rejected sub).
+//
+// Pinned to the top of the pitch column, drops in, and auto-dismisses after
+// ~2s. Kept dead simple: the parent owns a `{ id, text }` and clears it on a
+// timer; the `id` re-arms the drop animation when a new message replaces an old.
+// ---------------------------------------------------------------------------
+function MatchToast({ message }: { message: { id: number; text: string } | null }) {
+  if (!message) return null;
+  return (
+    <div
+      key={message.id}
+      className="match-toast"
+      role="status"
+      style={{
+        position: 'absolute', top: 8, left: '50%', zIndex: 30,
+        display: 'flex', alignItems: 'center', gap: 8,
+        maxWidth: 'calc(100% - 32px)',
+        padding: '8px 12px',
+        borderRadius: 'var(--radius)',
+        background: 'var(--surface)',
+        border: '2px solid var(--danger)',
+        boxShadow: '0 3px 0 0 var(--ink-black)',
+        pointerEvents: 'none',
+      }}
+    >
+      <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--line-white)', background: 'var(--danger)', borderRadius: 3, padding: '3px 5px', lineHeight: 1, flexShrink: 0 }}>BLOCKED</span>
+      <span style={{ fontSize: 11.5, color: 'var(--cream)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{message.text}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CoachPanel — the assistant's team-talk reads (assistant.coachNotes).
+//
+// A compact panel framed as the assistant manager speaking to the room during
+// the break: a tone-coloured dot + line per note (good = green, warn = amber/red,
+// info = neutral). Capped at the ~4 notes the helper returns. Pure presentational.
+// ---------------------------------------------------------------------------
+const COACH_TONE: Record<CoachNote['tone'], { dot: string; text: string }> = {
+  good: { dot: 'var(--success)', text: 'var(--cream)' },
+  warn: { dot: 'var(--amber)', text: 'var(--cream)' },
+  info: { dot: 'var(--cream-soft)', text: 'var(--cream-soft)' },
+};
+
+function CoachPanel({ notes }: { notes: CoachNote[] }) {
+  if (notes.length === 0) return null;
+  return (
+    <div
+      style={{
+        margin: '0 16px 8px', flexShrink: 0,
+        borderRadius: 'var(--radius)',
+        border: '2px solid var(--ink-black)',
+        boxShadow: '0 2px 0 0 var(--ink-black)',
+        background: 'linear-gradient(165deg, var(--surface-raised), var(--surface))',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Speaker bar — the assistant has the room. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 10px', background: 'rgba(0,0,0,0.28)', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '3px 5px', lineHeight: 1 }}>COACH</span>
+        <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.6, color: 'var(--cream-soft)' }}>TEAM TALK</span>
+      </div>
+      {/* The reads — one tone-coloured line each. */}
+      <div style={{ padding: '6px 10px 7px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {notes.map((n, i) => {
+          const tone = COACH_TONE[n.tone];
+          return (
+            <div key={`${n.kind}-${i}`} className="coach-line-in" style={{ display: 'flex', alignItems: 'flex-start', gap: 7, animationDelay: `${i * 60}ms` }}>
+              <span style={{ width: 6, height: 6, borderRadius: 2, background: tone.dot, flexShrink: 0, marginTop: 4 }} />
+              <span style={{ fontSize: 11, color: tone.text, lineHeight: 1.35 }}>{n.text}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function PitchMatchView({
   matchState, formation, jokers, tacticSlots, availableTactics, ownedFormations,
-  opponentBuild, nextMinute, mode, currentResult,
-  onToggleTactic, onSub, onReassign, onFormationChange, onContinue,
+  opponentBuild, nextMinute, mode, breakMoment, currentResult,
+  onToggleTactic, onSub, onReassign, onFormationChange, onAutoSelect, onIntentChange, onContinue,
 }: PitchMatchViewProps) {
   const [trayOpen, setTrayOpen] = useState(false);
   const [oppView, setOppView] = useState(false);
   const [tickerOpen, setTickerOpen] = useState(false);
   const [formSheet, setFormSheet] = useState(false);
   const [modal, setModal] = useState<GameCardModel | null>(null);
+  // FIX 2 — a transient blocked-action banner (a rejected sub). The `id` re-arms
+  // the drop animation when a new message replaces an old; cleared on a ~2s timer.
+  const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (text: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ id: Date.now(), text });
+    toastTimer.current = setTimeout(() => setToast(null), 2000);
+  };
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
   // Pointer drag: a tap inspects, a drag moves. We track movement to disambiguate.
   const [drag, setDrag] = useState<{ kind: 'bench' | 'pitch'; id: number } | null>(null);
@@ -768,12 +915,39 @@ export default function PitchMatchView({
     }
     return injuredSpot ?? tiredSpot;
   }, [planning, youSpots]);
-  const canSubFlag = !!flaggedPlayer && subsRemaining > 0 && (flaggedPlayer.injured || !matchState.isFirstHalf);
+  // FIX 2 — subs now work in the first half too (makeSub no longer gates on it), so
+  // the SUB? prompt fires for any injured/tired starter whenever a sub is available.
+  const canSubFlag = !!flaggedPlayer && subsRemaining > 0;
   const showSubPrompt = planning && canSubFlag && bench.length > 0;
 
   const emptyTacticSlots = tacticSlots.slots.filter((s) => s === null).length;
   const hasUndeployedTactic = availableTactics.some((t) => !deployedIds.has(t.id));
   const showTacticPrompt = planning && emptyTacticSlots > 0 && hasUndeployedTactic;
+
+  // The team-talk break: planning, not scouting the opposition. At a real break
+  // (kickoff / halftime / between) the coach panel and the SHAPE + TACTICS entry
+  // points are surfaced prominently rather than left to the side rail.
+  const isBreak = planning && breakMoment !== null;
+
+  // FIX 5 — the assistant's reads for this break (assistant.coachNotes). Pass the
+  // opponent's soft-spot blurb, the live tactic slots, and whether an undeployed
+  // tactic is still in hand, so the tactics read is accurate. Capped at ~4 lines.
+  const notes = useMemo<CoachNote[]>(
+    () => (isBreak ? coachNotes(matchState, {
+      weaknessLabel: opponentBuild.weakness,
+      tacticSlots,
+      hasUndeployedTactic,
+    }) : []),
+    [isBreak, matchState, opponentBuild.weakness, tacticSlots, hasUndeployedTactic],
+  );
+
+  // FIX 3 — match-to-date totals for the stats screen (cumulativeStats over scores).
+  const cumulative = useMemo<CumulativeStats>(() => cumulativeStats(matchState.scores), [matchState.scores]);
+
+  // FIX 1 — auto-select is only legal at the pre-kickoff team talk (no period
+  // played yet); pulling bench players on mid-match would be a free sub.
+  const canAutoSelect = !!onAutoSelect && breakMoment === 'kickoff'
+    && matchState.currentIncrement === 0 && matchState.scores.length === 0;
   // `drag` is only set once movement crosses the threshold, so its presence
   // already means a real drag is underway (taps never set it).
   const moving = !oppView && mode === 'plan' && drag !== null;
@@ -886,8 +1060,15 @@ export default function PitchMatchView({
       if (card) setModal({ variant: 'player', card: card as Card });
     } else if (hoverTargetId !== null) {
       // ISSUE 4 — a drag onto a player: bench → sub in; pitch → swap slots.
-      if (p.kind === 'bench') onSub(hoverTargetId, p.id);
-      else if (p.id !== hoverTargetId) onReassign(p.id, hoverTargetId);
+      if (p.kind === 'bench') {
+        // FIX 2 — confirm the sub is legal BEFORE committing it. subBlockReason
+        // returns the human reason a sub is rejected (no subs left, etc.) or null
+        // when it's fine; on a block we surface the reason as a toast and do NOT
+        // call onSub (which previously could no-op silently — "subs don't work").
+        const reason = subBlockReason(matchState, hoverTargetId, p.id);
+        if (reason) showToast(reason);
+        else onSub(hoverTargetId, p.id);
+      } else if (p.id !== hoverTargetId) onReassign(p.id, hoverTargetId);
     }
     setDrag(null); setDragPos(null); setHoverTargetId(null);
     e.stopPropagation();
@@ -920,6 +1101,9 @@ export default function PitchMatchView({
       onPointerMove={drag ? movePointer : undefined}
       onPointerUp={drag ? endPointer : undefined}
     >
+      {/* FIX 2 — blocked-action toast (a rejected sub). Auto-dismisses ~2s. */}
+      <MatchToast message={toast} />
+
       {/* The event-driven possession clock — keyed per increment so each
           resolution gets a clean lifecycle (ISSUE 7). Renders nothing itself. */}
       {resolving && currentResult && (
@@ -970,7 +1154,26 @@ export default function PitchMatchView({
         </div>
       </div>
 
-      {/* Ticker — three lines, tap to expand. Pre-kickoff shows a coach prompt. */}
+      {/* FIX 5 — the assistant's team-talk reads, surfaced prominently at a break
+          (halftime / between / pre-kickoff). It takes the ticker's spot during the
+          break — the recent events it would show are subsumed by the coach's
+          momentum line, and the full MATCH LOG stays one tap away below. */}
+      {isBreak && notes.length > 0 ? (
+        <>
+          <CoachPanel notes={notes} />
+          {/* A slim, tappable strip keeps the full match log reachable during the talk. */}
+          {feed.length > 0 && (
+            <button onClick={() => setTickerOpen(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 16px 8px', padding: '6px 10px', borderRadius: 'var(--radius)', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', flexShrink: 0, cursor: 'pointer' }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, color: 'var(--dust)' }}>MATCH LOG</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
+                <span style={{ fontSize: 10.5, color: feed.length ? lineColour(feed[feed.length - 1]) : 'var(--dust)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{feed[feed.length - 1]?.text ?? ''}</span>
+                <span style={{ fontFamily: PIXEL, fontSize: 9, color: 'var(--dust)', flexShrink: 0 }}>›</span>
+              </span>
+            </button>
+          )}
+        </>
+      ) : (
+      /* Ticker — three lines, tap to expand. Pre-kickoff shows a coach prompt. */
       <button onClick={() => setTickerOpen(true)} style={{ textAlign: 'left', margin: '0 16px 10px', padding: '8px 12px', borderRadius: 'var(--radius)', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', flexShrink: 0, cursor: 'pointer', display: 'grid', gap: 2 }}>
         {preKickoff ? (
           // ISSUE 6 — guidance, not a fake match event (no minute stamp).
@@ -993,6 +1196,7 @@ export default function PitchMatchView({
           })
         )}
       </button>
+      )}
 
       {/* TACTICS + MANAGER ON SCREEN — the active gaffer and deployed tactics are
           mirrored here persistently, so synergies read at a glance without opening
@@ -1046,6 +1250,69 @@ export default function PitchMatchView({
           </button>
         )}
       </div>
+
+      {/* INTENT — the attacking lean (DEF/BAL/ATT). Surfaced in the team talk so the
+          player can change it between periods; the engine reads state.intent fresh each
+          increment, so it bites from the next period. A change mid-talk also refreshes
+          the coach's momentum read. */}
+      {isBreak && onIntentChange && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 16px 6px', flexShrink: 0 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: 'var(--dust)', flexShrink: 0 }}>INTENT</span>
+          <div className="flex" style={{ flex: 1, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}>
+            {INTENT_OPTIONS.map((it) => {
+              const on = matchState.intent === it.id;
+              return (
+                <button
+                  key={it.id}
+                  onClick={() => onIntentChange(it.id)}
+                  className="active:scale-95"
+                  style={{
+                    flex: 1,
+                    padding: '6px 0',
+                    fontFamily: PIXEL,
+                    fontSize: 10,
+                    letterSpacing: 0.5,
+                    background: on ? it.accent : 'var(--surface)',
+                    color: on ? 'var(--ink-black)' : 'var(--cream-soft)',
+                    transition: 'background 0.15s ease',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {it.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* FIX 1 + FIX 4 — the TEAM-TALK action row. At a break the player's three
+          levers are surfaced together as proper buttons rather than buried in a
+          side rail: change SHAPE, open TACTICS, and (pre-kickoff only) AUTO-PICK
+          the strongest fitness-aware XI. Only shown at a real break, not while
+          scouting the opposition or mid-resolve. */}
+      {isBreak && (
+        <div style={{ display: 'flex', gap: 6, margin: '0 16px 8px', flexShrink: 0 }}>
+          <button onClick={() => setFormSheet(true)}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: 'var(--surface)', cursor: 'pointer' }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: 'var(--kit-blue)', lineHeight: 1 }}>SHAPE</span>
+            <span style={{ fontSize: 9.5, color: 'var(--cream-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{formation.name}</span>
+          </button>
+          <button onClick={() => setTrayOpen(true)}
+            className={showTacticPrompt ? 'carrier-glow' : undefined}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: `2px solid ${showTacticPrompt ? 'var(--gold)' : 'var(--ink-black)'}`, boxShadow: '0 3px 0 0 var(--ink-black)', background: showTacticPrompt ? 'rgba(245,197,66,0.10)' : 'var(--surface)', cursor: 'pointer' }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: showTacticPrompt ? 'var(--gold)' : 'var(--amber)', lineHeight: 1 }}>TACTICS</span>
+            <span style={{ fontSize: 9.5, color: 'var(--cream-soft)', lineHeight: 1 }}>{deployedIds.size}/{tacticSlots.slots.length} live{emptyTacticSlots > 0 ? ' · spare' : ''}</span>
+          </button>
+          {canAutoSelect && (
+            <button onClick={onAutoSelect}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))', cursor: 'pointer' }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: 'var(--cream)', lineHeight: 1 }}>AUTO XI</span>
+              <span style={{ fontSize: 9.5, color: 'rgba(242,246,239,0.85)', lineHeight: 1 }}>best legs</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Pitch */}
       <div ref={pitchRef} style={{ position: 'relative', flex: 1, minHeight: 0, margin: '0 16px', borderRadius: 'var(--radius-lg)', border: '2px solid var(--ink-black)', background: oppView
@@ -1175,8 +1442,10 @@ export default function PitchMatchView({
         )}
 
         {/* Side rail — SHAPE (the ONE formation control). Tactics now live in the
-            persistent on-screen strip above the pitch. */}
-        {!oppView && mode === 'plan' && (
+            persistent on-screen strip above the pitch. At a team-talk break the
+            SHAPE control is surfaced as a full button in the action row above, so
+            the side rail is suppressed there to avoid duplicating it. */}
+        {!oppView && mode === 'plan' && !isBreak && (
           <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: 8, zIndex: 5 }}>
             <button onClick={() => setFormSheet(true)} style={{ writingMode: 'vertical-rl', padding: '12px 6px', borderRadius: 'var(--radius) 0 0 var(--radius)', border: '2px solid var(--ink-black)', borderRight: 'none', background: 'var(--kit-blue)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 9, letterSpacing: 1, cursor: 'pointer' }}>SHAPE · {formation.name}</button>
           </div>
@@ -1185,8 +1454,10 @@ export default function PitchMatchView({
         {/* "Deploy a tactic?" pill — contextual nudge toward the opponent's weakness.
             FIX 3 (related) — anchored to the TOP-LEFT of the pitch (the clear zone
             by the opponent's goal mouth) so it never covers the GK at the bottom or
-            any central player. Fully opaque; sits below the side rail in z-order. */}
-        {showTacticPrompt && (
+            any central player. Fully opaque; sits below the side rail in z-order.
+            Suppressed at a break — the TACTICS button in the action row already
+            glows the same nudge there. */}
+        {showTacticPrompt && !isBreak && (
           <button onClick={() => setTrayOpen(true)} style={{ position: 'absolute', left: 8, top: 8, zIndex: 6, display: 'flex', alignItems: 'center', gap: 6, maxWidth: 160, background: 'var(--surface)', border: '2px solid var(--gold)', borderRadius: 'var(--radius)', padding: '6px 9px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 2px 0 0 var(--ink-black)' }}>
             <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>TIP</span>
             <span style={{ fontSize: 10, color: 'var(--cream-soft)', lineHeight: 1.25 }}>Deploy a tactic to exploit <b style={{ color: 'var(--gold)' }}>{opponentBuild.weakness.toLowerCase()}</b>.</span>
@@ -1441,6 +1712,7 @@ export default function PitchMatchView({
       {resolving && sequenceDone && currentResult?.stats && (
         <StatsScreen
           stats={currentResult.stats}
+          cumulative={cumulative}
           minute={clockMinute}
           periodLabel={periodLabel}
           youName="YOUR XI"

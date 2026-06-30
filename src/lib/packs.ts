@@ -176,9 +176,17 @@ export function openPack(packType: PackType, seed: number): PackContents {
 // ---------------------------------------------------------------------------
 
 export const RIP_COUNTS = { players: 25, managers: 2, tactics: 5 } as const;
+// The starter rip is deliberately SCRAPPY: Common-heavy with only a few Rare anchors and
+// NO Epic/Legendary. A full-pool rip starts the player ~maxed (XI avg ~74, can roll a
+// Legendary) so there's nothing to chase; capping at Common+Rare drops the opening XI to a
+// winnable-but-thin ~70 (still clears cup 1 ~80%+) and makes the shop's Epics/Legendaries
+// the real upgrade path. Tuned on scripts/starter-probe.ts.
+const RIP_RARES = 6; // of 25; the remainder are Common
 
 export function ripStarterPacks(seed: number): PackContents {
-  const players = seededShuffle(ALL_CARDS, seed).slice(0, RIP_COUNTS.players);
+  const rares = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Rare'), seed + 11).slice(0, RIP_RARES);
+  const commons = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Common'), seed).slice(0, RIP_COUNTS.players - rares.length);
+  const players = seededShuffle([...commons, ...rares], seed + 7);
   const tactics = seededShuffle(ALL_TACTICS, seed + 100).slice(0, RIP_COUNTS.tactics);
   const managers = seededShuffle(ALL_JOKERS, seed + 300).slice(0, RIP_COUNTS.managers);
   // Lead with 4-3-3, then the rest — every formation is selectable.

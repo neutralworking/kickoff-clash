@@ -69,3 +69,44 @@ export function autoFill(
 
   return next;
 }
+
+// ---------------------------------------------------------------------------
+// Fitness-aware auto-select (the in-match "auto-select" default).
+// ---------------------------------------------------------------------------
+
+/** Fitness-adjusted strength for ranking. Raw power tapered by condition (mirrors the
+ *  engine's fitnessFactor: 6 → ×1.0, 1 → ×0.6) so tired players drop down the order;
+ *  injured players are pushed to the bottom so auto-select rests them. */
+export function effectiveStrength(c: Card): number {
+  const fit = Math.max(1, Math.min(6, c.fitness ?? 6));
+  const fitMult = 0.52 + 0.08 * fit;
+  return c.power * fitMult * (c.injured ? 0.2 : 1);
+}
+
+/**
+ * Auto-pick the strongest legal XI from `pool` for `formation`, position-aware. With
+ * `fitnessAware` (the in-match default) players rank by fitness-adjusted strength, so
+ * tired/injured starters drop to the bench and fresh legs come in. Returns Cards in
+ * formation-slot order (xi[i] ↔ slots[i]) plus the remaining bench, best-first.
+ */
+export function autoFillXI(
+  pool: Card[],
+  formation: Formation,
+  fitnessAware = true,
+): { xi: Card[]; bench: Card[] } {
+  const score = fitnessAware ? effectiveStrength : (c: Card) => c.power;
+  const used = new Set<number>();
+  const remaining = () => pool.filter((c) => !used.has(c.id)).sort((a, b) => score(b) - score(a));
+
+  const xi: Card[] = [];
+  for (const slot of formation.slots) {
+    const avail = remaining();
+    const pick = avail.find((c) => positionFitsSlot(c.position, slot)) ?? avail[0];
+    if (pick) {
+      xi.push(pick);
+      used.add(pick.id);
+    }
+  }
+  const bench = remaining();
+  return { xi, bench };
+}
