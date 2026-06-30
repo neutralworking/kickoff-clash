@@ -109,6 +109,10 @@ export interface AttackDefenceSplit {
   attackingOrder: number[];
   /** The transformed 9×4 grid from the dispatcher (additive — read, never recomputed). */
   cells: Record<Cell, Record<ZoneName, number>>;
+  /** Per-card pre-dispatch emission (attack/defence/creation/finishing) keyed by card id.
+   *  The basis for the read-side per-player rating. Additive — never fed back into the
+   *  resolution math, so scorelines are unchanged. */
+  cardEmit: Record<number, Record<ZoneName, number>>;
 }
 
 export interface IncrementResult {
@@ -183,6 +187,10 @@ export interface MatchBeat {
   outcome: 'goal' | 'save' | 'miss';
   scorerId: number | null;
   scorerName: string | null;
+  /** Assist attribution for a GOAL (null = unassisted, or a non-goal shot). Additive and
+   *  deterministic (NEW salt on the same stateless hash — existing beats unchanged). */
+  assisterId: number | null;
+  assisterName: string | null;
   text: string;
 }
 
@@ -234,13 +242,19 @@ const FITNESS_DRAIN: Record<Durability, number> = {
 };
 const BAND_INVOLVEMENT: Record<Band, number> = { ATT: 1.2, MID: 0.9, DEF: 0.5 };
 
-function fitnessFactor(fitness: number): number {
+export function fitnessFactor(fitness: number): number {
   return 0.52 + 0.08 * clamp(fitness, 1, 6); // 6 → 1.0, 1 → 0.6
 }
 
 /** Starting fitness for a card entering a match: fresh, or low if carrying an injury. */
-function fitnessOf(card: Card): number {
+export function fitnessOf(card: Card): number {
   return card.fitness ?? (card.injured ? 2 : 6);
+}
+
+/** A card's current on-pitch power: base power scaled by its live fitness — the number the
+ *  match UI shows as "effective power". Convergent with team-select's effectiveStrength. */
+export function effectivePower(card: Card): number {
+  return Math.round(card.power * fitnessFactor(fitnessOf(card)));
 }
 
 // ---------------------------------------------------------------------------
@@ -947,6 +961,11 @@ export function evaluateSplit(
   chanceCreation += personalityCreationBonus;
   shotQuality += personalityFinishingBonus;
 
+  // Surface the per-card pre-dispatch emission for the read-side player rating (additive;
+  // never re-enters the resolution math, so the scoreline is unaffected).
+  const cardEmit: Record<number, Record<ZoneName, number>> = {};
+  emit.forEach((v, k) => { cardEmit[k] = v; });
+
   return {
     attackScore: Math.max(0, attackTotal),
     defenceScore: Math.max(0, defenceTotal),
@@ -968,6 +987,7 @@ export function evaluateSplit(
     laneCover,
     attackingOrder: orderedAttackers.map((c) => c.id),
     cells: dispatched.cells,
+    cardEmit,
   };
 }
 
@@ -1045,6 +1065,63 @@ function pickShooter(
   return pool[Math.min(pool.length - 1, idx)];
 }
 
+/** Same lane, or centre↔wing (adjacent). The two wings are NOT adjacent to each other. */
+function laneAdjacent(a: Lane, b: Lane): boolean {
+  return a === b || a === 'C' || b === 'C';
+}
+
+/**
+ * Deterministically pick the assister for a GOAL, or null for a solo/unassisted goal.
+ * Modeled on pickShooter: excludes the scorer, prefers playmakers in the same/adjacent
+ * lane, then any playmaker, then any attacking outfielder. Uses a NEW salt (15) on the
+ * stateless hash, so every existing seeded draw (scorer 12, text 13, clock 14) is
+ * byte-identical and the scoreline never moves.
+ */
+function pickAssister(
+  xi: Card[],
+  formation: Formation,
+  lane: Lane,
+  scorerId: number | null,
+  seed: number,
+  inc: number,
+  side: number,
+  shotIdx: number,
+  committedIds: Set<number> | null,
+): Card | null {
+  const laneMakers: Card[] = [];
+  const anyMakers: Card[] = [];
+  const attackingAny: Card[] = [];
+  for (let i = 0; i < xi.length; i++) {
+    const card = xi[i];
+    if (!card) continue;
+    if (card.id === scorerId) continue; // a player can't assist his own goal
+    if (committedIds && committedIds.size > 0 && !committedIds.has(card.id)) continue;
+    const slot = formation.slots[i];
+    const isGK = card.position === 'GK' || slot?.type === 'GK';
+    if (isGK) continue;
+    const band = slot ? bandOf(cellOf(slot.x, slot.y)) : null;
+    const attacking = ATTACKING_POSITIONS.has(card.position) || band === 'ATT' || band === 'MID';
+    if (!attacking) continue;
+    attackingAny.push(card);
+    if (isPlaymaker(card)) {
+      anyMakers.push(card);
+      const slotLane = slot ? laneOfX(slot.x) : 'C';
+      if (laneAdjacent(slotLane, lane)) laneMakers.push(card);
+    }
+  }
+  const pool = laneMakers.length ? laneMakers
+    : anyMakers.length ? anyMakers
+    : attackingAny.length ? attackingAny
+    : null;
+  if (!pool) return null;
+  // Reserve a fraction of goals as solo (unassisted); otherwise index into the pool.
+  const r = beatRng(seed, inc, side, shotIdx, 15);
+  const SOLO = 0.18;
+  if (r < SOLO) return null;
+  const idx = Math.floor(((r - SOLO) / (1 - SOLO)) * pool.length);
+  return pool[Math.min(pool.length - 1, idx)];
+}
+
 const LANE_WORD: Record<Lane, string> = { L: 'left', C: 'middle', R: 'right' };
 
 /** Terse one-liner for a beat, with NEW-salt seeded phrasing variety. */
@@ -1114,6 +1191,12 @@ function buildBeats(
     const scorer = pickShooter(xi, formation, shot.lane, seed, inc, side, shotIdx, committedIds);
     const scorerId = scorer?.id ?? null;
     const scorerName = scorer?.name ?? null;
+    // Assist exists only for a goal; deterministic (NEW salt 15), never the scorer himself.
+    const assister = outcome === 'goal'
+      ? pickAssister(xi, formation, shot.lane, scorerId, seed, inc, side, shotIdx, committedIds)
+      : null;
+    const assisterId = assister?.id ?? null;
+    const assisterName = assister?.name ?? null;
     const f = beatRng(seed, inc, side, shotIdx, 14); // fraction in [0,1) within the window
     const clock = Math.round(windowStart * 60 + f * 15 * 60);
     const mm = Math.floor(clock / 60).toString().padStart(2, '0');
@@ -1128,6 +1211,8 @@ function buildBeats(
       outcome,
       scorerId,
       scorerName,
+      assisterId,
+      assisterName,
       text: beatText(outcome, shot.lane, scorerName, seed, inc, side, shotIdx),
     };
   });
@@ -1574,4 +1659,88 @@ export function cumulativeStats(scores: IncrementResult[]): CumulativeStats {
     opponentZonesWon: oZW,
     zoneMargin,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Per-player match stats + rating — read-side only.
+// Derived entirely from IncrementResult data (per-card emission share + the goal/assist
+// ledger + live fitness). No RNG, never feeds the match math — the scoreline is unaffected.
+// ---------------------------------------------------------------------------
+
+export interface PlayerMatchStat {
+  cardId: number;
+  name: string;
+  position: string;
+  goals: number;
+  assists: number;
+  /** Base power scaled by current fitness — the number shown on the pitch card. */
+  effectivePower: number;
+  /** Current condition, 1–6. */
+  fitness: number;
+  /** Does the card's position fit its formation slot? false → a "wrong position" flag. */
+  posFit: boolean;
+  /** 0–10 match rating (one decimal): 6.0 base ± contribution share + goals/assists. */
+  rating: number;
+}
+
+/**
+ * Aggregate per-player in-match stats + a 0–10 rating over the played increments, keyed to
+ * the current XI. Pure read-side reduction (mirrors cumulativeStats). Rating = 6.0 base +
+ * contribution-share lift (each card's emission vs the XI average) + goals (×1.0) / assists
+ * (×0.7) + a small fitness nudge, with a positional-misfit ding; clamped to [0,10].
+ */
+export function playerMatchStats(
+  scores: IncrementResult[],
+  xi: Card[],
+  formation: Formation,
+): Record<number, PlayerMatchStat> {
+  const out: Record<number, PlayerMatchStat> = {};
+  xi.forEach((card, i) => {
+    const slot = formation.slots[i] ?? formation.slots[formation.slots.length - 1];
+    out[card.id] = {
+      cardId: card.id,
+      name: card.name,
+      position: card.position,
+      goals: 0,
+      assists: 0,
+      effectivePower: effectivePower(card),
+      fitness: fitnessOf(card),
+      posFit: slot ? slot.accepts.includes(card.position) : true,
+      rating: 6.0,
+    };
+  });
+
+  // Contribution (per-card emission, summed) + the goal/assist ledger from your beats.
+  const contrib: Record<number, number> = {};
+  for (const s of scores) {
+    const emit = s.split.cardEmit ?? {};
+    for (const idStr of Object.keys(emit)) {
+      const id = Number(idStr);
+      const e = emit[id];
+      contrib[id] = (contrib[id] ?? 0) + e.attack + e.defence + e.creation + e.finishing;
+    }
+    for (const b of s.beats) {
+      if (b.side !== 'you' || b.outcome !== 'goal') continue;
+      if (b.scorerId != null && out[b.scorerId]) out[b.scorerId].goals += 1;
+      if (b.assisterId != null && out[b.assisterId]) out[b.assisterId].assists += 1;
+    }
+  }
+
+  const ids = Object.keys(out).map(Number);
+  const n = ids.length || 1;
+  let sumContrib = 0;
+  for (const id of ids) sumContrib += contrib[id] ?? 0;
+  const avgContrib = sumContrib / n;
+
+  for (const id of ids) {
+    const st = out[id];
+    const rel = avgContrib > 0 ? ((contrib[id] ?? 0) - avgContrib) / avgContrib : 0;
+    let rating = 6.0 + clamp(rel, -1, 2) * 0.8;
+    rating += st.goals * 1.0 + st.assists * 0.7;
+    rating += (fitnessFactor(st.fitness) - 0.9) * 1.5; // spent players underperform their output
+    if (!st.posFit) rating -= 0.5;
+    st.rating = Math.round(clamp(rating, 0, 10) * 10) / 10;
+  }
+
+  return out;
 }
