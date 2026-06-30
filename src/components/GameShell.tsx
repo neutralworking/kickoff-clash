@@ -36,10 +36,11 @@ import { calculateAttendance, matchReward, JOKER_COST } from '../lib/economy';
 import { findConnections } from '../lib/chemistry';
 import { accrueMatch } from '../lib/chem';
 import type { PackContents } from '../lib/packs';
-import type { TeamSelection } from '../lib/run';
+import type { TeamSelection, TeamIntent } from '../lib/run';
 import TitleScreen from './TitleScreen';
 import PackReveal from './PackReveal';
 import TeamSelect from './TeamSelect';
+import TeamTalk from './TeamTalk';
 import MatchPhase from './MatchPhase';
 import PostMatch from './PostMatch';
 import ShopPhase from './ShopPhase';
@@ -140,12 +141,13 @@ function saveHistory(state: RunState): void {
 // Phase type
 // ---------------------------------------------------------------------------
 
-type Phase = 'title' | 'packOpen' | 'teamSelect' | 'match' | 'postmatch' | 'shop' | 'end';
+type Phase = 'title' | 'packOpen' | 'teamSelect' | 'teamTalk' | 'match' | 'postmatch' | 'shop' | 'end';
 
 function phaseFromStatus(status: RunState['status']): Phase {
   if (status === 'won' || status === 'lost') return 'end';
   if (status === 'packSelect' || status === 'setup') return 'teamSelect';
   if (status === 'title') return 'title';
+  if (status === 'teamTalk') return 'teamTalk';
   return status as Phase;
 }
 
@@ -335,14 +337,32 @@ export default function GameShell() {
         setPhase('shop');
       }
     } else {
-      // Next tie of the same cup — the Team Talk lives here (Phase 3B.5); for now the
-      // lineup carries forward and we go straight to the match.
-      const next: RunState = { ...runState, matchInCup: runState.matchInCup + 1 };
+      // Next tie of the same cup → the pre-match Team Talk (Phase 3B.5): fitness carries
+      // forward, so the player reviews condition and adjusts the XI/shape/intent before
+      // kickoff. matchInCup advances HERE only (the Team Talk confirm must not bump it).
+      const next: RunState = { ...runState, matchInCup: runState.matchInCup + 1, status: 'teamTalk' };
       setRunState(next);
-      setPhase('match');
+      setPhase('teamTalk');
       saveRun(next);
     }
   }, [runState]);
+
+  // --- Team Talk (pre-match) → Match ---
+  // Writes only the lineup levers the match reads (activeFormation — NOT the legacy
+  // `formation` — plus startingXI/benchIds/intent), all serializable; jokers/tactics are
+  // untouched so localStorage round-trip + rehydration are unaffected.
+  const handleTeamTalkConfirm = useCallback(
+    (upd: { startingXI: number[]; benchIds: number[]; activeFormation: string; intent: TeamIntent }) => {
+      setRunState(prev => {
+        if (!prev) return prev;
+        const next: RunState = { ...prev, ...upd, status: 'match' };
+        saveRun(next);
+        return next;
+      });
+      setPhase('match');
+    },
+    [],
+  );
 
   // --- Shop handlers ---
   const handleBuyCard = useCallback((card: Card, cost: number) => {
@@ -444,9 +464,11 @@ export default function GameShell() {
       // each cup is a self-contained puzzle. (Permanent durability shatter still sticks.)
       deck: runState.deck.map(c => ({ ...c, fitness: 6, injured: false })),
       tacticsDeck,
+      // Open the new cup on the Team Talk so the player sets the XI/shape for tie 1.
+      status: 'teamTalk',
     };
     setRunState(newState);
-    setPhase('match');
+    setPhase('teamTalk');
     saveRun(newState);
   }, [runState]);
 
@@ -484,6 +506,16 @@ export default function GameShell() {
         return pendingContents ? (
           <TeamSelect contents={pendingContents} initialManagerId={pickedManagerId} onConfirm={handleTeamConfirm} />
         ) : null;
+
+      case 'teamTalk': {
+        if (!runState) return null;
+        return (
+          <TeamTalk
+            runState={runState}
+            onConfirm={handleTeamTalkConfirm}
+          />
+        );
+      }
 
       case 'match': {
         if (!runState) return null;
