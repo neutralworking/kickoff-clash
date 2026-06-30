@@ -358,6 +358,9 @@ export function transformCard(raw: KCCard, index: number): Card {
     nickname: raw.nickname,
     pillars: raw.pillars,
     nation: raw.nation,
+    // Owned cards start fresh (6/6). Surfaces the fitness meter on the card/gallery
+    // immediately; engine-neutral (fitnessOf already treated undefined as 6).
+    fitness: 6,
   };
 }
 

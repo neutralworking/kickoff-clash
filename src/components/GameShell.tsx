@@ -534,6 +534,7 @@ export default function GameShell() {
             matchResult={lastMatchResult}
             durabilityResult={durabilityResult}
             round={lastMatchResult.round}
+            matchInCup={runState.matchInCup}
             totalRounds={MAX_CUPS}
             wins={runState.wins}
             matchHistory={runState.matchHistory}

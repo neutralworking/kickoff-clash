@@ -12,12 +12,12 @@ of these levers, with a number and a way to test it.
 
 | Theory (🃏 / ⚽) | KC system | File(s) | Levers |
 |---|---|---|---|
-| Difficulty escalation (Balatro blinds) | Opponent power curve | `src/lib/opponent.ts` | `ROUND_POWER = [76,81,86,91,96]`, ±6 jitter, `STYLE_FORMATION`, `OPP_REACTIVITY` |
+| Difficulty escalation (Balatro blinds) | Opponent power curve | `src/lib/opponent.ts` | `ROUND_POWER = [62,68,73,78,82]` (single-match), `CUP_FINAL_POWER = [48,53,58,63,67]` + `OPENER_DROP 18` (the real cup curve), ±6 jitter |
 | Output variance bound | Goal model (xG→Poisson) | `src/lib/possession.ts` | `XG_BASE`, `XG_CONVEX`, `XG_MIN/MAX`, `SHOT_BASE`, `POSS_POOL`, `drama` |
 | Constraint system (color pie) | Coupled zonal contest | `src/lib/field.ts` | `FIELD_CONST.k≈1.1` (convexity), `oppReact`, `coverPool` |
-| Opponent fudge factor | Skipped-cascade comp | `src/lib/match-v5.ts` | `OPP_COHESION = 1.3` |
-| Power budget / curve shape | Card power scale | data + `src/lib/transform.ts` | levels 71–95 (compressed; §11.2 → 50–99) |
-| Multiplicative synergy | Chemistry (4 tiers) | `src/lib/chemistry.ts`, `chem.ts` | tier multipliers; personality-theme stack |
+| Opponent fudge factor | Skipped-cascade comp | `src/lib/match-v5.ts` | `OPP_COHESION = 1.05` |
+| Power budget / curve shape | Card power scale | `public/data/kc_cards.json` + `transform.ts` | BRS = power directly, 52–95 (V3.1 data port; the §11.2 widening effectively shipped) |
+| Multiplicative synergy | Chemistry (4 tiers) | `src/lib/chemistry.ts`, `chem.ts` | tier multipliers; personality uplift now CAPPED at 1.30 (additive PDR) |
 | Archetype counter-web | Verbs + identities | `src/lib/verbs.ts`, `role-transforms.ts`, `docs/ARCHETYPES_V1.md` | emission verbs, role transforms |
 | Deck curation / draft | Packs + shop | `src/lib/packs.ts`, `economy.ts`, `run.ts` | `RIP_COUNTS`, pack weights, shop costs |
 | Tech cards / answers | Tactics | `src/lib/tactics.ts` | 12 cards, `contradicts` pairs, per-tactic `compute`, 3 slots, 5→9/run draw |
@@ -42,18 +42,17 @@ of these levers, with a number and a way to test it.
 
 ## Known issues / standing backlog (with the lens read)
 
-1. **Personality stacking (~72–80%).** 🃏 multiplicative runaway → cap or diminish.
-   ⚽ a great dressing room is real but shouldn't outweigh XI quality. *Lever:*
-   `chemistry.ts` tier multipliers + a stacking cap. *Test:* sweep deck strength with
-   stack on/off.
-2. **Power compression (71–95).** Flattens deck differences; top deck pins the
-   goal-chance ceiling, so drafting barely matters (🃏 "no power budget spread").
-   *Lever:* widen to 50–99 (`transform.ts` mapping). *Test:* re-run the harness; the
-   spread between a strong and weak XI should re-open.
-3. **Archetype skew (Creator 16.8% / Dribbler 1.4%).** Warps the counter-web and the
-   meta before any dial — fix the *data* first (🃏 + ⚽ agree). *Lever:*
-   `public/data/kc_characters.json` distribution. *Test:* recount; aim for a spread
-   that supports every archetype's build-around.
+1. **Personality stacking — FIXED.** Capped at 1.30 (additive Perfect Dressing Room; was
+   ×1.5 stacking to ~72–80%). *Residual:* is 1.30 the right ceiling? Sweep `attackMod`
+   peak vs deck strength.
+2. **Power compression — FIXED at source** (BRS 52–95 data port replaces levels 71–95).
+   *Residual:* the EFFECTIVE spread after fitness/mods is still ~60–78, so drafting may
+   still under-reward. *Lever:* the power→emission curve. *Test:* `power-probe.ts` +
+   `balance-sweep.ts` TOP-vs-WEAK divergence.
+3. **Archetype skew — FIXED in data** (`public/data/kc_cards.json` flat mix: Dribbler ~8%,
+   Creator ~12%; was 1.4% / 16.8% in the old `kc_characters.json`). *Residual:* the
+   load-bearing Controller / Commander identities are still thin — verify every archetype
+   is actually draftable.
 4. **Opponent curve vs one life.** Is round 5 a wall or a lap of honour? *Lever:*
    `ROUND_POWER`, `OPP_COHESION`. *Test:* seed sweep win-rate by round for a median deck.
 5. **Reward pacing.** Does survive-on-draws keep up with shop costs? *Lever:*

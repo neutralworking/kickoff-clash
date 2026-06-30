@@ -97,13 +97,13 @@ The Lab tunes *these*, not vibes:
 
 | System | Where | Sample dials |
 |---|---|---|
-| Opponent difficulty curve | `src/lib/opponent.ts` | `ROUND_POWER = [76,81,86,91,96]`, jitter ±6 |
-| Opponent strength fudge | `src/lib/match-v5.ts` | `OPP_COHESION = 1.3` |
+| Opponent difficulty curve | `src/lib/opponent.ts` | `ROUND_POWER = [62,68,73,78,82]`; cup uses `CUP_FINAL_POWER = [48,53,58,63,67]` + `OPENER_DROP 18`; ±6 jitter |
+| Opponent strength fudge | `src/lib/match-v5.ts` | `OPP_COHESION = 1.05` |
 | Goal model | `src/lib/possession.ts` | `XG_BASE`, `XG_CONVEX`, `SHOT_BASE`, `POSS_POOL` |
 | Zonal contest | `src/lib/field.ts` | `FIELD_CONST.k ≈ 1.1`, `oppReact`, `coverPool` |
-| Card power scale | data + `transform.ts` | levels 71–95 (compressed; §11.2 wants 50–99) |
-| Synergy / chemistry | `src/lib/chemistry.ts` | tier multipliers (personality stack is a known runaway) |
-| Archetype mix | `public/data/kc_characters.json` | Creator 16.8% (over) / Dribbler 1.4% (under) |
+| Card power scale | `public/data/kc_cards.json` + `transform.ts` | BRS = power directly, 52–95 (data port; §11.2 widening shipped) |
+| Synergy / chemistry | `src/lib/chemistry.ts` | tier multipliers; personality uplift CAPPED at 1.30 (additive PDR) |
+| Archetype mix | `public/data/kc_cards.json` | flat (Dribbler ~8% / Creator ~12%); the old skew is fixed |
 | Tactics | `src/lib/tactics.ts` | 12 cards, contradiction pairs, per-tactic `compute` |
 | Permadeath / rewards | `src/lib/run.ts`, `GameShell.tsx` | one loss ends run, `DRAW_REWARD_FACTOR = 0.5` |
 | Durability / attrition | `src/lib/scoring.ts` | `SHATTER_CHANCE` (glass 0.20 / phoenix 0.30) |
@@ -112,14 +112,13 @@ The Lab tunes *these*, not vibes:
 
 These are known or likely problems — use them to test-drive the skill:
 
-1. **Personality stacking** — tier-3 + Perfect Dressing Room can compound to ~72–80%
-   uplift (CLAUDE.md tech debt). Classic *multiplicative runaway*. 🃏 says cap/curve
-   it; ⚽ says a great dressing room is real but shouldn't dwarf the XI's quality.
-2. **Power-range compression** — levels 71–95 flatten deck-strength differences; the
-   top deck pins the goal-chance ceiling. Widening to 50–99 (§11.2) re-opens the
-   curve so good drafting matters.
-3. **Archetype distribution skew** — Creator 16.8% vs Dribbler 1.4% warps the meta and
-   the counter-web before a single dial is touched. Fix the *data* before tuning.
+1. **Personality stacking — FIXED** (capped 1.30, additive Perfect Dressing Room). The live
+   question is whether 1.30 is the right ceiling, not whether to add one.
+2. **Power-range compression — FIXED at source** (BRS 52–95 data port). Residual: the
+   *effective* spread after fitness/mods is still ~60–78, so drafting may under-reward —
+   check the power→emission curve, not the raw scale.
+3. **Archetype distribution skew — FIXED in data** (`kc_cards.json` flat mix). Residual:
+   the load-bearing Controller / Commander identities are still thin — verify draftability.
 4. **Opponent curve vs permadeath** — `ROUND_POWER` 76→96 across 5 must be tight but
    beatable on one life. Is round 5 a wall or a formality? Sweep it.
 5. **Reward economy** — `DRAW_REWARD_FACTOR = 0.5`: does a draw-and-survive line earn

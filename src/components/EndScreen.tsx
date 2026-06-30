@@ -17,6 +17,7 @@
  */
 
 import type { RunState, MatchResult } from '../lib/run';
+import { cupSize, MAX_CUPS } from '../lib/run';
 import { PIXEL } from './cards/cardTokens';
 
 interface EndScreenProps {
@@ -24,22 +25,18 @@ interface EndScreenProps {
   onNewRun: () => void;
 }
 
-const RESULT_COLOR: Record<MatchResult['result'], string> = {
-  win: 'var(--success)',
-  draw: 'var(--gold)',
-  loss: 'var(--danger)',
-};
-
 export default function EndScreen({ state, onNewRun }: EndScreenProps) {
   const won = state.status === 'won';
   const history = state.matchHistory;
   const totalGoals = history.reduce((s, m) => s + m.yourGoals, 0);
   const totalRevenue = history.reduce((s, m) => s + m.revenue, 0);
-  const totalRounds = 5;
+  // The run is a 5-cup gauntlet of CUP_SIZES ties (20 matches total), not 5 fixtures.
+  const totalCups = MAX_CUPS;
+  const totalMatches = Array.from({ length: totalCups }, (_, i) => cupSize(i + 1)).reduce((a, b) => a + b, 0);
 
-  // The fatal / final fixture is the last one played.
+  // The fatal / final match is the last one played.
   const finalMatch = history[history.length - 1];
-  const fixturesSurvived = won ? totalRounds : Math.max(history.length - 1, 0);
+  const matchesSurvived = won ? totalMatches : Math.max(history.length - 1, 0);
 
   // Best win by goal difference — the run's highlight.
   const bestWin = history
@@ -56,9 +53,9 @@ export default function EndScreen({ state, onNewRun }: EndScreenProps) {
     : `0 3px 0 var(--ink-black), 0 0 32px rgba(232,54,47,0.5)`;
 
   const subline = won
-    ? `All ${totalRounds} fixtures survived. One life, no defeats — the run is yours.`
+    ? `All ${totalMatches} matches survived across ${totalCups} cups. One life, no defeats — the run is yours.`
     : finalMatch
-      ? `Beaten by ${finalMatch.opponentName} at Match ${finalMatch.round} of ${totalRounds}. One loss, run gone.`
+      ? `Beaten by ${finalMatch.opponentName} in Cup ${finalMatch.round} — match ${history.length} of ${totalMatches}. One loss, run gone.`
       : `The run is over.`;
 
   return (
@@ -123,12 +120,15 @@ export default function EndScreen({ state, onNewRun }: EndScreenProps) {
 
       {/* ── Fixture run — every match played, coloured by outcome ─────────── */}
       <div className="relative shrink-0">
-        <SectionLabel text={won ? 'Unbeaten Run' : 'The Run'} />
+        <SectionLabel text={won ? 'Cups Cleared' : 'The Cups'} />
         <div className="flex items-stretch justify-center" style={{ gap: 6, marginTop: 9 }}>
-          {Array.from({ length: totalRounds }, (_, i) => {
-            const fixtureNo = i + 1;
-            const m = history.find((h) => h.round === fixtureNo);
-            return <FixtureCell key={fixtureNo} fixtureNo={fixtureNo} match={m} />;
+          {Array.from({ length: totalCups }, (_, i) => {
+            const cupNo = i + 1;
+            const results = history.filter((h) => h.round === cupNo);
+            const deathCup = won ? Infinity : state.round;
+            const status: 'cleared' | 'died' | 'pending' =
+              cupNo < deathCup ? 'cleared' : cupNo === deathCup ? 'died' : 'pending';
+            return <CupCell key={cupNo} cupNo={cupNo} results={results} status={status} />;
           })}
         </div>
       </div>
@@ -139,7 +139,7 @@ export default function EndScreen({ state, onNewRun }: EndScreenProps) {
       <div className="shrink min-h-0 overflow-y-auto relative" style={{ overscrollBehavior: 'contain' }}>
         <SectionLabel text="Run Summary" />
         <div className="grid grid-cols-2" style={{ gap: 8, marginTop: 9 }}>
-          <StatBox label="Fixtures Survived" value={`${fixturesSurvived}/${totalRounds}`} color={won ? 'var(--gold)' : 'var(--cream)'} />
+          <StatBox label="Matches Survived" value={`${matchesSurvived}/${totalMatches}`} color={won ? 'var(--gold)' : 'var(--cream)'} />
           <StatBox label="Record" value={recordLine(history)} color="var(--cream)" />
           <StatBox label="Goals Scored" value={totalGoals.toString()} color="var(--success)" />
           <StatBox label="Gate Revenue" value={`£${compact(totalRevenue)}`} color="var(--gold)" />
@@ -163,7 +163,7 @@ export default function EndScreen({ state, onNewRun }: EndScreenProps) {
             <div className="flex flex-col" style={{ gap: 3, minWidth: 0 }}>
               <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>HIGHLIGHT</span>
               <span className="truncate" style={{ fontSize: 11.5, color: 'var(--cream)' }}>
-                Match {bestWin.round} — beat {bestWin.opponentName}
+                Cup {bestWin.round} — beat {bestWin.opponentName}
               </span>
             </div>
             <span style={{ fontFamily: PIXEL, fontSize: 17, color: 'var(--success)', marginLeft: 'auto', flexShrink: 0 }}>
@@ -232,47 +232,32 @@ function SectionLabel({ text }: { text: string }) {
   );
 }
 
-/** One fixture in the run strip: outcome letter + scoreline, coloured by result,
- *  or a hollow "—" for a fixture that was never reached. */
-function FixtureCell({ fixtureNo, match }: { fixtureNo: number; match?: MatchResult }) {
-  if (!match) {
-    return (
-      <div
-        className="flex flex-col items-center justify-center"
-        style={{
-          flex: 1,
-          minWidth: 0,
-          height: 48,
-          borderRadius: 'var(--radius-sm)',
-          border: '1px dashed var(--border)',
-          background: 'rgba(0,0,0,0.2)',
-          gap: 2,
-        }}
-      >
-        <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--ink)' }}>—</span>
-        <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--ink)' }}>{fixtureNo}</span>
-      </div>
-    );
-  }
-  const color = RESULT_COLOR[match.result];
-  const letter = match.result === 'win' ? 'W' : match.result === 'loss' ? 'L' : 'D';
+/** One cup in the run strip: a glyph for whether the cup was cleared (✓), where the
+ *  run died (✕), or never reached (—). The cup's W/D record rides in the aria-label. */
+function CupCell({ cupNo, results, status }: { cupNo: number; results: MatchResult[]; status: 'cleared' | 'died' | 'pending' }) {
+  const pending = status === 'pending';
+  const color = status === 'cleared' ? 'var(--success)' : status === 'died' ? 'var(--danger)' : 'var(--ink)';
+  const glyph = status === 'cleared' ? '✓' : status === 'died' ? '✕' : '—';
+  const w = results.filter((m) => m.result === 'win').length;
+  const d = results.filter((m) => m.result === 'draw').length;
   return (
     <div
       className="flex flex-col items-center justify-center"
+      aria-label={`Cup ${cupNo}: ${status}${pending ? '' : ` — ${w}W ${d}D over ${results.length}`}`}
       style={{
         flex: 1,
         minWidth: 0,
         height: 48,
         borderRadius: 'var(--radius-sm)',
-        border: '2px solid var(--ink-black)',
-        background: `${color}1f`,
-        boxShadow: `inset 0 0 0 1px ${color}`,
+        border: pending ? '1px dashed var(--border)' : '2px solid var(--ink-black)',
+        background: pending ? 'rgba(0,0,0,0.2)' : `${color}1f`,
+        boxShadow: pending ? 'none' : `inset 0 0 0 1px ${color}`,
         gap: 2,
       }}
     >
-      <span style={{ fontFamily: PIXEL, fontSize: 14, color, lineHeight: 1 }}>{letter}</span>
-      <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--cream-soft)' }}>
-        {match.yourGoals}-{match.opponentGoals}
+      <span style={{ fontFamily: PIXEL, fontSize: 14, color, lineHeight: 1 }}>{glyph}</span>
+      <span style={{ fontFamily: PIXEL, fontSize: 7, color: pending ? 'var(--ink)' : 'var(--cream-soft)' }}>
+        CUP {cupNo}
       </span>
     </div>
   );
