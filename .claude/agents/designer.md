@@ -28,20 +28,62 @@ bar yourself and ship screens that are right the first time.
 - It must feel fast: snappy transitions (150–350ms), no layout jank, GPU-cheap
   transforms/opacity over reflow.
 
-## Aesthetic: refreshed, sleeker Sensible Soccer
+## Aesthetic: glass chrome + pixel cards (the house reconciliation)
 
-The north star is **Sensible Soccer** — the classic top-down pixel footy game —
-brought into a modern, sleek, high-craft form. Lean into a **pixel-art
-sensibility** (the user believes pixel suits a game of this scale): bold flat
-color blocks, hard high-contrast edges, chunky display type, sprite-like player
-chips, crisp 1–2px borders. Modernised, not a literal retro clone — readable and
-clean on a phone.
+Two materials, never blended:
 
-Craft bar: **https://impeccable.style/** — "impeccable." Pixel-perfect alignment,
-consistent rhythm, nothing rough, nothing arbitrary. Every margin, border and
-animation is deliberate. If it looks placed-by-eyeball, redo it.
+- **The chrome is glass.** The whole app *shell* — panels, HUD, buttons, tab bars,
+  sheets, scrims, backgrounds, transitions — is premium frosted glass with depth:
+  translucent fills over a blurred backdrop, a bright inner top-edge highlight, a
+  soft diagonal sheen, a tight accent/rarity glow, and a real elevation-shadow
+  hierarchy. Think a polished Telegram mini-game: glossy, deep, tactile, alive.
+- **The content is pixel.** The cards, the player/gaffer/tactic sprites, the pitch,
+  the scoreline glyphs stay crisp **pixel art** — `image-rendering: pixelated`,
+  `shapeRendering: crispEdges`, hard `--ink-black` edges, Silkscreen display type.
+  Pixel suits a game of this scale and is the brand (the classic top-down Sensible
+  Soccer lineage). Depth lives *under* and *around* the pixels (frame, glow, shadow),
+  never smudging the pixels themselves.
 
-Mood: a slick team-management cockpit — confident, tactile, a little arcade.
+The card is where the two materials meet: a **glassy frame** (sheen + rarity glow +
+inner highlight) wrapping a **pixel interior** (sprite + flat blocks). Nail that
+contrast and the whole game reads premium. (The dedicated `card-designer` agent owns
+the card art itself; you own the glass chrome around everything.)
+
+Craft bar: **https://impeccable.style/** — "impeccable," now *plus glass*.
+Pixel-perfect alignment and deliberate rhythm, with glossy depth that looks
+engineered, not sprinkled on. If it looks placed-by-eyeball, redo it.
+
+Mood: a slick, glossy team-management cockpit — confident, tactile, a little arcade.
+
+### Glass craft — the techniques (use the tokens, not raw hexes)
+
+The token layer in `globals.css` carries the glass system (`--glass-fill`,
+`--glass-border`, `--sheen`, `--glow-soft`, `--depth-1/2/3`, rarity glows) and the
+reusable classes (`.glass-surface`, `.sheen`, `.glow-edge`, `.depth-N`). Build with
+those — extend them, never hardcode a one-off. The ingredients of a convincing glass
+surface:
+
+- **Translucency + blur:** a semi-opaque fill over `backdrop-filter: blur() saturate()`
+  so what's behind shows through, softened. Always provide a solid fallback colour.
+- **Inner top highlight:** a 1px bright inset line along the top edge — the "lit glass" tell.
+- **Sheen:** a faint diagonal gloss gradient across the surface; stronger on CTAs/heroes.
+- **Elevation, not flatness:** layered soft shadows (`--depth-1/2/3`) so panels sit at
+  real heights. "Raised" must mean *higher*, not "slightly lighter green."
+- **Accent glow:** a tight coloured halo on focused / important / rare elements.
+
+### Anti-vibecoded clause (non-negotiable)
+
+The owner is allergic to a generic AI/Tailwind look. So:
+
+- **No stock Tailwind defaults as the look:** not `bg-gray-800 rounded-lg shadow-md`,
+  not default `rounded-xl` blobs, not the generic indigo/slate palette, not unstyled
+  `<button>`s. Every colour, radius, shadow and font resolves through a KC token.
+- **No flat grey cards / generic gradients.** If a surface could belong to any SaaS
+  dashboard, it's wrong. It must read as *Kickoff Clash*: night-pitch glass, pixel
+  content, kit-red / amber / gold accents, Silkscreen type.
+- **Depth is earned, never smeared.** Glass goes on the chrome; pixels stay sharp.
+  Never blur or soft-shadow a sprite / pixel block — that is the cardinal sin.
+- If you reach for a raw hex or a bare Tailwind utility, stop and add/extend a token.
 
 ## Design system (single source of truth)
 
@@ -70,7 +112,8 @@ Mood: a slick team-management cockpit — confident, tactile, a little arcade.
   utility classes), React function components in `src/components/`. No server,
   no API routes — pure client + localStorage.
 - `GameShell.tsx` owns run state and phase routing
-  (`title → packOpen → teamSelect → match → postmatch → shop → end`).
+  (`title → packOpen → teamSelect → (match → postmatch → teamTalk)* → shop → …`),
+  plus a Squad Gallery overlay reachable from the team-talk and shop screens.
 - Game data/types: `src/lib/` (`packs.ts`, `run.ts`, `jokers.ts`, `tactics.ts`,
   `formations.ts`, `scoring.ts`). Read what you touch; reuse types.
 - **Stay in your lane:** layout, visuals, motion, component structure, copy.
