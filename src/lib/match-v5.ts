@@ -27,7 +27,7 @@ import {
   generateInjuryText,
 } from './hand';
 import type { MatchEvent } from './hand';
-import type { DispatchCard, ZoneName, TraitRecord } from './verbs';
+import type { DispatchCard, ZoneName, TraitRecord, TraitLogLine } from './verbs';
 import { dispatchTraits, ZONES } from './verbs';
 import { traitsForCard } from './role-transforms';
 import type { Lane, Cell, Band } from './field';
@@ -82,6 +82,16 @@ export interface CascadeLine {
   type: 'base' | 'synergy' | 'style' | 'dual-role' | 'personality' | 'manager' | 'tactic' | 'ability';
 }
 
+/** A defining trait that FIRED this increment — the hook the match screen animates.
+ *  `moment` = a discrete event (cross/long-shot/tackle); `aura` = a persistent warp
+ *  (leadership). Additive/read-side, deduped by (cardId, traitName). */
+export interface TraitEvent {
+  cardId: number;
+  traitName: string;
+  animation: 'moment' | 'aura';
+  zone?: ZoneName;
+}
+
 export interface AttackDefenceSplit {
   attackScore: number;
   defenceScore: number;
@@ -113,6 +123,8 @@ export interface AttackDefenceSplit {
    *  The basis for the read-side per-player rating. Additive — never fed back into the
    *  resolution math, so scorelines are unchanged. */
   cardEmit: Record<number, Record<ZoneName, number>>;
+  /** Defining traits that FIRED this increment (animation-tagged) — the match-feel hook. */
+  traitEvents: TraitEvent[];
 }
 
 export interface IncrementResult {
@@ -231,6 +243,11 @@ const zeroEmit = (): Record<ZoneName, number> => ({ attack: 0, defence: 0, creat
  *  defence it attacks into, so a comparably-powered opponent is a real threat.
  *  (DESIGN §7 difficulty dial; calibrated against the deck-strength sweep.) */
 const OPP_COHESION = 1.05;
+
+/** Weight of a side's finishing in its possession-CONTROL term (the rest is creation +
+ *  attack). A finisher-heavy deck earns possession credit for its attacking quality, so
+ *  possession tracks total attacking strength rather than creation alone. Symmetric. */
+const CONTROL_FIN = 0.5;
 
 // --- Fitness (MATCH_ENGINE §3.1; §7 dials) ---
 // Dynamic 1–6 condition. fitnessFactor scales emission: fresh (6) = full, spent (1) =
@@ -644,6 +661,10 @@ export function computeSideField(
   seed: number,
   increment: number,
   squadTraits?: TraitRecord[],
+  // The faceless generated opponent opts OUT of the defining-trait suite (its difficulty
+  // is already carried by ROUND_POWER + opponentScaleTraits; stacking generates/denies on
+  // top double-counts it). The player path leaves this true and keeps the full suite.
+  includeDefiningTraits = true,
 ): SideField {
   const dispatchCards: DispatchCard[] = xi.map((card, i) => {
     const slot = formation.slots[i] ?? formation.slots[formation.slots.length - 1];
@@ -669,7 +690,7 @@ export function computeSideField(
       isWide: isWideCard(card),
       cell,
       emit: e,
-      traits: traitsForCard(card),
+      traits: traitsForCard(card, includeDefiningTraits),
     };
   });
 
@@ -966,6 +987,9 @@ export function evaluateSplit(
   const cardEmit: Record<number, Record<ZoneName, number>> = {};
   emit.forEach((v, k) => { cardEmit[k] = v; });
 
+  // Defining-trait firings this increment (animation-tagged), for the match-feel layer.
+  const traitEvents = collectTraitEvents(dispatched.log);
+
   return {
     attackScore: Math.max(0, attackTotal),
     defenceScore: Math.max(0, defenceTotal),
@@ -988,7 +1012,24 @@ export function evaluateSplit(
     attackingOrder: orderedAttackers.map((c) => c.id),
     cells: dispatched.cells,
     cardEmit,
+    traitEvents,
   };
+}
+
+/** Filter the dispatcher log to the defining-trait firings (animation-tagged), deduped by
+ *  (cardId, traitName) — an `amplify` over many teammates logs once per card, but the
+ *  animation should fire once. Read-side; never feeds the match math. */
+function collectTraitEvents(log: TraitLogLine[]): TraitEvent[] {
+  const seen = new Set<string>();
+  const out: TraitEvent[] = [];
+  for (const l of log) {
+    if (!l.animation) continue;
+    const key = `${l.cardId}:${l.trait}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ cardId: l.cardId, traitName: l.trait, animation: l.animation, zone: l.zone });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -1243,6 +1284,7 @@ export function resolveIncrement(
     state.seed + 7777,
     state.currentIncrement,
     opponentScaleTraits(state.opponentXI, state.currentIncrement),
+    false, // opponent opts out of the defining-trait suite (difficulty already in ROUND_POWER)
   );
 
   // The opponent runs the lean side path (no synergy/style/personality cascade). Its
@@ -1275,12 +1317,21 @@ export function resolveIncrement(
   // Chance quality blends finishing with creation, so a creation-heavy (build-up) side
   // still converts rather than being punished for low raw finishing.
   const chanceQuality = (finishing: number, creation: number) => 0.55 * finishing + 0.45 * creation;
+  // Possession control: creation + attack are the deep build-up that earns the ball, but a
+  // finisher-heavy side (Sprinter/Powerhouse/Target stacks) was getting NO possession
+  // credit for its finishing strength — so a higher-power finisher deck got out-possessed
+  // by a lower-power creative one, breaking monotonicity (balance-lab: the S3-mid dip).
+  // A light finishing term (CONTROL_FIN) credits attacking quality so a finisher-heavy
+  // side isn't judged on creation alone. Symmetric — the opponent gets the same blend
+  // under OPP_COHESION.
+  const control = (creation: number, attack: number, finishing: number) =>
+    creation + attack + CONTROL_FIN * finishing;
   const youSide: PossessionSide = {
     lanePush: split.lanePush,
     laneCover: split.laneCover,
     shotQuality: chanceQuality(split.shotQuality, split.chanceCreation),
     defenceScore: split.defenceScore,
-    control: split.chanceCreation + split.attackScore,
+    control: control(split.chanceCreation, split.attackScore, split.shotQuality),
     denial: yourDenial,
   };
   const oppSide: PossessionSide = {
@@ -1288,7 +1339,7 @@ export function resolveIncrement(
     laneCover: oppEffCover,
     shotQuality: chanceQuality(oppFinishing, opp.chanceCreation * OPP_COHESION),
     defenceScore: opp.defenceScore,
-    control: (opp.chanceCreation + opp.attackScore) * OPP_COHESION,
+    control: control(opp.chanceCreation, opp.attackScore, oppFinishing) * OPP_COHESION,
     denial: theirDenial,
   };
 

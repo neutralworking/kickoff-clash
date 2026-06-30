@@ -106,7 +106,14 @@ export type TraitCondition =
   | { kind: 'is-defending' }
   | { kind: 'in-wide-slot' }
   | { kind: 'in-position'; positions: string[] }
-  | { kind: 'archetype'; archetype?: string; anyOf?: string[] };
+  | { kind: 'archetype'; archetype?: string; anyOf?: string[] }
+  // --- v1 action-trait conditions (CARDS §2; need team/increment context, never score) ---
+  /** A teammate target/striker is up in the attacking band (Postman's "target in the box"). */
+  | { kind: 'box-target-present'; archetypes?: string[] }
+  /** At least `min` teammates are holding the back line (Offside Trap's structure gate). */
+  | { kind: 'backline-count'; min: number }
+  /** This increment index is ≥ `fromIncrement` (a trait that switches on late). */
+  | { kind: 'late-game'; fromIncrement: number };
 
 export interface TraitRecord {
   name: string;
@@ -122,6 +129,13 @@ export interface TraitRecord {
    * `{ band: 'MID' }` drops deep (same lane, one band back).
    */
   to?: { lane?: Lane; band?: Band };
+  /**
+   * Display-only metadata for the match-feel layer: a defining trait that fired this
+   * increment animates as a discrete `moment` (cross/long-shot/tackle) or a persistent
+   * `aura` (leadership). The dispatcher NEVER reads it — purely a hook for the UI to
+   * surface the firing as an animatable event (see match-v5 `traitEvents`).
+   */
+  animation?: 'moment' | 'aura';
   /** Escape hatch: a higher priority runs in a later sub-pass. Default 0. */
   priority?: number;
 }
@@ -171,6 +185,8 @@ export interface TraitLogLine {
   zone?: ZoneName;
   value: number;
   note: string;
+  /** Carried from the record so the host can filter fired defining traits for animation. */
+  animation?: 'moment' | 'aura';
 }
 
 export interface DispatchResult {
@@ -300,7 +316,14 @@ function laneVectors(cells: Record<Cell, Record<ZoneName, number>>): {
 // Conditions (declarative; evaluated against the owner card)
 // ---------------------------------------------------------------------------
 
-function conditionHolds(condition: TraitCondition | undefined, owner: DispatchCard): boolean {
+/** Default box-target archetypes for `box-target-present` (a genuine goal threat up top). */
+const BOX_TARGET_ARCHETYPES = ['Striker', 'Target', 'Powerhouse'];
+
+function conditionHolds(
+  condition: TraitCondition | undefined,
+  owner: DispatchCard,
+  ctx?: { team?: DispatchCard[]; increment?: number },
+): boolean {
   if (!condition) return true;
   switch (condition.kind) {
     case 'always': return true;
@@ -312,6 +335,18 @@ function conditionHolds(condition: TraitCondition | undefined, owner: DispatchCa
       return condition.anyOf
         ? condition.anyOf.includes(owner.archetype)
         : owner.archetype === condition.archetype;
+    case 'box-target-present': {
+      const team = ctx?.team ?? [];
+      const arch = condition.archetypes ?? BOX_TARGET_ARCHETYPES;
+      return team.some((c) => c.id !== owner.id && bandOf(c.cell) === 'ATT' && arch.includes(c.archetype));
+    }
+    case 'backline-count': {
+      const team = ctx?.team ?? [];
+      const n = team.filter((c) => c.side === 'defence' || bandOf(c.cell) === 'DEF').length;
+      return n >= condition.min;
+    }
+    case 'late-game':
+      return (ctx?.increment ?? 0) >= condition.fromIncrement;
     default: return true;
   }
 }
@@ -503,7 +538,7 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
 };
 
 function pushLog(ctx: VerbContext, zone: ZoneName | undefined, value: number, note: string): void {
-  ctx.log.push({ cardId: ctx.owner.id, trait: ctx.record.name, verb: ctx.record.verb, zone, value, note });
+  ctx.log.push({ cardId: ctx.owner.id, trait: ctx.record.name, verb: ctx.record.verb, zone, value, note, animation: ctx.record.animation });
 }
 
 // ---------------------------------------------------------------------------
@@ -550,8 +585,11 @@ export function dispatchTraits(
 
   const collected: CollectedRecord[] = [];
   for (const owner of ordered) {
+    // Team-/increment-aware conditions read the owner's own side and the increment;
+    // the score is deliberately NOT threaded (the dispatcher stays pure).
+    const ownTeam = owner.team === 'player' ? playerTeam : opponentTeam;
     for (const record of owner.traits) {
-      if (conditionHolds(record.condition, owner)) collected.push({ record, owner });
+      if (conditionHolds(record.condition, owner, { team: ownTeam, increment })) collected.push({ record, owner });
     }
   }
 

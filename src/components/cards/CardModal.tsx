@@ -37,6 +37,8 @@ import {
   formatCash,
   nationFlag,
   nationCode,
+  definingTraitsFor,
+  type ResolvedTrait,
 } from './cardTokens';
 
 interface CardModalProps {
@@ -218,6 +220,9 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
   const flag = nationFlag(card.nation);
   const nation = flag ? `${flag} ${card.nation}` : card.nation ?? '—';
   const dur = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
+  // Defining traits — the marquee "what this card DOES" list. Signature/legend
+  // loadouts surface first; otherwise the seeded rarity-count pick.
+  const traits = definingTraitsFor(card);
   return (
     <div className="flex flex-col" style={{ gap: 10 }}>
       <Panel>
@@ -256,6 +261,8 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
           </div>
         )}
       </Panel>
+
+      {traits.length > 0 && <TraitsSection traits={traits} rarity={card.rarity} accent={accent} />}
 
       {card.abilityText && (
         <Panel>
@@ -309,6 +316,89 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
           )}
         </Panel>
       )}
+    </div>
+  );
+}
+
+/**
+ * The marquee Traits section — the place a player reads what a card actually DOES.
+ * Each defining trait is glyph + label + one-line blurb, coloured by its kind.
+ * Rarity lands as identity here: a Legendary fills this panel with 4 actions, a
+ * Common with 1. Signature/legend traits sort first and carry a SIGNATURE badge.
+ */
+function TraitsSection({ traits, rarity, accent }: { traits: ResolvedTrait[]; rarity: string; accent: string }) {
+  // Signature traits first, original order preserved within each group.
+  const ordered = [...traits].sort((a, b) => Number(b.signature) - Number(a.signature));
+  return (
+    <Panel>
+      <div className="flex items-center justify-between" style={{ gap: 8 }}>
+        <Label>DEFINING TRAITS</Label>
+        <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.5, color: accent, lineHeight: 1 }}>
+          {rarity.toUpperCase()} · {ordered.length}
+        </span>
+      </div>
+      <div className="flex flex-col" style={{ gap: 8 }}>
+        {ordered.map((t, i) => (
+          <TraitRow key={`${t.name}-${i}`} trait={t} />
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+/** One defining-trait row: a coloured pixel glyph badge, the label (+ signature
+ *  marker), and the Marvel-Snap-voice blurb of what the action does. */
+function TraitRow({ trait }: { trait: ResolvedTrait }) {
+  const { color, bg } = trait.style;
+  return (
+    <div className="flex" style={{ gap: 9, alignItems: 'flex-start' }}>
+      {/* Kind glyph badge — a hard pixel chip in the trait's kind colour. */}
+      <span
+        aria-hidden
+        style={{
+          flexShrink: 0,
+          width: 24,
+          height: 24,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: PIXEL,
+          fontSize: 13,
+          lineHeight: 1,
+          color,
+          background: bg,
+          border: `1px solid ${color}`,
+          borderRadius: 4,
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.28)',
+        }}
+      >
+        {trait.copy.glyph}
+      </span>
+      <div className="flex flex-col" style={{ gap: 2, minWidth: 0, flex: 1 }}>
+        <div className="flex items-center" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 10.5, color, letterSpacing: 0.3, lineHeight: 1.1 }}>
+            {trait.copy.label.toUpperCase()}
+          </span>
+          {trait.signature && (
+            <span
+              style={{
+                fontFamily: PIXEL,
+                fontSize: 6.5,
+                letterSpacing: 0.6,
+                lineHeight: 1,
+                color: 'var(--gold)',
+                background: 'rgba(245,197,66,0.12)',
+                border: '1px solid var(--gold)',
+                borderRadius: 3,
+                padding: '2px 4px',
+              }}
+            >
+              SIGNATURE
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: 11, lineHeight: 1.4, color: 'var(--cream-soft)' }}>{trait.copy.blurb}</span>
+      </div>
     </div>
   );
 }

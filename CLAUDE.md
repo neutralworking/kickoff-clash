@@ -55,6 +55,8 @@ No test framework is installed. The match engine was validated via `scripts/matc
 | `economy.ts` | Attendance, revenue, shop item generation |
 | `packs.ts` | Seeded, weighted card pack draws |
 | `hand.ts` | Intermediate hand-evaluation layer (status uncertain — verify before editing) |
+| `defining-traits.ts` | The action-trait layer (CARDS_V1 §4): `pickDefiningTraits(card)` assigns N action-traits by rarity (Common 1 / Rare 2 / Epic 3 / Legendary 4) over the verb palette; `SIGNATURE_OVERRIDES` are the bespoke showcase legends. **Player-only** — opponents opt out (`computeSideField` `includeDefiningTraits=false`). |
+| `trait-copy.ts` | Display-only single source of truth for defining-trait words/icons (`traitCopy(name)` → label/blurb/kind/glyph) — read by the card pills AND the match animations so the two surfaces never drift. |
 
 ### Match scoring cascade (per increment)
 
@@ -114,4 +116,12 @@ squad tiers to read the raw power→win-rate curve (used to place the cup finals
 - **Archetype distribution skew — FIXED (data port).** The flat skillset mix in `kc_cards.json`
   (Dribbler 8.1%, Creator 12%) replaces the old Creator-16.8%/Dribbler-1.4% skew, so the
   counter-web is now evenly grounded.
+- **Defining-trait library coverage — PARTIAL (Trait v1 vertical slice).** 8 outfield
+  action-traits cover ~94% of cards at full rarity depth; **30/540 (5.6%) are under-filled**
+  (defining count < rarity count) — **24 are GKs** (the keeper pool is just `Leadership` by
+  design, with shot-stopping in the role baseline; keepers need bespoke GK traits — Sweeper
+  Keeper / Penalty Specialist — that don't exist yet), the other 6 are Epic/Legendary
+  Dribbler/Destroyer/Powerhouse on thin pools. Filling these = the "full trait library across
+  540 cards" phase (deferred). The bespoke showcase legends (`SIGNATURE_OVERRIDES`) all show 4.
+  Balance was validated on the current pools; padding them re-opens the sweep.
 - `design/` — contains fbal-era (Python/Flask prototype) docs. `design/CLAUDE.md`, `design/README.md`, `design/ROADMAP.md` describe a different codebase and should be treated as historical only.

@@ -15,6 +15,8 @@ import { subBlockReason, cumulativeStats } from '../../lib/match-v5';
 import type { CumulativeStats } from '../../lib/match-v5';
 import { coachNotes } from '../../lib/assistant';
 import type { CoachNote } from '../../lib/assistant';
+import { traitCopy } from '../../lib/trait-copy';
+import type { TraitKind } from '../../lib/trait-copy';
 import CardModal from '../cards/CardModal';
 import type { GameCardModel } from '../cards/GameCard';
 import { PIXEL, lastName, POSITION_COLOR, RARITY_COLOR, TACTIC_CAT_COLOR } from '../cards/cardTokens';
@@ -323,6 +325,80 @@ function MiniSprite({ side, isGK, accent }: { side: 'you' | 'opp'; isGK: boolean
       {/* crest */}
       <rect x="11" y="13" width="2" height="2" fill={accent} />
     </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TraitFiringLayer — the on-pitch beat for a defining trait that FIRED.
+//
+// The engine surfaces every firing in `IncrementResult.split.traitEvents`; this
+// layer turns each into a visible beat anchored on the firing card's pitch
+// coordinate (resolved by the caller, which knows the formation geometry).
+//   • MOMENT kinds (cross/shot/setpiece/poach/tackle/offside) — a one-shot glyph
+//     burst with a kind-appropriate motion, then clears (~600–900ms).
+//   • AURA kinds (aura/engine) — a persistent breathing ring + glyph held for the
+//     whole resolving increment (Leadership emanating, Engine Room late-game ring).
+// Deterministic: placement is the card's slot; the only per-event variation is a
+// stagger by event index so several firings read in sequence, not as mush.
+// ---------------------------------------------------------------------------
+
+// kind → the animation class + accent the firing plays. MOMENTS map to their
+// bespoke keyframe; AURAS share the held ring. Accent reads the trait family
+// colour (kit-blue deliveries, gold leadership, amber strikes, success defence).
+const TRAIT_KIND_STYLE: Record<TraitKind, { anim: string; accent: string; moment: boolean }> = {
+  cross:    { anim: 'trait-cross',    accent: 'var(--kit-blue)', moment: true },
+  shot:     { anim: 'trait-shot',     accent: 'var(--amber)',    moment: true },
+  setpiece: { anim: 'trait-setpiece', accent: 'var(--gold)',     moment: true },
+  poach:    { anim: 'trait-poach',    accent: 'var(--kit-red)',  moment: true },
+  tackle:   { anim: 'trait-tackle',   accent: 'var(--success)',  moment: true },
+  offside:  { anim: 'trait-offside',  accent: 'var(--cream-soft)', moment: true },
+  aura:     { anim: 'trait-aura',     accent: 'var(--gold)',     moment: false },
+  engine:   { anim: 'trait-aura',     accent: 'var(--kit-blue)', moment: false },
+};
+
+interface TraitFiring {
+  key: string;          // stable per (cardId, traitName)
+  x: number;            // pitch % left
+  y: number;            // pitch % top
+  glyph: string;
+  label: string;
+  kind: TraitKind;
+  index: number;        // stagger order among the moment firings
+}
+
+/** One trait firing rendered on the pitch. Moments flash and clear; auras hold. */
+function TraitMarker({ firing, dur }: { firing: TraitFiring; dur: (ms: number) => string | undefined }) {
+  const { anim, accent, moment } = TRAIT_KIND_STYLE[firing.kind];
+  // Stagger moments by ~220ms so a busy increment reads as a sequence.
+  const delayMs = moment ? firing.index * 220 : 0;
+  const delay = delayMs ? `${delayMs}ms` : undefined;
+
+  if (!moment) {
+    // AURA — a persistent breathing ring + centred glyph, held all increment.
+    return (
+      <div style={{ position: 'absolute', left: `${firing.x}%`, top: `${firing.y}%`, zIndex: 7, pointerEvents: 'none' }}>
+        {/* Held ring around the card. */}
+        <div className="trait-aura" style={{ position: 'absolute', left: 0, top: 0, width: CARD_W + 14, height: CARD_H + 14, transform: 'translate(-50%,-50%)', borderRadius: 'var(--radius)', border: `2px solid ${accent}`, boxShadow: `0 0 12px ${accent}`, opacity: 0.7 }} />
+        {/* Glyph badge pinned just above the card head. */}
+        <div className="trait-aura-glyph" style={{ position: 'absolute', left: 0, top: -(CARD_H / 2) - 10, transform: 'translate(-50%,-50%)', fontFamily: PIXEL, fontSize: 13, color: 'var(--ink-black)', background: accent, border: '2px solid var(--ink-black)', borderRadius: 4, padding: '2px 4px', lineHeight: 1, boxShadow: '0 2px 0 0 var(--ink-black)', whiteSpace: 'nowrap' }}>
+          {firing.glyph}
+        </div>
+      </div>
+    );
+  }
+
+  // MOMENT — a one-shot glyph burst + a lifting label caption, anchored on the card.
+  return (
+    <div style={{ position: 'absolute', left: `${firing.x}%`, top: `${firing.y}%`, zIndex: 9, pointerEvents: 'none' }}>
+      {/* The kind-motion glyph burst. */}
+      <div className={anim} style={{ position: 'absolute', left: 0, top: 0, transform: 'translate(-50%,-50%)', fontFamily: PIXEL, fontSize: 22, lineHeight: 1, color: accent, textShadow: '0 2px 0 var(--ink-black)', animationDelay: delay, animationDuration: dur(820) }}>
+        {firing.glyph}
+      </div>
+      {/* The trait-name caption lifts off the card so a player reads WHAT fired. */}
+      <div className="trait-tag" style={{ position: 'absolute', left: 0, top: -(CARD_H / 2) - 2, transform: 'translate(-50%,0)', fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.3, color: 'var(--ink-black)', background: accent, border: '1.5px solid var(--ink-black)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, whiteSpace: 'nowrap', boxShadow: '0 1px 0 0 var(--ink-black)', animationDelay: delay, animationDuration: dur(820) }}>
+        {firing.label}
+      </div>
+    </div>
   );
 }
 
@@ -1025,6 +1101,46 @@ export default function PitchMatchView({
   const timeline = useMemo(() => (currentResult ? buildTimeline(currentResult) : []), [currentResult]);
   const beat = beatIdx >= 0 && beatIdx < timeline.length ? timeline[beatIdx] : null;
 
+  // ── DEFINING-TRAIT FIRINGS (Task #12) — the engine surfaces every trait that
+  // fired this increment in `split.traitEvents`; we anchor each to the firing
+  // card's pitch coordinate. Only firings for cards on the CURRENTLY VISIBLE side
+  // render (events whose cardId isn't positioned on this pitch are skipped, never
+  // crashed). Moments stagger by index so a busy spell reads in sequence; auras
+  // hold the whole increment. Deduped defensively by (cardId, traitName). ──
+  const traitFirings = useMemo<TraitFiring[]>(() => {
+    if (mode !== 'resolve' || !currentResult) return [];
+    const events = currentResult.split.traitEvents ?? [];
+    if (events.length === 0) return [];
+    // Position lookup for the visible pitch (your XI, or the rival when scouting).
+    const byCard = new Map<number, PitchSpot>();
+    for (const s of spots) if (s.cardId !== undefined) byCard.set(s.cardId, s);
+    const out: TraitFiring[] = [];
+    const seen = new Set<string>();
+    let momentIdx = 0;
+    for (const ev of events) {
+      const key = `${ev.cardId}-${ev.traitName}`;
+      if (seen.has(key)) continue;
+      const spot = byCard.get(ev.cardId);
+      if (!spot) continue; // card not on the visible pitch — skip, don't crash.
+      seen.add(key);
+      const copy = traitCopy(ev.traitName);
+      // The VISUAL family (one-shot moment vs held aura) is driven by the trait's
+      // kind so the pitch animation always matches the on-card pill — trait-copy
+      // is the single source of truth both surfaces read.
+      const isMoment = TRAIT_KIND_STYLE[copy.kind].moment;
+      out.push({
+        key,
+        x: spot.slot.x,
+        y: spot.slot.y,
+        glyph: copy.glyph,
+        label: copy.label,
+        kind: copy.kind,
+        index: isMoment ? momentIdx++ : 0,
+      });
+    }
+    return out;
+  }, [mode, currentResult, spots]);
+
   // Reset the playhead when we leave resolve mode (back to planning).
   useEffect(() => {
     if (mode === 'resolve') return;
@@ -1707,12 +1823,39 @@ export default function PitchMatchView({
           </div>
         )}
 
-        {/* GOAL / CONCEDED eruption (driven by the goal beat) */}
-        {resolving && beat && beat.kind === 'goal' && (
-          <div key={`erupt-${beatIdx}`} className="goal-erupt" style={{ position: 'absolute', left: '50%', top: '50%', zIndex: 10, pointerEvents: 'none', fontFamily: PIXEL, fontSize: beat.side === 'you' ? 40 : 34, color: beat.side === 'you' ? 'var(--success)' : 'var(--danger)', textShadow: '0 3px 0 var(--ink-black)', whiteSpace: 'nowrap', animationDuration: dur(1450) }}>
-            {beat.side === 'you' ? 'GOAL!' : 'CONCEDED'}
-          </div>
-        )}
+        {/* ---- DEFINING-TRAIT FIRINGS (Task #12) ---- a beat per trait that fired
+            this increment, anchored on its card. Moments flash & clear (staggered);
+            auras hold the whole increment. Sits below the goal eruption in z. */}
+        {resolving && traitFirings.map((f) => (
+          <TraitMarker key={f.key} firing={f} dur={dur} />
+        ))}
+
+        {/* GOAL / CONCEDED eruption (driven by the goal beat) — names its hero.
+            The scorer (and assister) ride beneath the word so a goal isn't anonymous;
+            both come off the engine's MatchBeat (beat.source), surnamed via lastName. */}
+        {resolving && beat && beat.kind === 'goal' && (() => {
+          const scorer = beat.source?.scorerName ?? null;
+          const assister = beat.source?.assisterName ?? null;
+          const scored = beat.side === 'you';
+          const accent = scored ? 'var(--success)' : 'var(--danger)';
+          return (
+            <div key={`erupt-${beatIdx}`} className="goal-erupt" style={{ position: 'absolute', left: '50%', top: '50%', zIndex: 10, pointerEvents: 'none', display: 'grid', justifyItems: 'center', gap: 5, whiteSpace: 'nowrap', animationDuration: dur(1450) }}>
+              <span style={{ fontFamily: PIXEL, fontSize: scored ? 40 : 34, lineHeight: 1, color: accent, textShadow: '0 3px 0 var(--ink-black)' }}>
+                {scored ? 'GOAL!' : 'CONCEDED'}
+              </span>
+              {/* Scorer's surname — the named hero. Falls back to the side when the
+                  engine couldn't attribute the goal (e.g. an own-goal / no scorer). */}
+              <span style={{ fontFamily: PIXEL, fontSize: 14, lineHeight: 1, color: 'var(--cream)', background: 'var(--surface)', border: `2px solid ${accent}`, borderRadius: 'var(--radius-sm)', padding: '4px 8px', boxShadow: '0 2px 0 0 var(--ink-black)', letterSpacing: 0.4 }}>
+                {scorer ? lastName(scorer).toUpperCase() : scored ? 'YOUR XI' : 'OPPONENT'}
+              </span>
+              {assister && (
+                <span style={{ fontFamily: PIXEL, fontSize: 8.5, lineHeight: 1, color: 'var(--dust)', letterSpacing: 0.3 }}>
+                  {`ASSIST · ${lastName(assister).toUpperCase()}`}
+                </span>
+              )}
+            </div>
+          );
+        })()}
 
         {/* FIX 3 — Opponent intel while viewing the opposition. The SOFT SPOT
             scouting card no longer sits over the keeper: the opponent's GK is at
@@ -1816,13 +1959,34 @@ export default function PitchMatchView({
       <div style={{ display: 'flex', gap: 10, padding: '8px 16px 14px', flexShrink: 0 }}>
         <button onClick={() => setOppView((v) => !v)} style={{ flex: '0 0 104px', padding: '11px 0', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: oppView ? 'var(--surface-raised)' : 'var(--surface)', color: 'var(--cream)', fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.3, cursor: 'pointer', lineHeight: 1.3 }}>{oppView ? 'VIEW TEAM' : 'VIEW OPP'}</button>
         {/* ONE consistent advance verb. KICK OFF only at the very first kickoff;
-            CONTINUE for every later advance. While resolving the button is the
-            disabled PLAYING… state — the per-period stats screen (which rises once
-            the animation finishes) carries the CONTINUE that proceeds. */}
+            CONTINUE for every later advance. While resolving, this is the SINGLE
+            tap-gate (the per-period stats screen carries the real CONTINUE once the
+            animation finishes). DEAD-AIR FIX: the resolving state is no longer a
+            frozen grey frame — it reads as LIVE: a match-green tint, a sweeping
+            sheen, a breathing ellipsis and the ticking clock, so the period feels
+            in motion while the pitch animations play. */}
         <button onClick={onContinue} disabled={resolving}
           className={resolving ? undefined : 'advance-btn-pulse'}
-          style={{ flex: 1, padding: '11px 0', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 4px 0 0 var(--ink-black)', background: resolving ? 'var(--surface)' : 'linear-gradient(135deg, var(--amber), var(--amber-soft))', color: resolving ? 'var(--dust)' : 'var(--cream)', fontFamily: PIXEL, fontSize: 15, cursor: resolving ? 'default' : 'pointer', transition: 'background 200ms, color 200ms' }}>
-          {resolving ? 'PLAYING…' : isFirstKickoff ? 'KICK OFF →' : 'CONTINUE →'}
+          style={{ flex: 1, position: 'relative', overflow: 'hidden', padding: '11px 0', borderRadius: 'var(--radius)', border: `2px solid ${resolving ? 'var(--success)' : 'var(--ink-black)'}`, boxShadow: '0 4px 0 0 var(--ink-black)', background: resolving ? 'linear-gradient(135deg, #143a24, #0f2c1b)' : 'linear-gradient(135deg, var(--amber), var(--amber-soft))', color: resolving ? 'var(--cream)' : 'var(--cream)', fontFamily: PIXEL, fontSize: 15, cursor: resolving ? 'default' : 'pointer', transition: 'background 200ms, color 200ms' }}>
+          {resolving ? (
+            <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, zIndex: 1 }}>
+              {/* Live dot — mirrors the header's resolving status pulse. */}
+              <span className="carrier-glow" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 6px var(--success)', flexShrink: 0 }} />
+              <span style={{ letterSpacing: 0.6 }}>PLAYING</span>
+              {/* Breathing ellipsis — the dead-air tell that the frame is alive. */}
+              <span aria-hidden style={{ display: 'inline-flex', alignItems: 'baseline', gap: 2 }}>
+                {[0, 1, 2].map((i) => (
+                  <span key={i} className="playing-dot" style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--cream-soft)', animationDelay: `${i * 180}ms` }} />
+                ))}
+              </span>
+              {/* Live clock — the period visibly ticking under the CTA. */}
+              <span style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--cream-soft)', fontVariantNumeric: 'tabular-nums', marginLeft: 2 }}>{clockMMSS}</span>
+            </span>
+          ) : (isFirstKickoff ? 'KICK OFF →' : 'CONTINUE →')}
+          {/* A slow sheen sweep across the resolving CTA — never a dead frame. */}
+          {resolving && (
+            <span aria-hidden className="playing-sweep" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(105deg, transparent 35%, rgba(52,196,106,0.22) 50%, transparent 65%)', pointerEvents: 'none' }} />
+          )}
         </button>
       </div>
 
