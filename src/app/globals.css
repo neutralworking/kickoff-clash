@@ -56,6 +56,33 @@
   --dust: #88a08c;            /* muted / caption text */
   --ink: #5a7561;             /* disabled / faint text on dark */
 
+  /* --- Glass chrome (depth layer — see DESIGN.md › Glass chrome) ----------
+     The shell becomes premium frosted glass: translucent night-pitch fills
+     over a blurred backdrop, a bright top inner-highlight, a soft sheen, a
+     tight accent/rarity glow, and a real elevation-shadow hierarchy. These
+     live UNDER and AROUND the pixel content — they never smudge a sprite or
+     an --ink-black pixel edge. Always paired with a solid fallback.          */
+  --glass-fill: rgba(18, 42, 27, 0.58);          /* translucent --surface */
+  --glass-fill-strong: rgba(24, 55, 31, 0.78);   /* denser raised glass */
+  --glass-border: rgba(180, 226, 196, 0.16);     /* subtle light edge */
+  --glass-highlight: rgba(242, 246, 239, 0.22);  /* bright top inner-highlight */
+  --glass-fallback: #122a1b;                     /* opaque where blur absent */
+  --glass-fallback-strong: #18371f;
+
+  /* Accent / rarity glows — tight coloured halos for focus & rarity. */
+  --purple: #8b5cf6;                             /* epic rarity hue */
+  --glow-soft: rgba(242, 246, 239, 0.20);        /* neutral focus halo */
+  --glow-rare: rgba(47, 127, 224, 0.50);         /* kit-blue */
+  --glow-epic: rgba(139, 92, 246, 0.52);         /* purple */
+  --glow-legendary: rgba(245, 197, 66, 0.52);    /* gold */
+
+  /* Elevation scale — layered soft shadows; height + spread rise together.
+     Pairs with the pixel-edge drop shadow on hard-edged tokens; here it lifts
+     glass panels to real heights ("raised" = higher, not just lighter). */
+  --depth-1: 0 1px 2px rgba(2, 9, 5, 0.35), 0 2px 6px rgba(2, 9, 5, 0.28);
+  --depth-2: 0 2px 4px rgba(2, 9, 5, 0.38), 0 6px 16px rgba(2, 9, 5, 0.40);
+  --depth-3: 0 4px 8px rgba(2, 9, 5, 0.42), 0 14px 36px rgba(2, 9, 5, 0.48);
+
   /* --- Radius (pixel system stays tight) ---------------------------------- */
   --radius: 8px;
   --radius-sm: 4px;
@@ -80,6 +107,18 @@ body {
   font-family: var(--font-body);
 }
 
+/* .kc-app-bg — the deep glassy night-pitch app background: a faint top sheen of
+   light, a soft turf glow, and an edge vignette over --felt. Richer than a flat
+   fill, but quiet enough that pixel content reads cleanly on top. Use on a phase
+   shell's root in place of `background: var(--felt)`. */
+.kc-app-bg {
+  background:
+    radial-gradient(120% 70% at 50% -12%, rgba(242, 246, 239, 0.06) 0%, transparent 46%),
+    radial-gradient(90% 60% at 50% 8%, rgba(31, 157, 79, 0.10) 0%, transparent 60%),
+    radial-gradient(150% 130% at 50% 50%, transparent 52%, rgba(2, 9, 5, 0.62) 100%),
+    var(--felt);
+}
+
 /* Pixel display faces render crisper without sub-pixel smoothing artefacts on
    hard edges; body stays antialiased for legible running text. */
 h1, h2, h3,
@@ -88,11 +127,106 @@ h1, h2, h3,
   letter-spacing: 0.01em;
 }
 
-/* Phase Visual Differentiation */
+/* ===========================================================================
+   GLASS CHROME — the depth layer (DESIGN.md › Glass chrome)
+   Premium frosted-glass primitives for the app SHELL (panels, HUD, buttons,
+   tab bars, sheets). The pixel content (.pixel-edge / .pitch-stripes /
+   .pixelated / sprites / Silkscreen) is NEVER blurred or soft-shadowed — glass
+   lives under and around it.
+
+   PERFORMANCE: backdrop-filter blur is GPU-accelerated but not free. Keep blur
+   radii modest (8–16px) and avoid stacking many large blurred layers in one
+   view — prefer a few glass panels over a glass-on-glass-on-glass pileup.
+   =========================================================================== */
+
+/* .glass-surface — translucent fill over a blurred backdrop, a 1px light edge,
+   and a bright inner top-highlight (the "lit glass" tell, via inset shadow). */
+.glass-surface {
+  position: relative;
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  backdrop-filter: blur(12px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-highlight),   /* bright top inner-highlight */
+    inset 0 0 0 1px rgba(2, 9, 5, 0.10);       /* faint inner seat */
+}
+
+/* .glass-raised — glass surface that sits at a real height (elevation 2). */
+.glass-raised {
+  position: relative;
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: blur(14px) saturate(1.35);
+  backdrop-filter: blur(14px) saturate(1.35);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-highlight),
+    var(--depth-2);
+}
+
+/* Solid fallback where backdrop-filter is unsupported — opaque, never see-through
+   onto raw background. Highlight/border are retained so the look survives. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-surface { background: var(--glass-fallback); }
+  .glass-raised { background: var(--glass-fallback-strong); }
+}
+
+/* .sheen — a faint diagonal gloss band swept across the surface. Non-interactive
+   overlay; the host must establish a stacking context (position + overflow). */
+.sheen { position: relative; }
+.sheen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    rgba(242, 246, 239, 0.07) 38%,
+    rgba(242, 246, 239, 0.14) 47%,
+    rgba(242, 246, 239, 0.04) 56%,
+    transparent 72%
+  );
+  z-index: 1;
+}
+
+/* .sheen-strong — a brighter, tighter gloss for CTAs and hero surfaces. */
+.sheen-strong::before {
+  background: linear-gradient(
+    112deg,
+    transparent 0%,
+    rgba(242, 246, 239, 0.10) 36%,
+    rgba(242, 246, 239, 0.30) 48%,
+    rgba(242, 246, 239, 0.08) 60%,
+    transparent 78%
+  );
+}
+
+/* .glow-edge — outer accent glow ring driven by --glow (default soft). Callers
+   set the colour per element: style={{ '--glow': 'var(--glow-legendary)' }}. */
+.glow-edge {
+  --glow: var(--glow-soft);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--glow) 70%, transparent),
+              0 0 16px 1px var(--glow);
+}
+
+/* .depth-1 / .depth-2 / .depth-3 — elevation utilities mapping to the tokens. */
+.depth-1 { box-shadow: var(--depth-1); }
+.depth-2 { box-shadow: var(--depth-2); }
+.depth-3 { box-shadow: var(--depth-3); }
+
+/* Phase Visual Differentiation
+   Each phase shell reads as a deep glassy night-pitch: a radial vignette that
+   darkens the edges, a faint top sheen of phase-accent light, over --felt.
+   The pixel content layers on top untouched. */
 
 .phase-setup {
-  background: linear-gradient(135deg, #0b1a10 0%, #0f1e14 30%, #0b1a10 60%, #111d15 100%);
-  background-size: 400% 400%;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(47, 127, 224, 0.10) 0%, transparent 52%),
+    radial-gradient(140% 120% at 50% 50%, transparent 56%, rgba(2, 9, 5, 0.55) 100%),
+    linear-gradient(135deg, #0b1a10 0%, #0f1e14 30%, #0b1a10 60%, #111d15 100%);
+  background-size: 100% 100%, 100% 100%, 400% 400%;
   animation: setupGradient 12s ease infinite;
 }
 
@@ -103,7 +237,10 @@ h1, h2, h3,
 }
 
 .phase-match {
-  background: linear-gradient(180deg, rgba(45,138,78,0.18) 0%, transparent 30%, var(--felt) 100%);
+  background:
+    radial-gradient(130% 90% at 50% 0%, rgba(31, 157, 79, 0.20) 0%, transparent 42%),
+    radial-gradient(140% 120% at 50% 50%, transparent 58%, rgba(2, 9, 5, 0.50) 100%),
+    linear-gradient(180deg, rgba(45,138,78,0.10) 0%, transparent 30%, var(--felt) 100%);
 }
 
 .phase-match .commentary-feed {
@@ -112,11 +249,17 @@ h1, h2, h3,
 }
 
 .phase-shop {
-  background: linear-gradient(180deg, rgba(212,160,53,0.12) 0%, transparent 25%, var(--felt) 100%);
+  background:
+    radial-gradient(120% 80% at 50% -8%, rgba(255, 122, 31, 0.14) 0%, transparent 50%),
+    radial-gradient(140% 120% at 50% 50%, transparent 56%, rgba(2, 9, 5, 0.55) 100%),
+    linear-gradient(180deg, rgba(212,160,53,0.08) 0%, transparent 25%, var(--felt) 100%);
 }
 
 .phase-postmatch {
-  background: radial-gradient(ellipse at center top, rgba(232,98,26,0.08) 0%, transparent 50%, var(--felt) 100%);
+  background:
+    radial-gradient(120% 80% at 50% -6%, rgba(232, 98, 26, 0.12) 0%, transparent 50%),
+    radial-gradient(140% 120% at 50% 50%, transparent 56%, rgba(2, 9, 5, 0.55) 100%),
+    radial-gradient(ellipse at center top, rgba(232,98,26,0.04) 0%, transparent 50%, var(--felt) 100%);
 }
 
 /* Goal commentary styling */
@@ -160,7 +303,10 @@ h1, h2, h3,
 
 /* Card reveal phase background */
 .phase-reveal {
-  background: radial-gradient(ellipse at 50% 40%, rgba(212,160,53,0.08) 0%, transparent 50%, var(--felt) 100%);
+  background:
+    radial-gradient(120% 80% at 50% 38%, rgba(245, 197, 66, 0.12) 0%, transparent 50%),
+    radial-gradient(140% 120% at 50% 50%, transparent 56%, rgba(2, 9, 5, 0.55) 100%),
+    radial-gradient(ellipse at 50% 40%, rgba(212,160,53,0.04) 0%, transparent 50%, var(--felt) 100%);
 }
 
 /* 3D card flip system */
@@ -419,6 +565,26 @@ h1, h2, h3,
 /* Pixelated rendering helper for sprite-like chips */
 .pixelated {
   image-rendering: pixelated;
+}
+
+/* ---------------------------------------------------------------------------
+   Card foil — Legendary-only animated sheen sweep (card layer; owned by the
+   card-designer agent). Drives the diagonal gloss band that travels across a
+   gold card so the foil reads as live light, not a static gradient. The sweep
+   lives on the GLASS frame overlay only — it never touches the pixel interior.
+   --------------------------------------------------------------------------- */
+@keyframes cardFoilSweep {
+  0% { transform: translateX(-120%) skewX(-18deg); opacity: 0; }
+  12% { opacity: 1; }
+  45% { opacity: 1; }
+  60% { transform: translateX(120%) skewX(-18deg); opacity: 0; }
+  100% { transform: translateX(120%) skewX(-18deg); opacity: 0; }
+}
+.card-foil {
+  animation: cardFoilSweep 4.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-foil { animation: none; opacity: 0.5; transform: skewX(-18deg); }
 }
 
 /* The sealed pack idles with a tiny breathing wobble, inviting a tap. */

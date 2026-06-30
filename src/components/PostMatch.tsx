@@ -115,7 +115,6 @@ export default function PostMatch({
       className="phase-postmatch flex flex-col overflow-hidden relative"
       style={{
         height: '100dvh',
-        background: 'var(--felt)',
         paddingTop: 'max(env(safe-area-inset-top), 10px)',
         paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
       }}
@@ -123,12 +122,10 @@ export default function PostMatch({
       {/* ── Survival head: SURVIVED · scoreline · result ──────────────────── */}
       <div className="shrink-0 px-3">
         <div
-          className="relative overflow-hidden"
+          className="glass-raised sheen relative overflow-hidden"
           style={{
             borderRadius: 'var(--radius)',
-            border: '2px solid var(--ink-black)',
-            boxShadow: '0 3px 0 0 var(--ink-black)',
-            background: 'var(--surface)',
+            boxShadow: `inset 0 1px 0 0 var(--glass-highlight), 0 0 18px ${meta.color}33, var(--depth-2)`,
             padding: '10px 14px 12px',
           }}
         >
@@ -141,9 +138,9 @@ export default function PostMatch({
             }}
           />
           {/* accent rail in the result colour */}
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: meta.color }} />
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: meta.color, boxShadow: `0 0 8px ${meta.color}`, zIndex: 2 }} />
 
-          <div className="relative flex items-center justify-between" style={{ gap: 8 }}>
+          <div className="relative flex items-center justify-between" style={{ gap: 8, zIndex: 2 }}>
             <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 1.4, color: 'var(--dust)' }}>
               SURVIVED
             </span>
@@ -153,7 +150,7 @@ export default function PostMatch({
           </div>
 
           {/* Scoreline + result pill on one tight row */}
-          <div className="relative flex items-center justify-center" style={{ gap: 12, marginTop: 6 }}>
+          <div className="relative flex items-center justify-center" style={{ gap: 12, marginTop: 6, zIndex: 2 }}>
             <ScoreNum value={matchResult.yourGoals} win={matchResult.result === 'win'} />
             <span style={{ fontFamily: PIXEL, fontSize: 18, color: 'var(--ink)', lineHeight: 1, paddingBottom: 6 }}>
               {'–'}
@@ -161,7 +158,7 @@ export default function PostMatch({
             <ScoreNum value={matchResult.opponentGoals} win={false} />
           </div>
 
-          <div className="relative flex items-center justify-center" style={{ marginTop: 6 }}>
+          <div className="relative flex items-center justify-center" style={{ marginTop: 6, zIndex: 2 }}>
             <span
               className="score-pop"
               style={{
@@ -221,21 +218,23 @@ export default function PostMatch({
       <div className="shrink-0 px-3" style={{ paddingTop: 10 }}>
         <button
           onClick={onContinue}
-          className="w-full active:scale-[0.99] advance-btn-pulse"
+          className="sheen-strong glow-edge w-full active:scale-[0.99] advance-btn-pulse relative overflow-hidden"
           style={{
             height: 52,
             borderRadius: 'var(--radius)',
             border: '2px solid var(--ink-black)',
             background: 'linear-gradient(180deg, var(--amber) 0%, var(--amber-soft) 100%)',
-            boxShadow: '0 3px 0 0 var(--ink-black), 0 4px 14px var(--amber-glow)',
+            boxShadow:
+              'inset 0 1px 0 0 var(--glass-highlight), 0 3px 0 0 var(--ink-black), var(--depth-2)',
             fontFamily: PIXEL,
             fontSize: 14,
             letterSpacing: 0.8,
             color: 'var(--line-white)',
             textTransform: 'uppercase',
+            ['--glow' as string]: 'var(--amber-glow)',
           }}
         >
-          Continue to Shop {'→'}
+          <span className="relative" style={{ zIndex: 2 }}>Continue to Shop {'→'}</span>
         </button>
       </div>
 
@@ -282,20 +281,18 @@ function SurvivalTab({
   return (
     <div
       key="survival"
-      className="h-full flex flex-col relative overflow-hidden stats-rise"
+      className="glass-raised sheen h-full flex flex-col relative overflow-hidden stats-rise"
       style={{
-        background: 'var(--surface)',
-        border: '2px solid var(--ink-black)',
         borderRadius: 'var(--radius)',
-        boxShadow: '0 2px 0 0 var(--ink-black)',
+        boxShadow: `inset 0 1px 0 0 var(--glass-highlight), 0 0 18px ${meta.color}22, var(--depth-2)`,
       }}
     >
       {/* result-tinted wash + accent rail unify the panel under the verdict colour */}
       <div
         className="absolute inset-0"
-        style={{ background: `radial-gradient(ellipse at 50% 12%, ${meta.color}22 0%, transparent 58%)`, pointerEvents: 'none' }}
+        style={{ background: `radial-gradient(ellipse at 50% 12%, ${meta.color}22 0%, transparent 58%)`, pointerEvents: 'none', zIndex: 1 }}
       />
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: meta.color }} />
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: meta.color, boxShadow: `0 0 8px ${meta.color}`, zIndex: 2 }} />
 
       {/* Three composed regions distributed across the FULL panel height with
           equal flex spacers between them (space-around) — no concentrated void:
@@ -304,7 +301,7 @@ function SurvivalTab({
       <div className="shrink-0" style={{ flex: 0.6 }} />
 
       {/* (1) Match marker */}
-      <div className="relative shrink-0 flex justify-center" style={{ padding: '0 18px' }}>
+      <div className="relative shrink-0 flex justify-center" style={{ padding: '0 18px', zIndex: 2 }}>
         <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1.4, color: 'var(--dust)' }}>
           MATCH {round} OF {totalRounds}
         </span>
@@ -313,7 +310,7 @@ function SurvivalTab({
       <div className="shrink-0" style={{ flex: 1 }} />
 
       {/* (2) Verdict poster + summary line + one-life fixture arc */}
-      <div className="relative shrink-0 flex flex-col items-center text-center" style={{ padding: '0 18px', gap: 14 }}>
+      <div className="relative shrink-0 flex flex-col items-center text-center" style={{ padding: '0 18px', gap: 14, zIndex: 2 }}>
         <span
           className="score-pop"
           style={{
@@ -339,15 +336,15 @@ function SurvivalTab({
       <div className="shrink-0" style={{ flex: 1 }} />
 
       {/* (3) The books — divider + reward readout, grounded in the lower third */}
-      <div className="relative shrink-0" style={{ padding: '0 14px' }}>
+      <div className="relative shrink-0" style={{ padding: '0 14px', zIndex: 2 }}>
         <div className="flex items-center" style={{ gap: 8 }}>
-          <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+          <span style={{ flex: 1, height: 1, background: 'var(--glass-border)' }} />
           <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>THE BOOKS</span>
-          <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+          <span style={{ flex: 1, height: 1, background: 'var(--glass-border)' }} />
         </div>
       </div>
 
-      <div className="relative shrink-0 grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', padding: '16px 14px 0' }}>
+      <div className="relative shrink-0 grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', padding: '16px 14px 0', zIndex: 2 }}>
         <EconStat label="Reward" value={`£${compact(matchResult.revenue)}`} sub={rewardSub} color="var(--gold)" delay={0} divider={false} />
         <EconStat label="Attendance" value={compact(matchResult.attendance)} sub="in seats" color="var(--cream)" delay={60} divider />
         <EconStat label="Survived" value={`${round}/${totalRounds}`} sub={`${wins} won`} color="var(--success)" delay={120} divider />
@@ -449,12 +446,10 @@ function SquadTab({
   return (
     <div
       key="squad"
-      className="h-full flex flex-col overflow-hidden stats-rise"
+      className="glass-raised sheen h-full flex flex-col overflow-hidden stats-rise relative"
       style={{
-        background: 'var(--surface)',
-        border: '2px solid var(--ink-black)',
         borderRadius: 'var(--radius)',
-        boxShadow: '0 2px 0 0 var(--ink-black)',
+        boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-2)',
       }}
     >
       <PanelHeader
@@ -471,7 +466,7 @@ function SquadTab({
 
       {/* Compact fate legend — only the fates that actually occurred. */}
       {hasAftermath && (
-        <div className="shrink-0 flex flex-wrap items-center" style={{ gap: 6, padding: '0 11px 9px' }}>
+        <div className="shrink-0 flex flex-wrap items-center relative" style={{ gap: 6, padding: '0 11px 9px', zIndex: 2 }}>
           {groups.map(({ tone, cards }) => (
             <span
               key={tone.key}
@@ -499,8 +494,8 @@ function SquadTab({
       )}
 
       <div
-        className="flex-1 min-h-0 overflow-y-auto"
-        style={{ overscrollBehavior: 'contain', padding: '0 11px 11px' }}
+        className="flex-1 min-h-0 overflow-y-auto relative"
+        style={{ overscrollBehavior: 'contain', padding: '0 11px 11px', zIndex: 2 }}
       >
         {!hasAftermath ? (
           <div
@@ -566,27 +561,30 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className="flex-1 active:scale-[0.98] relative"
+      className={`flex-1 active:scale-[0.98] relative overflow-hidden ${active ? 'sheen-strong glow-edge' : 'glass-surface sheen'}`}
       style={{
         height: 38,
         borderRadius: 'var(--radius-sm)',
-        border: '2px solid var(--ink-black)',
-        background: active ? 'var(--amber)' : 'var(--surface)',
-        boxShadow: '0 2px 0 0 var(--ink-black)',
+        border: active ? '1px solid var(--ink-black)' : undefined,
+        background: active ? 'linear-gradient(135deg, var(--amber), var(--amber-soft))' : undefined,
+        boxShadow: active
+          ? 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)'
+          : 'var(--depth-1)',
         fontFamily: PIXEL,
         fontSize: 10,
         letterSpacing: 0.6,
-        color: active ? 'var(--ink-black)' : 'var(--dust)',
+        color: active ? 'var(--ink-black)' : 'var(--cream-soft)',
         textTransform: 'uppercase',
+        ...(active ? { ['--glow' as string]: 'var(--amber-glow)' } : {}),
       }}
     >
-      {label}
+      <span className="relative" style={{ zIndex: 2 }}>{label}</span>
       {badge != null && (
         <span
           style={{
             position: 'absolute',
-            top: -6,
-            right: -5,
+            top: 3,
+            right: 4,
             minWidth: 16,
             height: 16,
             padding: '0 3px',
@@ -600,6 +598,7 @@ function TabButton({
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
+            zIndex: 3,
           }}
         >
           {badge}
@@ -612,8 +611,8 @@ function TabButton({
 /** Shared panel header chip: accent bar · pixel title · optional right slot. */
 function PanelHeader({ accent, title, right }: { accent: string; title: string; right?: React.ReactNode }) {
   return (
-    <div className="shrink-0 flex items-center" style={{ gap: 8, padding: '9px 11px' }}>
-      <span style={{ width: 4, height: 12, background: accent, borderRadius: 1, flexShrink: 0 }} />
+    <div className="shrink-0 flex items-center relative" style={{ gap: 8, padding: '9px 11px', zIndex: 2 }}>
+      <span style={{ width: 4, height: 12, background: accent, borderRadius: 1, flexShrink: 0, boxShadow: `0 0 8px ${accent}` }} />
       <span
         className="mr-auto truncate"
         style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.8, color: 'var(--cream)', textTransform: 'uppercase' }}
@@ -646,12 +645,14 @@ function ScoreNum({ value, win }: { value: number; win: boolean }) {
 function ReportLine({ line, tone }: { line: string; tone: GroupTone | null }) {
   return (
     <div
+      className={tone ? '' : 'glass-surface'}
       style={{
         fontSize: 11,
         lineHeight: 1.4,
         color: tone ? tone.color : 'var(--cream-soft)',
-        background: tone ? tone.bg : 'rgba(0,0,0,0.2)',
-        border: `1px solid ${tone ? tone.color : 'var(--border)'}`,
+        background: tone ? tone.bg : undefined,
+        border: tone ? `1px solid ${tone.color}` : undefined,
+        boxShadow: tone ? undefined : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
         borderRadius: 'var(--radius-sm)',
         padding: '7px 9px',
         display: 'flex',
@@ -753,7 +754,7 @@ function EconStat({
       style={{
         gap: 7,
         padding: '0 4px',
-        borderLeft: divider ? '1px solid var(--border)' : undefined,
+        borderLeft: divider ? '1px solid var(--glass-border)' : undefined,
         animationDelay: `${delay}ms`,
       }}
     >

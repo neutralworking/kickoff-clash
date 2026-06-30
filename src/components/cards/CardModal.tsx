@@ -27,10 +27,13 @@ import GameCard, { type GameCardModel } from './GameCard';
 import {
   PIXEL,
   RARITY_COLOR,
+  POSITION_COLOR,
   POSITION_LABEL,
   DURABILITY_META,
   TACTIC_CAT_COLOR,
   INVESTMENT_META,
+  eligiblePositions,
+  fitnessMeter,
   formatCash,
   nationFlag,
   nationCode,
@@ -232,6 +235,16 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
           {card.secondaryArchetype && <StatCell label="SECONDARY" value={card.secondaryArchetype} />}
           <StatCell label="DURABILITY" value={dur.label} color={dur.color} />
         </div>
+        {/* Where they can operate — eligible pitch positions as pixel chips. */}
+        <div className="flex flex-col" style={{ gap: 6 }}>
+          <Label>CAN OPERATE</Label>
+          <div className="flex flex-wrap" style={{ gap: 5 }}>
+            {eligiblePositions(card.position).map((p, i) => (
+              <PositionChip key={p} pos={p} primary={i === 0} />
+            ))}
+          </div>
+        </div>
+        {typeof card.fitness === 'number' && <FitnessRow fitness={card.fitness} />}
         {(card.tacticalRole || card.personalityTheme) && (
           <div className="flex flex-wrap" style={{ gap: 5 }}>
             {card.tacticalRole && (
@@ -296,6 +309,55 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
           )}
         </Panel>
       )}
+    </div>
+  );
+}
+
+/** A small pixel position chip — the player's own slot is filled (primary). */
+function PositionChip({ pos, primary }: { pos: string; primary: boolean }) {
+  const color = POSITION_COLOR[pos] ?? 'var(--dust)';
+  return (
+    <span
+      style={{
+        fontFamily: PIXEL,
+        fontSize: 9,
+        letterSpacing: 0.4,
+        lineHeight: 1,
+        color: primary ? 'var(--line-white)' : color,
+        background: primary ? color : 'transparent',
+        border: `1px solid ${color}`,
+        borderRadius: 3,
+        padding: '4px 6px',
+        boxShadow: primary ? 'inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -1px 0 rgba(0,0,0,0.3)' : undefined,
+      }}
+    >
+      {pos}
+    </span>
+  );
+}
+
+/** Crisp pixel fitness meter row inside the detail panel. */
+function FitnessRow({ fitness }: { fitness: number }) {
+  const { filled, total, color } = fitnessMeter(fitness);
+  return (
+    <div className="flex items-center" style={{ gap: 8 }}>
+      <Label>FITNESS</Label>
+      <div className="flex" style={{ gap: 2 }}>
+        {Array.from({ length: total }).map((_, i) => (
+          <span
+            key={i}
+            style={{
+              width: 12,
+              height: 7,
+              background: i < filled ? color : 'rgba(255,255,255,0.10)',
+              boxShadow: i < filled
+                ? 'inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(0,0,0,0.35), 0 0 0 1px var(--ink-black)'
+                : 'inset 0 0 0 1px rgba(0,0,0,0.35)',
+            }}
+          />
+        ))}
+      </div>
+      <span style={{ fontFamily: PIXEL, fontSize: 9, color, lineHeight: 1 }}>{filled}/{total}</span>
     </div>
   );
 }

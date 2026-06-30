@@ -130,10 +130,9 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
 
   return (
     <div
-      className="flex flex-col overflow-hidden relative"
+      className="kc-app-bg flex flex-col overflow-hidden relative"
       style={{
         height: '100dvh',
-        background: 'var(--felt)',
         paddingTop: 'max(env(safe-area-inset-top), 10px)',
         paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
       }}
@@ -152,16 +151,14 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
           </span>
         </div>
 
-        {/* Squad average power badge */}
+        {/* Squad average power badge — glass chip, rating stays pixel --line-white. */}
         <div
-          className="flex flex-col items-center justify-center shrink-0"
+          className="glass-surface flex flex-col items-center justify-center shrink-0 relative overflow-hidden"
           style={{
             width: 46,
             height: 40,
             borderRadius: 'var(--radius-sm)',
-            background: 'var(--surface)',
-            border: '2px solid var(--ink-black)',
-            boxShadow: '0 2px 0 0 var(--ink-black)',
+            boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
           }}
         >
           <span style={{ fontFamily: PIXEL, fontSize: 15, lineHeight: 1, color: 'var(--line-white)' }}>{xiAvg || '--'}</span>
@@ -171,24 +168,25 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
         <button
           onClick={confirm}
           disabled={!ready}
-          className="active:scale-95 shrink-0"
+          className={`active:scale-95 shrink-0 relative overflow-hidden ${ready ? 'sheen-strong glow-edge' : 'glass-surface sheen'}`}
           style={{
             fontFamily: PIXEL,
             fontSize: 13,
             letterSpacing: 0.5,
-            color: ready ? 'var(--cream)' : 'var(--ink)',
+            color: ready ? 'var(--line-white)' : 'var(--ink)',
             height: 40,
             padding: '0 12px',
             borderRadius: 'var(--radius-sm)',
-            border: '2px solid var(--ink-black)',
+            border: ready ? '2px solid var(--ink-black)' : undefined,
             background: ready
               ? 'linear-gradient(135deg, var(--amber), var(--amber-soft))'
-              : 'var(--surface)',
+              : undefined,
             boxShadow: ready
-              ? '0 3px 0 0 var(--ink-black), 0 5px 14px var(--amber-glow)'
-              : '0 3px 0 0 var(--ink-black)',
+              ? 'inset 0 1px 0 0 var(--glass-highlight), 0 3px 0 0 var(--ink-black), var(--depth-2)'
+              : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
             transition: 'transform 0.12s ease',
             cursor: ready ? 'pointer' : 'default',
+            ...(ready ? { ['--glow' as string]: 'var(--amber-glow)' } : {}),
           }}
         >
           KICK OFF
@@ -197,26 +195,29 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
 
       {/* ── Control bar: formation · intent · manager ──────────────────── */}
       <div className="shrink-0 flex items-stretch gap-1.5 px-3 mt-2">
-        {/* Formation chip */}
+        {/* Formation chip — glass */}
         <button
           onClick={() => setOverlay({ kind: 'formation' })}
-          className="flex flex-col items-start justify-center px-2.5 active:scale-95"
+          className="glass-surface sheen flex flex-col items-start justify-center px-2.5 active:scale-95 relative overflow-hidden"
           style={{
             borderRadius: 'var(--radius-sm)',
-            background: 'var(--surface)',
-            border: '2px solid var(--ink-black)',
+            boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
             transition: 'transform 0.12s ease',
             minWidth: 64,
           }}
         >
-          <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: 'var(--dust)' }}>SHAPE</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1.1, color: 'var(--cream)' }}>{formation.name}</span>
+          <span className="relative" style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: 'var(--dust)', zIndex: 2 }}>SHAPE</span>
+          <span className="relative" style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1.1, color: 'var(--cream)', zIndex: 2 }}>{formation.name}</span>
         </button>
 
-        {/* Intent segmented toggle */}
+        {/* Intent segmented toggle — glass track; the active segment keeps its
+            kit-accent fill (that colour is identity, not chrome). */}
         <div
-          className="flex"
-          style={{ borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}
+          className="glass-surface flex relative overflow-hidden"
+          style={{
+            borderRadius: 'var(--radius-sm)',
+            boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
+          }}
         >
           {INTENTS.map((it) => {
             const on = intent === it.id;
@@ -224,14 +225,16 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
               <button
                 key={it.id}
                 onClick={() => setIntent(it.id)}
-                className="px-2.5 active:scale-95"
+                className="px-2.5 active:scale-95 relative"
                 style={{
                   fontFamily: PIXEL,
                   fontSize: 10,
                   letterSpacing: 0.5,
-                  background: on ? it.accent : 'var(--surface)',
+                  background: on ? it.accent : 'transparent',
                   color: on ? 'var(--ink-black)' : 'var(--cream-soft)',
+                  boxShadow: on ? `inset 0 1px 0 0 rgba(242,246,239,0.35)` : undefined,
                   transition: 'background 0.15s ease',
+                  zIndex: 2,
                 }}
               >
                 {it.label}
@@ -240,19 +243,21 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
           })}
         </div>
 
-        {/* Manager chip — tap to (re)pick. */}
+        {/* Manager chip — glass; gaffer accent glow when filled. */}
         <button
           onClick={() => setOverlay({ kind: 'manager' })}
-          className="flex-1 flex items-center gap-1.5 px-2 min-w-0 active:scale-[0.98]"
+          className="glass-surface sheen flex-1 flex items-center gap-1.5 px-2 min-w-0 active:scale-[0.98] relative overflow-hidden"
           style={{
             borderRadius: 'var(--radius-sm)',
-            background: 'var(--surface)',
-            border: `2px solid ${manager ? 'var(--kit-red)' : 'var(--ink-black)'}`,
+            border: manager ? '1px solid var(--kit-red)' : undefined,
+            boxShadow: manager
+              ? 'inset 0 1px 0 0 var(--glass-highlight), 0 0 12px rgba(232,54,47,0.30), var(--depth-1)'
+              : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
             transition: 'transform 0.12s ease',
           }}
         >
-          <span style={{ fontSize: 16, flexShrink: 0 }}>{'\u{1F454}'}</span>
-          <span className="flex flex-col items-start min-w-0">
+          <span className="relative" style={{ fontSize: 16, flexShrink: 0, zIndex: 2 }}>{'\u{1F454}'}</span>
+          <span className="flex flex-col items-start min-w-0 relative" style={{ zIndex: 2 }}>
             <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: manager ? 'var(--kit-red)' : 'var(--dust)' }}>
               {manager ? 'GAFFER' : 'PICK GAFFER'}
             </span>
@@ -296,22 +301,25 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
               <button
                 key={i}
                 onClick={() => (card ? setModal({ variant: 'player', card }) : setOverlay({ kind: 'bench' }))}
-                className="relative flex flex-col items-center justify-center active:scale-95"
+                className={`relative flex flex-col items-center justify-center active:scale-95 ${card ? 'glass-surface' : ''}`}
                 style={{
                   height: 44,
                   borderRadius: 'var(--radius-sm)',
-                  background: card ? 'var(--surface)' : 'rgba(0,0,0,0.28)',
-                  border: card ? `2px solid ${ring}` : '2px dashed var(--border)',
+                  background: card ? undefined : 'rgba(0,0,0,0.28)',
+                  border: card ? `1px solid ${ring}` : '2px dashed var(--border)',
+                  boxShadow: card
+                    ? `inset 0 1px 0 0 var(--glass-highlight), 0 0 8px ${ring}33, var(--depth-1)`
+                    : undefined,
                   transition: 'transform 0.12s ease',
                   minWidth: 0,
                 }}
               >
                 {card ? (
                   <>
-                    <span style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--line-white)' }}>
+                    <span className="relative" style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--line-white)', zIndex: 2 }}>
                       {Math.round(card.power)}
                     </span>
-                    <span className="truncate w-full text-center px-0.5" style={{ fontSize: 7.5, color: 'var(--cream-soft)', marginTop: 2 }}>
+                    <span className="truncate w-full text-center px-0.5 relative" style={{ fontSize: 7.5, color: 'var(--cream-soft)', marginTop: 2, zIndex: 2 }}>
                       {lastName(card.name)}
                     </span>
                     {/* Remove affordance — keeps tap = inspect, this corner = remove. */}
@@ -335,6 +343,7 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
                         fontFamily: PIXEL,
                         fontSize: 9,
                         lineHeight: 1,
+                        zIndex: 3,
                       }}
                     >
                       {'×'}
@@ -353,13 +362,14 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
       {overlay && (
         <div
           className="absolute inset-0 flex flex-col justify-end scrim-fade"
-          style={{ background: 'rgba(0,0,0,0.55)', zIndex: 40 }}
+          style={{ background: 'rgba(2,9,5,0.62)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', zIndex: 40 }}
           onClick={() => setOverlay(null)}
         >
           <div
-            className="sheet-rise rounded-t-[16px] flex flex-col"
+            className="glass-raised sheen sheet-rise flex flex-col relative overflow-hidden"
             style={{
-              background: 'var(--felt)',
+              borderTopLeftRadius: 'var(--radius-lg)',
+              borderTopRightRadius: 'var(--radius-lg)',
               borderTop: `3px solid ${
                 overlay.kind === 'manager'
                   ? 'var(--kit-red)'
@@ -367,17 +377,18 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
                     ? 'var(--kit-blue)'
                     : 'var(--gold)'
               }`,
+              boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-3)',
               maxHeight: '64%',
               paddingBottom: 'max(env(safe-area-inset-bottom), 12px)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Grab handle */}
-            <div className="flex justify-center pt-2 pb-1 shrink-0">
-              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)' }} />
+            <div className="flex justify-center pt-2 pb-1 shrink-0 relative" style={{ zIndex: 2 }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--glass-border)' }} />
             </div>
 
-            <div className="flex items-center justify-between px-3 pb-2 shrink-0">
+            <div className="flex items-center justify-between px-3 pb-2 shrink-0 relative" style={{ zIndex: 2 }}>
               <span style={{ fontFamily: PIXEL, fontSize: 13, letterSpacing: 0.5, color: 'var(--cream)' }}>
                 {overlay.kind === 'manager'
                   ? 'PICK GAFFER'
@@ -389,7 +400,8 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
               </span>
               <button
                 onClick={() => setOverlay(null)}
-                style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--dust)', padding: '4px 6px' }}
+                className="glass-surface active:scale-90 relative overflow-hidden"
+                style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)', padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}
               >
                 CLOSE
               </button>
@@ -623,7 +635,7 @@ function ActionBtn({ label, accent, onClick }: { label: string; accent: string; 
   return (
     <button
       onClick={onClick}
-      className="active:scale-95"
+      className="glass-surface sheen active:scale-95 relative overflow-hidden"
       style={{
         fontFamily: PIXEL,
         fontSize: 9,
@@ -631,13 +643,11 @@ function ActionBtn({ label, accent, onClick }: { label: string; accent: string; 
         color: accent,
         padding: '5px 8px',
         borderRadius: 'var(--radius-sm)',
-        background: 'var(--surface)',
-        border: '2px solid var(--ink-black)',
-        boxShadow: '0 2px 0 0 var(--ink-black)',
+        boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
         transition: 'transform 0.12s ease',
       }}
     >
-      {label}
+      <span className="relative" style={{ zIndex: 2 }}>{label}</span>
     </button>
   );
 }
@@ -669,7 +679,7 @@ function PlayerSheet({
   }, [available, activeSlot]);
 
   return (
-    <div className="grid grid-cols-3 gap-2 overflow-y-auto px-3 pt-1 pb-2" style={{ overscrollBehavior: 'contain' }}>
+    <div className="grid grid-cols-3 gap-2 overflow-y-auto px-3 pt-1 pb-2 relative" style={{ overscrollBehavior: 'contain', zIndex: 2 }}>
       {sorted.map((c) => {
         const eligible = !activeSlot || positionFitsSlot(c.position, activeSlot);
         return (
@@ -728,7 +738,7 @@ function ManagerSheet({
   onInspect: (m: PackContents['managers'][number]) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-2 overflow-y-auto px-3 pt-1 pb-2" style={{ overscrollBehavior: 'contain' }}>
+    <div className="grid grid-cols-2 gap-2 overflow-y-auto px-3 pt-1 pb-2 relative" style={{ overscrollBehavior: 'contain', zIndex: 2 }}>
       {managers.map((m) => {
         const on = managerId === m.id;
         return (
@@ -785,27 +795,30 @@ function FormationSheet({
   onPick: (id: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-1.5 overflow-y-auto px-3 pt-1 pb-2" style={{ overscrollBehavior: 'contain' }}>
+    <div className="grid grid-cols-2 gap-1.5 overflow-y-auto px-3 pt-1 pb-2 relative" style={{ overscrollBehavior: 'contain', zIndex: 2 }}>
       {formations.map((f) => {
         const on = f.id === current;
         return (
           <button
             key={f.id}
             onClick={() => onPick(f.id)}
-            className="text-left active:scale-[0.98] pixel-edge"
+            className={`text-left active:scale-[0.98] relative overflow-hidden ${on ? 'glass-raised sheen glow-edge' : 'glass-surface sheen'}`}
             style={{
-              background: 'linear-gradient(160deg, var(--surface-raised), var(--surface))',
-              border: `2px solid ${on ? 'var(--kit-blue)' : 'var(--ink-black)'}`,
+              border: on ? '1px solid var(--kit-blue)' : undefined,
               borderRadius: 'var(--radius-sm)',
               padding: '10px 11px',
+              boxShadow: on
+                ? 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-2)'
+                : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
               transition: 'transform 0.1s ease',
               minWidth: 0,
+              ...(on ? { ['--glow' as string]: 'var(--glow-rare)' } : {}),
             }}
           >
-            <span style={{ fontFamily: PIXEL, fontSize: 15, color: on ? 'var(--kit-blue)' : 'var(--cream)', lineHeight: 1 }}>
+            <span className="relative" style={{ fontFamily: PIXEL, fontSize: 15, color: on ? 'var(--kit-blue)' : 'var(--cream)', lineHeight: 1, zIndex: 2 }}>
               {f.name}
             </span>
-            <p style={{ fontSize: 9, lineHeight: 1.35, color: 'var(--dust)', margin: '5px 0 0' }}>{f.description}</p>
+            <p className="relative" style={{ fontSize: 9, lineHeight: 1.35, color: 'var(--dust)', margin: '5px 0 0', zIndex: 2 }}>{f.description}</p>
           </button>
         );
       })}

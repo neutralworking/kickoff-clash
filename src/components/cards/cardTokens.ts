@@ -11,11 +11,56 @@
 export const PIXEL = 'var(--font-pixel, monospace)';
 
 // Rarity rings the card; ratings stay --line-white for legibility (contrast law).
+// HARD CONSTRAINT: this is a flat Record<string,string> consumed across the app
+// as RARITY_COLOR[x] → string. Do NOT change its shape. The glass/sheen/glow
+// companions below are ADDITIVE.
 export const RARITY_COLOR: Record<string, string> = {
   Common: '#9aa0a8',
   Rare: '#3d7bd6',
   Epic: '#a855f7',
   Legendary: '#e8a23a',
+};
+
+// -- Glass-frame companions (additive; do not consume in place of RARITY_COLOR) --
+
+/**
+ * Per-rarity glass treatment for the GameCard frame. Common is matte/quiet;
+ * higher tiers escalate the sheen strength and (Epic/Legendary) add a glow halo.
+ * `glow` references the canonical `--glow-*` tokens from globals.css; `null`
+ * means no glow ring (matte). `sheen` keys the diagonal gloss strength.
+ */
+export interface RarityGlass {
+  /** A 3-value rim-light ramp [shadow, base, highlight] used on the inner frame edges. */
+  ramp: [string, string, string];
+  /** The `.glow-edge` colour token, or null for no glow (Common/Rare). */
+  glow: string | null;
+  /** Diagonal sheen opacity multiplier applied to the frame sweep. 0 = none. */
+  sheen: number;
+  /** Whether this tier earns the animated foil sheen (Legendary only). */
+  foil: boolean;
+}
+
+export const RARITY_GLASS: Record<string, RarityGlass> = {
+  Common: { ramp: ['#5e646c', '#9aa0a8', '#c4c9cf'], glow: null, sheen: 0, foil: false },
+  Rare: { ramp: ['#1f4f93', '#3d7bd6', '#7fb0ee'], glow: null, sheen: 0.5, foil: false },
+  Epic: { ramp: ['#6d2fb0', '#a855f7', '#d3a8ff'], glow: 'var(--glow-epic)', sheen: 0.85, foil: false },
+  Legendary: { ramp: ['#a9711a', '#e8a23a', '#ffd97a'], glow: 'var(--glow-legendary)', sheen: 1, foil: true },
+};
+
+/** Quick lookup: the outer glow token for a rarity (null = no glow ring). */
+export const RARITY_GLOW: Record<string, string | null> = {
+  Common: null,
+  Rare: null,
+  Epic: 'var(--glow-epic)',
+  Legendary: 'var(--glow-legendary)',
+};
+
+/** Quick lookup: the diagonal-sheen strength (0–1) for a rarity. */
+export const RARITY_SHEEN: Record<string, number> = {
+  Common: 0,
+  Rare: 0.5,
+  Epic: 0.85,
+  Legendary: 1,
 };
 
 // Position family → accent colour, shared by every card surface.
@@ -173,4 +218,50 @@ export function nationCode(nation?: string): string {
 export function lastName(name: string): string {
   const parts = name.trim().split(' ');
   return parts[parts.length - 1];
+}
+
+/**
+ * "Where a player can operate" — the set of pitch positions whose formation slots
+ * accept a card of position P. This is the inverse of run.ts's
+ * SLOT_ELIGIBLE_POSITIONS, collapsed onto pitch-position labels and frozen here so
+ * the card layer stays self-contained (no import of run/economy logic). Used by
+ * CardModal to show eligible positions as small chips. The card's own position is
+ * always first.
+ */
+export const ELIGIBLE_POSITIONS: Record<string, string[]> = {
+  GK: ['GK'],
+  CD: ['CD', 'DM', 'CM'],
+  WD: ['WD', 'WM'],
+  DM: ['DM', 'CM', 'CD'],
+  CM: ['CM', 'DM', 'AM'],
+  WM: ['WM', 'WD', 'WF'],
+  AM: ['AM', 'CM', 'WF', 'CF'],
+  WF: ['WF', 'WM', 'AM', 'CF'],
+  CF: ['CF', 'AM', 'WF'],
+};
+
+/** Eligible operating positions for a card, own position first, de-duplicated. */
+export function eligiblePositions(position: string): string[] {
+  const list = ELIGIBLE_POSITIONS[position] ?? [position];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of [position, ...list]) {
+    if (!seen.has(p)) {
+      seen.add(p);
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+/**
+ * Fitness pip model. `fitness` is 1–6 (MATCH_ENGINE §3.1); we render it as a small
+ * crisp pixel meter. Returns the filled-pip count, total, and a band colour.
+ */
+export function fitnessMeter(fitness: number): { filled: number; total: number; color: string } {
+  const total = 6;
+  const filled = Math.max(0, Math.min(total, Math.round(fitness)));
+  const color =
+    filled >= 5 ? 'var(--success)' : filled >= 3 ? 'var(--gold)' : filled >= 1 ? '#f6b765' : 'var(--danger)';
+  return { filled, total, color };
 }

@@ -16,6 +16,7 @@ import { getShopJokers } from '../lib/jokers';
 import type { OpponentBuild } from '../lib/run';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
+import SquadGallery from './SquadGallery';
 import { PIXEL } from './cards/cardTokens';
 
 // SHOP_ITEMS kept imported to preserve the module surface; not referenced directly.
@@ -81,6 +82,7 @@ export default function ShopPhase({
   const [sellSheet, setSellSheet] = useState(false);
   const [sellConfirm, setSellConfirm] = useState<Card | null>(null);
   const [modal, setModal] = useState<GameCardModel | null>(null);
+  const [showGallery, setShowGallery] = useState(false);
 
   const academy = getAcademyTier(state.academyTier);
   const acSeed = shopSeed + 777;
@@ -129,10 +131,9 @@ export default function ShopPhase({
 
   return (
     <div
-      className="flex flex-col overflow-hidden relative"
+      className="phase-shop flex flex-col overflow-hidden relative"
       style={{
         height: '100dvh',
-        background: 'var(--felt)',
         paddingTop: 'max(env(safe-area-inset-top), 10px)',
         paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
       }}
@@ -154,15 +155,12 @@ export default function ShopPhase({
 
           <HeaderStat label="NEXT CUP" value={`${Math.min(state.round + 1, 5)}/5`} />
           <div
-            className="flex flex-col items-end justify-center shrink-0"
+            className="glass-raised sheen flex flex-col items-end justify-center shrink-0 relative overflow-hidden"
             style={{
               minWidth: 84,
               height: 40,
               padding: '0 10px',
               borderRadius: 'var(--radius-sm)',
-              background: 'var(--surface)',
-              border: '2px solid var(--ink-black)',
-              boxShadow: '0 2px 0 0 var(--ink-black)',
             }}
           >
             <span style={{ fontFamily: PIXEL, fontSize: 14, lineHeight: 1, color: 'var(--gold)' }}>
@@ -179,7 +177,7 @@ export default function ShopPhase({
               <button
                 key={j.id}
                 onClick={() => setModal({ variant: 'manager', manager: j })}
-                className="shrink-0 active:scale-95"
+                className="glass-surface shrink-0 active:scale-95 relative overflow-hidden"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -187,9 +185,6 @@ export default function ShopPhase({
                   height: 28,
                   padding: '0 9px',
                   borderRadius: 'var(--radius-sm)',
-                  border: '2px solid var(--ink-black)',
-                  background: 'var(--surface)',
-                  boxShadow: '0 2px 0 0 var(--ink-black)',
                 }}
               >
                 <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--kit-red)' }} />
@@ -208,18 +203,21 @@ export default function ShopPhase({
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className="flex-1 active:scale-[0.98]"
+              className={`flex-1 active:scale-[0.98] relative overflow-hidden ${active ? 'sheen-strong glow-edge' : 'glass-surface sheen'}`}
               style={{
                 height: 38,
                 borderRadius: 'var(--radius-sm)',
-                border: '2px solid var(--ink-black)',
-                background: active ? 'var(--amber)' : 'var(--surface)',
-                boxShadow: active ? '0 2px 0 0 var(--ink-black)' : '0 2px 0 0 var(--ink-black)',
+                background: active ? 'linear-gradient(135deg, var(--amber), var(--amber-soft))' : undefined,
+                border: active ? '1px solid var(--ink-black)' : undefined,
+                boxShadow: active
+                  ? 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)'
+                  : 'var(--depth-1)',
                 fontFamily: PIXEL,
                 fontSize: 10,
                 letterSpacing: 0.6,
-                color: active ? 'var(--ink-black)' : 'var(--dust)',
+                color: active ? 'var(--ink-black)' : 'var(--cream-soft)',
                 textTransform: 'uppercase',
+                ...(active ? { ['--glow' as string]: 'var(--amber-glow)' } : {}),
               }}
             >
               {t.label}
@@ -252,6 +250,7 @@ export default function ShopPhase({
             onHealPlayer={onHealPlayer}
             openModal={setModal}
             openSell={() => setSellSheet(true)}
+            openGallery={() => setShowGallery(true)}
           />
         )}
 
@@ -274,18 +273,20 @@ export default function ShopPhase({
       <div className="shrink-0 px-3 pt-2.5">
         <button
           onClick={onNext}
-          className="w-full active:scale-[0.99]"
+          className="sheen-strong glow-edge w-full active:scale-[0.99] relative overflow-hidden"
           style={{
             height: 52,
             borderRadius: 'var(--radius)',
             border: '2px solid var(--ink-black)',
             background: 'linear-gradient(180deg, var(--amber) 0%, var(--amber-soft) 100%)',
-            boxShadow: '0 3px 0 0 var(--ink-black), 0 4px 14px var(--amber-glow)',
+            boxShadow:
+              'inset 0 1px 0 0 var(--glass-highlight), 0 3px 0 0 var(--ink-black), var(--depth-2)',
             fontFamily: PIXEL,
             fontSize: 14,
             letterSpacing: 0.8,
             color: 'var(--line-white)',
             textTransform: 'uppercase',
+            ['--glow' as string]: 'var(--amber-glow)',
           }}
         >
           Next Match {'→'}
@@ -371,6 +372,11 @@ export default function ShopPhase({
 
       {/* Single CardModal mounted at shop root (renders absolute inset-0). */}
       <CardModal model={modal} onClose={() => setModal(null)} />
+
+      {/* Squad Gallery — full-screen overlay over the shop (renders absolute inset-0). */}
+      {showGallery && (
+        <SquadGallery deck={state.deck} onClose={() => setShowGallery(false)} title="YOUR SQUAD" />
+      )}
     </div>
   );
 }
@@ -464,7 +470,7 @@ function MarketTab({
 // ===========================================================================
 
 function SquadTab({
-  state, trainableCards, injuredCards, onTrainPlayer, onHealPlayer, openModal, openSell,
+  state, trainableCards, injuredCards, onTrainPlayer, onHealPlayer, openModal, openSell, openGallery,
 }: {
   state: RunState;
   trainableCards: { card: Card; applied: number }[];
@@ -473,10 +479,22 @@ function SquadTab({
   onHealPlayer: (cardId: number) => boolean;
   openModal: (m: GameCardModel) => void;
   openSell: () => void;
+  openGallery: () => void;
 }) {
   const canHeal = state.cash >= 12000;
   return (
     <div className="flex flex-col gap-3 pb-2">
+      {/* Squad gallery shortcut — browse every owned card in the full overlay. */}
+      <SectionCard title="Your Squad" accent="var(--kit-blue)">
+        <RowAction
+          title="View all cards"
+          sub={`${state.deck.length} owned · filter & inspect`}
+          actionLabel="View All"
+          affordable={state.deck.length > 0}
+          onClick={openGallery}
+        />
+      </SectionCard>
+
       {/* Medical room */}
       <SectionCard title="Medical Room" accent="var(--danger)">
         {injuredCards.length === 0 ? (
@@ -610,14 +628,13 @@ function BackroomTab({
       <SectionCard title="Scout Report" accent="var(--kit-blue)">
         {scoutedOpponent ? (
           <div
+            className="glass-surface relative overflow-hidden"
             style={{
-              background: 'rgba(0,0,0,0.25)',
-              border: '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)',
               padding: 10,
             }}
           >
-            <div className="flex items-center justify-between" style={{ gap: 8 }}>
+            <div className="flex items-center justify-between relative" style={{ gap: 8, zIndex: 2 }}>
               <span style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--cream)' }}>{scoutedOpponent.name}</span>
               <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--kit-blue)', letterSpacing: 0.4 }}>
                 {scoutedOpponent.style.toUpperCase()}
@@ -693,15 +710,12 @@ function BackroomTab({
 function HeaderStat({ label, value }: { label: string; value: string }) {
   return (
     <div
-      className="flex flex-col items-center justify-center shrink-0"
+      className="glass-surface flex flex-col items-center justify-center shrink-0 relative overflow-hidden"
       style={{
         minWidth: 52,
         height: 40,
         padding: '0 8px',
         borderRadius: 'var(--radius-sm)',
-        background: 'var(--surface)',
-        border: '2px solid var(--ink-black)',
-        boxShadow: '0 2px 0 0 var(--ink-black)',
       }}
     >
       <span style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--cream)' }}>{value}</span>
@@ -720,22 +734,25 @@ function SectionCard({
 }) {
   return (
     <div
+      className="glass-raised sheen relative"
       style={{
-        background: 'var(--surface)',
-        border: '2px solid var(--ink-black)',
         borderRadius: 'var(--radius)',
-        boxShadow: '0 2px 0 0 var(--ink-black)',
         overflow: 'hidden',
       }}
     >
-      <div className="flex items-center" style={{ gap: 8, padding: '9px 10px 0' }}>
-        <span style={{ width: 4, height: 12, background: accent, borderRadius: 1, flexShrink: 0 }} />
+      <div className="flex items-center relative" style={{ gap: 8, padding: '10px 11px 0', zIndex: 2 }}>
+        <span
+          style={{
+            width: 4, height: 12, background: accent, borderRadius: 1, flexShrink: 0,
+            boxShadow: `0 0 8px ${accent}`,
+          }}
+        />
         <span className="mr-auto truncate" style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.8, color: 'var(--cream)', textTransform: 'uppercase' }}>
           {title}
         </span>
         {right}
       </div>
-      <div style={{ padding: 10 }}>{children}</div>
+      <div className="relative" style={{ padding: 11, zIndex: 2 }}>{children}</div>
     </div>
   );
 }
@@ -875,21 +892,23 @@ function BuyTile({
     <button
       onClick={onClick}
       disabled={!affordable}
-      className="text-left active:scale-[0.98]"
+      className="glass-surface sheen text-left active:scale-[0.98] relative overflow-hidden"
       style={{
         padding: 11,
         borderRadius: 'var(--radius-sm)',
-        border: '2px solid var(--ink-black)',
-        background: affordable ? 'var(--surface-raised)' : 'var(--surface)',
-        boxShadow: '0 2px 0 0 var(--ink-black)',
+        boxShadow: affordable
+          ? 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)'
+          : 'inset 0 1px 0 0 var(--glass-highlight)',
         cursor: affordable ? 'pointer' : 'not-allowed',
         opacity: affordable ? 1 : 0.55,
       }}
     >
-      <div style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)' }}>{label}</div>
-      <div style={{ fontSize: 9, color: 'var(--dust)', marginTop: 3 }}>{sub}</div>
-      <div style={{ fontFamily: PIXEL, fontSize: 9.5, color: affordable ? 'var(--gold)' : 'var(--ink)', marginTop: 6 }}>
-        {'£'}{cost.toLocaleString()}
+      <div className="relative" style={{ zIndex: 2 }}>
+        <div style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)' }}>{label}</div>
+        <div style={{ fontSize: 9, color: 'var(--dust)', marginTop: 3 }}>{sub}</div>
+        <div style={{ fontFamily: PIXEL, fontSize: 9.5, color: affordable ? 'var(--gold)' : 'var(--ink)', marginTop: 6 }}>
+          {'£'}{cost.toLocaleString()}
+        </div>
       </div>
     </button>
   );
@@ -915,15 +934,17 @@ function RowAction({
       <button
         onClick={onClick}
         disabled={!affordable}
-        className="active:scale-95 shrink-0"
+        className={`shrink-0 active:scale-95 relative overflow-hidden ${affordable ? 'sheen-strong' : 'glass-surface'}`}
         style={{
           minWidth: 70,
           height: 40,
           padding: '0 12px',
           borderRadius: 'var(--radius-sm)',
-          border: '2px solid var(--ink-black)',
-          background: affordable ? 'var(--amber)' : 'var(--surface)',
-          boxShadow: '0 2px 0 0 var(--ink-black)',
+          border: affordable ? '2px solid var(--ink-black)' : undefined,
+          background: affordable ? 'linear-gradient(135deg, var(--amber), var(--amber-soft))' : undefined,
+          boxShadow: affordable
+            ? 'inset 0 1px 0 0 var(--glass-highlight), 0 2px 0 0 var(--ink-black)'
+            : undefined,
           fontFamily: PIXEL,
           fontSize: 9.5,
           letterSpacing: 0.3,
@@ -948,37 +969,34 @@ function BottomSheet({
   return (
     <div
       className="absolute inset-0 flex flex-col justify-end scrim-fade"
-      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(2px)', zIndex: 50 }}
+      style={{ background: 'rgba(2,9,5,0.62)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', zIndex: 50 }}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="sheet-rise flex flex-col"
+        className="glass-raised sheen sheet-rise flex flex-col relative overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--felt-light)',
-          borderTop: '2px solid var(--ink-black)',
+          borderTop: '1px solid var(--glass-border)',
           borderTopLeftRadius: 'var(--radius-lg)',
           borderTopRightRadius: 'var(--radius-lg)',
+          boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-3)',
           maxHeight: '82dvh',
           padding: '12px 14px max(env(safe-area-inset-bottom), 14px)',
         }}
       >
-        <div className="flex items-center shrink-0" style={{ gap: 8, marginBottom: 12 }}>
+        <div className="flex items-center shrink-0 relative" style={{ gap: 8, marginBottom: 12, zIndex: 2 }}>
           <span className="mr-auto" style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--cream)', letterSpacing: 0.5, textTransform: 'uppercase' }}>
             {title}
           </span>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="active:scale-90"
+            className="glass-surface active:scale-90 relative overflow-hidden"
             style={{
               width: 36, height: 36,
               borderRadius: 'var(--radius-sm)',
-              border: '2px solid var(--ink-black)',
-              background: 'var(--surface)',
-              boxShadow: '0 2px 0 0 var(--ink-black)',
               color: 'var(--cream)',
               fontFamily: PIXEL,
               fontSize: 15,
@@ -988,7 +1006,7 @@ function BottomSheet({
             {'×'}
           </button>
         </div>
-        <div className="min-h-0 overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
+        <div className="min-h-0 overflow-y-auto relative" style={{ overscrollBehavior: 'contain', zIndex: 2 }}>
           {children}
         </div>
       </div>
@@ -1007,13 +1025,15 @@ function SheetButton({
   return (
     <button
       onClick={onClick}
-      className="flex-1 active:scale-[0.98]"
+      className={`flex-1 active:scale-[0.98] relative overflow-hidden ${danger ? 'sheen-strong' : 'glass-raised sheen'}`}
       style={{
         height: 46,
         borderRadius: 'var(--radius-sm)',
-        border: '2px solid var(--ink-black)',
-        background: danger ? 'var(--kit-red)' : 'var(--surface)',
-        boxShadow: '0 2px 0 0 var(--ink-black)',
+        border: danger ? '2px solid var(--ink-black)' : undefined,
+        background: danger ? 'linear-gradient(135deg, var(--kit-red), #c0241e)' : undefined,
+        boxShadow: danger
+          ? 'inset 0 1px 0 0 var(--glass-highlight), 0 2px 0 0 var(--ink-black)'
+          : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
         fontFamily: PIXEL,
         fontSize: 11,
         letterSpacing: 0.4,

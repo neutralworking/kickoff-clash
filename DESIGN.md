@@ -193,8 +193,10 @@ pixelated` (`.pixelated`) for any sprite art.
 
 ### Panel / surface
 
-`--surface` fill, `--border` hairline (or `--ink-black` for a hard edge),
-`--radius` corners. Raised/hover state → `--surface-raised`.
+Chrome panels are **glass** (see *Glass chrome* below): `.glass-surface` /
+`.glass-raised` + `.sheen`, with the accent rail glowing. Hard-edged **pixel**
+tokens (chips, packs, card faces) keep the flat `--surface` fill + `--ink-black`
+edge + pixel-edge drop — those are content, not chrome.
 
 ### Pill / tag
 
@@ -203,15 +205,92 @@ Small `--radius-lg` capsule, gold or accent outline, pixel uppercase label
 
 ### Bottom-sheet overlay
 
-Dimmed scrim (`rgba(0,0,0,.5)`), sheet pinned to the bottom with
-`rounded-t-[16px]`, `--felt`/`--surface` fill, accent top border, internal
-scroll, max-height ~62%. Used for player/manager pickers.
+Backdrop-blurred dimmed scrim (`rgba(2,9,5,.62)` + a small `backdrop-filter`
+blur), sheet pinned to the bottom with `rounded-t-[var(--radius-lg)]`, a
+**`.glass-raised` + `.sheen`** frosted-glass panel at `--depth-3`, internal
+scroll, max-height ~62–82dvh. Used for player/manager pickers.
 
 ### Pitch backdrop
 
 `.pitch-stripes` repeating mow stripes (`--pitch-bright` / `--pitch-stripe`) for
 pack stages; subtle box/centre-circle lines (`--line-white` at low alpha) for
 the match and team-select pitches.
+
+---
+
+## Glass chrome (depth layer)
+
+> **Canonical.** This is the **depth layer that sits ON TOP of the pixel
+> system** above — it supersedes the pure-flat framing while keeping the pixel
+> identity intact. The rule is one sentence: **glass shell, pixel content.**
+
+The app **SHELL** — panels, HUD, tab bars, buttons, sheets, scrims, phase
+backgrounds — is premium **frosted glass with depth** (a polished Telegram
+mini-game feel): translucent night-pitch fills over a blurred backdrop, a bright
+top inner-highlight, a soft diagonal sheen, a tight accent/rarity glow, and a
+real elevation-shadow hierarchy. The **CONTENT** — cards, player/gaffer/tactic
+sprites, the pitch, scoreline glyphs, Silkscreen type — stays crisp **pixel
+art**. Depth lives *under* and *around* the pixels (frame, glow, shadow); it
+**never blurs or soft-shadows a sprite or an `--ink-black` pixel edge** — that is
+the cardinal sin. The card is where the two meet: a glassy frame wrapping a pixel
+interior.
+
+### Tokens (in `globals.css` `@theme`)
+
+| Token | Value | Intent |
+|---|---|---|
+| `--glass-fill` | `rgba(18,42,27,.58)` | Translucent `--surface` fill for `.glass-surface`. |
+| `--glass-fill-strong` | `rgba(24,55,31,.78)` | Denser fill for raised glass. |
+| `--glass-border` | `rgba(180,226,196,.16)` | Subtle 1px light edge on glass. |
+| `--glass-highlight` | `rgba(242,246,239,.22)` | Bright top inner-highlight (the "lit glass" tell). |
+| `--glass-fallback` / `--glass-fallback-strong` | `#122a1b` / `#18371f` | Opaque fills where `backdrop-filter` is unsupported. |
+| `--purple` | `#8b5cf6` | Epic rarity hue (also the card Epic accent). |
+| `--glow-soft` | `rgba(242,246,239,.20)` | Neutral focus halo (default for `.glow-edge`). |
+| `--glow-rare` | `rgba(47,127,224,.50)` | Rare halo (kit-blue). |
+| `--glow-epic` | `rgba(139,92,246,.52)` | Epic halo (purple). |
+| `--glow-legendary` | `rgba(245,197,66,.52)` | Legendary halo (gold). |
+
+### Elevation system
+
+A three-step layered-shadow scale; height **and** spread rise together so a
+"raised" surface is genuinely *higher*, not just lighter green. Pairs with the
+hard `--ink-black` pixel-edge drop on pixel tokens.
+
+| Token | Use |
+|---|---|
+| `--depth-1` | Resting glass chips/tiles. |
+| `--depth-2` | Raised panels, CTAs, the title crest. |
+| `--depth-3` | Floating sheets / modals over a scrim. |
+
+### Classes
+
+| Class | What it does |
+|---|---|
+| `.glass-surface` | Translucent `--glass-fill` + `backdrop-filter: blur(12px) saturate()`, 1px `--glass-border`, inset top highlight. Resting glass. |
+| `.glass-raised` | Stronger fill + blur, `--depth-2`. Raised glass (panels, sheets). |
+| `.sheen` / `.sheen-strong` | A `::before` diagonal gloss sweep (`pointer-events:none`). Strong variant for CTAs/heroes. Host needs `position` + `overflow:hidden`; content sits at `z-index:2`. |
+| `.glow-edge` | Outer accent glow ring driven by `--glow`. Callers set the colour: `style={{ '--glow': 'var(--glow-legendary)' }}`. |
+| `.depth-1` / `.depth-2` / `.depth-3` | Elevation utilities mapping to the tokens. |
+| `.kc-app-bg` | The deep glassy night-pitch app background (top sheen + turf glow + edge vignette over `--felt`). Use in place of `background: var(--felt)` on a phase root. |
+
+The `.phase-*` shells were re-grounded to read as deep glassy night-pitch (a
+phase-accent top sheen + an edge vignette over `--felt`), without fighting pixel
+content. `.pixel-edge`, `.pitch-stripes`, `.pixelated` are unchanged — that is
+the pixel layer.
+
+### Backdrop-filter fallback (binding)
+
+Every glass class includes `-webkit-backdrop-filter` and an
+`@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))`
+block that swaps the translucent fill for the opaque `--glass-fallback*` colour,
+so where blur is unsupported the surface is solid (never see-through onto raw
+background). The highlight and border are retained so the look survives.
+
+### Performance
+
+`backdrop-filter` blur is GPU-accelerated but **not free**. Keep blur radii
+**modest (8–16px)** and avoid stacking many large blurred layers in one view —
+prefer a few glass panels over a glass-on-glass-on-glass pileup.
 
 ---
 

@@ -62,7 +62,7 @@ export interface RunState {
   matchInCup: number;  // the tie within the cup (1..CUP_SIZES[round-1]); ==size is the final.
   wins: number;
   losses: number;
-  status: 'title' | 'packSelect' | 'setup' | 'match' | 'postmatch' | 'shop' | 'won' | 'lost';
+  status: 'title' | 'packSelect' | 'setup' | 'match' | 'postmatch' | 'teamTalk' | 'shop' | 'won' | 'lost';
   matchHistory: MatchResult[];
   modifiers: unknown[];
   chemistry: CoAppearance;   // run-accumulated pairwise co-appearances (CARDS §5)

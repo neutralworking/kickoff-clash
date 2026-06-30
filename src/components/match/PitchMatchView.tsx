@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { MatchV5State, IncrementResult, MatchBeat, MatchStats } from '../../lib/match-v5';
+import type { MatchV5State, IncrementResult, MatchBeat, MatchStats, PlayerMatchStat } from '../../lib/match-v5';
 import type { Formation, FormationSlot } from '../../lib/formations';
 import { getFormation } from '../../lib/formations';
 import type { Band, Lane, Cell } from '../../lib/field';
@@ -34,6 +34,10 @@ interface PitchMatchViewProps {
    *  prominence of the team-talk affordances (coach panel, tactics + shape entry). */
   breakMoment: 'kickoff' | 'halftime' | 'between' | null;
   currentResult: IncrementResult | null;
+  /** Per-player in-match stats + 0–10 rating, keyed by card id (read-side, deterministic).
+   *  Surfaces effective power, fitness, position-fit, goals/assists and rating on the pitch
+   *  cards and in the team-talk ratings panel. Computed in MatchPhase from playerMatchStats. */
+  playerStats: Record<number, PlayerMatchStat>;
   onToggleTactic: (tacticId: string) => void;
   onSub: (xiCardId: number, benchCardId: number) => void;
   onReassign: (cardA: number, cardB: number) => void;
@@ -82,6 +86,13 @@ interface PitchSpot {
   fitness?: number;       // 1–6 dynamic condition
   injured?: boolean;
   lowFitness?: boolean;   // fitness ≤ 2.5 (engine's injury-risk threshold)
+  // ── PER-MATCH READOUT (Wave E) — read-side stats off playerMatchStats. ──
+  effPower?: number;      // fitness-adjusted power (the on-pitch level)
+  tired?: boolean;        // effPower < base power → legible "down on power" tell
+  posFit?: boolean;       // false → playing out of position (a wrong-slot warning)
+  matchRating?: number;   // 0–10 in-match rating
+  goals?: number;         // goals scored this match
+  assists?: number;       // assists this match
 }
 
 // Compact archetype code for the token (keeps a 390-wide pitch legible).
@@ -121,6 +132,42 @@ const INCREMENT_MINUTES_LEN = INCREMENT_MINUTES_LIST.length; // 5 (last index 4 
 const CARD_W = 54;   // up from 44 — bolder face on the pitch
 const CARD_H = 68;   // up from 56, holds the ~2.5:3.5 card ratio
 
+// ── Wave E rating colour band (req 5): red <6, neutral 6–7.5, green >7.5. ──
+// Returned as a {fill, ink} pair so the badge always carries a legible foreground.
+function ratingBand(r: number): { fill: string; ink: string } {
+  if (r < 6) return { fill: 'var(--danger)', ink: 'var(--line-white)' };
+  if (r > 7.5) return { fill: 'var(--success)', ink: 'var(--ink-black)' };
+  return { fill: 'var(--gold)', ink: 'var(--ink-black)' };
+}
+
+// ── Wave E fitness band (req 6): a 6-step condition meter. Fresh = green, low = red. ──
+function fitnessColor(f: number): string {
+  if (f <= LOW_FITNESS) return 'var(--danger)';
+  if (f <= 4) return 'var(--amber)';
+  return 'var(--success)';
+}
+
+/** A compact banded fitness meter (6 ticks) — fills proportional to live condition.
+ *  Pixel-flat (no blur/soft shadow on the bars), banded so it reads at a glance. */
+function FitnessMeter({ fitness }: { fitness: number }) {
+  const f = Math.max(1, Math.min(6, Math.round(fitness)));
+  const col = fitnessColor(fitness);
+  return (
+    <div aria-label={`Fitness ${f} of 6`} style={{ display: 'flex', gap: 1.5, alignItems: 'stretch' }}>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <span
+          key={i}
+          style={{
+            flex: 1, height: 4, borderRadius: 1,
+            background: i < f ? col : 'rgba(0,0,0,0.45)',
+            border: '0.5px solid rgba(7,16,11,0.6)',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function PitchCard({
   spot, side, accent, dim, glow,
 }: {
@@ -135,6 +182,13 @@ function PitchCard({
   // The card face tints to the side so a glance reads friend vs foe, but the
   // rarity rail still signals quality.
   const faceTop = youKit ? 'linear-gradient(165deg, #16361f, #0e2616)' : 'linear-gradient(165deg, #3a1411, #2a0d0b)';
+  // ── Wave E surfaces (yours only — rivals carry no live per-match stats). ──
+  const showStats = youKit;
+  const misfit = showStats && spot.posFit === false && !spot.isGK; // wrong-position warning (req 3)
+  // Effective (fitness-adjusted) power is the headline level the engine actually uses;
+  // when it's below base power, flag it tired so the drop is legible (req 1).
+  const effShown = showStats && typeof spot.effPower === 'number';
+  const ga = showStats ? (spot.goals ?? 0) + (spot.assists ?? 0) : 0; // any goal contribution (req 4)
   return (
     <div
       className={glow ? 'carrier-glow' : undefined}
@@ -152,32 +206,61 @@ function PitchCard({
         position: 'relative',
       }}
     >
-      {/* Rarity / accent top rail — the card family signature. */}
-      <div style={{ height: 3, background: accent, flexShrink: 0 }} />
-      {/* Header: position tab · rating */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 4px 0' }}>
-        <span style={{ background: posColor, color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1, padding: '2px 3px', borderRadius: 2 }}>
+      {/* Rarity / accent top rail — the card family signature. A misfit reddens it. */}
+      <div style={{ height: 3, background: misfit ? 'var(--danger)' : accent, flexShrink: 0 }} />
+      {/* Header: position tab · power. The power shown is the EFFECTIVE (fitness-adjusted)
+          level for your players (req 1); a down-on-power card greys + carries a ▾.
+          A misfit's position tab goes solid red — the Team Talk's misfit vocabulary. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 4px 0', gap: 2 }}>
+        <span style={{ background: misfit ? 'var(--danger)' : posColor, color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1, padding: '2px 3px', borderRadius: 2 }}>
           {spot.isGK ? 'GK' : spot.position ?? '—'}
         </span>
-        {spot.rating !== undefined && (
+        {effShown ? (
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 1 }}>
+            {spot.tired && <span style={{ fontFamily: PIXEL, fontSize: 8, lineHeight: 1, color: 'var(--amber)' }}>▾</span>}
+            <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, color: spot.tired ? 'var(--amber)' : 'var(--line-white)' }}>{spot.effPower}</span>
+          </span>
+        ) : spot.rating !== undefined ? (
           <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, color: 'var(--line-white)' }}>{spot.rating}</span>
-        )}
+        ) : null}
       </div>
       {/* Mini sprite — a flat pixel kit block, tinted by side. */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
         <MiniSprite side={side} isGK={spot.isGK} accent={accent} />
+        {/* Rating badge (req 5) — colour-coded 0–10, bottom-left over the sprite. */}
+        {showStats && typeof spot.matchRating === 'number' && (() => {
+          const band = ratingBand(spot.matchRating);
+          return (
+            <span style={{ position: 'absolute', left: 2, bottom: 0, fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: band.ink, background: band.fill, border: '1px solid var(--ink-black)', borderRadius: 2, padding: '1.5px 2.5px', fontVariantNumeric: 'tabular-nums' }}>
+              {spot.matchRating.toFixed(1)}
+            </span>
+          );
+        })()}
+        {/* G/A pip (req 4) — a gold pip on a scorer/assister, bottom-right over the sprite. */}
+        {ga > 0 && (
+          <span aria-label={`${spot.goals ?? 0} goals, ${spot.assists ?? 0} assists`} style={{ position: 'absolute', right: 2, bottom: 0, display: 'inline-flex', alignItems: 'center', gap: 1, fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1, color: 'var(--ink-black)', background: 'var(--gold)', border: '1px solid var(--ink-black)', borderRadius: 2, padding: '1.5px 2.5px' }}>
+            {(spot.goals ?? 0) > 0 && <span>{`⚽${spot.goals}`}</span>}
+            {(spot.assists ?? 0) > 0 && <span style={{ opacity: 0.85 }}>{`A${spot.assists}`}</span>}
+          </span>
+        )}
       </div>
       {/* Surname + archetype code */}
-      <div style={{ padding: '0 4px 3px' }}>
+      <div style={{ padding: '0 4px 2px' }}>
         <div style={{ fontSize: 9, fontWeight: 800, color: 'var(--cream)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {spot.name ?? '—'}
         </div>
         {!spot.isGK && spot.archetype && (
-          <div style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.2, color: 'var(--dust)', lineHeight: 1.1, marginTop: 1.5 }}>
+          <div style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.2, color: 'var(--dust)', lineHeight: 1.1, marginTop: 1 }}>
             {archCode(spot.archetype)}
           </div>
         )}
       </div>
+      {/* Fitness meter (req 6) — a banded condition bar pinned to the card foot (yours only). */}
+      {showStats && typeof spot.fitness === 'number' && (
+        <div style={{ padding: '0 3px 3px', flexShrink: 0 }}>
+          <FitnessMeter fitness={spot.fitness} />
+        </div>
+      )}
     </div>
   );
 }
@@ -252,13 +335,20 @@ function numberSlots(slots: FormationSlot[]): Map<number, number> {
   return map;
 }
 
-function yourPitch(matchState: MatchV5State, formation: Formation): PitchSpot[] {
+function yourPitch(
+  matchState: MatchV5State,
+  formation: Formation,
+  playerStats: Record<number, PlayerMatchStat>,
+): PitchSpot[] {
   const nums = numberSlots(formation.slots);
   return formation.slots.map((slot, i) => {
     const card = matchState.xi[i] ?? null;
     const band = bandOf(cellOf(slot.x, slot.y));
     const isGK = slot.type === 'GK' || card?.position === 'GK';
     const fitness = card?.fitness;
+    // Per-match stats (read-side; effective power, rating, G/A, position-fit).
+    const st = card ? playerStats[card.id] : undefined;
+    const effPower = st?.effectivePower;
     return {
       slot, band, number: nums.get(i) ?? i + 1,
       name: card ? lastName(card.name) : null, isGK, cardId: card?.id,
@@ -270,6 +360,13 @@ function yourPitch(matchState: MatchV5State, formation: Formation): PitchSpot[] 
       fitness,
       injured: card?.injured,
       lowFitness: typeof fitness === 'number' && fitness <= LOW_FITNESS,
+      effPower,
+      tired: typeof effPower === 'number' && card ? effPower < Math.round(card.power) : false,
+      // posFit defaults true when no stat row (e.g. mid-drag transient); only false flags a misfit.
+      posFit: st ? st.posFit : true,
+      matchRating: st?.rating,
+      goals: st?.goals ?? 0,
+      assists: st?.assists ?? 0,
     };
   });
 }
@@ -457,6 +554,131 @@ function PossessionClock({ timeline, baseYou, baseOpp, onState, onDone }: Posses
 const YOU = 'var(--success)';
 const OPP = 'var(--danger)';
 
+// ---------------------------------------------------------------------------
+// GoalLine + the goals ledger surfaces (Wave E req 4).
+// A goal is scorer (+ assister) at a minute, coloured by side. Shared by the
+// per-period stats screen and the team-talk ratings sheet so the record reads
+// identically everywhere. Drawn from FeedLine (the engine beats).
+// ---------------------------------------------------------------------------
+interface GoalLine { time: string; text: string; type: 'goal-yours' | 'goal-opponent' | 'chance'; scorer: string | null; assister: string | null; side: 'you' | 'opp' }
+
+/** A compact goals feed: one row per goal, scorer + assister, side-coloured. Used in
+ *  the stats screen and the ratings sheet. `surnameOf` is passed in (the host owns
+ *  the lastName import) so this stays a pure presentational helper. */
+function GoalsFeed({ goals, surnameOf, delay = 0 }: { goals: GoalLine[]; surnameOf: (n: string) => string; delay?: number }) {
+  if (goals.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      {goals.map((g, i) => {
+        const col = g.side === 'you' ? YOU : OPP;
+        return (
+          <div key={i} className="stat-row-in" style={{ display: 'flex', alignItems: 'center', gap: 7, animationDelay: `${delay + i * 50}ms` }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, width: 30 }}>{g.time}</span>
+            <span style={{ fontSize: 11, flexShrink: 0 }}>⚽</span>
+            <span style={{ fontSize: 11.5, fontWeight: 800, color: col, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {g.scorer ? surnameOf(g.scorer) : g.side === 'you' ? 'Your XI' : 'Opponent'}
+            </span>
+            {g.assister && (
+              <span style={{ fontSize: 9.5, color: 'var(--dust)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {`assist ${surnameOf(g.assister)}`}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RatingsSheet — the per-player ratings panel (Wave E req 5).
+//
+// A bottom-sheet over the team-talk: every starter sorted by 0–10 rating, with
+// the colour-coded rating badge · G/A · a banded fitness meter, so the player can
+// read at a glance who to hook. Glass shell, pixel content. Internal scroll only —
+// the page never scrolls. Pure presentational; the host owns playerStats + close.
+// ---------------------------------------------------------------------------
+function RatingRow({ st, rank }: { st: PlayerMatchStat; rank: number }) {
+  const band = ratingBand(st.rating);
+  return (
+    <div
+      className="stat-row-in"
+      style={{
+        display: 'grid', gridTemplateColumns: '34px 1fr auto', alignItems: 'center', columnGap: 9,
+        padding: '7px 9px', borderRadius: 'var(--radius-sm)',
+        background: 'var(--surface)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)',
+        animationDelay: `${rank * 35}ms`,
+      }}
+    >
+      {/* Rating badge — colour-coded, the headline sort key. */}
+      <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, textAlign: 'center', color: band.ink, background: band.fill, border: '1.5px solid var(--ink-black)', borderRadius: 3, padding: '4px 0', fontVariantNumeric: 'tabular-nums' }}>
+        {st.rating.toFixed(1)}
+      </span>
+      {/* Name · position · effective power · G/A */}
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lastName(st.name)}</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--line-white)', background: POSITION_COLOR[st.position] ?? 'var(--dust)', borderRadius: 2, padding: '2px 3px', lineHeight: 1, flexShrink: 0 }}>{st.position}</span>
+          {!st.posFit && (
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--line-white)', background: 'var(--danger)', borderRadius: 2, padding: '2px 3px', lineHeight: 1, flexShrink: 0 }}>OUT OF POS</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)' }}>PWR <b style={{ color: 'var(--cream-soft)' }}>{st.effectivePower}</b></span>
+          {(st.goals > 0 || st.assists > 0) && (
+            <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--gold)' }}>
+              {st.goals > 0 ? `⚽${st.goals}` : ''}{st.goals > 0 && st.assists > 0 ? ' ' : ''}{st.assists > 0 ? `A${st.assists}` : ''}
+            </span>
+          )}
+        </div>
+      </div>
+      {/* Fitness meter — the sub-decision tell. */}
+      <div style={{ width: 54, display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'stretch' }}>
+        <FitnessMeter fitness={st.fitness} />
+        <span style={{ fontFamily: PIXEL, fontSize: 6.5, color: fitnessColor(st.fitness), textAlign: 'right', lineHeight: 1 }}>FIT {Math.round(st.fitness)}/6</span>
+      </div>
+    </div>
+  );
+}
+
+function RatingsSheet({ stats, goals, surnameOf, onClose }: { stats: PlayerMatchStat[]; goals: GoalLine[]; surnameOf: (n: string) => string; onClose: () => void }) {
+  const sorted = [...stats].sort((a, b) => b.rating - a.rating);
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 23, background: 'rgba(2,9,5,0.62)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }} className="scrim-fade">
+      <div onClick={(e) => e.stopPropagation()} className="glass-raised sheen sheet-rise" style={{ display: 'flex', flexDirection: 'column', maxHeight: '82%', borderTopLeftRadius: 16, borderTopRightRadius: 16, borderTop: '2px solid var(--gold)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        {/* Grab handle */}
+        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8, flexShrink: 0, position: 'relative', zIndex: 2 }}>
+          <div style={{ width: 38, height: 4, borderRadius: 2, background: 'var(--glass-border)' }} />
+        </div>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px 10px', borderBottom: '1px solid var(--glass-border)', flexShrink: 0, position: 'relative', zIndex: 2 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--gold)', letterSpacing: 0.8 }}>PLAYER RATINGS</span>
+          <button onClick={onClose} aria-label="Close ratings" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, marginRight: -8, background: 'none', border: 'none', color: 'var(--dust)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>{'×'}</button>
+        </div>
+        {/* Scroll region — the only thing that scrolls. */}
+        <div style={{ overflowY: 'auto', overscrollBehavior: 'contain', padding: '12px 14px 18px', WebkitOverflowScrolling: 'touch', position: 'relative', zIndex: 2 }}>
+          {/* Goals ledger first — the record (req 4), then the sorted XI (req 5). */}
+          {goals.length > 0 && (
+            <>
+              <div style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.8, marginBottom: 6 }}>GOALS</div>
+              <div style={{ marginBottom: 14 }}>
+                <GoalsFeed goals={goals} surnameOf={surnameOf} />
+              </div>
+            </>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.8 }}>YOUR XI · BY RATING</span>
+            <span style={{ fontSize: 9, color: 'var(--dust)' }}>tap a player on the pitch to sub</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {sorted.map((st, i) => <RatingRow key={st.cardId} st={st} rank={i} />)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** A diverging bar that fills from each side toward the centre by share. */
 function StatBar({ you, opp, fmt, delay }: { you: number; opp: number; fmt?: (n: number) => string; delay: number }) {
   const total = you + opp;
@@ -517,7 +739,8 @@ function StatPair({
 }
 
 function StatsScreen({
-  stats, cumulative, minute, periodLabel, youName, oppName, scoreYou, scoreOpp, isFullTime, onContinue,
+  stats, cumulative, minute, periodLabel, youName, oppName, scoreYou, scoreOpp, isFullTime,
+  goals, surnameOf, onRatings, onContinue,
 }: {
   stats: MatchStats;
   cumulative: CumulativeStats;
@@ -528,6 +751,11 @@ function StatsScreen({
   scoreYou: number;
   scoreOpp: number;
   isFullTime: boolean;
+  /** Goals so far (scorer + assister), chronological — the per-match record (req 4). */
+  goals: GoalLine[];
+  surnameOf: (n: string) => string;
+  /** Open the per-player ratings sheet (req 5). */
+  onRatings: () => void;
   onContinue: () => void;
 }) {
   // FIX 7 — tally won cells from the full 9-cell grid (was the 3 L/C/R lanes).
@@ -563,6 +791,18 @@ function StatsScreen({
               <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oppName}</span><span style={{ width: 8, height: 8, borderRadius: 2, background: OPP }} />
             </span>
           </div>
+
+          {/* GOALS FEED (req 4) — scorer + assister per goal, the match record. Most
+              recent few shown here; the full ledger lives in the RATINGS sheet. */}
+          {goals.length > 0 && (
+            <div className="stat-row-in" style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', background: 'var(--surface)', animationDelay: '55ms' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.6, color: 'var(--gold)' }}>GOALS</span>
+                {goals.length > 3 && <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)' }}>{`+${goals.length - 3} earlier`}</span>}
+              </div>
+              <GoalsFeed goals={goals.slice(-3)} surnameOf={surnameOf} delay={60} />
+            </div>
+          )}
         </div>
 
         {/* Four stats — each a PERIOD value (headline + diverging bar) over its
@@ -626,11 +866,20 @@ function StatsScreen({
         </div>
       </div>
 
-      {/* CONTINUE — the single advance verb proceeds from the stats screen. */}
-      <button onClick={onContinue} className="advance-btn-pulse stat-row-in"
-        style={{ flexShrink: 0, marginTop: 12, width: '100%', padding: '13px 0', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 4px 0 0 var(--ink-black)', background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))', color: 'var(--cream)', fontFamily: PIXEL, fontSize: 15, cursor: 'pointer', animationDelay: '320ms' }}>
-        {isFullTime ? 'FULL TIME →' : 'CONTINUE →'}
-      </button>
+      {/* Footer — RATINGS opens the per-player marks (req 5: the sub-decision
+          surface), CONTINUE advances. Full time hides RATINGS (no more subs to make). */}
+      <div style={{ display: 'flex', gap: 10, flexShrink: 0, marginTop: 12 }}>
+        {!isFullTime && (
+          <button onClick={onRatings} className="stat-row-in"
+            style={{ flex: '0 0 116px', padding: '13px 0', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 4px 0 0 var(--ink-black)', background: 'var(--surface)', color: 'var(--gold)', fontFamily: PIXEL, fontSize: 12, letterSpacing: 0.4, cursor: 'pointer', animationDelay: '300ms' }}>
+            RATINGS
+          </button>
+        )}
+        <button onClick={onContinue} className="advance-btn-pulse stat-row-in"
+          style={{ flex: 1, padding: '13px 0', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 4px 0 0 var(--ink-black)', background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))', color: 'var(--cream)', fontFamily: PIXEL, fontSize: 15, cursor: 'pointer', animationDelay: '320ms' }}>
+          {isFullTime ? 'FULL TIME →' : 'CONTINUE →'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -716,13 +965,15 @@ function CoachPanel({ notes }: { notes: CoachNote[] }) {
 
 export default function PitchMatchView({
   matchState, formation, jokers, tacticSlots, availableTactics, ownedFormations,
-  opponentBuild, nextMinute, mode, breakMoment, currentResult,
+  opponentBuild, nextMinute, mode, breakMoment, currentResult, playerStats,
   onToggleTactic, onSub, onReassign, onFormationChange, onAutoSelect, onIntentChange, onContinue,
 }: PitchMatchViewProps) {
   const [trayOpen, setTrayOpen] = useState(false);
   const [oppView, setOppView] = useState(false);
   const [tickerOpen, setTickerOpen] = useState(false);
   const [formSheet, setFormSheet] = useState(false);
+  // Wave E (req 5) — the per-player ratings sheet (opened from the team-talk).
+  const [ratingsOpen, setRatingsOpen] = useState(false);
   const [modal, setModal] = useState<GameCardModel | null>(null);
   // FIX 2 — a transient blocked-action banner (a rejected sub). The `id` re-arms
   // the drop animation when a new message replaces an old; cleared on a ~2s timer.
@@ -766,7 +1017,7 @@ export default function PitchMatchView({
   // Team identity prefers the live engine style, falling back to the build's label.
   const oppStyleLabel = matchState.opponentStyle || opponentBuild.style;
 
-  const youSpots = useMemo(() => yourPitch(matchState, formation), [matchState, formation]);
+  const youSpots = useMemo(() => yourPitch(matchState, formation, playerStats), [matchState, formation, playerStats]);
   const rivalSpots = useMemo(() => rivalPitch(matchState), [matchState]);
   const spots = oppView ? rivalSpots : youSpots;
 
@@ -792,13 +1043,14 @@ export default function PitchMatchView({
   // `clock` for chronological display, so they read 02:45, 07:02, … Newest-first
   // in the log overlay. The full played history plus the live increment's beats
   // up to the current playhead (so the log fills in lockstep with the animation).
-  type FeedLine = { clock: number; time: string; text: string; type: 'goal-yours' | 'goal-opponent' | 'chance'; scorer: string | null; side: 'you' | 'opp' };
+  type FeedLine = { clock: number; time: string; text: string; type: 'goal-yours' | 'goal-opponent' | 'chance'; scorer: string | null; assister: string | null; side: 'you' | 'opp' };
   const beatToLine = (b: MatchBeat): FeedLine => ({
     clock: b.clock,
     time: b.time,
     text: b.text,
     type: b.outcome === 'goal' ? (b.side === 'you' ? 'goal-yours' : 'goal-opponent') : 'chance',
     scorer: b.scorerName,
+    assister: b.assisterName,
     side: b.side,
   });
 
@@ -820,6 +1072,14 @@ export default function PitchMatchView({
     return lines;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchState.scores, resolving, currentResult, beatIdx, timeline]);
+
+  // ── Wave E (req 4) — the GOALS LEDGER: every goal so far, scorer + assister,
+  // chronological. Drawn from the same feed so the resolve sequence and the team-talk
+  // read identically. Pure derived from beats (deterministic). ──
+  const goalsLedger = useMemo(
+    () => feed.filter((l) => l.type === 'goal-yours' || l.type === 'goal-opponent'),
+    [feed],
+  );
 
   // ISSUE 6 — sensible pre-kickoff guidance (no fake minute, styled as a coach prompt).
   const preKickoff = feed.length === 0 && !resolving;
@@ -928,6 +1188,16 @@ export default function PitchMatchView({
   // (kickoff / halftime / between) the coach panel and the SHAPE + TACTICS entry
   // points are surfaced prominently rather than left to the side rail.
   const isBreak = planning && breakMoment !== null;
+
+  // Wave E (req 5) — the per-player ratings, as a list keyed to the current XI (in
+  // XI order). `hasPlayed` gates the ratings surfaces (no marks before kickoff);
+  // `hasPoorRating` nudges the RATINGS button when a starter is underperforming.
+  const playerStatsList = useMemo<PlayerMatchStat[]>(
+    () => xi.map((c) => playerStats[c.id]).filter((s): s is PlayerMatchStat => !!s),
+    [xi, playerStats],
+  );
+  const hasPlayed = matchState.scores.length > 0;
+  const hasPoorRating = hasPlayed && playerStatsList.some((s) => s.rating < 6);
 
   // FIX 5 — the assistant's reads for this break (assistant.coachNotes). Pass the
   // opponent's soft-spot blurb, the live tactic slots, and whether an undeployed
@@ -1286,11 +1556,11 @@ export default function PitchMatchView({
         </div>
       )}
 
-      {/* FIX 1 + FIX 4 — the TEAM-TALK action row. At a break the player's three
-          levers are surfaced together as proper buttons rather than buried in a
-          side rail: change SHAPE, open TACTICS, and (pre-kickoff only) AUTO-PICK
-          the strongest fitness-aware XI. Only shown at a real break, not while
-          scouting the opposition or mid-resolve. */}
+      {/* FIX 1 + FIX 4 — the TEAM-TALK action row. At a break the player's levers
+          are surfaced together as proper buttons rather than buried in a side rail:
+          change SHAPE, open TACTICS, read RATINGS (once a period's played), and
+          (pre-kickoff only) AUTO-PICK the strongest fitness-aware XI. Only shown at
+          a real break, not while scouting the opposition or mid-resolve. */}
       {isBreak && (
         <div style={{ display: 'flex', gap: 6, margin: '0 16px 8px', flexShrink: 0 }}>
           <button onClick={() => setFormSheet(true)}
@@ -1304,6 +1574,16 @@ export default function PitchMatchView({
             <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: showTacticPrompt ? 'var(--gold)' : 'var(--amber)', lineHeight: 1 }}>TACTICS</span>
             <span style={{ fontSize: 9.5, color: 'var(--cream-soft)', lineHeight: 1 }}>{deployedIds.size}/{tacticSlots.slots.length} live{emptyTacticSlots > 0 ? ' · spare' : ''}</span>
           </button>
+          {/* RATINGS (req 5) — open the per-player ratings sheet to decide who to hook.
+              Shown once a period's been played; pulses if anyone's rating is poor. */}
+          {hasPlayed && (
+            <button onClick={() => setRatingsOpen(true)}
+              className={hasPoorRating ? 'carrier-glow' : undefined}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: `2px solid ${hasPoorRating ? 'var(--danger)' : 'var(--ink-black)'}`, boxShadow: '0 3px 0 0 var(--ink-black)', background: hasPoorRating ? 'rgba(232,54,47,0.12)' : 'var(--surface)', cursor: 'pointer' }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: hasPoorRating ? 'var(--danger)' : 'var(--gold)', lineHeight: 1 }}>RATINGS</span>
+              <span style={{ fontSize: 9.5, color: 'var(--cream-soft)', lineHeight: 1 }}>{hasPoorRating ? 'check the XI' : 'player marks'}</span>
+            </button>
+          )}
           {canAutoSelect && (
             <button onClick={onAutoSelect}
               style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))', cursor: 'pointer' }}>
@@ -1342,12 +1622,16 @@ export default function PitchMatchView({
           const condition: 'injured' | 'tired' | null = !oppView
             ? (spot.injured ? 'injured' : spot.lowFitness ? 'tired' : null)
             : null;
+          // Wave E (req 3) — a wrong-position starter. Reuses the Team Talk vocabulary:
+          // a red ring on the card + a red position tab/rail (in PitchCard).
+          const misfit = !oppView && spot.posFit === false && !spot.isGK;
           // The card's accent rail / ring: hover & drop targets take gold; a flagged
-          // or injured card takes its status colour; otherwise the rarity colour.
+          // or injured/misfit card takes its status colour; otherwise the rarity colour.
           const rarityAccent = spot.rarity ? RARITY_COLOR[spot.rarity] ?? RARITY_COLOR.Common : 'var(--dust)';
           const ringColor = isHover || isDropTarget ? 'var(--gold)'
             : isFlagged ? 'var(--amber)'
             : condition === 'injured' ? 'var(--danger)'
+            : misfit ? 'var(--danger)'
             : spot.isStar ? 'var(--gold)'
             : null;
           return (
@@ -1375,6 +1659,12 @@ export default function PitchMatchView({
                 {condition && (
                   <span aria-label={condition === 'injured' ? 'Injured' : 'Low fitness'}
                     style={{ position: 'absolute', top: -5, left: -5, width: 14, height: 14, borderRadius: '50%', background: condition === 'injured' ? 'var(--danger)' : 'var(--amber)', border: '1.5px solid var(--ink-black)', color: condition === 'injured' ? 'var(--line-white)' : 'var(--ink-black)', fontFamily: PIXEL, fontSize: 8, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3 }}>{condition === 'injured' ? '+' : '!'}</span>
+                )}
+                {/* Wave E (req 3) — wrong-position pip, top-left (offset below a condition
+                    pip when both apply). A red 'X' tag matching the Team Talk misfit colour. */}
+                {misfit && (
+                  <span aria-label="Out of position"
+                    style={{ position: 'absolute', top: condition ? 11 : -5, left: -5, height: 14, padding: '0 3px', borderRadius: 4, background: 'var(--danger)', border: '1.5px solid var(--ink-black)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.2, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4 }}>POS</span>
                 )}
                 {/* drop-target hint when dragging another card over this one. */}
                 {isDropTarget && !isHover && (
@@ -1545,14 +1835,23 @@ export default function PitchMatchView({
               <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--cream)', letterSpacing: 0.6 }}>MATCH LOG</span>
               <button onClick={() => setTickerOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--dust)', fontSize: 18, cursor: 'pointer' }}>{'×'}</button>
             </div>
-            {feed.length === 0 ? <div style={{ fontSize: 12, color: 'var(--dust)' }}>Kickoff — no events yet.</div> : feed.slice().reverse().map((e, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13, lineHeight: 1.55, color: lineColour(e), padding: '2px 0' }}>
-                <span style={{ color: 'var(--dust)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{e.time}</span>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', alignSelf: 'center', flexShrink: 0, background: e.side === 'you' ? 'var(--success)' : 'var(--danger)' }} />
-                <span style={{ flex: 1, fontWeight: e.type !== 'chance' ? 800 : 400 }}>{e.text}</span>
-                {e.scorer && e.type !== 'chance' && <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--cream-soft)', flexShrink: 0 }}>{lastName(e.scorer)}</span>}
-              </div>
-            ))}
+            {feed.length === 0 ? <div style={{ fontSize: 12, color: 'var(--dust)' }}>Kickoff — no events yet.</div> : feed.slice().reverse().map((e, i) => {
+              const isGoal = e.type !== 'chance';
+              return (
+                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13, lineHeight: 1.55, color: lineColour(e), padding: '2px 0' }}>
+                  <span style={{ color: 'var(--dust)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{e.time}</span>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', alignSelf: 'center', flexShrink: 0, background: e.side === 'you' ? 'var(--success)' : 'var(--danger)' }} />
+                  <span style={{ flex: 1, fontWeight: isGoal ? 800 : 400 }}>{e.text}</span>
+                  {/* Scorer + assister (req 4) — goals carry their author and creator. */}
+                  {isGoal && e.scorer && (
+                    <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, lineHeight: 1.2 }}>
+                      <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--cream-soft)' }}>{`⚽ ${lastName(e.scorer)}`}</span>
+                      {e.assister && <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)' }}>{`A · ${lastName(e.assister)}`}</span>}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1720,7 +2019,21 @@ export default function PitchMatchView({
           scoreYou={displayGoals.you}
           scoreOpp={displayGoals.opp}
           isFullTime={matchState.currentIncrement >= INCREMENT_MINUTES_LEN - 1}
+          goals={goalsLedger}
+          surnameOf={lastName}
+          onRatings={() => setRatingsOpen(true)}
           onContinue={onContinue}
+        />
+      )}
+
+      {/* Wave E (req 5) — the per-player ratings sheet (team-talk). Sorted by rating,
+          with the goals ledger (req 4) on top. Glass shell, pixel content. */}
+      {ratingsOpen && (
+        <RatingsSheet
+          stats={playerStatsList}
+          goals={goalsLedger}
+          surnameOf={lastName}
+          onClose={() => setRatingsOpen(false)}
         />
       )}
 
