@@ -420,6 +420,7 @@ const TRAIT_KIND_STYLE: Record<TraitKind, { anim: string; accent: string; moment
   poach:    { anim: 'trait-poach',    accent: 'var(--kit-red)',  moment: true },
   tackle:   { anim: 'trait-tackle',   accent: 'var(--success)',  moment: true },
   offside:  { anim: 'trait-offside',  accent: 'var(--cream-soft)', moment: true },
+  save:     { anim: 'trait-tackle',   accent: 'var(--gold)',     moment: true },
   aura:     { anim: 'trait-aura',     accent: 'var(--gold)',     moment: false },
   engine:   { anim: 'trait-aura',     accent: 'var(--kit-blue)', moment: false },
 };

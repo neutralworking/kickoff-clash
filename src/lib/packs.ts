@@ -169,19 +169,19 @@ export function openPack(packType: PackType, seed: number): PackContents {
 
 // ---------------------------------------------------------------------------
 // Starter rip (current flow): three fixed packs opened at New Season.
-//   - Player pack:  25 players (full pool)
+//   - Player pack:  24 players (full pool; a 3-col gallery fills 8 clean rows, no lone card)
 //   - Manager pack: 2 managers (pick 1 before the match)
 //   - Tactical pack: 10 tactics (5 opening hand + 1 per turn)
 // All formations are made available so the manager can pick a shape.
 // ---------------------------------------------------------------------------
 
-export const RIP_COUNTS = { players: 25, managers: 2, tactics: 5 } as const;
+export const RIP_COUNTS = { players: 24, managers: 2, tactics: 5 } as const;
 // The starter rip is deliberately SCRAPPY: Common-heavy with only a few Rare anchors and
 // NO Epic/Legendary. A full-pool rip starts the player ~maxed (XI avg ~74, can roll a
 // Legendary) so there's nothing to chase; capping at Common+Rare drops the opening XI to a
 // winnable-but-thin ~70 (still clears cup 1 ~80%+) and makes the shop's Epics/Legendaries
 // the real upgrade path. Tuned on scripts/starter-probe.ts.
-const RIP_RARES = 6; // of 25; the remainder are Common
+const RIP_RARES = 6; // of 24; the remainder are Common
 
 export function ripStarterPacks(seed: number): PackContents {
   const rares = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Rare'), seed + 11).slice(0, RIP_RARES);

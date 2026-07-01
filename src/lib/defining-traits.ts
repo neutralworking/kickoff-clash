@@ -98,6 +98,143 @@ const OVERLAP_RUN: TraitRecord = {
 };
 
 // ---------------------------------------------------------------------------
+// GK action-traits (the keeper identity, palette-only). Keepers ALWAYS defend
+// (their cell is DEF, side 'defence'), so `is-defending` is the natural gate and
+// no new condition is needed. Magnitudes sit at the LOW end of the deny band
+// (0.10–0.12, below Stopper's 0.14) because these are player-ONLY — the opponent
+// opts out of defining traits, so a keeper trait is a one-sided "concede less"
+// buff whose owner (the GK) is one card and whose denial STACKS on top of the
+// back line's Stopper/Offside Trap under the shared DENIAL_CAP (0.5).
+// ---------------------------------------------------------------------------
+
+/** Shot Stopper — the keeper's bread and butter: a reliable, gated save that
+ *  suppresses the opponent's conversion. The keeper is always defending, so the
+ *  gate just documents intent; the chance keeps it a "moment", not a flat wall. */
+const SHOT_STOPPER: TraitRecord = {
+  name: 'Shot Stopper', verb: 'deny', params: { amount: 0.11, chance: 0.7 },
+  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  condition: { kind: 'is-defending' }, animation: 'moment',
+};
+
+/** Sweeper Keeper — rushes off the line to snuff a through-ball, but only when the
+ *  line is pushed up (≥3 at the back) so there's space behind to sweep. Reuses the
+ *  Offside Trap structure gate — a keeper's sweep and an offside line are the same bet. */
+const SWEEPER_KEEPER: TraitRecord = {
+  name: 'Sweeper Keeper', verb: 'deny', params: { amount: 0.12 },
+  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  condition: { kind: 'backline-count', min: 3 }, animation: 'moment',
+};
+
+/** Commander of the Box — an ongoing aura that organises the defence, lifting the
+ *  weakest defender most (like Leadership, a shade gentler). A vocal keeper marshals. */
+const COMMANDER_OF_BOX: TraitRecord = {
+  name: 'Commander of the Box', verb: 'amplify-inverse-power', params: { amount: 0.18 },
+  scope: 'global', target: { kind: 'criterion', criterion: 'all-teammates', zone: 'defence' },
+  animation: 'aura',
+};
+
+/** Distribution — a ball-playing keeper who launches attacks from the back:
+ *  manufactures a creation chance (control = creation + attack), so the keeper's
+ *  distribution actually starts moves rather than just clearing his lines. */
+const DISTRIBUTION: TraitRecord = {
+  name: 'Distribution', verb: 'generate', params: { amount: 16 },
+  scope: 'zone', target: { kind: 'zone', zone: 'creation' },
+  animation: 'moment',
+};
+
+/** Big-Game Keeper — turns up when it matters: a late, clutch save that only
+ *  switches on from the hour mark. The keeper who wins you the tight ones at the death. */
+const BIG_GAME_KEEPER: TraitRecord = {
+  name: 'Big-Game Keeper', verb: 'deny', params: { amount: 0.12 },
+  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  condition: { kind: 'late-game', fromIncrement: 3 }, animation: 'moment',
+};
+
+// ---------------------------------------------------------------------------
+// Thin outfield-pool fillers (palette-only) — each keeps its archetype's identity.
+// ---------------------------------------------------------------------------
+
+/** Take-On — the dribbler beats his man and manufactures the opening: a chance
+ *  into CREATION while attacking (beating a defender opens the pass, not the shot). */
+const TAKE_ON: TraitRecord = {
+  name: 'Take-On', verb: 'generate', params: { amount: 18 },
+  scope: 'zone', target: { kind: 'zone', zone: 'creation' },
+  condition: { kind: 'is-attacking' }, animation: 'moment',
+};
+
+/** Mazy Run — the dribbler carries it all the way into the box: a manufactured
+ *  finishing chance central while attacking (the solo run that ends in a shot). */
+const MAZY_RUN: TraitRecord = {
+  name: 'Mazy Run', verb: 'generate', params: { amount: 15 },
+  scope: 'zone', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' },
+  condition: { kind: 'is-attacking' }, animation: 'moment',
+};
+
+/** Interceptor — the ball-winner reads the pass and snuffs the attack out (a gated
+ *  deny while defending). Sits just under Stopper: it's a lighter, more frequent read. */
+const INTERCEPTOR: TraitRecord = {
+  name: 'Interceptor', verb: 'deny', params: { amount: 0.12, chance: 0.6 },
+  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  condition: { kind: 'is-defending' }, animation: 'moment',
+};
+
+/** Last-Ditch — the destroyer throws himself in front of the shot: a chance-gated
+ *  denial that fires wherever the ball is (a recovery tackle high or a block deep). */
+const LAST_DITCH: TraitRecord = {
+  name: 'Last-Ditch', verb: 'deny', params: { amount: 0.13, chance: 0.5 },
+  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  animation: 'moment',
+};
+
+/** Aerial Threat — the big man wins the header in the box: a manufactured finishing
+ *  chance central while attacking. Shared by Powerhouse and Target (the box aerials). */
+const AERIAL_THREAT: TraitRecord = {
+  name: 'Aerial Threat', verb: 'generate', params: { amount: 16 },
+  scope: 'zone', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' },
+  condition: { kind: 'is-attacking' }, animation: 'moment',
+};
+
+/** Hold-Up Play — the target man holds it up and brings runners in: a creation
+ *  chance while attacking (control = creation + attack). Shared by Powerhouse/Target. */
+const HOLD_UP: TraitRecord = {
+  name: 'Hold-Up Play', verb: 'generate', params: { amount: 16 },
+  scope: 'zone', target: { kind: 'zone', zone: 'creation' },
+  condition: { kind: 'is-attacking' }, animation: 'moment',
+};
+
+/** Deep Distributor — the controller dictates from deep: a creation chance while
+ *  attacking (feeds possession the same way Regista's Metronome scales it). */
+const DEEP_DISTRIBUTOR: TraitRecord = {
+  name: 'Deep Distributor', verb: 'generate', params: { amount: 15 },
+  scope: 'zone', target: { kind: 'zone', zone: 'creation' },
+  condition: { kind: 'is-attacking' }, animation: 'moment',
+};
+
+/** Screen — the controller shields the back four: a gated deny while defending
+ *  (a dual-role Controller protects the line as well as builds play). */
+const SCREEN: TraitRecord = {
+  name: 'Screen', verb: 'deny', params: { amount: 0.11, chance: 0.6 },
+  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  condition: { kind: 'is-defending' }, animation: 'moment',
+};
+
+/** Runner in Behind — the sprinter runs onto the through ball: a manufactured
+ *  finishing chance central while attacking (pace in behind, not build-up). */
+const RUNNER_IN_BEHIND: TraitRecord = {
+  name: 'Runner in Behind', verb: 'generate', params: { amount: 15 },
+  scope: 'zone', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' },
+  condition: { kind: 'is-attacking' }, animation: 'moment',
+};
+
+/** Late Run — the box-to-box engine arrives late in the area: a manufactured
+ *  finishing chance that only switches on from the hour mark (the ghosting run). */
+const LATE_RUN: TraitRecord = {
+  name: 'Late Run', verb: 'generate', params: { amount: 15 },
+  scope: 'zone', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' },
+  condition: { kind: 'late-game', fromIncrement: 3 }, animation: 'moment',
+};
+
+// ---------------------------------------------------------------------------
 // Library — ordered candidate list per archetype (most-identifying first)
 // ---------------------------------------------------------------------------
 
@@ -105,16 +242,18 @@ const DEFINING_TRAITS: Record<string, TraitRecord[]> = {
   Creator: [POSTMAN, DEADEYE, SNIPER, ENGINE_ROOM],
   Passer: [POSTMAN, DEADEYE, ENGINE_ROOM],
   Striker: [POACHERS_INSTINCT, SNIPER, DEADEYE],
-  Target: [POACHERS_INSTINCT, DEADEYE],
-  Dribbler: [SNIPER, POSTMAN],
-  Sprinter: [OVERLAP_RUN, ENGINE_ROOM, STOPPER],
-  Engine: [OVERLAP_RUN, ENGINE_ROOM, STOPPER],
-  Destroyer: [STOPPER, OFFSIDE_TRAP],
+  Target: [POACHERS_INSTINCT, AERIAL_THREAT, HOLD_UP, DEADEYE],
+  Dribbler: [TAKE_ON, MAZY_RUN, SNIPER, POSTMAN],
+  Sprinter: [OVERLAP_RUN, RUNNER_IN_BEHIND, ENGINE_ROOM, STOPPER],
+  Engine: [OVERLAP_RUN, ENGINE_ROOM, LATE_RUN, STOPPER],
+  Destroyer: [STOPPER, INTERCEPTOR, OFFSIDE_TRAP, LAST_DITCH],
   Cover: [OFFSIDE_TRAP, STOPPER, LEADERSHIP],
   Commander: [LEADERSHIP, OFFSIDE_TRAP, STOPPER],
-  Controller: [ENGINE_ROOM, DEADEYE],
-  Powerhouse: [POACHERS_INSTINCT, STOPPER],
-  GK: [LEADERSHIP], // keeper's shot-stopping body stays in the role baseline
+  Controller: [ENGINE_ROOM, DEADEYE, DEEP_DISTRIBUTOR, SCREEN],
+  Powerhouse: [POACHERS_INSTINCT, AERIAL_THREAT, HOLD_UP, STOPPER],
+  // Keeper identity over the palette (shot-stopping body stays in the role baseline);
+  // 5 candidates so Rare/Epic/Legendary keepers all fill their rarity count.
+  GK: [SHOT_STOPPER, SWEEPER_KEEPER, COMMANDER_OF_BOX, DISTRIBUTION, BIG_GAME_KEEPER],
 };
 
 const RARITY_TRAIT_COUNT: Record<string, number> = { Common: 1, Rare: 2, Epic: 3, Legendary: 4 };

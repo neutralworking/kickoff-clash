@@ -79,14 +79,31 @@ export const STADIUMS: Stadium[] = [
   { tier: 5, name: 'The Cathedral',        capacity: 60000, ticketPrice: 40 },
 ];
 
+// Named price constants — the SINGLE SOURCE OF TRUTH for the two XI-upgrade picks (the
+// shop-every-match snowball driver). Under the new cadence the player reaches a shop after
+// nearly every one of 19 matches (was ~4 between-cups gates), so the picks are raised: a
+// Card Pick is now ~1.3 matches' income, a Rare+ Pick ~2.6 — upgrading stays a real
+// save-vs-spend decision, not an every-match reflex. ShopPhase.tsx currently DUPLICATES
+// these as local literals (15_000 / 35_000); wire it to these exports to take the new
+// prices live. Until then, the ~20% income trim (BASE_WIN_CASH, below — fully wired via
+// matchReward) is the lever that lands, and it alone already pulls the median snowball
+// back into a challenging band (see the economy sim). ECONOMY §1.
+export const CARD_PICK_COST = 20000;   // was 15000 — the everyday XI upgrade
+export const RARE_PICK_COST = 48000;   // was 35000 — the guaranteed Rare+ upgrade
+
 export const SHOP_ITEMS: ShopItem[] = [
-  { id: 'card_pick',       name: 'Card Pick',              description: 'Choose 1 of 3 cards',              cost: 15000, category: 'card' },
-  { id: 'rare_pick',       name: 'Rare+ Pick',             description: 'Choose 1 of 3 (Rare or better)',   cost: 35000, category: 'card' },
+  // NOTE: card_pick/rare_pick here are the source-of-truth prices; the pick UI is driven
+  // by ShopPhase local constants today (SHOP_ITEMS is `void`ed there), so these two are
+  // safe to raise ahead of the wiring. Every OTHER entry below is kept at its live display
+  // value so no charge≠display desync ships (reroll & scout ARE charged from here via
+  // buyShopItem, while their ShopPhase price labels are separate literals).
+  { id: 'card_pick',       name: 'Card Pick',              description: 'Choose 1 of 3 cards',              cost: CARD_PICK_COST, category: 'card' },
+  { id: 'rare_pick',       name: 'Rare+ Pick',             description: 'Choose 1 of 3 (Rare or better)',   cost: RARE_PICK_COST, category: 'card' },
   { id: 'tactical_pack',   name: 'Tactical Pack',          description: '3 random tactical cards',          cost: 10000, category: 'action_pack' },
   { id: 'moment_pack',     name: 'Moment Pack',            description: '2 random moment cards',            cost: 20000, category: 'action_pack' },
   { id: 'mind_games_pack', name: 'Mind Games Pack',        description: '2 random mind game cards',         cost: 15000, category: 'action_pack' },
   { id: 'mixed_pack',      name: 'Mixed Pack',             description: '3 random from all types',          cost: 8000,  category: 'action_pack' },
-  { id: 'manager_card',    name: 'Manager Card',           description: 'Random manager modifier',          cost: 25000, category: 'manager' },
+  { id: 'manager_card',    name: 'Manager Card',           description: 'Random manager modifier',          cost: 25000, category: 'manager' }, // == JOKER_COST
   { id: 'reroll',          name: 'Reroll Shop',            description: 'Refresh shop offerings',           cost: 8000,  category: 'utility' },
   { id: 'heal',            name: 'Heal Injured Card',      description: 'Restore an injured card',          cost: 12000, category: 'utility' },
   { id: 'scout_report',    name: 'Scout Report',           description: 'See next opponent style + strength', cost: 10000, category: 'utility' },
@@ -191,8 +208,17 @@ export function getAcademyTier(tier: number): Academy {
 // as a Stadium Expansion Investment), not derived from results; over-banking under
 // permadeath gets you eliminated before the compounding lands (ECONOMY §1, §4).
 
-/** Per-round win reward (draws derive via DRAW_REWARD_FACTOR; a loss ends the run). */
-export const BASE_WIN_CASH = [8000, 12000, 16000, 22000, 30000];
+/** Per-round win reward, keyed by CUP (1-5), NOT by tie — every tie in a cup pays this
+ *  base (draws derive via DRAW_REWARD_FACTOR; a loss ends the run).
+ *
+ *  Shop-every-match retune: the shop now opens after all 19 non-final matches (was ~4
+ *  between-cups gates), so this per-match base is credited and SPENDABLE ~5× as often.
+ *  Trimmed ~20% from the sparse-cadence values [8000,12000,16000,22000,30000] so the
+ *  average match no longer fully funds a Card Pick every time — income now gates the
+ *  new high-frequency shop so a mid squad upgrades meaningfully (+5 XI power over a run)
+ *  without buying its way to elite (+9 under the old numbers). See ECONOMY §1 (anti-
+ *  snowball) — this is the single dial that throttles EVERY purchase type at once. */
+export const BASE_WIN_CASH = [6000, 9500, 13000, 18000, 24000];
 
 /** Stadium payout multiplier by tier (1-indexed) — the compounding income axis. */
 export const STADIUM_MULT = [1.0, 1.25, 1.6, 2.0, 2.5];
