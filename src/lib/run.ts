@@ -839,7 +839,13 @@ export function startMatch(state: RunState): { state: RunState; handState: HandS
  * Advance to next match round
  */
 /** Compounding interest on banked cash, capped (ECONOMY §4: save-vs-spend under
- *  elimination — over-banking gets you knocked out before it pays off). §10 dial. */
+ *  elimination — over-banking gets you knocked out before it pays off). §10 dial.
+ *  Shop-every-match retune: interest is DELIBERATELY left banking only at cup boundaries
+ *  (handleShopNext finishedCup branch / advanceToNextMatch). The new mid-cup shops let
+ *  the player SPEND but not compound — so the dominant new effect is frequency of ACCESS
+ *  to upgrades, not runaway cash. Capped at £1500/cup (~£6k a run) it is a minor rounding
+ *  term next to match income; it was reviewed and left unchanged so banking stays a weak,
+ *  bounded incentive rather than a snowball. */
 export const INTEREST_RATE = 0.10;
 export const INTEREST_CAP = 1500;
 export function interestOn(cash: number): number {
@@ -910,6 +916,9 @@ export function buyShopItem(state: RunState, item: ShopItem): RunState | null {
 }
 
 export function healInjuredCard(state: RunState, cardId: number): RunState | null {
+  // Kept at 12000 to match the ShopPhase display literal (which this economy pass can't
+  // edit) — no charge≠display desync. A future pass should lift both together (a heal is
+  // now available after every match, so it could scale with the leaner income).
   const HEAL_COST = 12000;
   if (state.cash < HEAL_COST) return null;
 

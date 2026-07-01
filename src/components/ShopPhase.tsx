@@ -6,7 +6,7 @@ import { seededRandom } from '../lib/scoring';
 import type { RunState } from '../lib/run';
 import { getShopCards, ALL_CARDS } from '../lib/run';
 import {
-  SHOP_ITEMS, getTransferFee, getAcademyTier,
+  CARD_PICK_COST, RARE_PICK_COST, getTransferFee, getAcademyTier,
   generateAcademyDurability, JOKER_COST, getStadiumInvestment,
   getAcademyInvestment, BOX_OFFICE_INVESTMENT,
 } from '../lib/economy';
@@ -18,9 +18,6 @@ import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import SquadGallery from './SquadGallery';
 import { PIXEL } from './cards/cardTokens';
-
-// SHOP_ITEMS kept imported to preserve the module surface; not referenced directly.
-void SHOP_ITEMS;
 
 interface ShopPhaseProps {
   state: RunState;
@@ -39,8 +36,8 @@ interface ShopPhaseProps {
   shopSeed: number;
 }
 
-const CARD_PICK_COST = 15_000;
-const RARE_PICK_COST = 35_000;
+// Pick prices come from economy.ts (the single source of truth for the shop-every-match
+// snowball dials); display and charge both read these, so they never desync.
 const TACTIC_PACK_COST = 10_000;
 const TRAINING_COST = 8_000;
 const TRAINING_INCREMENT = 5;
