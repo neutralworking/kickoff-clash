@@ -1717,7 +1717,7 @@ export default function PitchMatchView({
           onClick={() => { if (manager) setModal({ variant: 'manager', manager }); else setTrayOpen(true); }}
           style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3, padding: '5px 8px', borderRadius: 'var(--radius)', border: `2px solid ${manager ? 'var(--gold)' : 'var(--border)'}`, background: manager ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0, width: 82, textAlign: 'left' }}>
           <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, alignSelf: 'flex-start' }}>MGR</span>
-          <span style={{ fontSize: 10, fontWeight: 800, color: manager ? 'var(--cream)' : 'var(--dust)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.1 }}>{manager ? lastName(manager.name) : 'No gaffer'}</span>
+          <span style={{ fontSize: 10, fontWeight: 800, color: manager ? 'var(--cream)' : 'var(--dust)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.1 }}>{manager ? lastName(manager.name) : 'No manager'}</span>
         </button>
         {/* Rich tactic strip — opponent read first, then deployed effects, then the
             free/deployable slot. No-wrap horizontal scroll keeps it one band tall. */}

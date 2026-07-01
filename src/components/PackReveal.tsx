@@ -535,9 +535,9 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
           <SealedPack meta={meta} count={count} countNoun={countNoun} ripping={phase === 'ripping'} onRip={rip} />
         ) : (
           <>
-            {/* Run-context strip — PLAYER pack only. Pinned in the upper dead
-                zone above the grid, matching the bottom hint pill. This is the
-                headline correction: the 24-card draft is your WHOLE run squad. */}
+            {/* Run-context strip — PLAYER pack only. Pinned above the grid, matching
+                the bottom hint pill: the starting draft is random and the lineup is
+                improved in the shop (players can be bought and sold). */}
             {stage === 'players' && (
               <div
                 className="chip-reveal glass-surface shrink-0 relative overflow-hidden"
