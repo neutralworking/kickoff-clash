@@ -780,7 +780,7 @@ function ManagerBody({ manager, full, accent }: { manager: JokerCard; full: bool
   const gaffer = managerAccent(manager.traits);
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: full ? 10 : '5px 6px' }}>
-      {/* Header: GAFFER tab · nation */}
+      {/* Header: MANAGER tab · nation */}
       <div className="flex items-center justify-between" style={{ gap: 4 }}>
         <span
           style={{
@@ -796,7 +796,7 @@ function ManagerBody({ manager, full, accent }: { manager: JokerCard; full: bool
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.3)',
           }}
         >
-          GAFFER
+          MANAGER
         </span>
         {flag ? (
           <span style={{ fontSize: full ? 15 : 11, lineHeight: 1 }}>{flag}</span>
@@ -814,22 +814,37 @@ function ManagerBody({ manager, full, accent }: { manager: JokerCard; full: bool
         <ManagerSprite tie={gaffer.tie} prop={gaffer.prop} full={full} />
       </div>
 
-      {/* Nameplate — gaffer name seated on a hard accent rule (matches the player
-          card's identity band), then the philosophy as the quiet flavour line. */}
+      {/* Nameplate — manager name seated on a hard accent rule (matches the player
+          card's identity band), then the EFFECT (what the manager does) as the
+          load-bearing line, and the philosophy as the quiet flavour beneath it. */}
       <div style={{ borderTop: `2px solid ${accent}`, paddingTop: full ? 6 : 3, marginTop: full ? 4 : 2 }}>
         <span className="truncate" style={{ display: 'block', fontFamily: PIXEL, fontSize: full ? 13 : 9.5, color: 'var(--cream)', lineHeight: 1.1, textShadow: '0 1px 0 var(--ink-black)' }}>
           {manager.name.toUpperCase()}
         </span>
         <p
           style={{
+            fontSize: full ? 11 : 8.5,
+            lineHeight: 1.35,
+            color: 'var(--cream)',
+            margin: '4px 0 0',
+            display: '-webkit-box',
+            WebkitLineClamp: full ? 4 : 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
+          {manager.effect}
+        </p>
+        <p
+          style={{
             fontFamily: 'var(--font-flavour, serif)',
             fontStyle: 'italic',
-            fontSize: full ? 12 : 8.5,
+            fontSize: full ? 11 : 8,
             lineHeight: 1.3,
-            color: 'var(--cream-soft)',
+            color: 'var(--dust)',
             margin: '3px 0 0',
             display: '-webkit-box',
-            WebkitLineClamp: full ? 3 : 2,
+            WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
           }}
@@ -1043,8 +1058,10 @@ function TacticBody({ tactic, full, accent }: { tactic: TacticCard; full: boolea
         </span>
       </div>
 
-      {/* Tactic crest sprite — bespoke chalk scene per tactic.id on a shared board. */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: full ? '8px 0' : '4px 0' }}>
+      {/* Tactic crest sprite — bespoke chalk scene per tactic.id on a shared board.
+          No rating/fitness/sprite competes for space here, so the board is the hero
+          of the card: it fills the width. */}
+      <div style={{ flex: 1, minHeight: full ? 0 : 74, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: full ? '10px 0' : '4px 0', overflow: 'hidden' }}>
         <TacticSprite id={tactic.id} accent={accent} full={full} />
       </div>
 
@@ -1085,7 +1102,7 @@ function TacticSprite({ id, accent, full }: { id: string; accent: string; full: 
     <svg
       className="pixelated"
       viewBox="0 0 24 24"
-      style={{ width: full ? '58%' : '70%', maxWidth: full ? 92 : 48, aspectRatio: '1', display: 'block' }}
+      style={{ width: full ? '94%' : '100%', maxWidth: full ? 168 : 100, height: '100%', maxHeight: full ? 168 : 100, aspectRatio: '1', display: 'block' }}
       shapeRendering="crispEdges"
     >
       <rect x="3" y="3" width="18" height="18" fill="rgba(0,0,0,0.22)" />

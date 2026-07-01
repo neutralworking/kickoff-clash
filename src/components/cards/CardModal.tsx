@@ -12,7 +12,7 @@
  * Detail content per variant:
  *   • Player     — position (long), archetype (+secondary), rating, rarity, nation,
  *                  durability, tags, strengths, weaknesses, quirk, bio.
- *   • Manager    — nation, philosophy, trait pills.
+ *   • Manager    — nation, philosophy, effect, trait pills.
  *   • Tactic     — category, effect, flavour, contradiction note.
  *   • Investment — ladder, tier, cost, Boardroom effect, flavour.
  */
@@ -520,12 +520,17 @@ function ManagerDetail({ manager }: { manager: JokerCard }) {
             fontStyle: 'italic',
             fontSize: 13,
             lineHeight: 1.4,
-            color: 'var(--cream-soft)',
+            color: 'var(--dust)',
             margin: 0,
           }}
         >
           {'“'}{manager.philosophy}{'”'}
         </p>
+      </Panel>
+
+      <Panel>
+        <Label>EFFECT</Label>
+        <span style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--cream)' }}>{manager.effect}</span>
       </Panel>
 
       <Panel>

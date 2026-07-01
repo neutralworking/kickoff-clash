@@ -417,13 +417,13 @@ function MarketTab({
         </div>
       </SectionCard>
 
-      {/* Gaffer signings */}
-      <SectionCard title="Gaffer Signings" accent="var(--kit-red)">
+      {/* Manager signings */}
+      <SectionCard title="Manager Signings" accent="var(--kit-red)">
         {!canPickJoker ? (
           <EmptyState
             text={state.jokers.length >= 3
-              ? 'Backroom full — 3 gaffers signed.'
-              : 'No gaffers available this window.'}
+              ? 'Backroom full — 3 managers signed.'
+              : 'No managers available this window.'}
           />
         ) : (
           <div className="grid grid-cols-3 gap-3">
