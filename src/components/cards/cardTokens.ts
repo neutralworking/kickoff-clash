@@ -186,6 +186,260 @@ export const POSITION_LABEL: Record<string, string> = {
   CF: 'Forward',
 };
 
+// ---------------------------------------------------------------------------
+// Per-role player SPRITE scheme (Tier-A #2). Distinct-per-role identity from a
+// BOUNDED asset count: one of 7 body silhouettes (drawn once, top-left lit) is
+// selected by role, tinted by POSITION_COLOR[position], and stamped with a tiny
+// per-role emblem prop. So: sprite = BODY[roleToBody(role)] + EMBLEM[role].
+//
+// The 7 bodies cover every tacticalRole in role-transforms.ts AND every `role`
+// string in kc_cards.json (23 live roles). New/unknown roles fall back by the
+// card's pitch position (`positionToBody`), so nothing ever renders bodyless.
+// ---------------------------------------------------------------------------
+
+export type BodyKind =
+  | 'keeper'      // GK — gloves + big frame, must survive grid size
+  | 'centreback'  // sweeper/stopper CB — tall, square-shouldered, arms crossed
+  | 'fullback'    // full-back / wing-back — leaner, one arm out (overlap)
+  | 'holding'     // holding / box-to-box mid — balanced, planted stance
+  | 'playmaker'   // playmaker / creator / #10 — poised, chest open, ball at feet
+  | 'winger'      // wide attacker — dynamic, leaning forward (running)
+  | 'striker';    // striker / target — front-on, arms wide, coiled
+
+// role → body silhouette. Covers ROLE_TRANSFORMS keys, their aliases, and the
+// authentic kc_cards.json role names. Order groups by family for readability.
+export const ROLE_TO_BODY: Record<string, BodyKind> = {
+  // --- Keepers ---
+  Distributor: 'keeper',
+  Torwart: 'keeper',
+  'Sweeper Keeper': 'keeper',
+  'Ball-Playing GK': 'keeper',
+  // --- Centre-backs ---
+  Sweeper: 'centreback',
+  Stopper: 'centreback',
+  Colossus: 'centreback',
+  Centrale: 'centreback',
+  Zagueiro: 'centreback',
+  Libero: 'centreback',
+  'Auxiliary CB': 'centreback',
+  // --- Full-backs / wide defenders ---
+  Fullback: 'fullback',
+  'Wing-back': 'fullback',
+  Lateral: 'fullback',
+  Fluidificante: 'fullback',
+  Tornante: 'fullback',
+  // --- Holding / box-to-box mids ---
+  Anchor: 'holding',
+  Regista: 'holding',
+  Metodista: 'holding',
+  Volante: 'holding',
+  'Segundo Volante': 'holding',
+  Pivote: 'holding',
+  Tuttocampista: 'holding',
+  Relayeur: 'holding',
+  Mezzala: 'holding',
+  // --- Playmakers / creators / #10 ---
+  Playmaker: 'playmaker',
+  'Wide Playmaker': 'playmaker',
+  Trequartista: 'playmaker',
+  Enganche: 'playmaker',
+  Fantasista: 'playmaker',
+  Invertido: 'playmaker',
+  Inventor: 'playmaker',
+  Mediapunta: 'playmaker',
+  'Half-Space Creator': 'playmaker',
+  // --- Wingers / wide attackers ---
+  'Inverted Winger': 'winger',
+  Winger: 'winger',
+  Extremo: 'winger',
+  // --- Strikers / targets ---
+  'Prima Punta': 'striker',
+  'Seconda Punta': 'striker',
+  'Vertical Forward': 'striker',
+  Poacher: 'striker',
+  'Falso Nove': 'striker',
+};
+
+// Pitch-position → body fallback (for any role not in ROLE_TO_BODY).
+const POSITION_TO_BODY: Record<string, BodyKind> = {
+  GK: 'keeper',
+  CD: 'centreback',
+  WD: 'fullback',
+  DM: 'holding',
+  CM: 'holding',
+  WM: 'winger',
+  AM: 'playmaker',
+  WF: 'winger',
+  CF: 'striker',
+};
+
+/** Resolve a card's body silhouette: role first, else pitch position, else holding. */
+export function roleToBody(role: string | undefined, position: string): BodyKind {
+  if (role && ROLE_TO_BODY[role]) return ROLE_TO_BODY[role];
+  return POSITION_TO_BODY[position] ?? 'holding';
+}
+
+/**
+ * A tiny per-role emblem: 1–5 pixel rects on the 24×24 grid, stamped on the
+ * sprite's chest/shoulder as a role motif. `fill` is 'accent' | 'white' | 'ink'
+ * | a hex, resolved at draw time (accent = the rarity/position accent passed in).
+ * Kept deliberately small (a crest-sized mark) so it reads without fighting the
+ * body silhouette. Roles that share a motif family share an emblem.
+ */
+export interface EmblemRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  fill: 'accent' | 'white' | 'ink' | 'shade';
+}
+
+// A handful of shared motifs, then the role→motif map. Motifs sit around the
+// upper chest (y 12–17) so they never collide with the head or the shorts.
+const EMBLEM_MOTIFS: Record<string, EmblemRect[]> = {
+  // Diamond (playmaker vision) — a lit 2px diamond.
+  diamond: [
+    { x: 11, y: 13, w: 2, h: 2, fill: 'accent' },
+    { x: 10, y: 14, w: 1, h: 1, fill: 'accent' },
+    { x: 13, y: 14, w: 1, h: 1, fill: 'accent' },
+    { x: 11, y: 13, w: 1, h: 1, fill: 'white' },
+  ],
+  // Arrow up (direct / vertical threat).
+  arrowUp: [
+    { x: 11, y: 12, w: 2, h: 4, fill: 'accent' },
+    { x: 10, y: 13, w: 1, h: 1, fill: 'accent' },
+    { x: 13, y: 13, w: 1, h: 1, fill: 'accent' },
+    { x: 11, y: 12, w: 1, h: 1, fill: 'white' },
+  ],
+  // Chevron (winger cut-in).
+  chevron: [
+    { x: 10, y: 15, w: 1, h: 1, fill: 'accent' },
+    { x: 11, y: 14, w: 1, h: 1, fill: 'accent' },
+    { x: 12, y: 13, w: 1, h: 1, fill: 'white' },
+    { x: 13, y: 14, w: 1, h: 1, fill: 'accent' },
+    { x: 14, y: 15, w: 1, h: 1, fill: 'accent' },
+  ],
+  // Shield (stopper / defensive).
+  shield: [
+    { x: 10, y: 13, w: 4, h: 2, fill: 'accent' },
+    { x: 11, y: 15, w: 2, h: 1, fill: 'accent' },
+    { x: 10, y: 13, w: 4, h: 1, fill: 'white' },
+    { x: 12, y: 15, w: 1, h: 1, fill: 'shade' },
+  ],
+  // Bar (anchor / holding — a planted crossbar).
+  anchorBar: [
+    { x: 10, y: 14, w: 4, h: 1, fill: 'accent' },
+    { x: 11, y: 13, w: 2, h: 3, fill: 'accent' },
+    { x: 11, y: 13, w: 1, h: 1, fill: 'white' },
+  ],
+  // Gloves (keeper).
+  gloves: [
+    { x: 9, y: 14, w: 2, h: 2, fill: 'white' },
+    { x: 13, y: 14, w: 2, h: 2, fill: 'white' },
+    { x: 9, y: 14, w: 2, h: 1, fill: 'accent' },
+    { x: 13, y: 14, w: 2, h: 1, fill: 'accent' },
+  ],
+  // Overlap (fullback — a small forward dash).
+  dash: [
+    { x: 10, y: 14, w: 3, h: 1, fill: 'accent' },
+    { x: 12, y: 13, w: 1, h: 1, fill: 'white' },
+    { x: 12, y: 15, w: 1, h: 1, fill: 'accent' },
+  ],
+  // Target ring (target man / poacher — a small crosshair).
+  target: [
+    { x: 11, y: 13, w: 2, h: 1, fill: 'accent' },
+    { x: 11, y: 15, w: 2, h: 1, fill: 'accent' },
+    { x: 10, y: 14, w: 1, h: 1, fill: 'accent' },
+    { x: 13, y: 14, w: 1, h: 1, fill: 'accent' },
+    { x: 11, y: 14, w: 2, h: 1, fill: 'white' },
+  ],
+  // Spark (creator / fantasista — a 4-point twinkle).
+  spark: [
+    { x: 11, y: 12, w: 2, h: 1, fill: 'white' },
+    { x: 11, y: 15, w: 2, h: 1, fill: 'accent' },
+    { x: 10, y: 13, w: 1, h: 2, fill: 'accent' },
+    { x: 13, y: 13, w: 1, h: 2, fill: 'accent' },
+    { x: 11, y: 13, w: 2, h: 2, fill: 'accent' },
+  ],
+  // Wings (sweeper keeper / distribution keeper distinctions handled by tint).
+  boot: [
+    { x: 10, y: 15, w: 4, h: 1, fill: 'accent' },
+    { x: 10, y: 14, w: 2, h: 1, fill: 'white' },
+    { x: 13, y: 14, w: 1, h: 1, fill: 'accent' },
+  ],
+};
+
+/** role → emblem motif. Falls back to the position family motif, else a plain bar. */
+export const ROLE_EMBLEM: Record<string, keyof typeof EMBLEM_MOTIFS> = {
+  // keepers
+  Distributor: 'boot',        // starts attacks with distribution
+  Torwart: 'gloves',
+  'Sweeper Keeper': 'gloves',
+  'Ball-Playing GK': 'boot',
+  // centre-backs
+  Sweeper: 'shield',
+  Stopper: 'shield',
+  Colossus: 'shield',
+  Centrale: 'shield',
+  Zagueiro: 'shield',
+  Libero: 'boot',             // ball-playing libero
+  'Auxiliary CB': 'shield',
+  // full-backs
+  Fullback: 'dash',
+  'Wing-back': 'dash',
+  Lateral: 'dash',
+  Fluidificante: 'dash',
+  Tornante: 'chevron',
+  // holding / b2b
+  Anchor: 'anchorBar',
+  Regista: 'diamond',         // deep creator
+  Metodista: 'anchorBar',
+  Volante: 'anchorBar',
+  'Segundo Volante': 'anchorBar',
+  Pivote: 'anchorBar',
+  Tuttocampista: 'arrowUp',   // box to box
+  Relayeur: 'arrowUp',
+  Mezzala: 'arrowUp',
+  // playmakers / creators
+  Playmaker: 'diamond',
+  'Wide Playmaker': 'diamond',
+  Trequartista: 'spark',
+  Enganche: 'diamond',
+  Fantasista: 'spark',
+  Invertido: 'diamond',
+  Inventor: 'spark',
+  Mediapunta: 'diamond',
+  'Half-Space Creator': 'diamond',
+  // wingers
+  'Inverted Winger': 'chevron',
+  Winger: 'chevron',
+  Extremo: 'chevron',
+  // strikers
+  'Prima Punta': 'target',
+  'Seconda Punta': 'spark',
+  'Vertical Forward': 'arrowUp',
+  Poacher: 'target',
+  'Falso Nove': 'diamond',
+};
+
+const POSITION_EMBLEM: Record<string, keyof typeof EMBLEM_MOTIFS> = {
+  GK: 'gloves',
+  CD: 'shield',
+  WD: 'dash',
+  DM: 'anchorBar',
+  CM: 'arrowUp',
+  WM: 'chevron',
+  AM: 'diamond',
+  WF: 'chevron',
+  CF: 'target',
+};
+
+/** Resolve a role's emblem rects: role first, else position family, else a bar. */
+export function roleEmblem(role: string | undefined, position: string): EmblemRect[] {
+  const key = (role && ROLE_EMBLEM[role]) || POSITION_EMBLEM[position] || 'anchorBar';
+  return EMBLEM_MOTIFS[key] ?? EMBLEM_MOTIFS.anchorBar;
+}
+
 // Durability → readable label + colour. Backed by scoring.ts Durability union.
 export const DURABILITY_META: Record<string, { label: string; color: string }> = {
   glass: { label: 'Glass', color: '#fca5a5' },
@@ -203,6 +457,148 @@ export const TACTIC_CAT_COLOR: Record<string, string> = {
   specialist: 'var(--gold)',
 };
 
+// ---------------------------------------------------------------------------
+// Bespoke TACTIC icons (Tier-A #3). All 16 share the CHALKBOARD base (the family
+// signature — a green board with a lit top rail + halfway line, drawn by the
+// sprite), and each supplies its own chalk SCENE as a list of pixel rects. The
+// scene draws inside the board's inner area (x 5–19, y 5–19 on the 24×24 grid).
+// `fill` resolves at draw time: 'accent' = the category accent, 'chalk' = chalk
+// white, 'ink' = the seated dark shadow, 'ball' = a bright ball dot. ≤6 colours.
+// TacticSprite dispatches on tactic.id and falls back to a chevron.
+// ---------------------------------------------------------------------------
+
+export interface ChalkRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  fill: 'accent' | 'chalk' | 'ink' | 'ball';
+}
+
+// Small helpers for readable scenes.
+const dot = (x: number, y: number, fill: ChalkRect['fill'] = 'chalk'): ChalkRect => ({ x, y, w: 2, h: 2, fill });
+const pip = (x: number, y: number, fill: ChalkRect['fill'] = 'chalk'): ChalkRect => ({ x, y, w: 1, h: 1, fill });
+
+export const TACTIC_ICON: Record<string, ChalkRect[]> = {
+  // high_line — a defensive line pushed HIGH + an up-arrow driving it up.
+  high_line: [
+    { x: 6, y: 9, w: 12, h: 1, fill: 'accent' }, // the pushed-up line
+    dot(6, 8), dot(10, 8), dot(14, 8), // back line dots on it
+    { x: 11, y: 11, w: 2, h: 5, fill: 'chalk' }, // arrow shaft up
+    { x: 10, y: 12, w: 1, h: 1, fill: 'chalk' }, { x: 13, y: 12, w: 1, h: 1, fill: 'chalk' },
+    { x: 11, y: 10, w: 2, h: 1, fill: 'accent' }, // arrow head
+  ],
+  // press_high — three arrows CONVERGING on a high ball.
+  press_high: [
+    dot(11, 6, 'ball'), // the high ball
+    { x: 7, y: 11, w: 1, h: 3, fill: 'accent' }, { x: 7, y: 10, w: 2, h: 1, fill: 'chalk' }, // left arrow up-right
+    { x: 11, y: 12, w: 2, h: 3, fill: 'accent' }, { x: 11, y: 11, w: 2, h: 1, fill: 'chalk' }, // centre arrow up
+    { x: 16, y: 11, w: 1, h: 3, fill: 'accent' }, { x: 15, y: 10, w: 2, h: 1, fill: 'chalk' }, // right arrow up-left
+  ],
+  // wing_play — ball hugging the touchline + a cross arc into the middle.
+  wing_play: [
+    { x: 6, y: 6, w: 1, h: 11, fill: 'chalk' }, // touchline hugging left
+    dot(5, 14, 'ball'), // ball wide low
+    pip(8, 10, 'accent'), pip(10, 8, 'accent'), pip(13, 7, 'accent'), pip(16, 8, 'accent'), // cross arc
+    dot(16, 12, 'chalk'), // target in the box
+  ],
+  // narrow — a tight central triangle of 3 dots.
+  narrow: [
+    dot(11, 7), // apex
+    dot(8, 14), dot(14, 14), // base
+    pip(10, 10, 'accent'), pip(13, 10, 'accent'), pip(11, 13, 'accent'), // connecting triangle lines
+    pip(12, 10, 'accent'),
+  ],
+  // low_block — a solid brick wall across the bottom.
+  low_block: [
+    { x: 5, y: 14, w: 14, h: 2, fill: 'accent' },
+    { x: 5, y: 16, w: 14, h: 2, fill: 'accent' },
+    // mortar lines (ink) — offset courses read as bricks
+    pip(9, 14, 'ink'), pip(13, 14, 'ink'), pip(17, 14, 'ink'),
+    pip(7, 16, 'ink'), pip(11, 16, 'ink'), pip(15, 16, 'ink'),
+    { x: 5, y: 14, w: 14, h: 1, fill: 'chalk' }, // lit top course
+  ],
+  // sit_deep — a deep flat block + a small counter-arrow breaking out.
+  sit_deep: [
+    { x: 5, y: 15, w: 14, h: 2, fill: 'accent' }, // deep block
+    dot(7, 15, 'chalk'), dot(11, 15, 'chalk'), dot(15, 15, 'chalk'),
+    { x: 12, y: 8, w: 1, h: 5, fill: 'chalk' }, // counter arrow shaft
+    { x: 11, y: 8, w: 3, h: 1, fill: 'accent' }, { x: 12, y: 7, w: 1, h: 1, fill: 'accent' }, // arrow head up
+  ],
+  // fortress — a castle battlement (gold via accent = specialist? it's defensive; use chalk crenellations on accent wall).
+  fortress: [
+    { x: 6, y: 12, w: 12, h: 5, fill: 'accent' }, // wall body
+    // crenellations on top
+    { x: 6, y: 10, w: 2, h: 2, fill: 'accent' }, { x: 10, y: 10, w: 2, h: 2, fill: 'accent' }, { x: 14, y: 10, w: 2, h: 2, fill: 'accent' },
+    { x: 6, y: 10, w: 12, h: 1, fill: 'chalk' }, // lit battlement top
+    { x: 6, y: 16, w: 12, h: 1, fill: 'ink' }, // shadowed base
+    pip(11, 13, 'ink'), pip(12, 13, 'ink'), { x: 11, y: 14, w: 2, h: 3, fill: 'ink' }, // gate
+  ],
+  // counter_attack — one long fast arrow box-to-box (diagonal).
+  counter_attack: [
+    pip(6, 16, 'chalk'), pip(8, 14, 'chalk'), pip(10, 12, 'chalk'), pip(12, 10, 'chalk'), pip(14, 8, 'chalk'), // shaft
+    { x: 14, y: 7, w: 3, h: 1, fill: 'accent' }, { x: 16, y: 7, w: 1, h: 3, fill: 'accent' }, // arrow head
+    dot(5, 16, 'ball'), // starting ball deep
+  ],
+  // possession — a ring of passing arrows (a circle of dots).
+  possession: [
+    dot(11, 6), dot(15, 8), dot(16, 12), dot(14, 15), dot(9, 15), dot(6, 12), dot(7, 8), // ring
+    { x: 11, y: 11, w: 2, h: 2, fill: 'accent' }, // ball in the middle
+    pip(11, 11, 'chalk'),
+  ],
+  // set_piece — a corner flag + a delivery arc to a header dot.
+  set_piece: [
+    { x: 6, y: 8, w: 1, h: 9, fill: 'chalk' }, // flag pole
+    { x: 7, y: 8, w: 3, h: 2, fill: 'accent' }, // flag
+    pip(10, 9, 'chalk'), pip(12, 7, 'chalk'), pip(14, 7, 'chalk'), pip(16, 9, 'chalk'), // delivery arc
+    dot(16, 12, 'ball'), // header target
+    pip(16, 11, 'accent'), // header contact
+  ],
+  // dark_arts — a sly mask / wink.
+  dark_arts: [
+    { x: 8, y: 9, w: 8, h: 3, fill: 'accent' }, // mask band
+    { x: 8, y: 9, w: 8, h: 1, fill: 'chalk' }, // lit top
+    pip(10, 10, 'ink'), // left eye slit
+    { x: 13, y: 10, w: 2, h: 1, fill: 'ink' }, // wink (closed eye)
+    { x: 9, y: 14, w: 6, h: 1, fill: 'chalk' }, // sly grin
+    pip(9, 13, 'chalk'), pip(14, 13, 'chalk'),
+  ],
+  // youth_policy — a sapling / academy shirt + an up-chevron.
+  youth_policy: [
+    { x: 11, y: 11, w: 2, h: 5, fill: 'chalk' }, // stem
+    { x: 8, y: 9, w: 3, h: 2, fill: 'accent' }, { x: 13, y: 9, w: 3, h: 2, fill: 'accent' }, // leaves
+    { x: 10, y: 7, w: 4, h: 2, fill: 'accent' }, // top bud
+    { x: 10, y: 7, w: 4, h: 1, fill: 'chalk' }, // lit bud
+    pip(10, 15, 'accent'), pip(11, 14, 'accent'), pip(12, 13, 'chalk'), pip(13, 14, 'accent'), pip(14, 15, 'accent'), // up-chevron below
+  ],
+  // overload_left — a cluster of dots + arrows on the LEFT.
+  overload_left: [
+    dot(6, 8, 'accent'), dot(6, 12, 'accent'), dot(8, 10, 'accent'), dot(6, 15, 'accent'),
+    { x: 9, y: 11, w: 3, h: 1, fill: 'chalk' }, { x: 11, y: 10, w: 1, h: 1, fill: 'chalk' }, { x: 11, y: 12, w: 1, h: 1, fill: 'chalk' }, // arrow pushing left→right? threat piled left
+    { x: 5, y: 6, w: 1, h: 12, fill: 'ink' }, // left touchline emphasis
+  ],
+  // overload_right — mirror on the RIGHT.
+  overload_right: [
+    dot(16, 8, 'accent'), dot(16, 12, 'accent'), dot(14, 10, 'accent'), dot(16, 15, 'accent'),
+    { x: 12, y: 11, w: 3, h: 1, fill: 'chalk' }, { x: 12, y: 10, w: 1, h: 1, fill: 'chalk' }, { x: 12, y: 12, w: 1, h: 1, fill: 'chalk' },
+    { x: 18, y: 6, w: 1, h: 12, fill: 'ink' }, // right touchline emphasis
+  ],
+  // route_one — one long VERTICAL over-the-top arrow bypassing the midfield line.
+  route_one: [
+    { x: 6, y: 13, w: 12, h: 1, fill: 'ink' }, // the midfield line being bypassed
+    pip(7, 13, 'chalk'), pip(11, 13, 'chalk'), pip(15, 13, 'chalk'),
+    { x: 11, y: 7, w: 2, h: 9, fill: 'chalk' }, // long vertical shaft
+    { x: 10, y: 8, w: 1, h: 1, fill: 'accent' }, { x: 13, y: 8, w: 1, h: 1, fill: 'accent' },
+    { x: 11, y: 6, w: 2, h: 1, fill: 'accent' }, // arrow head at top
+  ],
+  // man_marking — paired dots with connecting shadow lines.
+  man_marking: [
+    dot(7, 8, 'accent'), dot(10, 8, 'chalk'), pip(9, 9, 'ink'), // pair 1 (marker+man)
+    dot(14, 12, 'accent'), dot(11, 12, 'chalk'), pip(13, 13, 'ink'), // pair 2
+    dot(8, 15, 'accent'), dot(11, 15, 'chalk'), pip(10, 16, 'ink'), // pair 3
+  ],
+};
+
 /**
  * Investment ladder → Boardroom identity. One gold-family frame; each ladder is
  * distinguished by its tab label, a secondary accent, and a one-line summary of
@@ -216,6 +612,77 @@ export const INVESTMENT_META: Record<
   academy: { tab: 'ACADEMY', accent: 'var(--success)', kicker: 'Youth intake' },
   boxoffice: { tab: 'BOX OFFICE', accent: 'var(--amber)', kicker: 'Goals → cash' },
 };
+
+// ---------------------------------------------------------------------------
+// MANAGER (gaffer) identity (Tier-A #4). Every gaffer used to render the same
+// suit-blob; now the sprite is a proper half-body bust differentiated by the
+// gaffer's PRIMARY trait — a tie/pocket-square tint + a small prop (clipboard /
+// whistle / scarf / rosette). The trait TAGS are also coloured by meaning on
+// both the grid card and the modal (defensive-blue / attacking-red / etc.),
+// keyed on the trait string, with a sane neutral fallback.
+// ---------------------------------------------------------------------------
+
+export type ManagerProp = 'clipboard' | 'whistle' | 'scarf' | 'rosette' | 'shield' | 'none';
+
+export interface ManagerTraitStyle {
+  /** Tag + tie/pocket-square colour. */
+  color: string;
+  /** Low-alpha wash behind the tag. */
+  bg: string;
+  /** The bust's differentiating prop (drawn once per prop). */
+  prop: ManagerProp;
+}
+
+// Meaning families:
+//   defensive → kit blue · attacking → kit red · possession/patient → gold ·
+//   youth/chemistry/people → engine green · risk/dark → epic purple.
+export const MANAGER_TRAIT_STYLE: Record<string, ManagerTraitStyle> = {
+  // defensive
+  'Low Block': { color: '#3d7bd6', bg: 'rgba(61,123,214,0.16)', prop: 'shield' },
+  'Counter-Punch': { color: '#3d7bd6', bg: 'rgba(61,123,214,0.16)', prop: 'shield' },
+  // attacking / direct
+  'Direct Play': { color: '#e23b35', bg: 'rgba(226,59,53,0.16)', prop: 'clipboard' },
+  'Aerial Targets': { color: '#e23b35', bg: 'rgba(226,59,53,0.16)', prop: 'clipboard' },
+  // possession / patient
+  Possession: { color: '#f5c542', bg: 'rgba(245,197,66,0.14)', prop: 'clipboard' },
+  'Patient Build-up': { color: '#f5c542', bg: 'rgba(245,197,66,0.14)', prop: 'clipboard' },
+  // people / motivation
+  Motivator: { color: '#34c46a', bg: 'rgba(52,196,106,0.15)', prop: 'whistle' },
+  'Leaders Thrive': { color: '#34c46a', bg: 'rgba(52,196,106,0.15)', prop: 'whistle' },
+  // youth
+  'Youth Project': { color: '#34c46a', bg: 'rgba(52,196,106,0.15)', prop: 'rosette' },
+  'Raw Talent': { color: '#34c46a', bg: 'rgba(52,196,106,0.15)', prop: 'rosette' },
+  // chemistry / squad
+  'Team Cohesion': { color: '#2fc7b0', bg: 'rgba(47,199,176,0.15)', prop: 'scarf' },
+  Chemistry: { color: '#2fc7b0', bg: 'rgba(47,199,176,0.15)', prop: 'scarf' },
+  'Scouting Network': { color: '#2fc7b0', bg: 'rgba(47,199,176,0.15)', prop: 'clipboard' },
+  'Squad Depth': { color: '#2fc7b0', bg: 'rgba(47,199,176,0.15)', prop: 'clipboard' },
+  // risk / dark
+  'High Risk': { color: '#a855f7', bg: 'rgba(168,85,247,0.16)', prop: 'rosette' },
+  'Backs Mavericks': { color: '#a855f7', bg: 'rgba(168,85,247,0.16)', prop: 'rosette' },
+};
+
+/** Style for a manager trait tag, with a neutral kit-red-family fallback. */
+export function managerTraitStyle(trait: string): ManagerTraitStyle {
+  return (
+    MANAGER_TRAIT_STYLE[trait] ?? {
+      color: 'var(--kit-red)',
+      bg: 'rgba(232,54,47,0.14)',
+      prop: 'none',
+    }
+  );
+}
+
+/**
+ * The gaffer bust's differentiating accent + prop, resolved from the PRIMARY
+ * trait (traits[0]). This tints the tie + pocket-square and selects the prop, so
+ * a "Low Block" gaffer (blue tie, shield) never reads the same as a "Motivator"
+ * (green tie, whistle).
+ */
+export function managerAccent(traits: string[]): { tie: string; prop: ManagerProp } {
+  const s = managerTraitStyle(traits[0] ?? '');
+  return { tie: s.color, prop: s.prop };
+}
 
 /** Compact money label, e.g. 22000 → "£22k", 1500 → "£1.5k", 500 → "£500". */
 export function formatCash(n: number): string {
@@ -303,12 +770,68 @@ export function nationFlag(nation?: string): string | null {
   return NATION_FLAG[nation] ?? null;
 }
 
-/** Short uppercase code for nations without a mapped flag (e.g. "SPA/BRA" → "SPA"). */
+// ---------------------------------------------------------------------------
+// Fictional-nation identity (Tier-A #5). The live pool's 15 nations are invented
+// footballing cultures. A blind slice(0,3) produced opaque/ambiguous stubs
+// (Solmar→SOL, Esperia→ESP reading as SPAIN). Below is an AUTHORED code + one-
+// line gloss per nation — codes chosen so none collides with a real ISO/FIFA
+// country code or another KC nation. `nationCode`/`nationGloss` fall through to
+// a de-collided slice for anything unmapped so the card never renders blank.
+// ---------------------------------------------------------------------------
+
+export const NATION_CODE: Record<string, string> = {
+  Esperia: 'ESY',
+  Caldia: 'CAL',
+  Brakka: 'BRK',
+  Nordberg: 'NOR',
+  Westoria: 'WES',
+  Montera: 'MON',
+  Tavros: 'TAV',
+  Sur: 'SUR',
+  Trabia: 'TRB',
+  Valdoro: 'VAL',
+  Kestrel: 'KES',
+  Solmar: 'SOL',
+  Verdania: 'VRD',
+  Aurato: 'AUR',
+  Lenisia: 'LEN',
+};
+
+export const NATION_GLOSS: Record<string, string> = {
+  Esperia: 'Sun-baked south; technical, theatrical, tiki-taka heartland.',
+  Caldia: 'Cold northern coast; hard-running, direct, second-ball merchants.',
+  Brakka: 'Industrial heartland; combative destroyers and box-to-box engines.',
+  Nordberg: 'The frozen north; disciplined, organised, defends for its life.',
+  Westoria: 'Old money, old game; possession purists and elegant playmakers.',
+  Montera: 'Mountain nation; towering targets and set-piece obsessives.',
+  Tavros: 'Bull-country; fearless pressing and full-blooded challenges.',
+  Sur: 'The deep south; flair, dribblers, streets-first football.',
+  Trabia: 'Coastal trade ports; cosmopolitan, adaptable, jack-of-all-trades.',
+  Valdoro: 'Gold-valley aristocracy; expensive, silky, big-game players.',
+  Kestrel: 'Highland raptors; pace, counters, runners in behind.',
+  Solmar: 'Sun-and-sea riviera; creative forwards and confident keepers.',
+  Verdania: 'Green lowlands; patient build-up, deep distributors.',
+  Aurato: 'Dawn-coast; young, hungry, raw-talent academies.',
+  Lenisia: 'River nation; languid technicians, the classic no.10.',
+};
+
+/**
+ * Short uppercase code for a nation without a mapped flag. Prefers the AUTHORED
+ * KC nation code (so Solmar → SOL, not an ambiguous slice), then falls back to a
+ * de-collided slice for real-country strings without a flag or any unknown.
+ */
 export function nationCode(nation?: string): string {
   if (!nation) return '';
+  if (NATION_CODE[nation]) return NATION_CODE[nation];
   const first = nation.split('/')[0].trim();
   const letters = first.replace(/[^A-Za-z]/g, '');
   return letters.slice(0, 3).toUpperCase();
+}
+
+/** One-line gloss for a KC nation (empty for real-country / unknown strings). */
+export function nationGloss(nation?: string): string {
+  if (!nation) return '';
+  return NATION_GLOSS[nation] ?? '';
 }
 
 /** Display surname (last token of the name). */

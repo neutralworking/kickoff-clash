@@ -36,8 +36,12 @@ interface StageMeta {
   key: Stage;
   index: number;
   packLabel: string;
+  /** The named tagline shown under the title (was the generic category "The squad"). */
   packSub: string;
   packAccent: string;
+  /** Short header above the revealed cards, framing the pick (fills the dead zone). */
+  cardsHeader: string;
+  /** Bottom teach pill — the tactile "tap to …" instruction. */
   teach: string;
 }
 
@@ -45,25 +49,28 @@ const STAGE_META: Record<Stage, StageMeta> = {
   players: {
     key: 'players',
     index: 1,
-    packLabel: 'PLAYER PACK',
-    packSub: 'The squad',
+    packLabel: 'THE SIGNING SHEET',
+    packSub: 'Fresh off the coach.',
     packAccent: 'var(--gold)',
-    teach: 'These cards are your squad. Tap any card to inspect it. You’ll pick 11 to take the pitch.',
+    cardsHeader: 'YOUR SQUAD',
+    teach: 'Tap any card to inspect it. Next screen you name your XI and subs from this squad.',
   },
   managers: {
     key: 'managers',
     index: 2,
-    packLabel: 'MANAGER PACK',
-    packSub: 'The gaffers',
+    packLabel: 'THE HOT SEAT',
+    packSub: 'Two men want the job.',
     packAccent: 'var(--kit-red)',
+    cardsHeader: 'PICK 1 OF 2',
     teach: 'A gaffer shapes the whole team through their traits. Tap to inspect, then pick one.',
   },
   tactics: {
     key: 'tactics',
     index: 3,
-    packLabel: 'TACTICAL PACK',
-    packSub: 'The playbook',
+    packLabel: 'THE DUGOUT',
+    packSub: 'Instructions for the touchline.',
     packAccent: 'var(--kit-blue)',
+    cardsHeader: 'YOUR IN-MATCH HAND',
     teach: 'Tactics are your in-match hand — drawn and played as the game unfolds. Tap to inspect.',
   },
 };
@@ -156,17 +163,16 @@ function SealedPack({
           <div
             style={{
               fontFamily: PIXEL,
-              fontSize: 13,
+              fontSize: 12,
               lineHeight: 1.5,
               letterSpacing: 0.5,
               color: 'var(--cream)',
               textAlign: 'center',
               textShadow: '0 2px 0 var(--ink-black)',
+              padding: '0 4px',
             }}
           >
-            {meta.packLabel.split(' ')[0]}
-            <br />
-            {meta.packLabel.split(' ')[1]}
+            {meta.packLabel}
           </div>
           <div
             style={{
@@ -232,12 +238,15 @@ function PlayerReveal({ players, onOpen }: { players: Card[]; onOpen: (c: Card) 
         />
       )}
 
-      <div className="flex-1 min-h-0 flex flex-col justify-center">
+      {/* Grid + pager travel together as one centred block, so the leftover
+          vertical space splits above and below instead of pooling into a void. */}
+      <div className="flex-1 min-h-0 flex flex-col justify-center" style={{ gap: 12 }}>
         <div
           key={page}
-          className="grid"
+          className="grid shrink-0"
           style={{
             gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gridAutoRows: 'min-content',
             gap: 8,
           }}
         >
@@ -251,10 +260,9 @@ function PlayerReveal({ players, onOpen }: { players: Card[]; onOpen: (c: Card) 
             />
           ))}
         </div>
-      </div>
 
-      {/* Pager */}
-      <div className="flex items-center justify-center gap-3 shrink-0" style={{ paddingTop: 10 }}>
+        {/* Pager */}
+        <div className="flex items-center justify-center gap-3 shrink-0">
         <PagerBtn dir="prev" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))} />
         <div className="flex items-center gap-2">
           {Array.from({ length: pageCount }).map((_, i) => (
@@ -271,6 +279,7 @@ function PlayerReveal({ players, onOpen }: { players: Card[]; onOpen: (c: Card) 
           ))}
         </div>
         <PagerBtn dir="next" disabled={page >= pageCount - 1} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} />
+        </div>
       </div>
     </div>
   );
@@ -315,8 +324,11 @@ function ManagerReveal({
   onPick: (id: string) => void;
 }) {
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12, alignContent: 'center' }}>
+    <div className="flex-1 min-h-0 flex flex-col justify-center">
+      <div
+        className="grid mx-auto w-full"
+        style={{ gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12, alignContent: 'center', maxWidth: 340 }}
+      >
         {managers.map((m, i) => {
           const picked = pickedId === m.id;
           return (
@@ -367,7 +379,7 @@ function TacticReveal({ tactics, onOpen }: { tactics: TacticCard[]; onOpen: (t: 
   return (
     <div
       className="flex-1 min-h-0 grid overflow-y-auto"
-      style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gridAutoRows: 'min-content', gap: 8, alignContent: 'start', overscrollBehavior: 'contain' }}
+      style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gridAutoRows: 'min-content', gap: 8, alignContent: 'center', overscrollBehavior: 'contain' }}
     >
       {tactics.map((t, i) => (
         <GameCard
@@ -498,25 +510,84 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
             marginTop: 4,
           }}
         >
-          PACK {meta.index} / 3 {'·'} {meta.packSub.toUpperCase()}
+          PACK {meta.index} / 3
+        </p>
+        <p
+          className="text-center"
+          style={{
+            fontFamily: 'var(--font-flavour)',
+            fontStyle: 'italic',
+            fontSize: 12,
+            letterSpacing: 0.2,
+            color: 'var(--cream)',
+            opacity: 0.62,
+            marginTop: 3,
+          }}
+        >
+          {meta.packSub}
         </p>
       </div>
 
       {/* Body */}
-      <div className="flex-1 min-h-0 flex flex-col relative" style={{ zIndex: 2, marginTop: 12, marginBottom: 10 }}>
+      <div className="flex-1 min-h-0 flex flex-col relative" style={{ zIndex: 2, marginTop: 10, marginBottom: 10 }}>
         {phase !== 'reveal' ? (
           <SealedPack meta={meta} count={count} countNoun={countNoun} ripping={phase === 'ripping'} onRip={rip} />
-        ) : stage === 'players' ? (
-          <PlayerReveal players={sortedPlayers} onOpen={(c) => setModal({ variant: 'player', card: c })} />
-        ) : stage === 'managers' ? (
-          <ManagerReveal
-            managers={contents.managers}
-            pickedId={pickedManagerId}
-            onOpen={(m) => setModal({ variant: 'manager', manager: m })}
-            onPick={(id) => setPickedManagerId(id)}
-          />
         ) : (
-          <TacticReveal tactics={contents.tactics} onOpen={(t) => setModal({ variant: 'tactic', tactic: t })} />
+          <>
+            {/* Run-context strip — PLAYER pack only. Pinned in the upper dead
+                zone above the grid, matching the bottom hint pill. This is the
+                headline correction: the 24-card draft is your WHOLE run squad. */}
+            {stage === 'players' && (
+              <div
+                className="chip-reveal glass-surface shrink-0 relative overflow-hidden"
+                style={{
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid rgba(245,197,66,0.35)',
+                  boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), 0 0 10px rgba(245,197,66,0.14), var(--depth-1)',
+                  padding: '8px 11px',
+                  marginBottom: 8,
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'center',
+                }}
+              >
+                <span className="relative" style={{ fontSize: 15, flexShrink: 0, zIndex: 2 }}>{'\u{1F4A1}'}</span>
+                <span className="relative flex flex-col" style={{ zIndex: 2, minWidth: 0 }}>
+                  <span style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.3, color: 'var(--gold)', lineHeight: 1.35 }}>
+                    These {count} players are your whole squad for the run.
+                  </span>
+                  <span style={{ fontSize: 10.5, lineHeight: 1.3, color: 'var(--cream-soft)', marginTop: 2 }}>
+                    Name your XI and subs — you keep them all to rotate, and strengthen them in the store between ties.
+                  </span>
+                </span>
+              </div>
+            )}
+
+            {/* Card header — a small pixel kicker so managers/tactics stop looking
+                empty and the pick is framed. */}
+            {stage !== 'players' && (
+              <div className="chip-reveal shrink-0 flex items-center justify-center gap-2" style={{ marginBottom: 8 }}>
+                <span style={{ width: 16, height: 2, borderRadius: 1, background: meta.packAccent, opacity: 0.55 }} />
+                <span style={{ fontFamily: PIXEL, fontSize: 10, letterSpacing: 1.5, color: meta.packAccent }}>
+                  {meta.cardsHeader}
+                </span>
+                <span style={{ width: 16, height: 2, borderRadius: 1, background: meta.packAccent, opacity: 0.55 }} />
+              </div>
+            )}
+
+            {stage === 'players' ? (
+              <PlayerReveal players={sortedPlayers} onOpen={(c) => setModal({ variant: 'player', card: c })} />
+            ) : stage === 'managers' ? (
+              <ManagerReveal
+                managers={contents.managers}
+                pickedId={pickedManagerId}
+                onOpen={(m) => setModal({ variant: 'manager', manager: m })}
+                onPick={(id) => setPickedManagerId(id)}
+              />
+            ) : (
+              <TacticReveal tactics={contents.tactics} onOpen={(t) => setModal({ variant: 'tactic', tactic: t })} />
+            )}
+          </>
         )}
       </div>
 

@@ -13,9 +13,10 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
       style={{ height: '100dvh' }}
     >
       {/* Crest plate — a glass panel behind the pixel wordmark so the hero reads
-          as engraved on lit glass. The title text itself stays pure pixel. */}
+          as engraved on lit glass. The title text itself stays pure pixel. An
+          idle sheen sweep travels across the plate so the landing isn't dead-still. */}
       <div
-        className="glass-surface sheen depth-2 relative mb-12"
+        className="glass-surface depth-2 relative mb-7 overflow-hidden crest-sheen"
         style={{
           borderRadius: 'var(--radius-lg)',
           padding: '26px 30px 30px',
@@ -47,20 +48,26 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
         >
           CLASH
         </h1>
-        <span
-          className="block relative"
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 10,
-            letterSpacing: 3,
-            color: 'var(--dust)',
-            marginTop: 14,
-            zIndex: 2,
-          }}
-        >
-          MANAGEMENT ROGUELIKE
-        </span>
       </div>
+
+      {/* Tone-setting flavour line — sits BELOW the crest, in the flavour serif at
+          low opacity so it whispers rather than shouts. Not pixel, not chrome:
+          the one place running-serif voice is allowed. */}
+      <p
+        className="mb-9"
+        style={{
+          fontFamily: 'var(--font-flavour)',
+          fontStyle: 'italic',
+          fontSize: 15,
+          letterSpacing: 0.3,
+          lineHeight: 1.4,
+          color: 'var(--cream)',
+          opacity: 0.5,
+          maxWidth: 280,
+        }}
+      >
+        One life. Five cups. No second legs.
+      </p>
 
       {/* Buttons — glass CTAs with sheen, depth and a tight accent glow. The
           amber primary keeps its kit gradient; glass framing adds the gloss. */}

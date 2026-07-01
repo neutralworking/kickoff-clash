@@ -587,6 +587,35 @@ h1, h2, h3,
   .card-foil { animation: none; opacity: 0.5; transform: skewX(-18deg); }
 }
 
+/* Title crest — a slow idle sheen sweep travels diagonally across the glass
+   plate so the landing screen breathes. Reuses the cardFoilSweep motion (a lit
+   gloss band skewed and translated) but softer and slower for a hero surface.
+   The band lives on the GLASS overlay only — the pixel wordmark is untouched. */
+.crest-sheen { position: relative; }
+.crest-sheen::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 46%;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(242, 246, 239, 0.05) 40%,
+    rgba(242, 246, 239, 0.18) 50%,
+    rgba(242, 246, 239, 0.05) 60%,
+    transparent 100%
+  );
+  transform: translateX(-140%) skewX(-16deg);
+  animation: cardFoilSweep 5.6s ease-in-out infinite;
+  z-index: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .crest-sheen::after { animation: none; opacity: 0.4; transform: translateX(30%) skewX(-16deg); }
+}
+
 /* The sealed pack idles with a tiny breathing wobble, inviting a tap. */
 @keyframes packIdle {
   0%, 100% { transform: translateY(0) rotate(-1deg); }

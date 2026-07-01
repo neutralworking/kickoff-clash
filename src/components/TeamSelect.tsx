@@ -15,7 +15,14 @@ import {
 } from '../lib/team-select';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
-import { PIXEL, RARITY_COLOR, POSITION_COLOR, lastName } from './cards/cardTokens';
+import { PIXEL } from './cards/cardTokens';
+import { BenchTile, BenchCover, LineupSlot } from './lineup';
+
+// A matchday squad is the XI + BENCH_SIZE subs; only MAX_SUBS of them can come
+// on during a tie. We surface both numbers so "pick 7, use 5" reads as real
+// football (18-player squad, 5 substitutions) rather than a broken cap.
+const MATCHDAY_SQUAD = 11 + BENCH_SIZE; // 18
+const MAX_SUBS = 5;
 
 interface TeamSelectProps {
   contents: PackContents;
@@ -68,6 +75,11 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
   const slotCount = formation.slots.length;
   const manager = contents.managers.find((m) => m.id === managerId) ?? null;
   const ready = filled === slotCount && manager !== null;
+
+  const benchCards = useMemo(
+    () => sel.bench.map((id) => byId.get(id)).filter((c): c is Card => !!c),
+    [sel.bench, byId],
+  );
 
   // Live squad average power of the placed XI (clean, single useful number).
   const xiAvg = useMemo(() => {
@@ -144,10 +156,10 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
             className="uppercase truncate"
             style={{ fontFamily: PIXEL, fontSize: 16, color: 'var(--cream)', textShadow: '0 2px 0 var(--ink-black)', letterSpacing: 0.5 }}
           >
-            Pick Your XI
+            Name Your Squad
           </span>
           <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1, color: 'var(--dust)', marginTop: 2 }}>
-            {filled}/{slotCount} STARTERS {'·'} {sel.bench.length}/{BENCH_SIZE} BENCH
+            XI {filled}/{slotCount} {'·'} BENCH {sel.bench.length}/{BENCH_SIZE} {'·'} {MATCHDAY_SQUAD}-MAN SQUAD
           </span>
         </div>
 
@@ -280,13 +292,23 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
         />
       </div>
 
-      {/* ── Bench + actions ────────────────────────────────────────────── */}
+      {/* ── Bench (squad depth) + actions ──────────────────────────────── */}
       <div className="shrink-0 px-3 mt-2">
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2 mb-1">
           <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)' }}>
             BENCH {sel.bench.length}/{BENCH_SIZE}
           </span>
-          <div className="flex items-center gap-1">
+          {/* substitutions resource — a distinct in-match number, not a mis-cap. */}
+          <span
+            className="flex items-center gap-1"
+            style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--cream-soft)' }}
+          >
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />
+            {MAX_SUBS} SUBS IN-MATCH
+          </span>
+          {/* cover read: which lines the bench can refresh */}
+          <BenchCover benchCards={benchCards} />
+          <div className="flex items-center gap-1 ml-auto">
             <ActionBtn label="AUTO" accent="var(--gold)" onClick={() => setSel(autoFill(pool, formation, sel, 'all'))} />
             <ActionBtn label="FILL" accent="var(--cream-soft)" onClick={() => setSel(autoFill(pool, formation, sel, 'empty'))} />
             <ActionBtn label="CLEAR" accent="var(--dust)" onClick={() => setSel(emptySelection(formation))} />
@@ -296,66 +318,45 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
           {Array.from({ length: BENCH_SIZE }).map((_, i) => {
             const cardId = sel.bench[i];
             const card = cardId != null ? byId.get(cardId) : undefined;
-            const ring = card ? RARITY_COLOR[card.rarity] ?? 'var(--border)' : 'var(--border)';
-            return (
+            // The two slots past MAX_SUBS are squad depth / injury cover — label them so.
+            const depthSlot = i >= MAX_SUBS;
+            return card ? (
+              <BenchTile
+                key={i}
+                card={card}
+                onInspect={() => setModal({ variant: 'player', card })}
+                onRemove={() => removeBench(card.id)}
+              />
+            ) : (
               <button
                 key={i}
-                onClick={() => (card ? setModal({ variant: 'player', card }) : setOverlay({ kind: 'bench' }))}
-                className={`relative flex flex-col items-center justify-center active:scale-95 ${card ? 'glass-surface' : ''}`}
+                onClick={() => setOverlay({ kind: 'bench' })}
+                className="relative flex flex-col items-center justify-center active:scale-95"
                 style={{
-                  height: 44,
+                  height: 62,
                   borderRadius: 'var(--radius-sm)',
-                  background: card ? undefined : 'rgba(0,0,0,0.28)',
-                  border: card ? `1px solid ${ring}` : '2px dashed var(--border)',
-                  boxShadow: card
-                    ? `inset 0 1px 0 0 var(--glass-highlight), 0 0 8px ${ring}33, var(--depth-1)`
-                    : undefined,
+                  background: 'rgba(0,0,0,0.28)',
+                  border: '2px dashed var(--border)',
                   transition: 'transform 0.12s ease',
                   minWidth: 0,
                 }}
               >
-                {card ? (
-                  <>
-                    <span className="relative" style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--line-white)', zIndex: 2 }}>
-                      {Math.round(card.power)}
-                    </span>
-                    <span className="truncate w-full text-center px-0.5 relative" style={{ fontSize: 7.5, color: 'var(--cream-soft)', marginTop: 2, zIndex: 2 }}>
-                      {lastName(card.name)}
-                    </span>
-                    {/* Remove affordance — keeps tap = inspect, this corner = remove. */}
-                    <span
-                      role="button"
-                      aria-label={`Remove ${lastName(card.name)} from bench`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeBench(card.id);
-                      }}
-                      className="absolute flex items-center justify-center"
-                      style={{
-                        top: -5,
-                        right: -5,
-                        width: 16,
-                        height: 16,
-                        borderRadius: '50%',
-                        background: 'var(--danger)',
-                        border: '1.5px solid var(--ink-black)',
-                        color: 'var(--line-white)',
-                        fontFamily: PIXEL,
-                        fontSize: 9,
-                        lineHeight: 1,
-                        zIndex: 3,
-                      }}
-                    >
-                      {'×'}
-                    </span>
-                  </>
-                ) : (
-                  <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'var(--ink)' }}>+</span>
+                <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'var(--ink)' }}>+</span>
+                {depthSlot && (
+                  <span
+                    style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: 'var(--dust)', marginTop: 2, lineHeight: 1 }}
+                  >
+                    COVER
+                  </span>
                 )}
               </button>
             );
           })}
         </div>
+        {/* One-line framing so the XI+7 vs 5-subs asymmetry reads as football. */}
+        <p style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--dust)', margin: '5px 0 0', textAlign: 'center', lineHeight: 1.3 }}>
+          {MATCHDAY_SQUAD}-MAN MATCHDAY SQUAD {'·'} {MAX_SUBS} SUBSTITUTIONS PER TIE {'·'} LAST 2 ARE INJURY COVER
+        </p>
       </div>
 
       {/* ── Overlays ───────────────────────────────────────────────────── */}
@@ -490,15 +491,20 @@ function Pitch({
         <rect x="43" y="147" width="14" height="1.6" fill="none" stroke={line} strokeWidth="0.6" />
       </svg>
 
-      {/* Slots */}
+      {/* Slots — the SHARED lineup chip: colour-keyed POSITION code (never the
+          long word that clipped to "RIGHT WI…"), misfit-red when a placed player
+          can't cover the slot. Fitness is off here (no condition yet at draft). */}
       {formation.slots.map((slot, i) => {
         const cardId = starters[i];
         const card = cardId != null ? byId.get(cardId) : undefined;
+        const misfit = !!card && !positionFitsSlot(card.position, slot);
         return (
-          <PitchSlot
+          <LineupSlot
             key={i}
             slot={slot}
             card={card}
+            misfit={misfit}
+            showMisfit
             justPlaced={placedSlot === i}
             onClick={() => onSlot(i, !!card)}
             onInspect={card ? () => onInspect(card) : undefined}
@@ -506,124 +512,6 @@ function Pitch({
         );
       })}
     </div>
-  );
-}
-
-function PitchSlot({
-  slot,
-  card,
-  justPlaced,
-  onClick,
-  onInspect,
-}: {
-  slot: Formation['slots'][number];
-  card: Card | undefined;
-  justPlaced: boolean;
-  onClick: () => void;
-  onInspect?: () => void;
-}) {
-  const isGK = slot.type === 'GK';
-  const kit = isGK ? '#16a34a' : 'var(--kit-red)';
-  const rarityRing = card ? RARITY_COLOR[card.rarity] ?? 'var(--line-white)' : null;
-  const posColor = card ? POSITION_COLOR[card.position] ?? 'var(--dust)' : null;
-
-  return (
-    <button
-      onClick={onClick}
-      className="absolute flex flex-col items-center active:scale-95"
-      style={{
-        left: `${slot.x}%`,
-        top: `${slot.y}%`,
-        transform: 'translate(-50%, -50%)',
-        width: 50,
-        transition: 'transform 0.1s ease',
-      }}
-    >
-      {card ? (
-        <div
-          className={`relative flex items-center justify-center ${justPlaced ? 'chip-place' : ''}`}
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: '50%',
-            background: `radial-gradient(circle at 50% 32%, ${kit}, ${isGK ? '#0f7a35' : '#b62520'})`,
-            border: `2px solid ${rarityRing}`,
-            boxShadow: '0 2px 0 0 var(--ink-black), 0 3px 5px rgba(0,0,0,0.4)',
-          }}
-        >
-          <span style={{ fontFamily: PIXEL, fontSize: 13, color: 'var(--line-white)', textShadow: '0 1px 0 rgba(0,0,0,0.6)' }}>
-            {Math.round(card.power)}
-          </span>
-          {/* position dot */}
-          <span
-            className="absolute"
-            style={{
-              bottom: -2,
-              left: -2,
-              width: 11,
-              height: 11,
-              borderRadius: '50%',
-              background: posColor!,
-              border: '1.5px solid var(--ink-black)',
-            }}
-          />
-          {/* Info affordance — non-destructive full-card view (tap on chip = remove). */}
-          <span
-            role="button"
-            aria-label={`Inspect ${lastName(card.name)}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onInspect?.();
-            }}
-            className="absolute flex items-center justify-center"
-            style={{
-              bottom: -3,
-              right: -4,
-              width: 14,
-              height: 14,
-              borderRadius: '50%',
-              background: 'var(--surface)',
-              border: '1.5px solid var(--line-white)',
-              color: 'var(--line-white)',
-              fontFamily: PIXEL,
-              fontSize: 8,
-              lineHeight: 1,
-            }}
-          >
-            i
-          </span>
-        </div>
-      ) : (
-        <div
-          className="slot-pulse flex items-center justify-center"
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: '50%',
-            background: 'rgba(7,16,11,0.45)',
-            border: '2px dashed rgba(242,246,239,0.7)',
-          }}
-        >
-          <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'rgba(242,246,239,0.9)', lineHeight: 1 }}>+</span>
-        </div>
-      )}
-      <span
-        className="truncate text-center"
-        style={{
-          width: 54,
-          marginTop: 3,
-          fontSize: card ? 8.5 : 7.5,
-          fontWeight: card ? 700 : 400,
-          fontFamily: card ? 'inherit' : PIXEL,
-          letterSpacing: card ? 0 : 0.5,
-          color: 'var(--line-white)',
-          textShadow: '0 1px 2px rgba(0,0,0,0.85)',
-          lineHeight: 1.1,
-        }}
-      >
-        {card ? lastName(card.name) : slot.label.toUpperCase()}
-      </span>
-    </button>
   );
 }
 

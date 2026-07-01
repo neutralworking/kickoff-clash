@@ -37,6 +37,8 @@ import {
   formatCash,
   nationFlag,
   nationCode,
+  nationGloss,
+  managerTraitStyle,
   definingTraitsFor,
   type ResolvedTrait,
 } from './cardTokens';
@@ -146,7 +148,7 @@ export default function CardModal({ model, onClose }: CardModalProps) {
             {model.variant === 'player' ? (
               <PlayerDetail card={model.card} accent={accent} />
             ) : model.variant === 'manager' ? (
-              <ManagerDetail manager={model.manager} accent={accent} />
+              <ManagerDetail manager={model.manager} />
             ) : model.variant === 'tactic' ? (
               <TacticDetail tactic={model.tactic} accent={accent} />
             ) : (
@@ -241,8 +243,12 @@ function TagRow({ items, color, bg }: { items: string[]; color: string; bg: stri
 
 function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
   const flag = nationFlag(card.nation);
-  const nation = flag ? `${flag} ${card.nation}` : card.nation ?? '—';
   const dur = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
+  // The ROLE (a real, evocative on-pitch identity — Inverted Winger, Regista) is
+  // what the player reads; the scoring-internal `archetype`/`secondaryArchetype`
+  // are engine plumbing and no longer surfaced on the expanded card.
+  const role = card.tacticalRole ?? card.archetype;
+  const gloss = nationGloss(card.nation);
   // Defining traits — the marquee "what this card DOES" list. Signature/legend
   // loadouts surface first; otherwise the seeded rarity-count pick.
   const traits = definingTraitsFor(card);
@@ -259,10 +265,19 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
           <StatCell label="RATING" value={String(Math.round(card.power))} color="var(--line-white)" />
           <StatCell label="POSITION" value={POSITION_LABEL[card.position] ?? card.position} />
           <StatCell label="NATION" value={flag ? card.nation ?? '—' : nationCode(card.nation) || '—'} />
-          <StatCell label="ARCHETYPE" value={card.archetype} color={accent} />
-          {card.secondaryArchetype && <StatCell label="SECONDARY" value={card.secondaryArchetype} />}
+          {/* ROLE is the prominent, accent-coloured identity where ARCHETYPE was —
+              archetype/secondary are no longer surfaced on the expanded card. */}
+          <StatCell label="ROLE" value={role} color={accent} />
           <StatCell label="DURABILITY" value={dur.label} color={dur.color} />
         </div>
+        {/* Nation gloss — the fictional footballing culture in one line, so a code
+            like SOL / ESY reads as a place with an identity rather than a stub. */}
+        {gloss && (
+          <div className="flex flex-col" style={{ gap: 4 }}>
+            <Label>{`${card.nation ?? 'NATION'}`.toUpperCase()}</Label>
+            <span style={{ fontSize: 11, lineHeight: 1.4, color: 'var(--cream-soft)' }}>{gloss}</span>
+          </div>
+        )}
         {/* Where they can operate — eligible pitch positions as pixel chips. */}
         <div className="flex flex-col" style={{ gap: 6 }}>
           <Label>CAN OPERATE</Label>
@@ -273,14 +288,9 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
           </div>
         </div>
         {typeof card.fitness === 'number' && <FitnessRow fitness={card.fitness} />}
-        {(card.tacticalRole || card.personalityTheme) && (
+        {card.personalityTheme && card.personalityTheme !== 'General' && (
           <div className="flex flex-wrap" style={{ gap: 5 }}>
-            {card.tacticalRole && (
-              <Chip label="ROLE" value={card.tacticalRole} />
-            )}
-            {card.personalityTheme && card.personalityTheme !== 'General' && (
-              <Chip label="THEME" value={card.personalityTheme} />
-            )}
+            <Chip label="THEME" value={card.personalityTheme} />
           </div>
         )}
       </Panel>
@@ -500,7 +510,7 @@ function Chip({ label, value }: { label: string; value: string }) {
 // MANAGER detail
 // ---------------------------------------------------------------------------
 
-function ManagerDetail({ manager, accent }: { manager: JokerCard; accent: string }) {
+function ManagerDetail({ manager }: { manager: JokerCard }) {
   const flag = nationFlag(manager.nation);
   return (
     <div className="flex flex-col" style={{ gap: 10 }}>
@@ -530,7 +540,32 @@ function ManagerDetail({ manager, accent }: { manager: JokerCard; accent: string
 
       <Panel>
         <Label>TRAITS</Label>
-        <TagRow items={manager.traits} color={accent} bg="rgba(232,54,47,0.14)" />
+        {/* Each trait tag is coloured BY MEANING (defensive-blue, attacking-red, …)
+            so the modal matches the grid card and a gaffer's identity reads at a
+            glance rather than every tag being the same kit-red. */}
+        <div className="flex flex-wrap" style={{ gap: 5 }}>
+          {manager.traits.map((t) => {
+            const s = managerTraitStyle(t);
+            return (
+              <span
+                key={t}
+                style={{
+                  fontFamily: PIXEL,
+                  fontSize: 8.5,
+                  letterSpacing: 0.3,
+                  color: s.color,
+                  background: s.bg,
+                  border: `1px solid ${s.color}`,
+                  borderRadius: 'var(--radius-lg)',
+                  padding: '4px 7px',
+                  lineHeight: 1,
+                }}
+              >
+                {t.toUpperCase()}
+              </span>
+            );
+          })}
+        </div>
       </Panel>
     </div>
   );
