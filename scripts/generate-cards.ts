@@ -5,7 +5,8 @@
  * below as compact aggregates — no PII) to emit a FICTIONAL card pool that inherits the
  * real structure: the flat skillset mix (fixing the Creator/Dribbler skew), per-skillset
  * pillar profiles, the position→skillset joint, BRS-as-power, role + evocative nickname.
- * Names/nations are invented, so no real likeness is used (the kc_cards intent).
+ * Player names are invented, so no real likeness is used; nations are real footballing
+ * countries (a country label carries no personal likeness) with matching flag emoji.
  *
  * Run:  npx tsx scripts/generate-cards.ts [count]   → writes public/data/kc_cards.json
  */
@@ -71,7 +72,7 @@ const THEMES = ['Catalyst','Captain','Maestro','General','Professor'];
 
 const FIRST = ['Andre','Marco','Diego','Luka','Kai','Theo','Noa','Leon','Mateo','Hugo','Ivan','Omar','Yuki','Tariq','Felix','Bruno','Joel','Niko','Pavel','Sami','Carlos','Dani','Emre','Finn','Goran','Hassan','Iker','Janos','Kofi','Lars','Milos','Nuno','Osman','Pedro','Rashid','Sven','Tomas','Ugo','Vito','Wim','Xabi','Yann','Zito','Aron','Bekele','Cesar','Dario','Enzo','Florian','Gael'];
 const LAST = ['Vossen','Renard','Haldor','Kessler','Brandt','Marek','Sorin','Calder','Drobny','Ferreira','Lindqvist','Okoro','Vasquez','Petrov','Norebo','Achterberg','Salvi','Konno','Dembaro','Ravel','Tessier','Olund','Berisha','Maganga','Ivankov','Quintero','Faxe','Holloway','Strand','Reuben','Costa','Adeyemi','Vornov','Larsson','Belmonte','Hage','Cisse','Truong','Maldano','Roux','Skoglund','Vargic','Nieto','Halversen','Okafor','Pasic','Lindholm','Esquivel','Brunner','Talbot','Moreno','Janssen','Bauer','Novak','Fontaine','Delgado','Keita','Suzuki','Ozturk','Andersen'];
-const NATIONS = ['Westoria','Nordberg','Sur','Caldia','Montera','Esperia','Valdoro','Brakka','Tavros','Lenisia','Kestrel','Aurato','Solmar','Verdania','Trabia'];
+const NATIONS = ['England','Denmark','Brazil','Norway','Croatia','Spain','France','Germany','Italy','Argentina','Scotland','Uruguay','Portugal','Netherlands','Belgium'];
 
 // --- seeded RNG ---
 let seed = 20260629;

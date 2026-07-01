@@ -764,74 +764,21 @@ const NATION_FLAG: Record<string, string> = {
   Bermuda: '\u{1F1E7}\u{1F1F2}',
 };
 
-/** Returns a flag emoji for the nation, or null if we should fall back to a code. */
+/** Returns a flag emoji for the nation, or null if we should fall back to a code.
+ *  Every nation in the live pool is a real footballing country (see transform.ts /
+ *  generate-cards.ts) and is mapped here, so players show a real flag like the gaffers. */
 export function nationFlag(nation?: string): string | null {
   if (!nation) return null;
   return NATION_FLAG[nation] ?? null;
 }
 
-// ---------------------------------------------------------------------------
-// Fictional-nation identity (Tier-A #5). The live pool's 15 nations are invented
-// footballing cultures. A blind slice(0,3) produced opaque/ambiguous stubs
-// (Solmar→SOL, Esperia→ESP reading as SPAIN). Below is an AUTHORED code + one-
-// line gloss per nation — codes chosen so none collides with a real ISO/FIFA
-// country code or another KC nation. `nationCode`/`nationGloss` fall through to
-// a de-collided slice for anything unmapped so the card never renders blank.
-// ---------------------------------------------------------------------------
-
-export const NATION_CODE: Record<string, string> = {
-  Esperia: 'ESY',
-  Caldia: 'CAL',
-  Brakka: 'BRK',
-  Nordberg: 'NOR',
-  Westoria: 'WES',
-  Montera: 'MON',
-  Tavros: 'TAV',
-  Sur: 'SUR',
-  Trabia: 'TRB',
-  Valdoro: 'VAL',
-  Kestrel: 'KES',
-  Solmar: 'SOL',
-  Verdania: 'VRD',
-  Aurato: 'AUR',
-  Lenisia: 'LEN',
-};
-
-export const NATION_GLOSS: Record<string, string> = {
-  Esperia: 'Sun-baked south; technical, theatrical, tiki-taka heartland.',
-  Caldia: 'Cold northern coast; hard-running, direct, second-ball merchants.',
-  Brakka: 'Industrial heartland; combative destroyers and box-to-box engines.',
-  Nordberg: 'The frozen north; disciplined, organised, defends for its life.',
-  Westoria: 'Old money, old game; possession purists and elegant playmakers.',
-  Montera: 'Mountain nation; towering targets and set-piece obsessives.',
-  Tavros: 'Bull-country; fearless pressing and full-blooded challenges.',
-  Sur: 'The deep south; flair, dribblers, streets-first football.',
-  Trabia: 'Coastal trade ports; cosmopolitan, adaptable, jack-of-all-trades.',
-  Valdoro: 'Gold-valley aristocracy; expensive, silky, big-game players.',
-  Kestrel: 'Highland raptors; pace, counters, runners in behind.',
-  Solmar: 'Sun-and-sea riviera; creative forwards and confident keepers.',
-  Verdania: 'Green lowlands; patient build-up, deep distributors.',
-  Aurato: 'Dawn-coast; young, hungry, raw-talent academies.',
-  Lenisia: 'River nation; languid technicians, the classic no.10.',
-};
-
-/**
- * Short uppercase code for a nation without a mapped flag. Prefers the AUTHORED
- * KC nation code (so Solmar → SOL, not an ambiguous slice), then falls back to a
- * de-collided slice for real-country strings without a flag or any unknown.
- */
+/** Short uppercase code — only reached for a nation with no mapped flag (all live
+ *  pool + gaffer nations have flags, so this is just a safety fallback). */
 export function nationCode(nation?: string): string {
   if (!nation) return '';
-  if (NATION_CODE[nation]) return NATION_CODE[nation];
   const first = nation.split('/')[0].trim();
   const letters = first.replace(/[^A-Za-z]/g, '');
   return letters.slice(0, 3).toUpperCase();
-}
-
-/** One-line gloss for a KC nation (empty for real-country / unknown strings). */
-export function nationGloss(nation?: string): string {
-  if (!nation) return '';
-  return NATION_GLOSS[nation] ?? '';
 }
 
 /** Display surname (last token of the name). */

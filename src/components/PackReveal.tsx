@@ -238,9 +238,10 @@ function PlayerReveal({ players, onOpen }: { players: Card[]; onOpen: (c: Card) 
         />
       )}
 
-      {/* Grid + pager travel together as one centred block, so the leftover
-          vertical space splits above and below instead of pooling into a void. */}
-      <div className="flex-1 min-h-0 flex flex-col justify-center" style={{ gap: 12 }}>
+      {/* Grid + pager sit directly under the run-context strip (top-aligned), so the
+          squad reads as one block from the top and leftover space falls to the bottom
+          above the CTA — no floating island / dead zone. */}
+      <div className="flex-1 min-h-0 flex flex-col justify-start" style={{ gap: 12, paddingTop: 4 }}>
         <div
           key={page}
           className="grid shrink-0"
@@ -324,10 +325,10 @@ function ManagerReveal({
   onPick: (id: string) => void;
 }) {
   return (
-    <div className="flex-1 min-h-0 flex flex-col justify-center">
+    <div className="flex-1 min-h-0 flex flex-col justify-start" style={{ paddingTop: 4 }}>
       <div
         className="grid mx-auto w-full"
-        style={{ gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12, alignContent: 'center', maxWidth: 340 }}
+        style={{ gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12, alignContent: 'start', maxWidth: 340 }}
       >
         {managers.map((m, i) => {
           const picked = pickedId === m.id;
@@ -379,7 +380,7 @@ function TacticReveal({ tactics, onOpen }: { tactics: TacticCard[]; onOpen: (t: 
   return (
     <div
       className="flex-1 min-h-0 grid overflow-y-auto"
-      style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gridAutoRows: 'min-content', gap: 8, alignContent: 'center', overscrollBehavior: 'contain' }}
+      style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gridAutoRows: 'min-content', gap: 8, alignContent: 'start', paddingTop: 4, overscrollBehavior: 'contain' }}
     >
       {tactics.map((t, i) => (
         <GameCard

@@ -37,7 +37,6 @@ import {
   formatCash,
   nationFlag,
   nationCode,
-  nationGloss,
   managerTraitStyle,
   definingTraitsFor,
   type ResolvedTrait,
@@ -248,7 +247,6 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
   // what the player reads; the scoring-internal `archetype`/`secondaryArchetype`
   // are engine plumbing and no longer surfaced on the expanded card.
   const role = card.tacticalRole ?? card.archetype;
-  const gloss = nationGloss(card.nation);
   // Defining traits — the marquee "what this card DOES" list. Signature/legend
   // loadouts surface first; otherwise the seeded rarity-count pick.
   const traits = definingTraitsFor(card);
@@ -270,14 +268,6 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
           <StatCell label="ROLE" value={role} color={accent} />
           <StatCell label="DURABILITY" value={dur.label} color={dur.color} />
         </div>
-        {/* Nation gloss — the fictional footballing culture in one line, so a code
-            like SOL / ESY reads as a place with an identity rather than a stub. */}
-        {gloss && (
-          <div className="flex flex-col" style={{ gap: 4 }}>
-            <Label>{`${card.nation ?? 'NATION'}`.toUpperCase()}</Label>
-            <span style={{ fontSize: 11, lineHeight: 1.4, color: 'var(--cream-soft)' }}>{gloss}</span>
-          </div>
-        )}
         {/* Where they can operate — eligible pitch positions as pixel chips. */}
         <div className="flex flex-col" style={{ gap: 6 }}>
           <Label>CAN OPERATE</Label>
