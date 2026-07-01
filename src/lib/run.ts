@@ -760,7 +760,7 @@ export function generateStarterActionDeck(seed: number): ActionCard[] {
 
 /** The player's pre-match team selection (from the TeamSelect screen). */
 export interface TeamSelection {
-  players: Card[];        // the full 25-player rip → the run deck
+  players: Card[];        // the full 24-player rip → the run deck
   startingXI: number[];   // 11 cardIds in formation-slot order
   benchIds: number[];     // up to 7 cardIds available as subs
   manager: JokerCard | null;
@@ -771,7 +771,7 @@ export interface TeamSelection {
 
 /**
  * Initialize a new run from the player's explicit team selection.
- * The full 25-player rip becomes the deck; the chosen XI/bench drive the match
+ * The full 24-player rip becomes the deck; the chosen XI/bench drive the match
  * (the unselected players are unavailable until the shop).
  */
 export function createRun(sel: TeamSelection, seed?: number): RunState {
