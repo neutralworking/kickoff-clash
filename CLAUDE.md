@@ -116,12 +116,16 @@ squad tiers to read the raw power→win-rate curve (used to place the cup finals
 - **Archetype distribution skew — FIXED (data port).** The flat skillset mix in `kc_cards.json`
   (Dribbler 8.1%, Creator 12%) replaces the old Creator-16.8%/Dribbler-1.4% skew, so the
   counter-web is now evenly grounded.
-- **Defining-trait library coverage — PARTIAL (Trait v1 vertical slice).** 8 outfield
-  action-traits cover ~94% of cards at full rarity depth; **30/540 (5.6%) are under-filled**
-  (defining count < rarity count) — **24 are GKs** (the keeper pool is just `Leadership` by
-  design, with shot-stopping in the role baseline; keepers need bespoke GK traits — Sweeper
-  Keeper / Penalty Specialist — that don't exist yet), the other 6 are Epic/Legendary
-  Dribbler/Destroyer/Powerhouse on thin pools. Filling these = the "full trait library across
-  540 cards" phase (deferred). The bespoke showcase legends (`SIGNATURE_OVERRIDES`) all show 4.
-  Balance was validated on the current pools; padding them re-opens the sweep.
+- **Defining-trait library coverage — CLOSED (full trait library).** The library now fills
+  **0/540** under-filled (was 30/540): a bespoke **GK pool** (`Shot Stopper`/`Sweeper Keeper`/
+  `Commander of the Box`/`Distribution`/`Big-Game Keeper` — 5 candidates, all `deny`/`generate`/
+  `amplify-inverse-power` gated on `is-defending`/`backline-count`/`late-game`, no new verb) plus
+  thin-outfield fillers (`Take-On`/`Mazy Run` for Dribbler, `Interceptor`/`Last-Ditch` for
+  Destroyer, `Aerial Threat`/`Hold-Up Play` for Powerhouse+Target, `Deep Distributor`/`Screen`
+  for Controller, `Runner in Behind` for Sprinter, `Late Run` for Engine) take every pool to ≥4.
+  Copy lives in `trait-copy.ts` (one new `TraitKind` — `save` — for keeper shot-stops, animated
+  via the existing `trait-tackle` keyframe). GK traits are **player-only** (opponent opts out), so
+  they only make your own keeper concede less (~0.05 fewer ga for an Epic vs Common keeper — a
+  deliberate low-band `deny` of 0.11–0.12). balance-sweep (40 seeds) unchanged in-band: S5-top vs
+  R1 100%, vs R5 68%, TOP/WEAK divergence 75%, ga sane. `SIGNATURE_OVERRIDES` legends still show 4.
 - `design/` — contains fbal-era (Python/Flask prototype) docs. `design/CLAUDE.md`, `design/README.md`, `design/ROADMAP.md` describe a different codebase and should be treated as historical only.
