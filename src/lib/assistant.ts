@@ -2,17 +2,15 @@
  * Kickoff Clash — assistant coach reads (in-match team-talk advice).
  *
  * Pure, deterministic helpers that turn the live match state into a few concise coaching
- * lines for the team-talk break. Four reads, each at most one or two notes, prioritised:
+ * lines for the team-talk break. Three reads, each at most one or two notes, prioritised:
  *   1. weakness  — the opponent's soft-spot archetype + whether your XI can punish it
  *   2. fitness   — who's injured / fading and should come off
- *   3. tactics   — tactic-slot usage and spare slots
- *   4. momentum  — a plain read of the match so far (goals + xG)
+ *   3. momentum  — a plain read of the match so far (goals + xG)
  * Display-only: never feeds the match math.
  */
 
 import type { MatchV5State } from './match-v5';
 import { cumulativeStats } from './match-v5';
-import type { TacticSlots } from './tactics';
 
 export type CoachTone = 'good' | 'warn' | 'info';
 export type CoachKind = 'weakness' | 'fitness' | 'tactics' | 'momentum';
@@ -26,10 +24,6 @@ export interface CoachNote {
 export interface CoachContext {
   /** Human-readable soft-spot blurb (opponentBuild.weakness), e.g. "Weak to pace". */
   weaknessLabel?: string;
-  /** Currently deployed tactic slots, to read tactic fit + spare slots. */
-  tacticSlots?: TacticSlots;
-  /** Whether the player still holds an undeployed tactic they could bring on. */
-  hasUndeployedTactic?: boolean;
 }
 
 const TIRED_FITNESS = 3;      // at/under this a starter is fading
@@ -90,28 +84,7 @@ export function coachNotes(state: MatchV5State, ctx: CoachContext = {}): CoachNo
     }
   }
 
-  // 3. Tactics — usage + spare slots.
-  if (ctx.tacticSlots) {
-    const deployed = ctx.tacticSlots.slots.filter((s) => s !== null);
-    const freeSlots = ctx.tacticSlots.slots.length - deployed.length;
-    if (deployed.length === 0) {
-      notes.push({ kind: 'tactics', tone: 'info', text: 'No tactics deployed — you have cards to play.' });
-    } else if (freeSlots > 0 && ctx.hasUndeployedTactic) {
-      notes.push({
-        kind: 'tactics',
-        tone: 'info',
-        text: `${deployed.length} tactic${deployed.length > 1 ? 's' : ''} live, ${freeSlots} slot${freeSlots > 1 ? 's' : ''} spare — deploy another.`,
-      });
-    } else {
-      notes.push({
-        kind: 'tactics',
-        tone: 'good',
-        text: `${deployed.length} tactic${deployed.length > 1 ? 's' : ''} live.`,
-      });
-    }
-  }
-
-  // 4. Momentum — only once a period has been played.
+  // 3. Momentum — only once a period has been played.
   if (state.scores.length > 0) {
     const c = cumulativeStats(state.scores);
     const yg = c.yourGoals, og = c.opponentGoals;

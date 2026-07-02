@@ -7,8 +7,9 @@ import { getFormation } from '../../lib/formations';
 import type { Band, Lane, Cell } from '../../lib/field';
 import { cellOf, bandOf } from '../../lib/field';
 import type { JokerCard } from '../../lib/jokers';
-import type { TacticCard, TacticSlots } from '../../lib/tactics';
-import { canDeploy, getTacticById } from '../../lib/tactics';
+import type { TacticCard } from '../../lib/tactics';
+import { getTacticById, chargesLeft } from '../../lib/tactics';
+import { getOpponentPlayById } from '../../lib/opponent';
 import type { OpponentBuild, TeamIntent } from '../../lib/run';
 import type { Card } from '../../lib/scoring';
 import { subBlockReason, cumulativeStats } from '../../lib/match-v5';
@@ -25,7 +26,6 @@ interface PitchMatchViewProps {
   matchState: MatchV5State;
   formation: Formation;
   jokers: JokerCard[];
-  tacticSlots: TacticSlots;
   availableTactics: TacticCard[];
   ownedFormations: string[];
   opponentBuild: OpponentBuild;
@@ -1252,7 +1252,7 @@ function CoachPanel({ notes }: { notes: CoachNote[] }) {
 }
 
 export default function PitchMatchView({
-  matchState, formation, jokers, tacticSlots, availableTactics, ownedFormations,
+  matchState, formation, jokers, availableTactics, ownedFormations,
   opponentBuild, nextMinute, mode, breakMoment, currentResult, playerStats,
   onToggleTactic, onSub, onReassign, onFormationChange, onAutoSelect, onIntentChange, onContinue,
 }: PitchMatchViewProps) {
@@ -1463,48 +1463,50 @@ export default function PitchMatchView({
   while (tickerLines.length < 3) tickerLines.unshift(null);
 
   const manager = jokers[0] ?? null;
-  const deployedTactics = tacticSlots.slots.filter((t): t is TacticCard => t !== null);
+
+  // ── CALLED PLAY (per-spell call; the 3-slot model is gone) ─────────────────
+  // matchState.calledPlayId is THIS spell's call; playChargesUsed is the match's
+  // used-charges ledger. The opponent's telegraphed play for the coming spell is
+  // matchState.opponentPlay (Adaptive telegraphs 2 candidates — the real one plays).
+  const calledPlay = useMemo<TacticCard | null>(
+    () => (matchState.calledPlayId
+      ? availableTactics.find((t) => t.id === matchState.calledPlayId) ?? getTacticById(matchState.calledPlayId) ?? null
+      : null),
+    [matchState.calledPlayId, availableTactics],
+  );
+  const deployedTactics = calledPlay ? [calledPlay] : [];
   const deployedIds = new Set(deployedTactics.map((t) => t.id));
+  const playChargesUsed = matchState.playChargesUsed ?? {};
+
+  // The opponent's telegraph line(s) for the coming spell — plain factual strings.
+  const telegraphText = useMemo(() => {
+    const ids = matchState.opponentPlayCandidates?.length
+      ? matchState.opponentPlayCandidates
+      : matchState.opponentPlay ? [matchState.opponentPlay.id] : [];
+    const lines = ids
+      .map((id) => getOpponentPlayById(id)?.telegraph)
+      .filter((t): t is string => Boolean(t));
+    return lines.join(' — or — ');
+  }, [matchState.opponentPlayCandidates, matchState.opponentPlay]);
 
   // ── TACTIC DECK STATE (display-only) ──────────────────────────────────────
-  // The engine (onToggleTactic + canDeploy in tactics.ts) is the single source of
-  // truth; here we mirror it to a label so a tap is never a silent no-op. Each
-  // card resolves to exactly one of four states, computed from canDeploy() +
-  // its `contradicts` field:
-  //   • deployed   — already in a slot           → tap removes it
-  //   • deployable — a free slot, no conflict     → tap deploys it
-  //   • swap       — canDeploy via auto-removal   → tap REPLACES the named card
-  //   • blocked    — slots full, nothing to swap  → tap is a no-op, so we disable
-  // `replaces` carries the contradicting card's NAME so the swap is explicit
-  // BEFORE it happens; `contradictsName` surfaces the static pairing on the card.
-  type TacticState = 'deployed' | 'deployable' | 'swap' | 'blocked';
+  // The engine (onToggleTactic → callPlay in match-v5.ts) is the single source of
+  // truth; here we mirror it to a label so a tap is never a silent no-op:
+  //   • deployed   — the play called for THIS spell   → tap clears the call
+  //   • deployable — charges remain                    → tap calls it (replacing any call)
+  //   • blocked    — no charges left this match        → tap is a no-op, so we disable
+  type TacticState = 'deployed' | 'deployable' | 'blocked';
   const tacticView = useMemo(() => {
     return availableTactics.map((tactic) => {
-      const deployed = deployedIds.has(tactic.id);
-      // The contradiction note (static, regardless of what's deployed).
-      const contradictsName = tactic.contradicts
-        ? getTacticById(tactic.contradicts)?.name ?? null
-        : null;
-      let state: TacticState;
-      let replaces: string | null = null;
-      if (deployed) {
-        state = 'deployed';
-      } else {
-        const { canDeploy: ok, wouldRemove } = canDeploy(tacticSlots, tactic);
-        if (ok && wouldRemove) {
-          state = 'swap';
-          replaces = getTacticById(wouldRemove)?.name ?? null;
-        } else if (ok) {
-          state = 'deployable';
-        } else {
-          state = 'blocked';
-        }
-      }
-      return { tactic, state, replaces, contradictsName };
+      const left = chargesLeft(tactic, playChargesUsed);
+      const state: TacticState = deployedIds.has(tactic.id)
+        ? 'deployed'
+        : left > 0 ? 'deployable' : 'blocked';
+      return { tactic, state, left };
     });
-    // deployedIds is derived from tacticSlots, so tacticSlots is the real dep.
+    // deployedIds is derived from calledPlay, so calledPlay is the real dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [availableTactics, tacticSlots]);
+  }, [availableTactics, calledPlay, playChargesUsed]);
 
   // FIX 1 — A MATCH CLOCK THAT COUNTS (mm:ss).
   //   • PLANNING: show the elapsed time = the last completed increment's end
@@ -1553,9 +1555,10 @@ export default function PitchMatchView({
   const canSubFlag = !!flaggedPlayer && subsRemaining > 0;
   const showSubPrompt = planning && canSubFlag && bench.length > 0;
 
-  const emptyTacticSlots = tacticSlots.slots.filter((s) => s === null).length;
-  const hasUndeployedTactic = availableTactics.some((t) => !deployedIds.has(t.id));
-  const showTacticPrompt = planning && emptyTacticSlots > 0 && hasUndeployedTactic;
+  const hasCallableTactic = availableTactics.some(
+    (t) => !deployedIds.has(t.id) && chargesLeft(t, playChargesUsed) > 0,
+  );
+  const showTacticPrompt = planning && !calledPlay && hasCallableTactic;
 
   // The team-talk break: planning, not scouting the opposition. At a real break
   // (kickoff / halftime / between) the coach panel and the SHAPE + TACTICS entry
@@ -1579,10 +1582,8 @@ export default function PitchMatchView({
   const notes = useMemo<CoachNote[]>(
     () => (isBreak ? coachNotes(matchState, {
       weaknessLabel: opponentBuild.weakness,
-      tacticSlots,
-      hasUndeployedTactic,
     }).filter((n) => n.kind !== 'tactics') : []),
-    [isBreak, matchState, opponentBuild.weakness, tacticSlots, hasUndeployedTactic],
+    [isBreak, matchState, opponentBuild.weakness],
   );
 
   // FIX 3 — match-to-date totals for the stats screen (cumulativeStats over scores).
@@ -1894,6 +1895,14 @@ export default function PitchMatchView({
             <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--ink-black)', background: 'var(--success)', borderRadius: 2, padding: '2px 3px', lineHeight: 1, flexShrink: 0 }}>VS</span>
             <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--cream-soft)', whiteSpace: 'nowrap' }}>{oppStyleLabel.toUpperCase()}</span>
           </span>
+          {/* THE TELEGRAPH — the opponent's play for the coming spell (Adaptive shows
+              two candidates; the real one plays). Plain factual engine string. */}
+          {mode === 'plan' && telegraphText && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0 8px', borderRadius: 'var(--radius)', border: '2px solid var(--kit-blue)', background: 'rgba(58,110,165,0.10)', flexShrink: 0 }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--ink-black)', background: 'var(--kit-blue)', borderRadius: 2, padding: '2px 3px', lineHeight: 1, flexShrink: 0 }}>READ</span>
+              <span style={{ fontSize: 10, color: 'var(--cream-soft)', whiteSpace: 'nowrap' }}>{telegraphText}</span>
+            </span>
+          )}
           {deployedTactics.map((t) => {
             const cat = TACTIC_CAT_COLOR[t.category] ?? 'var(--gold)';
             return (
@@ -1912,8 +1921,8 @@ export default function PitchMatchView({
           <button onClick={() => setTrayOpen(true)} aria-label="Edit tactics"
             className={showTacticPrompt ? 'carrier-glow' : undefined}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px', borderRadius: 'var(--radius)', border: `2px ${deployedTactics.length === 0 ? 'dashed' : 'solid'} ${showTacticPrompt ? 'var(--gold)' : 'var(--border)'}`, background: showTacticPrompt ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0 }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.4, color: showTacticPrompt ? 'var(--gold)' : 'var(--cream-soft)', lineHeight: 1 }}>TACTICS</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{deployedIds.size}/{tacticSlots.slots.length}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.4, color: showTacticPrompt ? 'var(--gold)' : 'var(--cream-soft)', lineHeight: 1 }}>CALL PLAY</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{calledPlay ? '1' : '0'}/1</span>
           </button>
         )}
       </div>
@@ -2327,34 +2336,33 @@ export default function PitchMatchView({
               <div style={{ width: 38, height: 4, borderRadius: 2, background: 'var(--border)' }} />
             </div>
 
-            {/* Header — title + close, and the live slot meter beneath. */}
+            {/* Header — title + close, and the live call readout beneath. */}
             <div style={{ padding: '8px 16px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--amber)', letterSpacing: 0.8 }}>TACTICAL SHELF</span>
+                <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--amber)', letterSpacing: 0.8 }}>CALL A PLAY</span>
                 <button onClick={() => setTrayOpen(false)} aria-label="Close tactics" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, marginRight: -8, background: 'none', border: 'none', color: 'var(--dust)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>{'×'}</button>
               </div>
-              {/* SLOT METER — three pips mirror tacticSlots.slots; filled pips carry
-                  the deployed card's category colour, empty ones read as outlines. */}
+              {/* THE CALL — one play per spell; charges are per match. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                <div style={{ display: 'flex', gap: 7 }}>
-                  {tacticSlots.slots.map((slot, i) => {
-                    const cat = slot ? TACTIC_CAT_COLOR[slot.category] ?? 'var(--amber)' : null;
-                    return (
-                      <span key={i} title={slot ? slot.name : 'Empty slot'} style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, background: cat ?? 'transparent', border: `2px solid ${cat ?? 'var(--border)'}`, boxShadow: cat ? `0 0 0 0 ${cat}` : 'none' }} />
-                    );
-                  })}
-                </div>
+                <span title={calledPlay ? calledPlay.name : 'No play called'} style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, background: calledPlay ? TACTIC_CAT_COLOR[calledPlay.category] ?? 'var(--amber)' : 'transparent', border: `2px solid ${calledPlay ? TACTIC_CAT_COLOR[calledPlay.category] ?? 'var(--amber)' : 'var(--border)'}` }} />
                 <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.5 }}>
-                  {deployedIds.size}/{tacticSlots.slots.length} SLOTS
+                  THIS SPELL
                 </span>
                 <span style={{ fontSize: 10, color: 'var(--cream-soft)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-                  {emptyTacticSlots > 0
-                    ? `${emptyTacticSlots} free`
-                    : 'Full — swap to change'}
+                  {calledPlay ? calledPlay.name : 'No play called — one per spell'}
                 </span>
               </div>
+              {/* THE TELEGRAPH — the opponent's play for the coming spell. */}
+              {telegraphText && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 9, padding: '6px 9px', borderRadius: 'var(--radius-sm)', border: '2px solid var(--kit-blue)', background: 'rgba(58,110,165,0.10)' }}>
+                  <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--kit-blue)', borderRadius: 3, padding: '3px 4px', lineHeight: 1, flexShrink: 0 }}>READ</span>
+                  <span style={{ fontSize: 10, color: 'var(--cream-soft)', lineHeight: 1.3, overflow: 'hidden' }}>
+                    Next spell: <b style={{ color: 'var(--cream)' }}>{telegraphText}</b>.
+                  </span>
+                </div>
+              )}
               {/* FIX 3 — the opponent read in the shelf: their PLAY style + the SOFT
-                  SPOT to exploit, so the player picks a tactic with the rival in mind. */}
+                  SPOT to exploit, so the player picks a play with the rival in mind. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 9, padding: '6px 9px', borderRadius: 'var(--radius-sm)', border: '2px solid var(--success)', background: 'rgba(52,196,106,0.08)' }}>
                 <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--success)', borderRadius: 3, padding: '3px 4px', lineHeight: 1, flexShrink: 0 }}>SCOUT</span>
                 <span style={{ fontSize: 10, color: 'var(--cream-soft)', lineHeight: 1.3, overflow: 'hidden' }}>
@@ -2380,27 +2388,23 @@ export default function PitchMatchView({
                 <span style={{ fontSize: 9, color: 'var(--dust)' }}>{availableTactics.length} in deck</span>
               </div>
               <div style={{ display: 'grid', gap: 8 }}>
-                {tacticView.length === 0 && <div style={{ fontSize: 11, color: 'var(--dust)' }}>No tactical cards drafted for this fixture.</div>}
-                {tacticView.map(({ tactic, state, replaces, contradictsName }) => {
+                {tacticView.length === 0 && <div style={{ fontSize: 11, color: 'var(--dust)' }}>No plays drafted for this fixture.</div>}
+                {tacticView.map(({ tactic, state, left }) => {
                   const cat = TACTIC_CAT_COLOR[tactic.category] ?? 'var(--gold)';
                   const blocked = state === 'blocked';
-                  // The border tells the state apart: amber = deployed, kit-blue
-                  // = swap (a deliberate change), category accent = deployable,
-                  // muted = blocked. Blocked cards dim and disable.
+                  // The border tells the state apart: amber = the called play,
+                  // category accent = callable, muted = out of charges (disabled).
                   const borderColor =
                     state === 'deployed' ? 'var(--amber)'
-                      : state === 'swap' ? 'var(--kit-blue)'
-                        : blocked ? 'var(--border)' : 'var(--ink-black)';
+                      : blocked ? 'var(--border)' : 'var(--ink-black)';
                   // Top-right status label — the action a tap performs RIGHT NOW.
                   const label =
-                    state === 'deployed' ? 'DEPLOYED'
-                      : state === 'swap' ? 'TAP TO SWAP'
-                        : blocked ? 'SLOTS FULL'
-                          : 'TAP TO DEPLOY';
+                    state === 'deployed' ? 'CALLED'
+                      : blocked ? 'NO CHARGES'
+                        : 'TAP TO CALL';
                   const labelColor =
                     state === 'deployed' ? 'var(--amber)'
-                      : state === 'swap' ? 'var(--kit-blue)'
-                        : blocked ? 'var(--dust)' : 'var(--success)';
+                      : blocked ? 'var(--dust)' : 'var(--success)';
                   return (
                     <button
                       key={tactic.id}
@@ -2426,24 +2430,13 @@ export default function PitchMatchView({
                         <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: labelColor, letterSpacing: 0.3, flexShrink: 0, whiteSpace: 'nowrap' }}>{label}</span>
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--cream-soft)', marginTop: 3, lineHeight: 1.4, paddingLeft: 4 }}>{tactic.effect}</div>
-                      {/* STATE LINE — make every consequence explicit before a tap:
-                          the swap names the card it replaces; the blocked card says
-                          how to free a slot; otherwise show the static contradiction. */}
-                      {state === 'swap' && replaces && (
-                        <div style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--kit-blue)', letterSpacing: 0.3, marginTop: 6, paddingLeft: 4, lineHeight: 1.3 }}>
-                          {'⇄'} REPLACES {replaces.toUpperCase()}
-                        </div>
-                      )}
+                      {/* STATE LINE — charges remaining, and the clear action. */}
                       {state === 'deployed' && (
-                        <div style={{ fontSize: 9.5, color: 'var(--amber)', marginTop: 6, paddingLeft: 4 }}>Tap to remove</div>
+                        <div style={{ fontSize: 9.5, color: 'var(--amber)', marginTop: 6, paddingLeft: 4 }}>Called this spell — tap to clear</div>
                       )}
-                      {blocked && (
-                        <div style={{ fontSize: 9.5, color: 'var(--dust)', marginTop: 6, paddingLeft: 4 }}>Slots full — remove one first</div>
-                      )}
-                      {/* Contradiction note (shown when it isn't already the live swap line). */}
-                      {contradictsName && state !== 'swap' && (
-                        <div style={{ fontSize: 9.5, color: 'var(--dust)', marginTop: 6, paddingLeft: 4 }}>Contradicts {contradictsName}</div>
-                      )}
+                      <div style={{ fontSize: 9.5, color: blocked ? 'var(--dust)' : 'var(--cream-soft)', marginTop: 6, paddingLeft: 4 }}>
+                        {left} of {tactic.charges} charge{tactic.charges === 1 ? '' : 's'} left this match
+                      </div>
                     </button>
                   );
                 })}

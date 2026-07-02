@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 import { transformCards, type KCCard } from '../src/lib/transform';
 import { getFormation } from '../src/lib/formations';
-import { createEmptySlots } from '../src/lib/tactics';
+
 import {
   initMatch, commitAttackers, evaluateSplit, resolveIncrement, advanceIncrement,
   getMatchResult, type MatchV5State,
@@ -48,7 +48,7 @@ const ROUNDS: Record<number, { style: string; weakness: string }> = {
   5: { style: 'Adaptive', weakness: 'Striker' },
 };
 const formation = getFormation('4-3-3');
-const slots = createEmptySlots();
+
 const pickAttackers = (s: MatchV5State) =>
   [...s.xi].filter(c => !c.injured).sort((a, b) => b.power - a.power).slice(0, 4).map(c => c.id);
 
@@ -78,7 +78,7 @@ function playTie(xi: Card[], cup: number, matchInCup: number, seed: number): 'wi
   let state = initMatch(xi, [], [], formation, 'tiki-taka', [], seed, cup, style, weakness, {}, 'balanced', power);
   for (let i = 0; i < 5; i++) {
     state = commitAttackers(state, pickAttackers(state));
-    state = advanceIncrement(state, resolveIncrement(state, evaluateSplit(state, [], slots), seed));
+    state = advanceIncrement(state, resolveIncrement(state, evaluateSplit(state, [], null), seed));
   }
   // Copy the played XI's drained fitness AND any in-match injury back onto the caller's
   // squad cards, so applyMatchFitness sees them (injuries are a real cross-tie punishment).

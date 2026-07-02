@@ -1,39 +1,44 @@
 /**
- * Kickoff Clash — Squad transforms (engine v1, step 3)
+ * Kickoff Clash — Squad transforms (engine v1, step 3; Called Plays rework)
  *
- * Tactical cards and the Manager were flat attack bonuses bolted onto the score
- * (match-v5 `compute` / `applyJoker`). DESIGN §2 says they must be the *same kind
- * of thing* as a player trait or an archetype identity: a record over the closed
- * verb palette (verbs.ts). This module is their authoring layer.
+ * Tactic cards are now per-spell CALLED PLAYS (tactics.ts): the one play the
+ * player calls this spell is authored here as TraitRecords over the closed verb
+ * palette (verbs.ts) and joins the Manager + intent records on the squad source
+ * for THIS spell only. Squad-level gating (archetype counts, the opponent's
+ * telegraphed play, the scoreline, per-increment gates) is resolved here, in the
+ * producer — the records themselves only use palette verbs.
  *
- * Each producer takes the squad context and returns `TraitRecord[]`. Squad-level
- * gating (archetype counts, rarity, "is winning", per-increment ramps) is resolved
- * here, in the producer — the records themselves only use palette verbs, and the
- * dispatcher applies them squad-wide via a synthetic source owner (verbs.ts).
+ * Magnitudes are the rework's starting bands, sized toward the "a clean
+ * counter-call swings ~±0.35 xG per spell" contract; a later balance pass tunes.
  *
- * Two deliberate divergences from the legacy numbers (DESIGN §7 — tuning-deferred):
- *   - The defensive denies (Low Block / Sit Deep / Fortress) were stubbed to 0 in
- *     match-v5; now that the palette has `deny`, they suppress the opponent for real.
- *   - Flat point bonuses are re-cast as percentages, the redesign's native unit
- *     (cf. the §9 examples — Regista +5%, Anchor +30%). Magnitudes are dials.
- *
- * The legacy `compute`/`applyJoker` functions are kept (hand.ts still scores through
- * them); this module is the match-v5 path.
+ * Targeting note (reported deviation): the `deny` verb is a flat conversion
+ * suppression — there is no per-card denial, and enemy-targeted `amplify`
+ * records are a no-op against the zero-emit opponent shadows the dispatcher
+ * sees. Man-Marking therefore uses a stronger flat deny + own-defence amp
+ * instead of a star-targeted deny. Enemy-targeted STATE effects (drain-fitness)
+ * DO work through the shadows — Dark Arts drains the opponent's best player.
  */
 
 import type { Card } from './scoring';
-import type { TacticCard, TacticSlots } from './tactics';
+import type { TacticCard } from './tactics';
 import type { JokerCard } from './jokers';
 import type { Connection } from './chemistry';
 import type { TraitRecord, ZoneName } from './verbs';
 import type { TeamIntent } from './run';
+import type { Band, Lane } from './field';
+import { LANES } from './field';
+import { getOpponentPlayById } from './opponent';
+import { attackLanes, isAttackingPlay } from './plays';
 
 export interface SquadContext {
   xi: Card[];
   increment: number;      // 0–4
   opponentGoals: number;  // for "after conceding" style conditions
+  yourGoals: number;      // for "trailing" gates (Counter Attack)
   connections: Connection[];
   intent?: TeamIntent;    // pre-match attacking/balanced/defensive lean (§ intent)
+  /** The opponent's play this spell (the telegraph) — producer-level gating. */
+  opponentPlayId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,33 +70,58 @@ function overloadLane(name: string, lane: 'L' | 'R', attack: number, creation: n
   ];
 }
 
+/** Drain fitness from every card of an archetype on the OWN side (the press cost). */
+function drainArchetype(name: string, amount: number, archetype: string): TraitRecord {
+  return { name, verb: 'drain-fitness', params: { amount }, scope: 'global', target: { kind: 'criterion', criterion: 'archetype', archetype } };
+}
+
 // A "power lift" touches the score and the chance mix together.
 function powerLift(name: string, amount: number): TraitRecord[] {
   return [ampZone(name, amount, 'attack'), ampZone(name, amount, 'creation'), ampZone(name, amount, 'finishing')];
 }
 
+/** Is the opponent's telegraphed play an attacking commitment? (Data-driven.) */
+function opponentIsAttacking(ctx: SquadContext): boolean {
+  const play = ctx.opponentPlayId ? getOpponentPlayById(ctx.opponentPlayId) : undefined;
+  return play ? isAttackingPlay(play.records) : false;
+}
+
 // ---------------------------------------------------------------------------
-// Tactics — all 16
+// Called plays — all 16 (per-spell records)
 // ---------------------------------------------------------------------------
 
 export function tacticTraits(tactic: TacticCard, ctx: SquadContext): TraitRecord[] {
   const n = tactic.name;
-  const inc = ctx.increment;
 
   switch (tactic.id) {
     // ---- attacking ----
     case 'high_line':
-      // +15% power up top (the opponent-gains-too downside was never coded).
-      return powerLift(n, 0.15);
+      // Commit forward: attack + creation up, your own back line thins.
+      return [ampZone(n, 0.15, 'attack'), ampZone(n, 0.15, 'creation'), ampZone(n, -0.10, 'defence')];
     case 'press_high':
-      // The pressers (Engine / Destroyer) get +20%.
-      return [ampArchetype(n, 0.20, 'Engine'), ampArchetype(n, 0.20, 'Destroyer')];
+      // Suppress their conversion; the pressers (Engine/Destroyer) lift but tire.
+      return [
+        denyOpponent(n, 0.15),
+        ampArchetype(n, 0.20, 'Engine'), ampArchetype(n, 0.20, 'Destroyer'),
+        drainArchetype(n, 0.5, 'Engine'), drainArchetype(n, 0.5, 'Destroyer'),
+      ];
     case 'wing_play':
-      // Reward the wide threats (pace + dribbling).
-      return [ampArchetype(n, 0.10, 'Dribbler'), ampArchetype(n, 0.10, 'Sprinter')];
+      // Threat down BOTH wings (a squad source cannot relocate — it has no
+      // emission of its own — so the wide shift is manufactured with generate).
+      return [
+        { name: n, verb: 'generate', params: { amount: 22 }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, to: { band: 'ATT', lane: 'L' } },
+        { name: n, verb: 'generate', params: { amount: 22 }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, to: { band: 'ATT', lane: 'R' } },
+        { name: n, verb: 'generate', params: { amount: 12 }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'MID', lane: 'L' } },
+        { name: n, verb: 'generate', params: { amount: 12 }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'MID', lane: 'R' } },
+        ampArchetype(n, 0.10, 'Dribbler'), ampArchetype(n, 0.10, 'Sprinter'),
+      ];
     case 'narrow':
-      // Reward the central combiners.
-      return [ampArchetype(n, 0.10, 'Controller'), ampArchetype(n, 0.10, 'Passer')];
+      // Threat through the middle; the central combiners lift.
+      return [
+        { name: n, verb: 'generate', params: { amount: 20 }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, to: { band: 'ATT', lane: 'C' } },
+        { name: n, verb: 'generate', params: { amount: 20 }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'MID', lane: 'C' } },
+        ampArchetype(n, 0.10, 'Controller'), ampArchetype(n, 0.10, 'Passer'),
+      ];
     case 'overload_left':
       // Stack the LEFT lane — concentrate threat where their cover is thin.
       return overloadLane(n, 'L', 38, 20);
@@ -105,39 +135,52 @@ export function tacticTraits(tactic: TacticCard, ctx: SquadContext): TraitRecord
         { name: n, verb: 'generate', params: { amount: 16 }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, to: { band: 'ATT', lane: 'C' } },
       ];
 
-    // ---- defensive (now wired through `deny`) ----
+    // ---- defensive ----
     case 'low_block':
       return [denyOpponent(n, 0.20), ampZone(n, -0.10, 'attack')];
-    case 'sit_deep':
-      // -15% opponent; your attack bleeds a compounding 5% per increment.
-      return [denyOpponent(n, 0.15), ampZone(n, -0.05 * (inc + 1), 'attack')];
-    case 'fortress': {
-      // -25% opponent early, fading to nothing by 90'.
-      const ramp = [0.25, 0.20, 0.15, 0.05, 0];
-      const amount = ramp[Math.min(inc, ramp.length - 1)] ?? 0;
-      return amount > 0 ? [denyOpponent(n, amount)] : [];
+    case 'sit_deep': {
+      // Counter Trap: absorb, then spring the runners — doubled against an
+      // attacking opponent play (the trap they walked into).
+      const amp = opponentIsAttacking(ctx) ? 0.30 : 0.15;
+      return [denyOpponent(n, 0.10), ampArchetype(n, amp, 'Sprinter'), ampArchetype(n, amp, 'Dribbler')];
     }
+    case 'fortress':
+      return [denyOpponent(n, 0.25)];
+    case 'man_marking':
+      // Reported deviation: no per-card denial exists in the palette wiring, so
+      // the star-targeted deny is a stronger flat deny + an own-back-line amp.
+      return [denyOpponent(n, 0.20), ampZone(n, 0.12, 'defence')];
 
     // ---- specialist ----
-    case 'counter_attack':
-      // Springs only once they've scored (the card's "after opponent scores").
-      return ctx.opponentGoals > 0 ? [ampZone(n, 0.05, 'attack'), ampZone(n, 0.05, 'finishing')] : [];
-    case 'possession':
-      // Compounds as the game settles: +5% attack + creation per increment.
-      return [ampZone(n, 0.05 * (inc + 1), 'attack'), ampZone(n, 0.05 * (inc + 1), 'creation')];
-    case 'set_piece':
-      // Aerial threats sharpen in front of goal.
-      return [ampArchetype(n, 0.15, 'Target'), ampArchetype(n, 0.15, 'Commander')];
-    case 'dark_arts':
-      // A small edge to you and a nibble off them (the red-card risk is UI-side).
-      return [ampZone(n, 0.04, 'attack'), denyOpponent(n, 0.10)];
-    case 'youth_policy': {
-      const commons = ctx.xi.filter((c) => c.rarity === 'Common').length;
-      return commons > 0 ? [ampZone(n, Math.min(0.20, commons * 0.03), 'attack')] : [];
+    case 'counter_attack': {
+      // Fires when they committed forward this spell, or you trail.
+      const sprung = opponentIsAttacking(ctx) || ctx.yourGoals < ctx.opponentGoals;
+      return sprung ? [ampZone(n, 0.15, 'attack'), ampZone(n, 0.15, 'finishing')] : [];
     }
-    case 'man_marking':
-      // Disciplined marking: a clean −13% to them and a +12% to your own back line.
-      return [denyOpponent(n, 0.13), ampZone(n, 0.12, 'defence')];
+    case 'possession':
+      // Keep the ball: more creation, a steadier spell.
+      return [
+        ampZone(n, 0.12, 'creation'),
+        { name: n, verb: 'dampen-variance', params: { amount: 0.10 }, scope: 'global', target: { kind: 'zone', zone: 'attack' } },
+      ];
+    case 'set_piece':
+      // A central dead-ball chance; the aerial threats sharpen it.
+      return [
+        { name: n, verb: 'generate', params: { amount: 18 }, scope: 'global', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' } },
+        ampArchetype(n, 0.15, 'Target'), ampArchetype(n, 0.15, 'Commander'),
+      ];
+    case 'dark_arts':
+      // A nibble off their conversion + their best player takes a knock
+      // (drain-fitness reaches the opponent via the zero-emit shadows).
+      return [
+        denyOpponent(n, 0.08),
+        { name: n, verb: 'drain-fitness', params: { amount: 1.0 }, scope: 'global', target: { kind: 'enemyCard', criterion: 'highest-power' } },
+      ];
+    case 'youth_policy':
+      // Fresh Legs: late on, lift the whole XI — weakest players most.
+      return ctx.increment >= 3
+        ? [{ name: n, verb: 'amplify-inverse-power', params: { amount: 0.5 }, scope: 'global', target: { kind: 'criterion', criterion: 'all-teammates' } }]
+        : [];
 
     default:
       return [];
@@ -191,7 +234,7 @@ export function managerTraits(joker: JokerCard, ctx: SquadContext): TraitRecord[
 // like a soft, always-on tactic). It sways the point distribution: Attacking
 // pushes output up top while thinning the back line; Defensive solidifies the
 // rear and suppresses the opponent at the cost of your own attack. Magnitudes
-// are deliberately gentle (smaller than a tactic) — a lean, not a commitment.
+// are deliberately gentle (smaller than a called play) — a lean, not a commitment.
 // ---------------------------------------------------------------------------
 
 export function intentTraits(intent: TeamIntent | undefined, _ctx: SquadContext): TraitRecord[] {
@@ -217,18 +260,17 @@ export function intentTraits(intent: TeamIntent | undefined, _ctx: SquadContext)
 }
 
 // ---------------------------------------------------------------------------
-// Combined squad records for a side
+// Combined squad records for a side: the CALLED play (this spell only) + the
+// Manager + the pre-match intent.
 // ---------------------------------------------------------------------------
 
 export function squadTraits(
-  tacticSlots: TacticSlots,
+  calledPlay: TacticCard | null,
   jokers: JokerCard[],
   ctx: SquadContext,
 ): TraitRecord[] {
   const records: TraitRecord[] = [];
-  for (const slot of tacticSlots.slots) {
-    if (slot) records.push(...tacticTraits(slot, ctx));
-  }
+  if (calledPlay) records.push(...tacticTraits(calledPlay, ctx));
   for (const joker of jokers) {
     records.push(...managerTraits(joker, ctx));
   }

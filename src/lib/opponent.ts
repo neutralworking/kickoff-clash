@@ -221,6 +221,183 @@ export function opponentScaleTraits(xi: Card[], increment: number): TraitRecord[
   return recs;
 }
 
+// ---------------------------------------------------------------------------
+// Opponent PLAYS (the Called Plays rework) — one telegraphed play per spell.
+//
+// Each play is a set of TraitRecords over the existing verb palette, authored
+// exactly like squad-transforms.ts squad records: they ride the opponent's
+// squad source through computeSideField (resolveIncrement joins them with
+// opponentScaleTraits). `telegraph` is the PLAIN factual string shown to the
+// player before the spell — the read a called play answers.
+// ---------------------------------------------------------------------------
+
+export interface OpponentPlay {
+  id: string;
+  name: string;
+  telegraph: string;
+  records: TraitRecord[];
+}
+
+/** Amplify one emission kind across the opponent's whole field. */
+function oppAmp(name: string, amount: number, zone: 'attack' | 'defence' | 'creation' | 'finishing'): TraitRecord {
+  return { name, verb: 'amplify', params: { amount }, scope: 'global', target: { kind: 'zone', zone } };
+}
+
+/** Suppress the player's conversion (the opponent's `deny`). */
+function oppDeny(name: string, amount: number): TraitRecord {
+  return { name, verb: 'deny', params: { amount }, scope: 'zone', target: { kind: 'zone', zone: 'attack' } };
+}
+
+/** Manufacture flat threat in a specific cell (mirrors squad-transforms overloadLane). */
+function oppGen(name: string, amount: number, zone: 'attack' | 'creation' | 'finishing', band: 'ATT' | 'MID', lane: Lane): TraitRecord {
+  return { name, verb: 'generate', params: { amount }, scope: 'global', target: { kind: 'zone', zone }, to: { band, lane } };
+}
+
+export const OPPONENT_PLAYS: OpponentPlay[] = [
+  {
+    id: 'build_patiently',
+    name: 'Build Patiently',
+    telegraph: 'Keeping the ball and building slowly',
+    records: [
+      oppAmp('Build Patiently', 0.12, 'creation'),
+      { name: 'Build Patiently', verb: 'dampen-variance', params: { amount: 0.10 }, scope: 'global', target: { kind: 'zone', zone: 'attack' } },
+    ],
+  },
+  {
+    id: 'high_press',
+    name: 'High Press',
+    telegraph: 'Pressing your back line high',
+    records: [oppDeny('High Press', 0.12), oppAmp('High Press', 0.08, 'attack')],
+  },
+  {
+    id: 'overload_left',
+    name: 'Overload Left',
+    telegraph: 'Overloading your left',
+    records: [
+      oppGen('Overload Left', 38, 'attack', 'ATT', 'L'),
+      oppGen('Overload Left', 20, 'creation', 'MID', 'L'),
+    ],
+  },
+  {
+    id: 'overload_right',
+    name: 'Overload Right',
+    telegraph: 'Overloading your right',
+    records: [
+      oppGen('Overload Right', 38, 'attack', 'ATT', 'R'),
+      oppGen('Overload Right', 20, 'creation', 'MID', 'R'),
+    ],
+  },
+  {
+    id: 'route_one',
+    name: 'Route One',
+    telegraph: 'Playing direct to the striker',
+    records: [
+      oppGen('Route One', 26, 'finishing', 'ATT', 'C'),
+      oppGen('Route One', 16, 'attack', 'ATT', 'C'),
+    ],
+  },
+  {
+    id: 'drop_deep',
+    name: 'Drop Deep',
+    telegraph: 'Sitting deep behind the ball',
+    records: [oppDeny('Drop Deep', 0.15), oppAmp('Drop Deep', 0.12, 'defence'), oppAmp('Drop Deep', -0.08, 'attack')],
+  },
+  {
+    id: 'kill_the_game',
+    name: 'Kill the Game',
+    telegraph: 'Slowing the game down',
+    records: [
+      oppDeny('Kill the Game', 0.10),
+      oppAmp('Kill the Game', -0.05, 'attack'),
+      { name: 'Kill the Game', verb: 'dampen-variance', params: { amount: 0.15 }, scope: 'global', target: { kind: 'zone', zone: 'attack' } },
+    ],
+  },
+  {
+    id: 'unleash_star',
+    name: 'Unleash the Star',
+    telegraph: 'Playing everything through the star player',
+    records: [
+      { name: 'Unleash the Star', verb: 'amplify', params: { amount: 0.25 }, scope: 'global', target: { kind: 'criterion', criterion: 'highest-power' } },
+    ],
+  },
+];
+
+export function getOpponentPlayById(id: string): OpponentPlay | undefined {
+  return OPPONENT_PLAYS.find(p => p.id === id);
+}
+
+/** Style-base weights per play id (unlisted → 0). Scoreline shifts apply on top. */
+const PLAY_WEIGHTS: Record<string, Record<string, number>> = {
+  Passive:   { build_patiently: 3.0, drop_deep: 2.5, kill_the_game: 1.0, route_one: 0.8, high_press: 0.4, overload_left: 0.4, overload_right: 0.4, unleash_star: 0.5 },
+  Balanced:  { build_patiently: 1.5, drop_deep: 1.0, kill_the_game: 0.8, route_one: 1.2, high_press: 1.2, overload_left: 1.0, overload_right: 1.0, unleash_star: 1.0 },
+  Attacking: { build_patiently: 0.5, drop_deep: 0.3, kill_the_game: 0.3, route_one: 2.2, high_press: 1.8, overload_left: 2.2, overload_right: 2.2, unleash_star: 1.5 },
+  Counter:   { build_patiently: 0.6, drop_deep: 2.5, kill_the_game: 1.5, route_one: 1.5, high_press: 0.6, overload_left: 0.6, overload_right: 0.6, unleash_star: 0.8 },
+  Adaptive:  { build_patiently: 1.0, drop_deep: 1.0, kill_the_game: 1.0, route_one: 1.2, high_press: 1.2, overload_left: 1.2, overload_right: 1.2, unleash_star: 1.2 },
+};
+
+const ATTACK_PLAY_IDS = new Set(['high_press', 'overload_left', 'overload_right', 'route_one', 'unleash_star']);
+
+function playRng(seed: number, increment: number, salt: number): number {
+  const mixed = (((seed * 73856093) ^ (increment * 19349663) ^ (salt * 2654435761)) >>> 0);
+  return seededRandom(mixed);
+}
+
+function weightedPlayPick(weights: Map<string, number>, roll: number): OpponentPlay {
+  let total = 0;
+  for (const w of weights.values()) total += w;
+  const t = roll * (total || 1);
+  let acc = 0;
+  for (const play of OPPONENT_PLAYS) {
+    acc += weights.get(play.id) ?? 0;
+    if (t <= acc && (weights.get(play.id) ?? 0) > 0) return play;
+  }
+  return OPPONENT_PLAYS[0];
+}
+
+/**
+ * Pick the opponent's play for a spell. Deterministic from (style, increment,
+ * scoreDiff, seed); style-weighted and scoreline-aware (`scoreDiff` = opponent
+ * goals − your goals: ahead → game-killing plays, behind → attacking plays).
+ *
+ * `candidates` is what the player is SHOWN: [play] for every style except
+ * Adaptive, which telegraphs 2 candidates (the real play + a decoy, in a
+ * seeded order) — the real one plays.
+ */
+export function pickOpponentPlay(
+  style: string,
+  increment: number,
+  scoreDiff: number,
+  seed: number,
+): { play: OpponentPlay; candidates: OpponentPlay[] } {
+  const base = PLAY_WEIGHTS[style] ?? PLAY_WEIGHTS.Balanced;
+  const weights = new Map<string, number>();
+  for (const play of OPPONENT_PLAYS) {
+    let w = base[play.id] ?? 0;
+    if (scoreDiff > 0) {
+      // Ahead: protect it.
+      if (play.id === 'kill_the_game') w *= 2.5;
+      if (play.id === 'drop_deep') w *= 1.8;
+      if (ATTACK_PLAY_IDS.has(play.id)) w *= 0.5;
+    } else if (scoreDiff < 0) {
+      // Behind: chase it.
+      if (ATTACK_PLAY_IDS.has(play.id)) w *= 1.7;
+      if (play.id === 'drop_deep') w *= 0.35;
+      if (play.id === 'kill_the_game') w *= 0.25;
+    }
+    weights.set(play.id, w);
+  }
+
+  const play = weightedPlayPick(weights, playRng(seed, increment, 71));
+  if (style !== 'Adaptive') return { play, candidates: [play] };
+
+  // Adaptive: telegraph two candidates — the real play + a weighted decoy.
+  const decoyWeights = new Map(weights);
+  decoyWeights.set(play.id, 0);
+  const decoy = weightedPlayPick(decoyWeights, playRng(seed, increment, 73));
+  const realFirst = playRng(seed, increment, 79) < 0.5;
+  return { play, candidates: realFirst ? [play, decoy] : [decoy, play] };
+}
+
 /**
  * SECONDARY behaviour — counter only if it can. Bias a `reactivity`-weighted share of
  * the opponent's push toward your thinnest cover lane: opportunistic, and only as
