@@ -7,7 +7,7 @@ import { cupMatchPower } from '../lib/opponent';
 import type { HandState } from '../lib/hand';
 import { rollXI, handFromSelection, INCREMENT_MINUTES } from '../lib/hand';
 import { getFormation } from '../lib/formations';
-import type { MatchV5State, IncrementResult } from '../lib/match-v5';
+import type { MatchV5State, IncrementResult, MatchVerdict } from '../lib/match-v5';
 import {
   initMatch,
   evaluateSplit,
@@ -33,6 +33,8 @@ interface MatchPhaseProps {
     opponentGoals: number;
     result: 'win' | 'draw' | 'loss';
     handState: HandState;
+    /** Why the match went the way it did (engine computeMatchVerdict). */
+    verdict: MatchVerdict;
   }) => void;
 }
 
@@ -205,6 +207,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       yourGoals: result.yourGoals,
       opponentGoals: result.opponentGoals,
       result: result.result,
+      verdict: result.verdict,
       // Bridge to HandState shape for backward compatibility
       handState: {
         xi: matchState.xi,

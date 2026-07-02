@@ -22,6 +22,9 @@ import { transformCards, type KCCard } from './transform';
 import kcCardsData from '../../public/data/kc_cards.json';
 import type { HandState } from './hand';
 import { rollXI } from './hand';
+// Type-only (erased at runtime) — match-v5 imports TeamIntent from here, so a
+// value import would be a cycle; the verdict TYPE alone is safe to share.
+import type { MatchVerdict } from './match-v5';
 import type { JokerCard } from './jokers';
 import { getExtraDiscards } from './jokers';
 import { ALL_TACTICS, type TacticCard } from './tactics';
@@ -81,6 +84,9 @@ export interface MatchResult {
   shattered: string[];
   injured: string[];
   promoted: string[];
+  /** Why the match went the way it did (match-v5 computeMatchVerdict). Optional
+   *  for saves recorded before the verdict existed. Plain strings — serializable. */
+  verdict?: MatchVerdict;
 }
 
 // ---------------------------------------------------------------------------

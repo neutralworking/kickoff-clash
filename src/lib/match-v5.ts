@@ -212,6 +212,27 @@ export interface MatchV5Result {
   result: 'win' | 'draw' | 'loss';
   scores: IncrementResult[];
   matchState: MatchV5State;
+  /** Why the match went the way it did — computed from the played increments
+   *  (read-side, deterministic). Surfaced on the post-match and end screens. */
+  verdict: MatchVerdict;
+}
+
+/** One contributing factor in the match verdict. `swing` is a rough normalized
+ *  signed magnitude (+ favours you, − favours the opponent) used only to RANK
+ *  factors — the player-facing content is the plain `label`/`detail` strings. */
+export interface VerdictFactor {
+  key: 'power' | 'chances' | 'conversion' | 'control' | 'plan';
+  label: string;
+  detail: string;
+  swing: number;
+}
+
+/** The legible "why you won/lost" readout: one plain headline naming the
+ *  decisive factor, plus the ranked factors behind it. All strings are dry and
+ *  data-grounded (numbers from the match), never editorial. */
+export interface MatchVerdict {
+  headline: string;
+  factors: VerdictFactor[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1635,8 +1656,119 @@ export function discardFromBench(state: MatchV5State, benchCardIds: number[]): M
 }
 
 // ---------------------------------------------------------------------------
-// 9. getMatchResult
+// 9. getMatchResult + the match verdict (why you won/lost)
 // ---------------------------------------------------------------------------
+
+const nf1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
+
+/**
+ * Compute the legible "why" from the played increments. Read-side and
+ * deterministic — every number quoted comes from the match data:
+ *   power      — your XI's average power vs the opponent XI's
+ *   chances    — total xG for vs against
+ *   conversion — goals relative to xG on both sides (who took their chances)
+ *   control    — average possession share + lane contests won
+ *   plan       — attack added per spell by tactics + manager + chemistry
+ * The headline names the DECISIVE factor via a small result-aware tree; the
+ * factors list carries the rest, ranked by magnitude. Copy stays dry and
+ * numeric — the data is the sentence.
+ */
+export function computeMatchVerdict(state: MatchV5State): MatchVerdict {
+  const inc = Math.max(1, state.scores.length);
+  const { yourGoals, opponentGoals } = state;
+  const result: 'win' | 'draw' | 'loss' =
+    yourGoals > opponentGoals ? 'win' : yourGoals < opponentGoals ? 'loss' : 'draw';
+
+  // --- Raw axes -------------------------------------------------------------
+  const yourAvgPower = state.xi.length
+    ? state.xi.reduce((a, c) => a + c.power, 0) / state.xi.length : 0;
+  const oppAvgPower = state.opponentXI.length
+    ? state.opponentXI.reduce((a, c) => a + c.power, 0) / state.opponentXI.length : 0;
+  const powerGap = yourAvgPower - oppAvgPower;
+
+  let yourXG = 0, oppXG = 0, poss = 0, yourLanes = 0, oppLanes = 0;
+  let planPts = 0, basePts = 0;
+  for (const r of state.scores) {
+    yourXG += r.yourXG;
+    oppXG += r.opponentXG;
+    poss += r.stats.yourPossessionPct;
+    yourLanes += (['L', 'C', 'R'] as Lane[]).filter((l) => r.stats.yourZonesWon[l]).length;
+    oppLanes += (['L', 'C', 'R'] as Lane[]).filter((l) => r.stats.opponentZonesWon[l]).length;
+    for (const line of r.split.attackBreakdown) {
+      if (line.type === 'tactic' || line.type === 'manager' || line.type === 'synergy') planPts += line.value;
+      if (line.type === 'base') basePts += line.value;
+    }
+  }
+  poss /= inc;
+  const laneShare = yourLanes + oppLanes > 0 ? yourLanes / (yourLanes + oppLanes) : 0.5;
+  const planPerSpell = planPts / inc;
+  const planShare = basePts > 0 ? planPts / basePts : 0;
+  // Finishing swing: who out-scored their chances (goals − xG), you minus them.
+  const convSwing = (yourGoals - yourXG) - (opponentGoals - oppXG);
+
+  // --- Factors (swing normalizes each axis to roughly ±1 for RANKING only) ---
+  const rawFactors: VerdictFactor[] = [
+    {
+      key: 'power',
+      label: 'Squad power',
+      detail: `Your XI averaged ${Math.round(yourAvgPower)} power to their ${Math.round(oppAvgPower)}.`,
+      swing: Math.max(-1, Math.min(1, powerGap / 10)),
+    },
+    {
+      key: 'chances',
+      label: 'Chances created',
+      detail: `Expected goals ${nf1(yourXG)} to ${nf1(oppXG)}.`,
+      swing: Math.max(-1, Math.min(1, (yourXG - oppXG) / 2.5)),
+    },
+    {
+      key: 'conversion',
+      label: 'Finishing',
+      detail: `You scored ${yourGoals} from ${nf1(yourXG)} xG; they scored ${opponentGoals} from ${nf1(oppXG)}.`,
+      swing: Math.max(-1, Math.min(1, convSwing / 2)),
+    },
+    {
+      key: 'control',
+      label: 'Control',
+      detail: `${Math.round(poss)}% possession; lane contests won ${yourLanes} to ${oppLanes}.`,
+      swing: Math.max(-1, Math.min(1, ((poss - 50) / 25 + (laneShare - 0.5) * 2) / 2)),
+    },
+    {
+      key: 'plan',
+      label: 'Your plan',
+      detail: `Tactics, manager and chemistry added ${Math.round(planPerSpell)} attack per spell (+${Math.round(planShare * 100)}% on the base).`,
+      swing: Math.max(0, Math.min(1, planShare / 0.35)),
+    },
+  ];
+  const factors = rawFactors.sort((a, b) => Math.abs(b.swing) - Math.abs(a.swing));
+
+  // --- Headline: a small result-aware tree, decisive factor first ------------
+  let headline: string;
+  const xgGap = yourXG - oppXG;
+  if (Math.abs(powerGap) >= 6) {
+    headline = powerGap < 0
+      ? `Outgunned: their XI averaged ${Math.round(oppAvgPower)} power to your ${Math.round(yourAvgPower)}.`
+      : `Overpowered them: your XI averaged ${Math.round(yourAvgPower)} power to their ${Math.round(oppAvgPower)}.`;
+  } else if (result === 'loss' && xgGap >= 0.8) {
+    headline = `Created enough — xG ${nf1(yourXG)} to ${nf1(oppXG)} — but they took their chances and you didn't.`;
+  } else if (result === 'win' && xgGap <= -0.8) {
+    headline = `Won on finishing: ${yourGoals} goal${yourGoals === 1 ? '' : 's'} from ${nf1(yourXG)} xG against the run of play.`;
+  } else if (Math.abs(xgGap) >= 0.8) {
+    headline = xgGap > 0
+      ? `Out-created them: xG ${nf1(yourXG)} to ${nf1(oppXG)}.`
+      : `Out-created: they made xG ${nf1(oppXG)} to your ${nf1(yourXG)}.`;
+  } else if (Math.abs(poss - 50) >= 8 || Math.abs(laneShare - 0.5) >= 0.2) {
+    const yours = poss >= 50;
+    headline = yours
+      ? `Controlled it: ${Math.round(poss)}% possession and ${yourLanes}–${oppLanes} on the lanes.`
+      : `Control lost: ${Math.round(poss)}% possession and ${yourLanes}–${oppLanes} on the lanes.`;
+  } else if (result !== 'draw' && planShare >= 0.25) {
+    headline = `Your plan made the difference: tactics, manager and chemistry added +${Math.round(planShare * 100)}% attack.`;
+  } else {
+    headline = `Fine margins: xG ${nf1(yourXG)} to ${nf1(oppXG)}.`;
+  }
+
+  return { headline, factors };
+}
 
 export function getMatchResult(state: MatchV5State): MatchV5Result {
   const { yourGoals, opponentGoals } = state;
@@ -1651,6 +1783,7 @@ export function getMatchResult(state: MatchV5State): MatchV5Result {
     result,
     scores: state.scores,
     matchState: state,
+    verdict: computeMatchVerdict(state),
   };
 }
 

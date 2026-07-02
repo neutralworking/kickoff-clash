@@ -38,6 +38,7 @@ import { accrueMatch } from '../lib/chem';
 import type { PackContents } from '../lib/packs';
 import type { TeamSelection, TeamIntent } from '../lib/run';
 import TitleScreen from './TitleScreen';
+import type { MatchVerdict } from '../lib/match-v5';
 import PackReveal from './PackReveal';
 import TeamSelect from './TeamSelect';
 import TeamTalk from './TeamTalk';
@@ -217,7 +218,7 @@ export default function GameShell() {
   }, [pendingSeed]);
 
   // --- Match Complete ---
-  const handleMatchComplete = useCallback((result: { yourGoals: number; opponentGoals: number; result: 'win' | 'draw' | 'loss'; handState: HandState }) => {
+  const handleMatchComplete = useCallback((result: { yourGoals: number; opponentGoals: number; result: 'win' | 'draw' | 'loss'; handState: HandState; verdict: MatchVerdict }) => {
     if (!runState) return;
 
     // Calculate attendance from hand's final XI
@@ -263,6 +264,9 @@ export default function GameShell() {
       shattered: durResult.shattered.map(c => c.name),
       injured: durResult.injured.map(c => c.name),
       promoted: durResult.promoted.map(c => c.name),
+      // Why the match went the way it did — read by PostMatch, and by EndScreen
+      // via matchHistory (the last entry is why the run ended).
+      verdict: result.verdict,
     };
 
     // Apply durability to deck, then fold in cross-match fitness (Phase 3B.2): the XI
