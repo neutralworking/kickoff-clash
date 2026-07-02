@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 import { transformCards, type KCCard } from '../src/lib/transform';
 import { getFormation } from '../src/lib/formations';
-import { createEmptySlots } from '../src/lib/tactics';
+
 import {
   initMatch,
   commitAttackers,
@@ -34,7 +34,7 @@ const raw = JSON.parse(fs.readFileSync(dataPath, 'utf-8')) as KCCard[];
 const cards = transformCards(raw);
 const sorted = [...cards].sort((a, b) => b.power - a.power);
 
-const slots = createEmptySlots();
+
 const formation = getFormation('4-3-3');
 const SEEDS = 160;
 
@@ -46,7 +46,7 @@ function runMatch(xi: Card[], bench: Card[], round: number, seed: number) {
   let state = initMatch(xi, bench, [], formation, 'tiki-taka', [], seed, round, 'Balanced', 'Sprinter');
   for (let i = 0; i < 5; i++) {
     state = commitAttackers(state, pickAttackers(state));
-    const split = evaluateSplit(state, [], slots);
+    const split = evaluateSplit(state, [], null);
     state = advanceIncrement(state, resolveIncrement(state, split, seed));
   }
   return { yg: state.yourGoals, og: state.opponentGoals };

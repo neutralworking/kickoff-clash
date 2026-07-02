@@ -613,7 +613,7 @@ function TacticDetail({ tactic, accent }: { tactic: TacticCard; accent: string }
         </p>
         {contradicts && (
           <span style={{ fontSize: 10.5, color: 'var(--danger)', lineHeight: 1.35 }}>
-            Replaces <b style={{ color: 'var(--cream)' }}>{contradicts.name}</b> if deployed together.
+            The opposite play to <b style={{ color: 'var(--cream)' }}>{contradicts.name}</b>.
           </span>
         )}
       </Panel>

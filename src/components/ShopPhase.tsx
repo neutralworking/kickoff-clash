@@ -4,9 +4,9 @@ import { useMemo, useState } from 'react';
 import type { Card } from '../lib/scoring';
 import { seededRandom } from '../lib/scoring';
 import type { RunState } from '../lib/run';
-import { getShopCards, getPlayerPackCards, ALL_CARDS } from '../lib/run';
+import { getShopCards, getPlayerPickCards, ALL_CARDS } from '../lib/run';
 import {
-  CARD_PICK_COST, RARE_PICK_COST, PLAYER_PACK_COST, getTransferFee, getAcademyTier,
+  CARD_PICK_COST, RARE_PICK_COST, PLAYER_PICK_COST, getTransferFee, getAcademyTier,
   generateAcademyDurability, JOKER_COST, getStadiumInvestment,
   getAcademyInvestment, BOX_OFFICE_INVESTMENT,
 } from '../lib/economy';
@@ -18,11 +18,12 @@ import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import SquadGallery from './SquadGallery';
 import { PIXEL } from './cards/cardTokens';
+import { getFormation } from '../lib/formations';
+import { LineupSlot, BenchTile } from './lineup';
 
 interface ShopPhaseProps {
   state: RunState;
   onBuyCard: (card: Card, cost: number) => void;
-  onBuyPlayerPack: (cards: Card[], cost: number) => void;
   onSellCard: (card: Card) => void;
   onBuyJoker: (joker: JokerCardType) => void;
   onBuyAcademy: (card: Card) => void;
@@ -49,7 +50,6 @@ type Tab = 'market' | 'squad' | 'backroom';
 export default function ShopPhase({
   state,
   onBuyCard,
-  onBuyPlayerPack,
   onSellCard,
   onBuyJoker,
   onBuyAcademy,
@@ -76,16 +76,16 @@ export default function ShopPhase({
     () => getShopJokers(shopSeed + 2 + rerollCount * 17, 3),
     [shopSeed, rerollCount],
   );
-  const [showCardPick, setShowCardPick] = useState<'normal' | 'rare' | null>(null);
-  // Player Pack: one per shop visit (a new seed each match re-offers it).
-  const packCards = useMemo(() => getPlayerPackCards(shopSeed + 77), [shopSeed]);
-  const [showPack, setShowPack] = useState(false);
-  const [packBought, setPackBought] = useState(false);
+  const [showCardPick, setShowCardPick] = useState<'budget' | 'normal' | 'rare' | null>(null);
+  // Player Pick (budget): 3 Common/Rare candidates, choose one. Seeded per visit.
+  const budgetCards = useMemo(() => getPlayerPickCards(shopSeed + 77), [shopSeed]);
   const [tab, setTab] = useState<Tab>('market');
   const [sellSheet, setSellSheet] = useState(false);
   const [sellConfirm, setSellConfirm] = useState<Card | null>(null);
   const [modal, setModal] = useState<GameCardModel | null>(null);
   const [showGallery, setShowGallery] = useState(false);
+  // Read-only XI view — see the current shape (gaps, fitness, depth) while shopping.
+  const [showXI, setShowXI] = useState(false);
 
   const academy = getAcademyTier(state.academyTier);
   const acSeed = shopSeed + 777;
@@ -237,8 +237,6 @@ export default function ShopPhase({
             offeredJokers={offeredJokers}
             canPickJoker={canPickJoker}
             setShowCardPick={setShowCardPick}
-            onOpenPack={() => setShowPack(true)}
-            packBought={packBought}
             onBuyJoker={onBuyJoker}
             onRerollShop={onRerollShop}
             setRerollCount={setRerollCount}
@@ -256,6 +254,7 @@ export default function ShopPhase({
             openModal={setModal}
             openSell={() => setSellSheet(true)}
             openGallery={() => setShowGallery(true)}
+            openXI={() => setShowXI(true)}
           />
         )}
 
@@ -302,8 +301,8 @@ export default function ShopPhase({
       {showCardPick && (
         <BottomSheet title="Pick 1 of 3" onClose={() => setShowCardPick(null)}>
           <div className="grid grid-cols-3 gap-3">
-            {(showCardPick === 'rare' ? rareCards : shopCards).map(card => {
-              const cost = showCardPick === 'rare' ? RARE_PICK_COST : CARD_PICK_COST;
+            {(showCardPick === 'rare' ? rareCards : showCardPick === 'budget' ? budgetCards : shopCards).map(card => {
+              const cost = showCardPick === 'rare' ? RARE_PICK_COST : showCardPick === 'budget' ? PLAYER_PICK_COST : CARD_PICK_COST;
               return (
                 <CardCell
                   key={card.id}
@@ -319,31 +318,6 @@ export default function ShopPhase({
                 />
               );
             })}
-          </div>
-        </BottomSheet>
-      )}
-
-      {/* ── Player Pack bottom sheet: the 3 drawn cards, one price, all join ── */}
-      {showPack && (
-        <BottomSheet title="Player Pack" onClose={() => setShowPack(false)}>
-          <div className="flex flex-col" style={{ gap: 12 }}>
-            <div className="grid grid-cols-3 gap-3">
-              {packCards.map(card => (
-                <button key={card.id} onClick={() => setModal({ variant: 'player', card })} className="active:scale-95" style={{ transition: 'transform 0.1s ease' }}>
-                  <GameCard model={{ variant: 'player', card }} />
-                </button>
-              ))}
-            </div>
-            <SheetButton
-              label={packBought ? 'Signed' : `Sign all 3 — £${PLAYER_PACK_COST.toLocaleString()}`}
-              tone={packBought || state.cash < PLAYER_PACK_COST ? 'muted' : 'primary'}
-              onClick={() => {
-                if (packBought || state.cash < PLAYER_PACK_COST) return;
-                onBuyPlayerPack(packCards, PLAYER_PACK_COST);
-                setPackBought(true);
-                setShowPack(false);
-              }}
-            />
           </div>
         </BottomSheet>
       )}
@@ -407,6 +381,9 @@ export default function ShopPhase({
       {showGallery && (
         <SquadGallery deck={state.deck} onClose={() => setShowGallery(false)} title="YOUR SQUAD" />
       )}
+
+      {/* Read-only XI pitch view — the current shape while shopping. */}
+      {showXI && <XIOverlay state={state} onInspect={(c) => setModal({ variant: 'player', card: c })} onClose={() => setShowXI(false)} />}
     </div>
   );
 }
@@ -417,14 +394,12 @@ export default function ShopPhase({
 
 function MarketTab({
   state, offeredJokers, canPickJoker,
-  setShowCardPick, onOpenPack, packBought, onBuyJoker, onRerollShop, setRerollCount, openModal,
+  setShowCardPick, onBuyJoker, onRerollShop, setRerollCount, openModal,
 }: {
   state: RunState;
   offeredJokers: JokerCardType[];
   canPickJoker: boolean;
-  setShowCardPick: (v: 'normal' | 'rare' | null) => void;
-  onOpenPack: () => void;
-  packBought: boolean;
+  setShowCardPick: (v: 'budget' | 'normal' | 'rare' | null) => void;
   onBuyJoker: (joker: JokerCardType) => void;
   onRerollShop: () => boolean;
   setRerollCount: React.Dispatch<React.SetStateAction<number>>;
@@ -432,15 +407,15 @@ function MarketTab({
 }) {
   return (
     <div className="flex flex-col gap-3 pb-2">
-      {/* Card picks + the cheap depth pack */}
+      {/* The three pick tiers: budget depth, standard, elite */}
       <SectionCard title="Player Market" accent="var(--gold)">
         <div className="grid grid-cols-2 gap-2">
           <BuyTile
-            label="Player Pack"
-            sub={packBought ? 'Signed this window' : '3 random players'}
-            cost={PLAYER_PACK_COST}
-            affordable={!packBought && state.cash >= PLAYER_PACK_COST}
-            onClick={() => { if (!packBought) onOpenPack(); }}
+            label="Player Pick"
+            sub="Choose 1 of 3 (Common/Rare)"
+            cost={PLAYER_PICK_COST}
+            affordable={state.cash >= PLAYER_PICK_COST}
+            onClick={() => setShowCardPick('budget')}
           />
           <BuyTile
             label="Card Pick"
@@ -509,7 +484,7 @@ function MarketTab({
 // ===========================================================================
 
 function SquadTab({
-  state, trainableCards, injuredCards, onTrainPlayer, onHealPlayer, openModal, openSell, openGallery,
+  state, trainableCards, injuredCards, onTrainPlayer, onHealPlayer, openModal, openSell, openGallery, openXI,
 }: {
   state: RunState;
   trainableCards: { card: Card; applied: number }[];
@@ -519,19 +494,29 @@ function SquadTab({
   openModal: (m: GameCardModel) => void;
   openSell: () => void;
   openGallery: () => void;
+  openXI: () => void;
 }) {
   const canHeal = state.cash >= 12000;
   return (
     <div className="flex flex-col gap-3 pb-2">
-      {/* Squad gallery shortcut — browse every owned card in the full overlay. */}
+      {/* Squad shortcuts — the current XI on the pitch, and the full card list. */}
       <SectionCard title="Your Squad" accent="var(--kit-blue)">
-        <RowAction
-          title="View all cards"
-          sub={`${state.deck.length} owned · filter & inspect`}
-          actionLabel="View All"
-          affordable={state.deck.length > 0}
-          onClick={openGallery}
-        />
+        <div className="flex flex-col gap-2">
+          <RowAction
+            title="View XI"
+            sub="Current lineup on the pitch"
+            actionLabel="View XI"
+            affordable
+            onClick={openXI}
+          />
+          <RowAction
+            title="View all cards"
+            sub={`${state.deck.length} owned · filter & inspect`}
+            actionLabel="View All"
+            affordable={state.deck.length > 0}
+            onClick={openGallery}
+          />
+        </div>
       </SectionCard>
 
       {/* Medical room */}
@@ -824,9 +809,10 @@ function CardCell({
         {badge && (
           <span
             style={{
+              // Off the corner — the card's top-right is the rating; never cover it.
               position: 'absolute',
-              top: 4,
-              right: 4,
+              top: -5,
+              right: -5,
               fontFamily: PIXEL,
               fontSize: 8,
               color: 'var(--ink-black)',
@@ -1047,6 +1033,70 @@ function BottomSheet({
         </div>
         <div className="min-h-0 overflow-y-auto relative" style={{ overscrollBehavior: 'contain', zIndex: 2 }}>
           {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// XIOverlay — the current lineup, read-only, while shopping: the pitch with the
+// starting XI (fitness showing), the bench, and the reserves, so a buyer can
+// see exactly where the squad is thin. Tap any player to inspect.
+// ---------------------------------------------------------------------------
+
+function XIOverlay({
+  state, onInspect, onClose,
+}: {
+  state: RunState;
+  onInspect: (c: Card) => void;
+  onClose: () => void;
+}) {
+  const formation = getFormation(state.activeFormation);
+  const byId = new Map(state.deck.map((c) => [c.id, c]));
+  const xi = (state.startingXI ?? []).map((id) => byId.get(id));
+  const benchCards = (state.benchIds ?? []).map((id) => byId.get(id)).filter((c): c is Card => !!c);
+  const used = new Set([...(state.startingXI ?? []), ...(state.benchIds ?? [])]);
+  const reserves = state.deck.filter((c) => !used.has(c.id));
+
+  return (
+    <div className="absolute inset-0 flex flex-col" style={{ background: 'rgba(4,10,7,0.94)', zIndex: 55, padding: '12px 12px max(env(safe-area-inset-bottom), 10px)' }}>
+      <div className="flex items-center justify-between shrink-0" style={{ marginBottom: 8 }}>
+        <span style={{ fontFamily: PIXEL, fontSize: 12, letterSpacing: 0.6, color: 'var(--cream)' }}>CURRENT XI</span>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          style={{ width: 36, height: 36, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', background: 'var(--surface)', boxShadow: '0 2px 0 0 var(--ink-black)', color: 'var(--cream)', fontFamily: PIXEL, fontSize: 14, lineHeight: 1 }}
+        >
+          {'×'}
+        </button>
+      </div>
+      {/* Pitch — LineupSlot uses % coords, so any container height works. */}
+      <div className="relative shrink-0" style={{ height: '46vh', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', background: 'linear-gradient(180deg, #1f7a37 0%, #17632c 100%)', overflow: 'hidden' }}>
+        {formation.slots.map((slot, i) => (
+          <LineupSlot
+            key={i}
+            slot={slot}
+            card={xi[i]}
+            justPlaced={false}
+            showFitness
+            onClick={xi[i] ? () => onInspect(xi[i]!) : undefined}
+          />
+        ))}
+      </div>
+      {/* Bench + reserves — same tiles as the squad screen, inspect-only. */}
+      <div className="flex-1 min-h-0 overflow-y-auto" style={{ marginTop: 8, overscrollBehavior: 'contain' }}>
+        <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)' }}>BENCH {benchCards.length}</span>
+        <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', marginTop: 4 }}>
+          {benchCards.map((c) => (
+            <BenchTile key={c.id} card={c} onPointerUp={() => onInspect(c)} />
+          ))}
+        </div>
+        <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)', display: 'block', marginTop: 8 }}>RESERVES {reserves.length}</span>
+        <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', marginTop: 4 }}>
+          {reserves.map((c) => (
+            <BenchTile key={c.id} card={c} onPointerUp={() => onInspect(c)} />
+          ))}
         </div>
       </div>
     </div>

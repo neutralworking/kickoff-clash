@@ -17,9 +17,13 @@ import {
 import type { Formation, FormationSlot } from './formations';
 import type { JokerCard } from './jokers';
 import { getExtraDiscards } from './jokers';
-import type { TacticSlots } from './tactics';
+import type { TacticCard } from './tactics';
+import { getTacticById } from './tactics';
 import type { TeamIntent } from './run';
-import { squadTraits } from './squad-transforms';
+import type { SquadContext } from './squad-transforms';
+import { squadTraits, tacticTraits } from './squad-transforms';
+import type { CallGrade } from './plays';
+import { gradeCall } from './plays';
 import {
   INCREMENT_MINUTES,
   generateGoalText,
@@ -32,7 +36,10 @@ import { dispatchTraits, ZONES } from './verbs';
 import { traitsForCard } from './role-transforms';
 import type { Lane, Cell, Band } from './field';
 import { CELLS, BANDS, LANES, cellOf, bandOf } from './field';
-import { generateOpponentXI, opponentScaleTraits, counterPush, reactivityFor } from './opponent';
+import {
+  generateOpponentXI, opponentScaleTraits, counterPush, reactivityFor,
+  pickOpponentPlay, getOpponentPlayById,
+} from './opponent';
 import type { CoAppearance } from './chem';
 import { chemistryRecords } from './chem';
 import type { PossessionSide, Shot } from './possession';
@@ -73,6 +80,16 @@ export interface MatchV5State {
   opponentXI: Card[];         // the opponent's positioned side (step 4)
   opponentFormation: Formation;
   chemistry: CoAppearance;    // run-accumulated pairwise co-appearances (CARDS §5)
+  // --- Called Plays (per-spell calls; the 3-slot tactic model is gone) ---
+  /** The play the player has called for THIS spell (null = no call). */
+  calledPlayId: string | null;
+  /** Charges consumed per play id across this match (charges live on TacticCard). */
+  playChargesUsed: Record<string, number>;
+  /** The opponent's play for the COMING spell — its telegraph is shown at the break. */
+  opponentPlay: { id: string; name: string; telegraph: string } | null;
+  /** Telegraph candidates (play ids): [the play] for every style; the Adaptive
+   *  style telegraphs 2 (the real play + a decoy) — the real one plays. */
+  opponentPlayCandidates: string[];
   seed: number;
 }
 
@@ -125,6 +142,9 @@ export interface AttackDefenceSplit {
   cardEmit: Record<number, Record<ZoneName, number>>;
   /** Defining traits that FIRED this increment (animation-tagged) — the match-feel hook. */
   traitEvents: TraitEvent[];
+  /** Per-card fitness deltas from drain-fitness records this spell (negative values;
+   *  may include opponent card ids via enemy targeting). Applied in advanceIncrement. */
+  fitnessDelta: Record<number, number>;
 }
 
 export interface IncrementResult {
@@ -155,6 +175,18 @@ export interface IncrementResult {
   beats: MatchBeat[];
   // Per-increment stats readout (additive, deterministic — display only).
   stats: MatchStats;
+  // --- Called Plays readout (display-only, deterministic) ---
+  /** The play you called this spell (null = no call). */
+  calledPlayName: string | null;
+  /** The opponent's play this spell. */
+  opponentPlayName: string | null;
+  /** How your call graded against their play (null = no call made). */
+  callGrade: CallGrade | null;
+  /** Counterfactual xG impact (same seed, re-read without the play's records):
+   *  yourCallXG = net xG swing your call produced (+ favours you);
+   *  theirPlayXG = net xG swing their play produced (+ favours them).
+   *  Display-only — never feeds match math. */
+  playImpact: { yourCallXG: number; theirPlayXG: number } | null;
 }
 
 /** Per-increment match stats (additive, deterministic — never feeds match math).
@@ -203,6 +235,9 @@ export interface MatchBeat {
    *  deterministic (NEW salt on the same stateless hash — existing beats unchanged). */
   assisterId: number | null;
   assisterName: string | null;
+  /** Set on a GOAL whose scoring lane was materially boosted by your called play
+   *  (the play's name). Additive, display-only. */
+  viaPlay?: string;
   text: string;
 }
 
@@ -221,7 +256,7 @@ export interface MatchV5Result {
  *  signed magnitude (+ favours you, − favours the opponent) used only to RANK
  *  factors — the player-facing content is the plain `label`/`detail` strings. */
 export interface VerdictFactor {
-  key: 'power' | 'chances' | 'conversion' | 'control' | 'plan';
+  key: 'power' | 'chances' | 'conversion' | 'control' | 'plan' | 'calls';
   label: string;
   detail: string;
   swing: number;
@@ -341,7 +376,7 @@ function isFinisher(card: Card): boolean {
 function inferPlayPattern(
   orderedAttackers: Card[],
   defenders: Card[],
-  tacticSlots: TacticSlots,
+  calledPlayId: string | null,
   playingStyle: string,
 ): { name: string; summary: string; creationBonus: number; qualityBonus: number; attackBonus: number; defenceBonus: number } {
   if (orderedAttackers.length === 0) {
@@ -355,7 +390,6 @@ function inferPlayPattern(
     };
   }
 
-  const tacticIds = tacticSlots.slots.filter(Boolean).map((t) => t!.id);
   const finisher = orderedAttackers[orderedAttackers.length - 1];
   const opener = orderedAttackers[0];
   const playmakers = orderedAttackers.filter(isPlaymaker).length;
@@ -371,8 +405,8 @@ function inferPlayPattern(
     return {
       name: 'Route One',
       summary: `${opener.name} goes long early and ${finisher.name} attacks the space behind.`,
-      creationBonus: 42 + (tacticIds.includes('counter_attack') ? 18 : 0),
-      qualityBonus: 50 + (tacticIds.includes('set_piece') ? 10 : 0),
+      creationBonus: 42 + (calledPlayId === 'counter_attack' ? 18 : 0),
+      qualityBonus: 50 + (calledPlayId === 'set_piece' ? 10 : 0),
       attackBonus: 34,
       defenceBonus: -12,
     };
@@ -382,14 +416,14 @@ function inferPlayPattern(
     return {
       name: 'Wing Overload',
       summary: `Stretch them wide, feed the flanks, and finish through ${finisher.name}.`,
-      creationBonus: 46 + (tacticIds.includes('wing_play') ? 22 : 0),
+      creationBonus: 46 + (calledPlayId === 'wing_play' ? 22 : 0),
       qualityBonus: 34 + (orderedAttackers.some((c) => c.archetype === 'Engine') ? 12 : 0),
       attackBonus: 30,
       defenceBonus: defendersHolding >= 4 ? 10 : -10,
     };
   }
 
-  if ((playingStyle === 'Tiki-Taka' || tacticIds.includes('possession') || tacticIds.includes('narrow')) && orderedAttackers.length >= 5 && playmakers >= 2) {
+  if ((playingStyle === 'Tiki-Taka' || calledPlayId === 'possession' || calledPlayId === 'narrow') && orderedAttackers.length >= 5 && playmakers >= 2) {
     return {
       name: 'Tiki-Taka',
       summary: `Short combinations pull them apart before ${finisher.name} gets the final touch.`,
@@ -411,7 +445,7 @@ function inferPlayPattern(
     };
   }
 
-  if (tacticIds.includes('counter_attack') && defendersHolding >= 5 && finishers >= 1) {
+  if (calledPlayId === 'counter_attack' && defendersHolding >= 5 && finishers >= 1) {
     return {
       name: 'Counter Trap',
       summary: `Absorb, spring out, and release ${finisher.name} into the break.`,
@@ -605,6 +639,9 @@ export function initMatch(
     seed,
     opponentPower,
   );
+  // The opponent's play for the FIRST spell is rolled here; each advanceIncrement
+  // rolls the next, so the break screen can telegraph the coming spell.
+  const firstPlay = pickOpponentPlay(opponentStyle, 0, 0, seed);
   return {
     // Each starter begins the match fresh (or low if carrying an injury); fitness
     // then depletes per increment (§3.1).
@@ -633,8 +670,30 @@ export function initMatch(
     opponentXI,
     opponentFormation,
     chemistry,
+    calledPlayId: null,
+    playChargesUsed: {},
+    opponentPlay: { id: firstPlay.play.id, name: firstPlay.play.name, telegraph: firstPlay.play.telegraph },
+    opponentPlayCandidates: firstPlay.candidates.map((p) => p.id),
     seed,
   };
+}
+
+// ---------------------------------------------------------------------------
+// 1b. callPlay — set (or clear) this spell's called play
+// ---------------------------------------------------------------------------
+
+/**
+ * Call a play for THIS spell (null clears the call). Validates the play exists
+ * and has a charge remaining; the charge is consumed when the spell resolves
+ * (advanceIncrement), so re-calling before kick-off is free.
+ */
+export function callPlay(state: MatchV5State, tacticId: string | null): MatchV5State {
+  if (tacticId === null) return { ...state, calledPlayId: null };
+  const tactic = getTacticById(tacticId);
+  if (!tactic) return state;
+  const used = state.playChargesUsed[tacticId] ?? 0;
+  if (used >= tactic.charges) return state;
+  return { ...state, calledPlayId: tacticId };
 }
 
 // ---------------------------------------------------------------------------
@@ -751,7 +810,7 @@ export function computeSideField(
 export function evaluateSplit(
   state: MatchV5State,
   jokers: JokerCard[],
-  tacticSlots: TacticSlots,
+  calledPlay: TacticCard | null,
 ): AttackDefenceSplit {
   const { xi, formation, playingStyle, personalityBonus, opponentWeakness } = state;
   const maxAtk = formation.maxAttackers;
@@ -796,7 +855,7 @@ export function evaluateSplit(
 
   // The move flows deep → forward; the most advanced attacker is the finisher.
   const orderedAttackers = [...attackers].sort((a, b) => (cardY.get(b.id) ?? 0) - (cardY.get(a.id) ?? 0));
-  const playPattern = inferPlayPattern(orderedAttackers, defenders, tacticSlots, playingStyle);
+  const playPattern = inferPlayPattern(orderedAttackers, defenders, calledPlay?.id ?? null, playingStyle);
 
   attackBreakdown.push({ label: 'Forward shape', value: baseAttack, type: 'base' });
   defenceBreakdown.push({ label: 'Back-line shape', value: baseDefence, type: 'base' });
@@ -809,16 +868,18 @@ export function evaluateSplit(
     findPositionalConnections(attackerSlotted, defenderSlotted);
   const allConnections: Connection[] = [...attackSynergies, ...defenceSynergies, ...crossSynergies];
 
-  // Tactical cards + Manager → squad-wide records over the same verb palette, plus
-  // run-accumulated chemistry: connecting pairs emit a zonal bonus scaling with how
-  // settled the partnership is (CARDS §5). Both ride the same squad source.
+  // The CALLED play (this spell only) + Manager → squad-wide records over the same
+  // verb palette, plus run-accumulated chemistry: connecting pairs emit a zonal bonus
+  // scaling with how settled the partnership is (CARDS §5). All ride the squad source.
   const playerSquadTraits = [
-    ...squadTraits(tacticSlots, jokers, {
+    ...squadTraits(calledPlay, jokers, {
       xi,
       increment: state.currentIncrement,
       opponentGoals: state.opponentGoals,
+      yourGoals: state.yourGoals,
       connections: allConnections,
       intent: state.intent,
+      opponentPlayId: state.opponentPlay?.id,
     }),
     ...chemistryRecords(xi, formation, state.chemistry ?? {}),
   ];
@@ -838,7 +899,36 @@ export function evaluateSplit(
     traits: traitsForCard(card),
   }));
 
-  const dispatched = dispatchTraits(dispatchCards, state.seed, state.currentIncrement, { playerSquadTraits });
+  // ZERO-EMIT opponent shadows: the opponent XI enters the dispatch with empty
+  // emission and no traits, so it adds NOTHING to any accumulator — it exists only
+  // as a target pool for enemy-targeted STATE effects (Dark Arts' drain-fitness on
+  // their best player). Field math is byte-identical with or without them for any
+  // record that doesn't target an enemy card.
+  const lastOppSlot = state.opponentFormation.slots[state.opponentFormation.slots.length - 1];
+  const opponentShadows: DispatchCard[] = state.opponentXI.map((card, i) => {
+    const slot = state.opponentFormation.slots[i] ?? lastOppSlot;
+    const cell = cellOf(slot.x, slot.y);
+    return {
+      id: card.id,
+      power: card.power,
+      archetype: card.archetype,
+      tacticalRole: card.tacticalRole,
+      position: card.position,
+      team: 'opponent' as const,
+      side: bandOf(cell) === 'DEF' ? 'defence' as const : 'attack' as const,
+      isWide: isWideCard(card),
+      cell,
+      emit: zeroEmit(),
+      traits: [],
+    };
+  });
+
+  const dispatched = dispatchTraits(
+    [...dispatchCards, ...opponentShadows],
+    state.seed,
+    state.currentIncrement,
+    { playerSquadTraits },
+  );
 
   // Adopt the transformed field. attack/defence are the raw aggregate; creation &
   // finishing are a band-weighted projection of the transformed cells (§4), so a
@@ -1047,6 +1137,11 @@ export function evaluateSplit(
   // Defining-trait firings this increment (animation-tagged), for the match-feel layer.
   const traitEvents = collectTraitEvents(dispatched.log);
 
+  // Per-card fitness deltas from drain-fitness records (Press High's press cost;
+  // Dark Arts' knock on their star via the shadows). Applied in advanceIncrement.
+  const fitnessDelta: Record<number, number> = {};
+  dispatched.fitness.forEach((v, id) => { if (v !== 0) fitnessDelta[id] = v; });
+
   return {
     attackScore: Math.max(0, attackTotal),
     defenceScore: Math.max(0, defenceTotal),
@@ -1070,6 +1165,7 @@ export function evaluateSplit(
     cells: dispatched.cells,
     cardEmit,
     traitEvents,
+    fitnessDelta,
   };
 }
 
@@ -1276,6 +1372,10 @@ function buildBeats(
   seed: number,
   inc: number,
   committedIds: Set<number> | null,
+  // Called-play attribution: a GOAL in a lane the called play materially boosted
+  // carries the play's name (display-only, deterministic — no new RNG draws).
+  viaPlayName: string | null = null,
+  boostedLanes: Record<Lane, boolean> | null = null,
 ): MatchBeat[] {
   // Each increment owns a 15-minute match-minute window ending at INCREMENT_MINUTES[inc]
   // (inc 0 -> 0..15; the increment ending at 60 -> 45..60, leaving the natural half-time
@@ -1311,6 +1411,9 @@ function buildBeats(
       scorerName,
       assisterId,
       assisterName,
+      ...(outcome === 'goal' && viaPlayName && boostedLanes?.[shot.lane]
+        ? { viaPlay: viaPlayName }
+        : {}),
       text: beatText(outcome, shot.lane, scorerName, seed, inc, side, shotIdx),
     };
   });
@@ -1320,36 +1423,23 @@ function buildBeats(
 // 4. resolveIncrement
 // ---------------------------------------------------------------------------
 
-export function resolveIncrement(
-  state: MatchV5State,
+/**
+ * Build both PossessionSides for the period contest from your resolved split and
+ * the opponent's resolved field. Pure — extracted so the play-impact counterfactuals
+ * can re-run the SAME construction with an alternative split / opponent field.
+ *
+ * The opponent runs the lean side path (no synergy/style/personality cascade). Its
+ * raw lane push/cover are already power-comparable to a player side, so the lane
+ * contest (shot volume) uses them straight — only the offensive counter biases its
+ * push toward your thinnest cover lane. OPP_COHESION compensates ONLY for the skipped
+ * cascade on the QUALITY/CONTROL dimensions (creation, finishing, possession), where a
+ * player deck's synergy+style+personality stack genuinely lifts it above raw power.
+ */
+function buildContestSides(
   split: AttackDefenceSplit,
-  seed: number,
-): IncrementResult {
-  const minute = INCREMENT_MINUTES[state.currentIncrement];
-
-  // The opponent is a real positioned side (step 4): its field runs through the same
-  // path, so the contest is a symmetric mirror (§4) — your push vs their cover, and
-  // theirs vs yours — and counters emerge from the verbs both sides emit.
-  //
-  // Objective hierarchy (§8): PRIMARY — scale its own points (play-to-strengths +
-  // build-up, as squad records); SECONDARY — counter only if it can (reactivity-
-  // weighted shift toward your weakness), low by default, high for reactive styles.
-  const reactivity = reactivityFor(state.opponentStyle);
-  const opp = computeSideField(
-    state.opponentXI,
-    state.opponentFormation,
-    state.seed + 7777,
-    state.currentIncrement,
-    opponentScaleTraits(state.opponentXI, state.currentIncrement),
-    false, // opponent opts out of the defining-trait suite (difficulty already in ROUND_POWER)
-  );
-
-  // The opponent runs the lean side path (no synergy/style/personality cascade). Its
-  // raw lane push/cover are already power-comparable to a player side, so the lane
-  // contest (shot volume) uses them straight — only the offensive counter biases its
-  // push toward your thinnest cover lane. OPP_COHESION compensates ONLY for the skipped
-  // cascade on the QUALITY/CONTROL dimensions (creation, finishing, possession), where a
-  // player deck's synergy+style+personality stack genuinely lifts it above raw power.
+  opp: SideField,
+  reactivity: number,
+): { youSide: PossessionSide; oppSide: PossessionSide; oppPush: Record<Lane, number>; oppEffCover: Record<Lane, number> } {
   const oppPush = counterPush(opp.lanePush, split.laneCover, reactivity);
   const oppFinishing = opp.shotQuality * OPP_COHESION;
 
@@ -1367,10 +1457,6 @@ export function resolveIncrement(
   const yourDenial = clamp(split.opponentDenial ?? 0, 0, 0.5);   // you → them
   const theirDenial = clamp(opp.denial ?? 0, 0, 0.5);            // them → you
 
-  // --- Per-possession resolution: the period is a pool of possessions split by
-  // control; each becomes a shot (push vs cover) carrying an xG that is itself a dice
-  // roll. Goals are the sum, so a period yields 0..n. The zonal contest feeds it.
-  const drama = state.currentIncrement === 4 ? 1.3 : 1.0;
   // Chance quality blends finishing with creation, so a creation-heavy (build-up) side
   // still converts rather than being punished for low raw finishing.
   const chanceQuality = (finishing: number, creation: number) => 0.55 * finishing + 0.45 * creation;
@@ -1399,8 +1485,102 @@ export function resolveIncrement(
     control: control(opp.chanceCreation, opp.attackScore, oppFinishing) * OPP_COHESION,
     denial: theirDenial,
   };
+  return { youSide, oppSide, oppPush, oppEffCover };
+}
+
+export function resolveIncrement(
+  state: MatchV5State,
+  split: AttackDefenceSplit,
+  seed: number,
+  /**
+   * Your split resolved WITHOUT the called play's records (evaluateSplit with
+   * calledPlay = null) — feeds the display-only playImpact counterfactual.
+   * Pass null (or omit) when no play was called.
+   */
+  baselineSplit: AttackDefenceSplit | null = null,
+): IncrementResult {
+  const minute = INCREMENT_MINUTES[state.currentIncrement];
+
+  // The opponent is a real positioned side (step 4): its field runs through the same
+  // path, so the contest is a symmetric mirror (§4) — your push vs their cover, and
+  // theirs vs yours — and counters emerge from the verbs both sides emit.
+  //
+  // Objective hierarchy (§8): PRIMARY — scale its own points (play-to-strengths +
+  // build-up, as squad records); SECONDARY — counter only if it can (reactivity-
+  // weighted shift toward your weakness), low by default, high for reactive styles.
+  // The opponent's PLAY for this spell (rolled at the previous break) joins the
+  // scale records on its squad source.
+  const reactivity = reactivityFor(state.opponentStyle);
+  const oppScale = opponentScaleTraits(state.opponentXI, state.currentIncrement);
+  const oppPlayDef = state.opponentPlay ? getOpponentPlayById(state.opponentPlay.id) ?? null : null;
+  const opp = computeSideField(
+    state.opponentXI,
+    state.opponentFormation,
+    state.seed + 7777,
+    state.currentIncrement,
+    oppPlayDef ? [...oppScale, ...oppPlayDef.records] : oppScale,
+    false, // opponent opts out of the defining-trait suite (difficulty already in ROUND_POWER)
+  );
+
+  // --- Per-possession resolution: the period is a pool of possessions split by
+  // control; each becomes a shot (push vs cover) carrying an xG that is itself a dice
+  // roll. Goals are the sum, so a period yields 0..n. The zonal contest feeds it.
+  const drama = state.currentIncrement === 4 ? 1.3 : 1.0;
+  const { youSide, oppSide, oppPush, oppEffCover } = buildContestSides(split, opp, reactivity);
 
   const period = simulatePeriod(youSide, oppSide, seed, state.currentIncrement, drama);
+
+  // --- Called-play readout (display-only, deterministic; never feeds match math) ---
+  const calledPlay = state.calledPlayId ? getTacticById(state.calledPlayId) ?? null : null;
+  let callGrade: CallGrade | null = null;
+  if (calledPlay) {
+    const gradeCtx: SquadContext = {
+      xi: state.xi,
+      increment: state.currentIncrement,
+      opponentGoals: state.opponentGoals,
+      yourGoals: state.yourGoals,
+      connections: [],
+      intent: state.intent,
+      opponentPlayId: state.opponentPlay?.id,
+    };
+    callGrade = gradeCall(calledPlay, oppPlayDef?.records ?? [], tacticTraits(calledPlay, gradeCtx));
+  }
+
+  // Counterfactual play impact: resolve the period again with the SAME seed but
+  // (a) without your called play's records, (b) without the opponent play's records.
+  // Both are net swings; deterministic and read-side only.
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  let playImpact: { yourCallXG: number; theirPlayXG: number } | null = null;
+  const hasCall = calledPlay !== null && baselineSplit !== null;
+  const hasOppPlay = !!oppPlayDef && oppPlayDef.records.length > 0;
+  if (hasCall || hasOppPlay) {
+    let yourCallXG = 0;
+    if (hasCall && baselineSplit) {
+      const alt = buildContestSides(baselineSplit, opp, reactivity);
+      const p = simulatePeriod(alt.youSide, alt.oppSide, seed, state.currentIncrement, drama);
+      yourCallXG = (period.you.xg - p.you.xg) - (period.opp.xg - p.opp.xg);
+    }
+    let theirPlayXG = 0;
+    if (hasOppPlay) {
+      const oppNoPlay = computeSideField(
+        state.opponentXI, state.opponentFormation, state.seed + 7777, state.currentIncrement,
+        oppScale, false,
+      );
+      const alt = buildContestSides(split, oppNoPlay, reactivity);
+      const p = simulatePeriod(alt.youSide, alt.oppSide, seed, state.currentIncrement, drama);
+      theirPlayXG = (period.opp.xg - p.opp.xg) - (period.you.xg - p.you.xg);
+    }
+    playImpact = { yourCallXG: round2(yourCallXG), theirPlayXG: round2(theirPlayXG) };
+  }
+
+  // Which lanes did your call materially boost? A goal in a boosted lane carries
+  // the play's name on its beat (viaPlay).
+  const boostedLanes: Record<Lane, boolean> = { L: false, C: false, R: false };
+  if (calledPlay && baselineSplit) {
+    for (const lane of LANES) {
+      boostedLanes[lane] = split.lanePush[lane] > baselineSplit.lanePush[lane] * 1.10 + 1;
+    }
+  }
   const yourGoalCount = period.you.goals;
   const opponentGoalCount = period.opp.goals;
   const yourScored = yourGoalCount > 0;
@@ -1438,7 +1618,10 @@ export function resolveIncrement(
   // YOUR scorer pool prefers the committed attackers; OPP uses its full positioned XI.
   const committedIds = state.attackerIds && state.attackerIds.size > 0 ? state.attackerIds : null;
   const beats: MatchBeat[] = [
-    ...buildBeats(period.you.shots, state.xi, state.formation, 'you', 0, minute, seed, state.currentIncrement, committedIds),
+    ...buildBeats(
+      period.you.shots, state.xi, state.formation, 'you', 0, minute, seed, state.currentIncrement, committedIds,
+      calledPlay?.name ?? null, boostedLanes,
+    ),
     ...buildBeats(period.opp.shots, state.opponentXI, state.opponentFormation, 'opp', 1, minute, seed, state.currentIncrement, null),
   ];
 
@@ -1517,6 +1700,10 @@ export function resolveIncrement(
     event: { minute, text: eventText, type: eventType },
     beats,
     stats,
+    calledPlayName: calledPlay?.name ?? null,
+    opponentPlayName: state.opponentPlay?.name ?? null,
+    callGrade,
+    playImpact,
   };
 }
 
@@ -1579,6 +1766,25 @@ export function advanceIncrement(state: MatchV5State, result: IncrementResult): 
   const nextIncrement = state.currentIncrement + 1;
   const isFirstHalf = nextIncrement <= 1;
 
+  // The just-played spell consumes its called play's charge; the call clears.
+  const playChargesUsed = { ...state.playChargesUsed };
+  if (state.calledPlayId) {
+    playChargesUsed[state.calledPlayId] = (playChargesUsed[state.calledPlayId] ?? 0) + 1;
+  }
+
+  // Roll the NEXT spell's opponent play now, so the break screen can show its
+  // telegraph. Deterministic from (style, increment, scoreline, seed).
+  const nextPlay = pickOpponentPlay(
+    state.opponentStyle,
+    nextIncrement,
+    newOpponentGoals - newYourGoals,
+    state.seed,
+  );
+
+  // Trait-driven fitness deltas this spell (drain-fitness records: Press High's
+  // press cost on your own pressers; Dark Arts' knock on their star). Negative values.
+  const traitDrain = result.split.fitnessDelta ?? {};
+
   // Fitness drain (§3.1): every starter loses condition each increment — base by
   // durability × involvement by band (attacking lanes burn faster). A genuinely spent,
   // fragile card risks an injury. Cards rested in a cold (DEF) zone fade slower.
@@ -1591,7 +1797,7 @@ export function advanceIncrement(state: MatchV5State, result: IncrementResult): 
     const slot = state.formation.slots[i] ?? lastSlot;
     const band = bandOf(cellOf(slot.x, slot.y));
     const drain = (FITNESS_DRAIN[card.durability] ?? 0.5) * BAND_INVOLVEMENT[band];
-    const fitness = clamp((card.fitness ?? 6) - drain, 1, 6);
+    const fitness = clamp((card.fitness ?? 6) - drain + (traitDrain[card.id] ?? 0), 1, 6);
 
     let injured = card.injured;
     if (!injured && fitness < 2.5) {
@@ -1606,9 +1812,19 @@ export function advanceIncrement(state: MatchV5State, result: IncrementResult): 
     newXi[i] = { ...card, fitness, injured };
   }
 
+  // Enemy-targeted drains (Dark Arts) land on the opponent XI: the drained card
+  // emits less in every later spell (computeSideField reads its live fitness).
+  let newOpponentXI = state.opponentXI;
+  if (state.opponentXI.some((c) => traitDrain[c.id])) {
+    newOpponentXI = state.opponentXI.map((c) =>
+      traitDrain[c.id] ? { ...c, fitness: clamp(fitnessOf(c) + traitDrain[c.id], 1, 6) } : c,
+    );
+  }
+
   return {
     ...state,
     xi: newXi,
+    opponentXI: newOpponentXI,
     scores: newScores,
     yourGoals: newYourGoals,
     opponentGoals: newOpponentGoals,
@@ -1616,6 +1832,10 @@ export function advanceIncrement(state: MatchV5State, result: IncrementResult): 
     isFirstHalf,
     attackerIds: new Set(), // clear for next increment
     attackerOrder: [],
+    calledPlayId: null,     // per-spell call — cleared every advance
+    playChargesUsed,
+    opponentPlay: { id: nextPlay.play.id, name: nextPlay.play.name, telegraph: nextPlay.play.telegraph },
+    opponentPlayCandidates: nextPlay.candidates.map((p) => p.id),
   };
 }
 
@@ -1737,6 +1957,14 @@ export function computeMatchVerdict(state: MatchV5State): MatchVerdict {
   const laneShare = yourLanes + oppLanes > 0 ? yourLanes / (yourLanes + oppLanes) : 0.5;
   const planPerSpell = planPts / inc;
   const planShare = basePts > 0 ? planPts / basePts : 0;
+  // Called plays: how many calls were made, and how they graded.
+  let callsMade = 0, callsAnswered = 0, callsCountered = 0;
+  for (const r of state.scores) {
+    if (!r.calledPlayName) continue;
+    callsMade++;
+    if (r.callGrade === 'answered') callsAnswered++;
+    else if (r.callGrade === 'countered') callsCountered++;
+  }
   // Finishing swing: who out-scored their chances (goals − xG), you minus them.
   const convSwing = (yourGoals - yourXG) - (opponentGoals - oppXG);
 
@@ -1773,6 +2001,14 @@ export function computeMatchVerdict(state: MatchV5State): MatchVerdict {
       swing: Math.max(0, Math.min(1, planShare / 0.35)),
     },
   ];
+  if (callsMade > 0) {
+    rawFactors.push({
+      key: 'calls',
+      label: 'Your calls',
+      detail: `Calls answered ${callsAnswered} of ${callsMade}${callsCountered > 0 ? `, countered ${callsCountered}` : ''}.`,
+      swing: Math.max(-1, Math.min(1, (callsAnswered - callsCountered) / callsMade)),
+    });
+  }
   const factors = rawFactors.sort((a, b) => Math.abs(b.swing) - Math.abs(a.swing));
 
   // --- Headline: a small result-aware tree, decisive factor first ------------

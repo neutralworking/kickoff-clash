@@ -20,13 +20,16 @@ import { fileURLToPath } from 'node:url';
 
 import { transformCards, type KCCard } from '../src/lib/transform';
 import { getFormation } from '../src/lib/formations';
-import { createEmptySlots } from '../src/lib/tactics';
+
 import {
-  initMatch, commitAttackers, evaluateSplit, resolveIncrement, advanceIncrement,
+  initMatch, commitAttackers, callPlay, evaluateSplit, resolveIncrement, advanceIncrement,
   getMatchResult, type MatchV5State,
 } from '../src/lib/match-v5';
-import { cupMatchPower } from '../src/lib/opponent';
+import { cupMatchPower, getOpponentPlayById } from '../src/lib/opponent';
 import { CUP_SIZES, MAX_CUPS, cupSize, applyMatchFitness, buildMatchSeed } from '../src/lib/run';
+import { ALL_TACTICS, chargesLeft, type TacticCard } from '../src/lib/tactics';
+import { tacticTraits, type SquadContext } from '../src/lib/squad-transforms';
+import { gradeCall } from '../src/lib/plays';
 import type { Card } from '../src/lib/scoring';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,11 +51,47 @@ const ROUNDS: Record<number, { style: string; weakness: string }> = {
   5: { style: 'Adaptive', weakness: 'Striker' },
 };
 const formation = getFormation('4-3-3');
-const slots = createEmptySlots();
+
 const pickAttackers = (s: MatchV5State) =>
   [...s.xi].filter(c => !c.injured).sort((a, b) => b.power - a.power).slice(0, 4).map(c => c.id);
 
-type Policy = 'best-xi' | 'rotate';
+type Policy = 'best-xi' | 'rotate' | 'rotate+calls';
+
+// --- Called-play layer (Called Plays rework) --------------------------------
+// 'rotate+calls' plays the same rotation policy but also CALLS a play each spell
+// with balance-sweep's 'best' heuristic: answer a telegraphed forward commitment
+// with a defensive-class block, otherwise attack what can't punish you. This is
+// the instrument for "completable under good play" now that calls exist.
+const PLAY_RANK: Record<string, number> = {
+  low_block: 16, man_marking: 15, sit_deep: 14, fortress: 13, press_high: 12,
+  route_one: 11, wing_play: 10, narrow: 9, overload_right: 8, overload_left: 7,
+  high_line: 6, counter_attack: 5, set_piece: 4,
+  possession: 3, youth_policy: 2, dark_arts: 1,
+};
+
+function chooseBestPlay(s: MatchV5State): TacticCard | null {
+  const available = ALL_TACTICS.filter(t => chargesLeft(t, s.playChargesUsed) > 0);
+  if (available.length === 0) return null;
+  const oppRecords = s.opponentPlay ? getOpponentPlayById(s.opponentPlay.id)?.records ?? [] : [];
+  const ctx: SquadContext = {
+    xi: s.xi, increment: s.currentIncrement, opponentGoals: s.opponentGoals,
+    yourGoals: s.yourGoals, connections: [], intent: s.intent, opponentPlayId: s.opponentPlay?.id,
+  };
+  let best: TacticCard | null = null;
+  let bestScore = 0;
+  for (const t of available) {
+    const records = tacticTraits(t, ctx);
+    const grade = gradeCall(t, oppRecords, records);
+    const base = grade === 'answered'
+      ? (t.playClass === 'defensive' ? 400 : 300)
+      : grade === 'neutral' && records.length > 0
+        ? (t.playClass === 'attacking' ? 200 : 100)
+        : -100;
+    const score = base + (PLAY_RANK[t.id] ?? 0);
+    if (score > bestScore) { best = t; bestScore = score; }
+  }
+  return best;
+}
 
 // Pick the XI for a tie from the squad given the policy.
 //  - best-xi: the 11 highest RAW power (ignores fatigue — the stubborn manager).
@@ -63,7 +102,7 @@ function pickXI(squad: Card[], policy: Policy, isFinal: boolean): { xi: Card[]; 
   let chosen: Card[];
   if (policy === 'best-xi') {
     chosen = [...avail].sort((a, b) => b.power - a.power).slice(0, 11);
-  } else {
+  } else { // 'rotate' and 'rotate+calls' share the rotation policy
     // On the final, field the best available right now (effective power). On openers, lean
     // on effective power too but the tired stars naturally rest and recover for the final.
     chosen = [...avail].sort((a, b) => effPower(b) - effPower(a)).slice(0, 11);
@@ -72,13 +111,15 @@ function pickXI(squad: Card[], policy: Policy, isFinal: boolean): { xi: Card[]; 
   return { xi: chosen, benchIds: new Set(squad.filter(c => !xiIds.has(c.id)).map(c => c.id)) };
 }
 
-function playTie(xi: Card[], cup: number, matchInCup: number, seed: number): 'win' | 'draw' | 'loss' {
+function playTie(xi: Card[], cup: number, matchInCup: number, seed: number, calls: boolean): 'win' | 'draw' | 'loss' {
   const { style, weakness } = ROUNDS[cup];
   const power = cupMatchPower(cup, matchInCup, cupSize(cup));
   let state = initMatch(xi, [], [], formation, 'tiki-taka', [], seed, cup, style, weakness, {}, 'balanced', power);
   for (let i = 0; i < 5; i++) {
     state = commitAttackers(state, pickAttackers(state));
-    state = advanceIncrement(state, resolveIncrement(state, evaluateSplit(state, [], slots), seed));
+    const play = calls ? chooseBestPlay(state) : null;
+    state = callPlay(state, play?.id ?? null);
+    state = advanceIncrement(state, resolveIncrement(state, evaluateSplit(state, [], play), seed));
   }
   // Copy the played XI's drained fitness AND any in-match injury back onto the caller's
   // squad cards, so applyMatchFitness sees them (injuries are a real cross-tie punishment).
@@ -100,7 +141,7 @@ function runOnce(squadSeed: number, policy: Policy): { cupReached: number; won: 
       const isFinal = m === size;
       const { xi } = pickXI(squad, policy, isFinal);
       const seed = buildMatchSeed(squadSeed, cup, m);
-      const result = playTie(xi, cup, m, seed);
+      const result = playTie(xi, cup, m, seed, policy === 'rotate+calls');
       if (result === 'loss') return { cupReached: cup - 1 + (m - 1) / size, won: false };
       // fold fitness + injuries back onto the squad (playTie set them on the XI cards)
       const updated = applyMatchFitness(squad, xi, result);
@@ -124,7 +165,7 @@ for (const [label, frac] of [['STRONG (top 18)', 0.0], ['UPPER (rank ~60)', 0.13
   squadCards = tierAt(frac);
   const avgPow = Math.round(squadCards.slice(0, 11).reduce((s, c) => s + c.power, 0) / 11);
   console.log(`── ${label}  (best-XI avg power ${avgPow}) ──`);
-  for (const policy of ['best-xi', 'rotate'] as Policy[]) {
+  for (const policy of ['best-xi', 'rotate', 'rotate+calls'] as Policy[]) {
     let champions = 0, sumCup = 0;
     const cupHist = [0, 0, 0, 0, 0, 0]; // index = cup reached (0-5)
     for (let s = 0; s < SEEDS; s++) {
@@ -134,7 +175,7 @@ for (const [label, frac] of [['STRONG (top 18)', 0.0], ['UPPER (rank ~60)', 0.13
       cupHist[Math.floor(cupReached)]++;
     }
     console.log(
-      `  ${policy.padEnd(8)} champions ${((champions / SEEDS) * 100).toFixed(0).padStart(3)}%  ` +
+      `  ${policy.padEnd(12)} champions ${((champions / SEEDS) * 100).toFixed(0).padStart(3)}%  ` +
       `avg cup reached ${(sumCup / SEEDS).toFixed(2)}  ` +
       `[died after cup: ${cupHist.slice(0, 5).join('/')} | champ ${cupHist[5]}]`,
     );

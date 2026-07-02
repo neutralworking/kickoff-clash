@@ -5,15 +5,11 @@
  * discards from remaining deck, 5 scoring increments with sub management.
  */
 
-import type { Card, SlottedCard, Durability } from './scoring';
-import { seededRandom, DURABILITY_WEIGHTS, PLAYING_STYLES } from './scoring';
-import { findConnections, type Connection } from './chemistry';
+import type { Card, Durability } from './scoring';
+import { seededRandom, DURABILITY_WEIGHTS } from './scoring';
+import type { Connection } from './chemistry';
 import type { Formation } from './formations';
 import { positionFitsSlot } from './formations';
-import type { TacticSlots } from './tactics';
-import { calculateTacticBonus, createEmptySlots } from './tactics';
-import type { JokerCard } from './jokers';
-import { applyJoker } from './jokers';
 
 // Re-export JokerCard from the canonical jokers module
 export type { JokerCard } from './jokers';
@@ -34,45 +30,16 @@ export interface HandState {
   remainingDeck: Card[];         // undrawn cards
   subsRemaining: number;         // starts at 5
   subsUsed: { outId: number; inId: number; minute: number }[];
-  tacticSlots: TacticSlots;
   currentIncrement: number;      // 0-4 index into INCREMENT_MINUTES
   isFirstHalf: boolean;          // true for increments 0-1
-  scores: IncrementScore[];
   yourGoals: number;
   opponentGoals: number;
-}
-
-export interface IncrementScore {
-  minute: number;
-  cascade: ScoreCascade;
-  opponentScore: number;
-  yourScored: boolean;
-  opponentScored: boolean;
-  event: MatchEvent;
-}
-
-export interface ScoreCascade {
-  basePower: number;
-  chemistryBonus: number;
-  chemistryMultiplier: number;
-  styleBonus: number;
-  tacticBonus: number;
-  managerBonus: number;
-  total: number;
 }
 
 export interface MatchEvent {
   minute: number;
   text: string;
   type: 'goal-yours' | 'goal-opponent' | 'chance' | 'save' | 'injury';
-}
-
-export interface MatchResult {
-  yourGoals: number;
-  opponentGoals: number;
-  result: 'win' | 'draw' | 'loss';
-  scores: IncrementScore[];
-  handState: HandState;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,17 +82,6 @@ const CHANCE_COMMENTARY = [
   "Blocked on the line by a last-ditch tackle!",
 ];
 
-const OPPONENT_GOAL_COMMENTARY = [
-  "They break and finish clinically.",
-  "A set piece goal — poor marking in the box.",
-  "A deflection wrong-foots the keeper. Cruel.",
-  "Long-range effort and it nestles in the corner.",
-  "Counter-attack at pace — nothing you could do.",
-  "Penalty given. Converted coolly.",
-  "A mistake at the back is ruthlessly punished.",
-  "They score against the run of play. Typical.",
-];
-
 const INJURY_COMMENTARY = [
   "goes down clutching the hamstring — doesn't look good.",
   "pulls up after a sprint — muscle problem.",
@@ -138,10 +94,6 @@ const INJURY_COMMENTARY = [
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
 
 /**
  * Pick a card weighted by durability. Titanium cards have overwhelming weight
@@ -189,11 +141,6 @@ export function generateGoalText(connections: Connection[], seed: number): strin
 export function generateChanceText(seed: number): string {
   const idx = Math.floor(seededRandom(seed * 53 + 19) * CHANCE_COMMENTARY.length);
   return CHANCE_COMMENTARY[idx];
-}
-
-function generateOpponentGoalText(seed: number): string {
-  const idx = Math.floor(seededRandom(seed * 59 + 23) * OPPONENT_GOAL_COMMENTARY.length);
-  return OPPONENT_GOAL_COMMENTARY[idx];
 }
 
 /**
@@ -263,10 +210,8 @@ export function rollXI(deck: Card[], formation: Formation, seed: number): HandSt
     remainingDeck: remaining,
     subsRemaining: 5,
     subsUsed: [],
-    tacticSlots: createEmptySlots(),
     currentIncrement: 0,
     isFirstHalf: true,
-    scores: [],
     yourGoals: 0,
     opponentGoals: 0,
   };
@@ -297,10 +242,8 @@ export function handFromSelection(
     remainingDeck: [],   // the unselected players are unavailable for this match
     subsRemaining: 5,
     subsUsed: [],
-    tacticSlots: createEmptySlots(),
     currentIncrement: 0,
     isFirstHalf: true,
-    scores: [],
     yourGoals: 0,
     opponentGoals: 0,
   };
@@ -375,211 +318,7 @@ export function makeSub(hand: HandState, xiCardId: number, benchCardId: number):
   };
 }
 
-// ---------------------------------------------------------------------------
-// 4. evaluateIncrement — Score cascade at current increment
-// ---------------------------------------------------------------------------
-
-/**
- * Calculate the full score cascade at the current increment.
- */
-export function evaluateIncrement(
-  hand: HandState,
-  playingStyle: string,
-  jokers: JokerCard[],
-  opponentStrength: number,
-  seed: number,
-): IncrementScore {
-  const { xi, currentIncrement } = hand;
-
-  // Base power
-  const basePower = xi.reduce((sum, c) => sum + c.power, 0);
-
-  // Chemistry
-  const slottedXI: SlottedCard[] = xi.map((card, i) => ({ card, slot: 'slot_' + i }));
-  const connections = findConnections(slottedXI);
-  const chemistryBonus = connections.reduce((sum, conn) => sum + conn.bonus, 0);
-
-  // Chemistry multiplier from highest tier
-  const highestTier = connections.length > 0
-    ? Math.max(...connections.map(c => c.tier))
-    : 0;
-
-  const tierMultipliers: Record<number, number> = {
-    0: 1.0,
-    1: 1.15,
-    2: 1.3,
-    3: 1.6,
-    4: 2.5,
-  };
-
-  let chemistryMultiplier = tierMultipliers[highestTier] ?? 1.0;
-  // +0.05 per extra connection beyond the first
-  if (connections.length > 1) {
-    chemistryMultiplier += (connections.length - 1) * 0.05;
-  }
-
-  // Style bonus
-  let styleBonus = 0;
-  const style = PLAYING_STYLES[playingStyle];
-  if (style) {
-    if (style.bonusArchetypes.length === 0) {
-      // Total Football: flat bonus
-      styleBonus = Math.round(basePower * style.multiplier);
-    } else {
-      const matchCount = xi.filter(c =>
-        style.bonusArchetypes.includes(c.archetype),
-      ).length;
-      styleBonus = Math.round(matchCount * style.multiplier * basePower / xi.length);
-    }
-  }
-
-  // Tactic bonus
-  const tacticBonus = calculateTacticBonus(hand.tacticSlots, xi, currentIncrement);
-
-  // Manager bonus (jokers)
-  const managerBonus = jokers.reduce(
-    (sum, j) => sum + applyJoker(j, xi, connections),
-    0,
-  );
-
-  // Total
-  const total = Math.round(
-    (basePower + chemistryBonus + styleBonus + tacticBonus + managerBonus) * chemistryMultiplier,
-  );
-
-  // Goal resolution
-  const diff = total - opponentStrength;
-  let yourChance = clamp(0.12 + diff / 500, 0.03, 0.45);
-  let oppChance = clamp(0.12 - diff / 500, 0.03, 0.35);
-
-  // 90th minute drama
-  if (currentIncrement === 4) {
-    yourChance *= 1.3;
-    oppChance *= 1.3;
-  }
-
-  const roll = seededRandom(seed + currentIncrement * 37);
-
-  let yourScored = false;
-  let opponentScored = false;
-  let event: MatchEvent;
-  const minute = INCREMENT_MINUTES[currentIncrement];
-  const eventSeed = seed + currentIncrement * 53 + 11;
-
-  if (roll < yourChance) {
-    yourScored = true;
-    event = {
-      minute,
-      text: generateGoalText(connections, eventSeed),
-      type: 'goal-yours',
-    };
-  } else if (roll < yourChance + oppChance) {
-    opponentScored = true;
-    event = {
-      minute,
-      text: generateOpponentGoalText(eventSeed),
-      type: 'goal-opponent',
-    };
-  } else if (roll < yourChance + oppChance + 0.15) {
-    const isSave = seededRandom(eventSeed * 7) > 0.5;
-    event = {
-      minute,
-      text: generateChanceText(eventSeed),
-      type: isSave ? 'save' : 'chance',
-    };
-  } else {
-    event = {
-      minute,
-      text: generateChanceText(eventSeed),
-      type: 'chance',
-    };
-  }
-
-  const cascade: ScoreCascade = {
-    basePower,
-    chemistryBonus,
-    chemistryMultiplier,
-    styleBonus,
-    tacticBonus,
-    managerBonus,
-    total,
-  };
-
-  return {
-    minute,
-    cascade,
-    opponentScore: opponentStrength,
-    yourScored,
-    opponentScored,
-    event,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// 5. advanceIncrement — Apply result and move forward
-// ---------------------------------------------------------------------------
-
-/**
- * Apply the increment result. Add to scores array. Update goals. Move
- * currentIncrement forward. Apply fatigue injuries at increments 2+ for
- * Glass/Phoenix cards.
- */
-export function advanceIncrement(hand: HandState, incrementScore: IncrementScore): HandState {
-  const newScores = [...hand.scores, incrementScore];
-  const newYourGoals = hand.yourGoals + (incrementScore.yourScored ? 1 : 0);
-  const newOpponentGoals = hand.opponentGoals + (incrementScore.opponentScored ? 1 : 0);
-  const nextIncrement = hand.currentIncrement + 1;
-
-  // Moving from increment 1 to 2 = half-time
-  const isFirstHalf = nextIncrement <= 1;
-
-  // Apply fatigue at increments 2+ (second half onwards)
-  let newXI = [...hand.xi];
-  if (hand.currentIncrement >= 1) {
-    // Glass and Phoenix cards risk fatigue injury
-    const fatigueSeed = incrementScore.minute * 71 + hand.currentIncrement * 13;
-    newXI = newXI.map((card, i) => {
-      if (card.injured) return card; // already injured
-      if (card.durability === 'glass' || card.durability === 'phoenix') {
-        const injuryChance = card.durability === 'glass' ? 0.15 : 0.10;
-        const roll = seededRandom(fatigueSeed + i * 29 + card.id);
-        if (roll < injuryChance) {
-          return { ...card, injured: true };
-        }
-      }
-      return card;
-    });
-  }
-
-  return {
-    ...hand,
-    xi: newXI,
-    scores: newScores,
-    yourGoals: newYourGoals,
-    opponentGoals: newOpponentGoals,
-    currentIncrement: nextIncrement,
-    isFirstHalf,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// 6. getMatchResult — Final result after all 5 increments
-// ---------------------------------------------------------------------------
-
-/**
- * After all 5 increments, return final result.
- */
-export function getMatchResult(hand: HandState): MatchResult {
-  const result: 'win' | 'draw' | 'loss' =
-    hand.yourGoals > hand.opponentGoals ? 'win' :
-    hand.yourGoals < hand.opponentGoals ? 'loss' :
-    'draw';
-
-  return {
-    yourGoals: hand.yourGoals,
-    opponentGoals: hand.opponentGoals,
-    result,
-    scores: hand.scores,
-    handState: hand,
-  };
-}
+// The legacy per-increment scoring cascade (evaluateIncrement / advanceIncrement /
+// getMatchResult and the tactic-slot bonus it read) is GONE — match-v5.ts is the
+// engine. This module keeps only the live pieces: XI rolling (rollXI /
+// handFromSelection), bench management, and the commentary text generators.

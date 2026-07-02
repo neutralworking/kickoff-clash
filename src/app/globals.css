@@ -976,3 +976,45 @@ h1, h2, h3,
   .carrier-glow { animation: none; box-shadow: 0 0 0 3px var(--gold-glow); }
   .advance-btn-pulse { animation: none; box-shadow: 0 0 10px var(--amber-glow); }
 }
+
+/* ===========================================================================
+   MATCH — CALLED PLAYS (break console, PitchMatchView)
+   The per-spell call loop: the opponent's TELEGRAPH lane pulse on the pitch,
+   the CALL VERDICT banner on resolve, and the counterfactual impact chips.
+   GPU-cheap (opacity/transform only); reduced-motion parity below.
+   =========================================================================== */
+
+/* The telegraphed threat lane breathes softly under the player cards. Base
+   opacity lives here (not inline) so the reduced-motion static tint wins. */
+@keyframes kcLanePulse {
+  0%, 100% { opacity: 0.10; }
+  50% { opacity: 0.26; }
+}
+.kc-lane-pulse {
+  opacity: 0.14;
+  animation: kcLanePulse 2.2s ease-in-out infinite;
+}
+
+/* The ANSWERED / COUNTERED banner drops in once per resolve. */
+@keyframes kcVerdictIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.kc-verdict-in { animation: kcVerdictIn 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Counterfactual xG chips rise into the THIS SPELL panel (staggered inline). */
+@keyframes kcChipIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.kc-impact-chip { opacity: 0; animation: kcChipIn 0.24s ease-out forwards; }
+
+/* The hand row scrolls horizontally with no visible scrollbar. */
+.kc-call-row { scrollbar-width: none; }
+.kc-call-row::-webkit-scrollbar { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kc-lane-pulse { animation: none; opacity: 0.16; }
+  .kc-verdict-in,
+  .kc-impact-chip { animation: none; opacity: 1; transform: none; }
+}

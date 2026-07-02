@@ -14,11 +14,11 @@ import {
   resolveIncrement,
   advanceIncrement,
   makeSub,
+  callPlay,
   getMatchResult,
   playerMatchStats,
 } from '../lib/match-v5';
-import type { TacticSlots } from '../lib/tactics';
-import { canDeploy, createEmptySlots, deployTactic, removeTactic } from '../lib/tactics';
+import { getTacticById } from '../lib/tactics';
 import { autoFillXI } from '../lib/team-select';
 import PitchMatchView from './match/PitchMatchView';
 
@@ -49,7 +49,6 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
   const matchSeed = buildMatchSeed(runState.seed, runState.round, runState.matchInCup);
   const opponent = getOpponent(runState.round);
   const opponentBuild = getOpponentBuild(runState.round, runState.matchInCup, runState.seed);
-  const [tacticSlots, setTacticSlots] = useState<TacticSlots>(() => createEmptySlots());
 
   // Core state
   const [matchState, setMatchState] = useState<MatchV5State>(() => {
@@ -109,13 +108,17 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
 
   // ---- Kick Off: evaluate and resolve ----
   const handleKickOff = useCallback(() => {
-    const split = evaluateSplit(matchState, runState.jokers, tacticSlots);
+    const calledPlay = matchState.calledPlayId ? getTacticById(matchState.calledPlayId) ?? null : null;
+    const split = evaluateSplit(matchState, runState.jokers, calledPlay);
+    // Counterfactual baseline (this spell WITHOUT the called play) feeds the
+    // display-only playImpact readout — never the match math.
+    const baseline = calledPlay ? evaluateSplit(matchState, runState.jokers, null) : null;
     const seed = matchSeed + matchState.currentIncrement * 113;
-    const result = resolveIncrement(matchState, split, seed);
+    const result = resolveIncrement(matchState, split, seed, baseline);
 
     setCurrentResult(result);
     setSubPhase('resolving');
-  }, [matchSeed, matchState, runState.jokers, tacticSlots]);
+  }, [matchSeed, matchState, runState.jokers]);
 
   // ---- After resolution animation completes ----
   const handleResolveComplete = useCallback(() => {
@@ -168,36 +171,14 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     setMatchState((prev: MatchV5State) => ({ ...prev, intent }));
   }, []);
 
+  // ---- Call a play for THIS spell (tap the called play again to clear it).
+  // callPlay validates charges; the charge is consumed when the spell resolves.
   const handleToggleTactic = useCallback((tacticId: string) => {
     const tactic = runState.tacticsDeck.find((card) => card.id === tacticId);
     if (!tactic) return;
-
-    setTacticSlots((prev) => {
-      const existingIndex = prev.slots.findIndex((slot) => slot?.id === tactic.id);
-      if (existingIndex !== -1) {
-        return removeTactic(prev, existingIndex);
-      }
-
-      const deployResult = canDeploy(prev, tactic);
-      if (!deployResult.canDeploy) {
-        return prev;
-      }
-
-      const nextSlots = [...prev.slots];
-      if (deployResult.wouldRemove) {
-        const removeIndex = nextSlots.findIndex((slot) => slot?.id === deployResult.wouldRemove);
-        if (removeIndex !== -1) {
-          nextSlots[removeIndex] = null;
-        }
-      }
-
-      const freeIndex = nextSlots.findIndex((slot) => slot === null);
-      if (freeIndex === -1) {
-        return prev;
-      }
-
-      return deployTactic({ slots: nextSlots }, tactic, freeIndex);
-    });
+    setMatchState((prev: MatchV5State) =>
+      callPlay(prev, prev.calledPlayId === tacticId ? null : tacticId),
+    );
   }, [runState.tacticsDeck]);
 
   // ---- Finished: return result to GameShell ----
@@ -215,15 +196,13 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
         remainingDeck: matchState.remainingDeck,
         subsRemaining: matchState.subsRemaining,
         subsUsed: matchState.subsUsed,
-        tacticSlots,
         currentIncrement: matchState.currentIncrement,
         isFirstHalf: matchState.isFirstHalf,
-        scores: [],
         yourGoals: matchState.yourGoals,
         opponentGoals: matchState.opponentGoals,
       },
     });
-  }, [matchState, onMatchComplete, tacticSlots]);
+  }, [matchState, onMatchComplete]);
 
   // ---- Render ----
   return (
@@ -259,7 +238,6 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
             matchState={matchState}
             formation={matchState.formation}
             jokers={runState.jokers}
-            tacticSlots={tacticSlots}
             availableTactics={runState.tacticsDeck}
             ownedFormations={runState.ownedFormations}
             opponentBuild={opponentBuild}

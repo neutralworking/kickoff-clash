@@ -50,7 +50,7 @@ No test framework is installed. The match engine was validated via `scripts/matc
 | `transform.ts` | `kc_characters.json` → `Card[]` (position map + `MODEL_TO_ARCHETYPE` map) |
 | `formations.ts` | 8 formations, 11 slots each, pitch x/y geometry, max-attacker caps |
 | `jokers.ts` | Manager cards (passive modifiers); `ALL_JOKERS` registry used for rehydration |
-| `tactics.ts` | 12 tactic cards with contradiction rules |
+| `tactics.ts` | 16 tactic cards as per-spell CALLED PLAYS (charges, playClass) — the 3-slot model and the legacy `compute()` path are gone; effects live in `squad-transforms.ts tacticTraits`, opponent plays + telegraphs in `opponent.ts OPPONENT_PLAYS`, call grading in `plays.ts` |
 | `run.ts` | Roguelike `RunState`: deck, shop, economy, round progression |
 | `economy.ts` | Attendance, revenue, shop item generation |
 | `packs.ts` | Seeded, weighted card pack draws |
@@ -128,4 +128,12 @@ squad tiers to read the raw power→win-rate curve (used to place the cup finals
   they only make your own keeper concede less (~0.05 fewer ga for an Epic vs Common keeper — a
   deliberate low-band `deny` of 0.11–0.12). balance-sweep (40 seeds) unchanged in-band: S5-top vs
   R1 100%, vs R5 68%, TOP/WEAK divergence 75%, ga sane. `SIGNATURE_OVERRIDES` legends still show 4.
+- **Variance verbs are inert** (found in the Called Plays balance pass): `possession.ts`
+  never reads the dispatcher's `variance` accumulator, so `dampen/amplify-variance`
+  records do nothing. No card text claims them any more; wiring it is a scheduled
+  engine change.
+- **Called Plays instrument** — `balance-sweep.ts` carries a `callPolicy` axis
+  (none/random/best) + per-play swing tables; `cup-sweep.ts` a `rotate+calls` policy.
+  Current anchors: clean-counter swing ~+0.4 xG; best-vs-none +21pp; reading the
+  telegraph roughly halves goals against; STRONG rotate+calls ~80% champions.
 - `design/` — contains fbal-era (Python/Flask prototype) docs. `design/CLAUDE.md`, `design/README.md`, `design/ROADMAP.md` describe a different codebase and should be treated as historical only.

@@ -1236,16 +1236,18 @@ function PlayerSheet({
               }}
               className="absolute flex items-center justify-center active:scale-90"
               style={{
-                top: 4,
-                right: 4,
-                width: 18,
-                height: 18,
+                // Hangs off the card corner so it never covers the rating
+                // (top-right of the card face is the score).
+                top: -5,
+                right: -5,
+                width: 16,
+                height: 16,
                 borderRadius: '50%',
                 background: 'var(--surface)',
                 border: '1.5px solid var(--line-white)',
                 color: 'var(--line-white)',
                 fontFamily: PIXEL,
-                fontSize: 9,
+                fontSize: 8,
                 lineHeight: 1,
                 zIndex: 2,
               }}
@@ -1290,16 +1292,17 @@ function ManagerSheet({
               }}
               className="absolute flex items-center justify-center active:scale-90"
               style={{
-                top: 4,
-                right: 4,
-                width: 18,
-                height: 18,
+                // Off the corner — matches PlayerSheet, keeps the card face clear.
+                top: -5,
+                right: -5,
+                width: 16,
+                height: 16,
                 borderRadius: '50%',
                 background: 'var(--surface)',
                 border: '1.5px solid var(--line-white)',
                 color: 'var(--line-white)',
                 fontFamily: PIXEL,
-                fontSize: 9,
+                fontSize: 8,
                 lineHeight: 1,
                 zIndex: 2,
               }}
