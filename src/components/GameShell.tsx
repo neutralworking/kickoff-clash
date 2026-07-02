@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Card, SlottedCard } from '../lib/scoring';
 import type { RunState, MatchResult, DurabilityResult } from '../lib/run';
 import {
@@ -24,8 +24,9 @@ import {
   interestOn,
   applyMatchFitness,
 } from '../lib/run';
-import { getShopItem } from '../lib/economy';
+import { getShopItem, SCOUT_COST } from '../lib/economy';
 import type { InvestmentCard } from '../lib/economy';
+import { getFormation } from '../lib/formations';
 import type { HandState } from '../lib/hand';
 import { INCREMENT_MINUTES } from '../lib/hand';
 import type { JokerCard } from '../lib/jokers';
@@ -40,8 +41,7 @@ import type { TeamSelection, TeamIntent } from '../lib/run';
 import TitleScreen from './TitleScreen';
 import type { MatchVerdict } from '../lib/match-v5';
 import PackReveal from './PackReveal';
-import TeamSelect from './TeamSelect';
-import TeamTalk from './TeamTalk';
+import SquadScreen from './SquadScreen';
 import MatchPhase from './MatchPhase';
 import PostMatch from './PostMatch';
 import ShopPhase from './ShopPhase';
@@ -459,6 +459,24 @@ export default function GameShell() {
     return true;
   }, [runState]);
 
+  // --- Scout Report (squad screen) ---
+  // Unlocks the estimated lineup for the CURRENT upcoming tie. Stored as the
+  // composite `round * 100 + matchInCup` in the existing scoutedOpponentRound
+  // field (composites are ≥ 101, so they never collide with the shop's legacy
+  // next-cup values of 2–5) — deterministic and localStorage-safe.
+  const handleScoutCurrentTie = useCallback(() => {
+    setRunState(prev => {
+      if (!prev || prev.cash < SCOUT_COST) return prev;
+      const next: RunState = {
+        ...prev,
+        cash: prev.cash - SCOUT_COST,
+        scoutedOpponentRound: prev.round * 100 + prev.matchInCup,
+      };
+      saveRun(next);
+      return next;
+    });
+  }, []);
+
   const handleShopNext = useCallback(() => {
     if (!runState) return;
     // The shop now follows EVERY match, so this is where the run advances to the next one.
@@ -508,6 +526,17 @@ export default function GameShell() {
   // Render
   // =========================================================================
 
+  // The deterministic build of the next opponent, for the squad screen's Scout
+  // Report. Draft = the first tie of cup 1 under the pending run seed (the same
+  // seed createRun receives); team talk = the current upcoming tie.
+  const nextOpponentBuild = useMemo(() => {
+    if (phase === 'teamTalk' && runState) {
+      return getOpponentBuild(runState.round, runState.matchInCup, runState.seed);
+    }
+    if (phase === 'teamSelect') return getOpponentBuild(1, 1, pendingSeed);
+    return null;
+  }, [phase, runState, pendingSeed]);
+
   function renderPhase() {
     switch (phase) {
       case 'title':
@@ -524,17 +553,79 @@ export default function GameShell() {
           <PackReveal contents={pendingContents} onContinue={handlePacksOpened} />
         ) : null;
 
-      case 'teamSelect':
-        return pendingContents ? (
-          <TeamSelect contents={pendingContents} initialManagerId={pickedManagerId} onConfirm={handleTeamConfirm} />
-        ) : null;
+      case 'teamSelect': {
+        // Run-start draft — the unified SquadScreen in draft mode. Its neutral
+        // result is adapted HERE to the existing TeamSelection contract that
+        // handleTeamConfirm → createRun expects (unchanged).
+        if (!pendingContents || !nextOpponentBuild) return null;
+        const contents = pendingContents;
+        return (
+          <SquadScreen
+            mode="draft"
+            pool={contents.players}
+            formations={contents.formations}
+            initialFormationId={contents.formations[0]?.id ?? '4-3-3'}
+            initialIntent="balanced"
+            managers={contents.managers}
+            initialManagerId={pickedManagerId}
+            opponent={nextOpponentBuild}
+            cash={0}
+            scoutUnlocked={false}
+            onConfirm={(out) =>
+              handleTeamConfirm({
+                players: contents.players,
+                startingXI: out.startingXI,
+                benchIds: out.benchIds,
+                manager: contents.managers.find((m) => m.id === out.managerId) ?? null,
+                tactics: contents.tactics,
+                formationId: out.formationId,
+                intent: out.intent,
+              })
+            }
+          />
+        );
+      }
 
       case 'teamTalk': {
-        if (!runState) return null;
+        // Between-ties team talk — the SAME SquadScreen in talk mode. Its
+        // neutral result is adapted HERE to the existing lineup-levers contract
+        // that handleTeamTalkConfirm expects (unchanged).
+        if (!runState || !nextOpponentBuild) return null;
+        const formationIds = Array.from(
+          new Set([
+            runState.activeFormation,
+            ...(runState.ownedFormations?.length ? runState.ownedFormations : [runState.activeFormation]),
+          ]),
+        );
+        const tieLabel = isCupFinal(runState.round, runState.matchInCup)
+          ? 'FINAL'
+          : `TIE ${runState.matchInCup}/${cupSize(runState.round)}`;
+        // Unlocked for THIS tie via the composite key, or via the shop's legacy
+        // next-cup scout (which points at the next cup's opening tie).
+        const scoutUnlocked =
+          runState.scoutedOpponentRound === runState.round * 100 + runState.matchInCup ||
+          (runState.scoutedOpponentRound === runState.round && runState.matchInCup === 1);
         return (
-          <TeamTalk
-            runState={runState}
-            onConfirm={handleTeamTalkConfirm}
+          <SquadScreen
+            mode="talk"
+            pool={runState.deck}
+            formations={formationIds.map(getFormation)}
+            initialFormationId={runState.activeFormation}
+            initialIntent={runState.intent ?? 'balanced'}
+            initialSelection={{ startingXI: runState.startingXI ?? [], benchIds: runState.benchIds ?? [] }}
+            contextLabel={`CUP ${runState.round} · ${tieLabel}`}
+            opponent={nextOpponentBuild}
+            cash={runState.cash}
+            scoutUnlocked={scoutUnlocked}
+            onUnlockScout={handleScoutCurrentTie}
+            onConfirm={(out) =>
+              handleTeamTalkConfirm({
+                startingXI: out.startingXI,
+                benchIds: out.benchIds,
+                activeFormation: out.formationId,
+                intent: out.intent,
+              })
+            }
           />
         );
       }
