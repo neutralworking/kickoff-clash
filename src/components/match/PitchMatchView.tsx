@@ -373,6 +373,99 @@ function GoalAssistBadges({ goals, assists }: { goals: number; assists: number }
   );
 }
 
+// ---------------------------------------------------------------------------
+// Trait-firing pixel sprites — the PICTORIAL vocabulary for defining traits.
+// Crisp pixel-art (crispEdges, hard --ink-black edges, ≤6 colours, one light
+// source top-left) matching the ball/boot badge discipline above. These are
+// CONTENT: never blurred, never soft-shadowed — motion lives on the wrapper.
+// ---------------------------------------------------------------------------
+
+/** Impact frame 1 — the tight flash at the moment of the tackle. */
+function BurstFlashGlyph({ size = 30 }: { size?: number }) {
+  return (
+    <svg className="pixelated" viewBox="0 0 16 16" shapeRendering="crispEdges" style={{ width: size, height: size, display: 'block' }} aria-hidden>
+      {/* ink backing cross */}
+      <rect x="6" y="1" width="4" height="14" fill="var(--ink-black)" />
+      <rect x="1" y="6" width="14" height="4" fill="var(--ink-black)" />
+      {/* amber arms */}
+      <rect x="7" y="2" width="2" height="12" fill="var(--amber)" />
+      <rect x="2" y="7" width="12" height="2" fill="var(--amber)" />
+      {/* white-hot core */}
+      <rect x="6" y="6" width="4" height="4" fill="var(--line-white)" />
+    </svg>
+  );
+}
+
+/** Impact frame 2 — the full starburst as the challenge lands. */
+function BurstBlastGlyph({ size = 38 }: { size?: number }) {
+  return (
+    <svg className="pixelated" viewBox="0 0 20 20" shapeRendering="crispEdges" style={{ width: size, height: size, display: 'block' }} aria-hidden>
+      {/* ink backing spikes (cardinal) */}
+      <rect x="8" y="0" width="4" height="20" fill="var(--ink-black)" />
+      <rect x="0" y="8" width="20" height="4" fill="var(--ink-black)" />
+      {/* gold cardinal spikes */}
+      <rect x="9" y="1" width="2" height="18" fill="var(--gold)" />
+      <rect x="1" y="9" width="18" height="2" fill="var(--gold)" />
+      {/* amber diagonal debris */}
+      <rect x="4" y="4" width="2" height="2" fill="var(--amber)" />
+      <rect x="14" y="4" width="2" height="2" fill="var(--amber)" />
+      <rect x="4" y="14" width="2" height="2" fill="var(--amber)" />
+      <rect x="14" y="14" width="2" height="2" fill="var(--amber)" />
+      {/* hollow white ring — the shockwave */}
+      <rect x="7" y="6" width="6" height="2" fill="var(--line-white)" />
+      <rect x="7" y="12" width="6" height="2" fill="var(--line-white)" />
+      <rect x="6" y="7" width="2" height="6" fill="var(--line-white)" />
+      <rect x="12" y="7" width="2" height="6" fill="var(--line-white)" />
+      {/* open ink centre — the blast hollow */}
+      <rect x="8" y="8" width="4" height="4" fill="var(--ink-black)" />
+    </svg>
+  );
+}
+
+/** A keeper's glove, fingers up — the SAVE. White mitt, gold cuff, ink edge. */
+function GloveGlyph({ size = 30 }: { size?: number }) {
+  return (
+    <svg className="pixelated" viewBox="0 0 14 14" shapeRendering="crispEdges" style={{ width: size, height: size, display: 'block' }} aria-hidden>
+      {/* ink backing (mitt + thumb) */}
+      <rect x="2" y="0" width="10" height="13" fill="var(--ink-black)" />
+      <rect x="0" y="4" width="3" height="6" fill="var(--ink-black)" />
+      {/* fingers */}
+      <rect x="3" y="1" width="8" height="4" fill="var(--line-white)" />
+      <rect x="5" y="1" width="1" height="3" fill="var(--ink-black)" />
+      <rect x="7" y="1" width="1" height="3" fill="var(--ink-black)" />
+      <rect x="9" y="1" width="1" height="3" fill="var(--ink-black)" />
+      {/* palm */}
+      <rect x="3" y="5" width="8" height="4" fill="var(--line-white)" />
+      {/* thumb */}
+      <rect x="1" y="5" width="2" height="4" fill="var(--line-white)" />
+      {/* cuff — gold band with a white strap line */}
+      <rect x="3" y="9" width="8" height="3" fill="var(--gold)" />
+      <rect x="3" y="10" width="8" height="1" fill="var(--line-white)" />
+    </svg>
+  );
+}
+
+/** The linesman's raised flag — OFFSIDE. Ink pole, kit-red/amber checked cloth. */
+function FlagGlyph({ size = 30 }: { size?: number }) {
+  return (
+    <svg className="pixelated" viewBox="0 0 14 14" shapeRendering="crispEdges" style={{ width: size, height: size, display: 'block' }} aria-hidden>
+      {/* pole */}
+      <rect x="2" y="0" width="2" height="14" fill="var(--ink-black)" />
+      <rect x="2" y="0" width="2" height="1" fill="var(--line-white)" />
+      {/* cloth backing */}
+      <rect x="4" y="1" width="9" height="7" fill="var(--ink-black)" />
+      {/* checked cloth */}
+      <rect x="5" y="2" width="4" height="3" fill="var(--kit-red)" />
+      <rect x="9" y="2" width="3" height="3" fill="var(--amber)" />
+      <rect x="5" y="5" width="4" height="2" fill="var(--amber)" />
+      <rect x="9" y="5" width="3" height="2" fill="var(--kit-red)" />
+      {/* grip */}
+      <rect x="1" y="11" width="4" height="2" fill="var(--ink-black)" />
+      <rect x="2" y="11" width="2" height="1" fill="var(--gold)" />
+    </svg>
+  );
+}
+
 /** A tiny flat pixel kit sprite for the pitch card, tinted to the side. */
 function MiniSprite({ side, isGK, accent }: { side: 'you' | 'opp'; isGK: boolean; accent: string }) {
   const kit = isGK ? '#5a6b5f' : side === 'you' ? 'var(--kit-blue)' : 'var(--kit-red)';
@@ -413,16 +506,16 @@ function MiniSprite({ side, isGK, accent }: { side: 'you' | 'opp'; isGK: boolean
 // kind → the animation class + accent the firing plays. MOMENTS map to their
 // bespoke keyframe; AURAS share the held ring. Accent reads the trait family
 // colour (kit-blue deliveries, gold leadership, amber strikes, success defence).
-const TRAIT_KIND_STYLE: Record<TraitKind, { anim: string; accent: string; moment: boolean }> = {
-  cross:    { anim: 'trait-cross',    accent: 'var(--kit-blue)', moment: true },
-  shot:     { anim: 'trait-shot',     accent: 'var(--amber)',    moment: true },
-  setpiece: { anim: 'trait-setpiece', accent: 'var(--gold)',     moment: true },
-  poach:    { anim: 'trait-poach',    accent: 'var(--kit-red)',  moment: true },
-  tackle:   { anim: 'trait-tackle',   accent: 'var(--success)',  moment: true },
-  offside:  { anim: 'trait-offside',  accent: 'var(--cream-soft)', moment: true },
-  save:     { anim: 'trait-tackle',   accent: 'var(--gold)',     moment: true },
-  aura:     { anim: 'trait-aura',     accent: 'var(--gold)',     moment: false },
-  engine:   { anim: 'trait-aura',     accent: 'var(--kit-blue)', moment: false },
+const TRAIT_KIND_STYLE: Record<TraitKind, { accent: string; moment: boolean }> = {
+  cross:    { accent: 'var(--kit-blue)',   moment: true },
+  shot:     { accent: 'var(--amber)',      moment: true },
+  setpiece: { accent: 'var(--gold)',       moment: true },
+  poach:    { accent: 'var(--kit-red)',    moment: true },
+  tackle:   { accent: 'var(--success)',    moment: true },
+  offside:  { accent: 'var(--cream-soft)', moment: true },
+  save:     { accent: 'var(--gold)',       moment: true },
+  aura:     { accent: 'var(--gold)',       moment: false },
+  engine:   { accent: 'var(--kit-blue)',   moment: false },
 };
 
 interface TraitFiring {
@@ -437,42 +530,80 @@ interface TraitFiring {
   index: number;        // stagger order among the moment firings
 }
 
-/** One trait firing rendered on the pitch. Moments flash and clear; auras hold. */
+/** One trait firing rendered on the pitch — PICTORIAL: the picture is the event
+ *  (a travelling ball, an impact burst, a glove, a flag); no name banners. Names
+ *  stay in the THIS SPELL feed. Moments flash and clear; auras hold as a glow. */
 function TraitMarker({ firing, dur }: { firing: TraitFiring; dur: (ms: number) => string | undefined }) {
-  const { anim, accent, moment } = TRAIT_KIND_STYLE[firing.kind];
+  const { accent, moment } = TRAIT_KIND_STYLE[firing.kind];
   // Stagger moments by ~220ms so a busy increment reads as a sequence.
   const delayMs = moment ? firing.index * 220 : 0;
   const delay = delayMs ? `${delayMs}ms` : undefined;
 
   if (!moment) {
-    // AURA — a held, breathing glow ring AND a clearly-readable trait LABEL chip held
-    // for the whole increment, so the player reads e.g. "LEADERSHIP" not a tiny glyph.
+    // AURA — a held, breathing glow ring on the card. Glow only, no label chip.
     return (
       <div style={{ position: 'absolute', left: `${firing.x}%`, top: `${firing.y}%`, zIndex: 8, pointerEvents: 'none' }}>
-        {/* Held ring around the card — bigger + brighter so it reads as a clear glow. */}
         <div className="trait-aura" style={{ position: 'absolute', left: 0, top: 0, width: CARD_W + 18, height: CARD_H + 18, transform: 'translate(-50%,-50%)', borderRadius: 'var(--radius)', border: `3px solid ${accent}`, boxShadow: `0 0 18px ${accent}, inset 0 0 10px ${accent}`, opacity: 0.85 }} />
-        {/* Named label chip pinned above the card head — glyph + the trait NAME. */}
-        <div className="trait-aura-glyph" data-trait-label style={{ position: 'absolute', left: 0, top: -(CARD_H / 2) - 12, transform: 'translate(-50%,-50%)', display: 'inline-flex', alignItems: 'center', gap: 3, fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.3, color: 'var(--ink-black)', background: accent, border: '2px solid var(--ink-black)', borderRadius: 4, padding: '3px 5px', lineHeight: 1, boxShadow: '0 2px 0 0 var(--ink-black)', whiteSpace: 'nowrap' }}>
-          <span style={{ fontSize: 11 }}>{firing.glyph}</span>
-          <span>{firing.label.toUpperCase()}</span>
-        </div>
       </div>
     );
   }
 
-  // MOMENT — a big one-shot glyph burst + a BOLD held label banner, anchored on the
-  // card. The banner is the headline: a large named pill that pops, holds, then clears
-  // so a player can clearly READ "POSTMAN" / "SNIPER" fire off the card.
-  return (
-    <div style={{ position: 'absolute', left: `${firing.x}%`, top: `${firing.y}%`, zIndex: 9, pointerEvents: 'none' }}>
-      {/* The kind-motion glyph burst — bigger so the action reads even peripherally. */}
-      <div className={anim} style={{ position: 'absolute', left: 0, top: 0, transform: 'translate(-50%,-50%)', fontFamily: PIXEL, fontSize: 30, lineHeight: 1, color: accent, textShadow: '0 0 12px ' + accent + ', 0 2px 0 var(--ink-black)', animationDelay: delay, animationDuration: dur(1400) }}>
-        {firing.glyph}
+  const wrap: React.CSSProperties = { position: 'absolute', left: `${firing.x}%`, top: `${firing.y}%`, zIndex: 9, pointerEvents: 'none' };
+
+  // TACKLE — an impact explosion: a tight flash then the full starburst.
+  if (firing.kind === 'tackle') {
+    return (
+      <div style={wrap}>
+        <div className="trait-burst-a" style={{ position: 'absolute', left: 0, top: 0, animationDelay: delay, animationDuration: dur(360) }}><BurstFlashGlyph /></div>
+        <div className="trait-burst-b" style={{ position: 'absolute', left: 0, top: 0, animationDelay: delayMs ? `${delayMs + 120}ms` : '120ms', animationDuration: dur(640) }}><BurstBlastGlyph /></div>
       </div>
-      {/* The trait-name banner lifts off the card — large, high-contrast, held. */}
-      <div className="trait-tag" data-trait-label style={{ position: 'absolute', left: 0, top: -(CARD_H / 2) - 4, transform: 'translate(-50%,0)', display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: PIXEL, fontSize: 11, letterSpacing: 0.4, color: 'var(--ink-black)', background: accent, border: '2px solid var(--ink-black)', borderRadius: 4, padding: '4px 6px', lineHeight: 1, whiteSpace: 'nowrap', boxShadow: '0 2px 0 0 var(--ink-black), 0 0 14px ' + accent, animationDelay: delay, animationDuration: dur(1400) }}>
-        <span style={{ fontSize: 12 }}>{firing.glyph}</span>
-        <span>{firing.label.toUpperCase()}</span>
+    );
+  }
+
+  // SAVE — the keeper's glove punches up and holds.
+  if (firing.kind === 'save') {
+    return (
+      <div style={wrap}>
+        <div className="trait-glove" style={{ position: 'absolute', left: 0, top: 0, animationDelay: delay, animationDuration: dur(900) }}><GloveGlyph /></div>
+      </div>
+    );
+  }
+
+  // OFFSIDE — the linesman's flag hinges up (existing raise motion, now a sprite).
+  if (firing.kind === 'offside') {
+    return (
+      <div style={wrap}>
+        <div className="trait-offside" style={{ position: 'absolute', left: 0, top: 0, transform: 'translate(-50%,-50%)', animationDelay: delay, animationDuration: dur(820) }}><FlagGlyph /></div>
+      </div>
+    );
+  }
+
+  // BALL kinds — a pixel ball travels from the card toward the goal (your XI
+  // attacks the top goal). Trajectory per kind via CSS vars; deterministic.
+  //   shot: straight, long · cross: lateral arc into the box (toward the centre)
+  //   setpiece: placed still, then struck · poach: a short sharp tap-in flick
+  const toCentre = firing.x > 50 ? -1 : 1;
+  const path: Record<'shot' | 'cross' | 'setpiece' | 'poach', { cls: string; tx: number; ty: number; ms: number }> = {
+    shot:     { cls: 'trait-ball-fly',   tx: 0,             ty: -110, ms: 800 },
+    cross:    { cls: 'trait-ball-fly',   tx: toCentre * 62, ty: -58,  ms: 850 },
+    setpiece: { cls: 'trait-ball-place', tx: toCentre * 24, ty: -96,  ms: 1050 },
+    poach:    { cls: 'trait-ball-fly',   tx: 0,             ty: -34,  ms: 520 },
+  };
+  const p = path[firing.kind as 'shot' | 'cross' | 'setpiece' | 'poach'] ?? path.shot;
+  return (
+    <div style={wrap}>
+      <div
+        className={p.cls}
+        style={{
+          position: 'absolute', left: 0, top: 0,
+          ['--tx' as string]: `${p.tx}px`,
+          ['--ty' as string]: `${p.ty}px`,
+          animationDelay: delay,
+          animationDuration: dur(p.ms),
+          filter: `drop-shadow(0 0 6px ${accent})`,
+        }}
+      >
+        <BallGlyph size={16} />
       </div>
     </div>
   );
