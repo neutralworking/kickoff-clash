@@ -535,8 +535,9 @@ interface TraitFiring {
  *  stay in the THIS SPELL feed. Moments flash and clear; auras hold as a glow. */
 function TraitMarker({ firing, dur }: { firing: TraitFiring; dur: (ms: number) => string | undefined }) {
   const { accent, moment } = TRAIT_KIND_STYLE[firing.kind];
-  // Stagger moments by ~220ms so a busy increment reads as a sequence.
-  const delayMs = moment ? firing.index * 220 : 0;
+  // Stagger moments by ~700ms so they play as a SEQUENCE across the resolution
+  // window (max 5 per spell), never a simultaneous burst.
+  const delayMs = moment ? firing.index * 700 : 0;
   const delay = delayMs ? `${delayMs}ms` : undefined;
 
   if (!moment) {
@@ -1351,7 +1352,16 @@ export default function PitchMatchView({
         index: isMoment ? momentIdx++ : 0,
       });
     }
-    return out;
+    // Pace the pitch: at most 5 one-shot moments per spell (the feed still lists
+    // every firing), so a busy increment reads as a SEQUENCE, not a simultaneous
+    // burst. The wider stagger below spreads them across the resolution window.
+    const MAX_MOMENTS = 5;
+    let kept = 0;
+    return out.filter((f) => {
+      if (!TRAIT_KIND_STYLE[f.kind].moment) return true;
+      kept += 1;
+      return kept <= MAX_MOMENTS;
+    });
   }, [mode, currentResult, spots]);
 
   // ── TRAIT CALLOUTS (Fix 1) — the same firings, surfaced as styled commentary

@@ -18,6 +18,8 @@ import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import SquadGallery from './SquadGallery';
 import { PIXEL } from './cards/cardTokens';
+import { getFormation } from '../lib/formations';
+import { LineupSlot, BenchTile } from './lineup';
 
 interface ShopPhaseProps {
   state: RunState;
@@ -82,6 +84,8 @@ export default function ShopPhase({
   const [sellConfirm, setSellConfirm] = useState<Card | null>(null);
   const [modal, setModal] = useState<GameCardModel | null>(null);
   const [showGallery, setShowGallery] = useState(false);
+  // Read-only XI view — see the current shape (gaps, fitness, depth) while shopping.
+  const [showXI, setShowXI] = useState(false);
 
   const academy = getAcademyTier(state.academyTier);
   const acSeed = shopSeed + 777;
@@ -250,6 +254,7 @@ export default function ShopPhase({
             openModal={setModal}
             openSell={() => setSellSheet(true)}
             openGallery={() => setShowGallery(true)}
+            openXI={() => setShowXI(true)}
           />
         )}
 
@@ -376,6 +381,9 @@ export default function ShopPhase({
       {showGallery && (
         <SquadGallery deck={state.deck} onClose={() => setShowGallery(false)} title="YOUR SQUAD" />
       )}
+
+      {/* Read-only XI pitch view — the current shape while shopping. */}
+      {showXI && <XIOverlay state={state} onInspect={(c) => setModal({ variant: 'player', card: c })} onClose={() => setShowXI(false)} />}
     </div>
   );
 }
@@ -476,7 +484,7 @@ function MarketTab({
 // ===========================================================================
 
 function SquadTab({
-  state, trainableCards, injuredCards, onTrainPlayer, onHealPlayer, openModal, openSell, openGallery,
+  state, trainableCards, injuredCards, onTrainPlayer, onHealPlayer, openModal, openSell, openGallery, openXI,
 }: {
   state: RunState;
   trainableCards: { card: Card; applied: number }[];
@@ -486,19 +494,29 @@ function SquadTab({
   openModal: (m: GameCardModel) => void;
   openSell: () => void;
   openGallery: () => void;
+  openXI: () => void;
 }) {
   const canHeal = state.cash >= 12000;
   return (
     <div className="flex flex-col gap-3 pb-2">
-      {/* Squad gallery shortcut — browse every owned card in the full overlay. */}
+      {/* Squad shortcuts — the current XI on the pitch, and the full card list. */}
       <SectionCard title="Your Squad" accent="var(--kit-blue)">
-        <RowAction
-          title="View all cards"
-          sub={`${state.deck.length} owned · filter & inspect`}
-          actionLabel="View All"
-          affordable={state.deck.length > 0}
-          onClick={openGallery}
-        />
+        <div className="flex flex-col gap-2">
+          <RowAction
+            title="View XI"
+            sub="Current lineup on the pitch"
+            actionLabel="View XI"
+            affordable
+            onClick={openXI}
+          />
+          <RowAction
+            title="View all cards"
+            sub={`${state.deck.length} owned · filter & inspect`}
+            actionLabel="View All"
+            affordable={state.deck.length > 0}
+            onClick={openGallery}
+          />
+        </div>
       </SectionCard>
 
       {/* Medical room */}
@@ -1015,6 +1033,70 @@ function BottomSheet({
         </div>
         <div className="min-h-0 overflow-y-auto relative" style={{ overscrollBehavior: 'contain', zIndex: 2 }}>
           {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// XIOverlay — the current lineup, read-only, while shopping: the pitch with the
+// starting XI (fitness showing), the bench, and the reserves, so a buyer can
+// see exactly where the squad is thin. Tap any player to inspect.
+// ---------------------------------------------------------------------------
+
+function XIOverlay({
+  state, onInspect, onClose,
+}: {
+  state: RunState;
+  onInspect: (c: Card) => void;
+  onClose: () => void;
+}) {
+  const formation = getFormation(state.activeFormation);
+  const byId = new Map(state.deck.map((c) => [c.id, c]));
+  const xi = (state.startingXI ?? []).map((id) => byId.get(id));
+  const benchCards = (state.benchIds ?? []).map((id) => byId.get(id)).filter((c): c is Card => !!c);
+  const used = new Set([...(state.startingXI ?? []), ...(state.benchIds ?? [])]);
+  const reserves = state.deck.filter((c) => !used.has(c.id));
+
+  return (
+    <div className="absolute inset-0 flex flex-col" style={{ background: 'rgba(4,10,7,0.94)', zIndex: 55, padding: '12px 12px max(env(safe-area-inset-bottom), 10px)' }}>
+      <div className="flex items-center justify-between shrink-0" style={{ marginBottom: 8 }}>
+        <span style={{ fontFamily: PIXEL, fontSize: 12, letterSpacing: 0.6, color: 'var(--cream)' }}>CURRENT XI</span>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          style={{ width: 36, height: 36, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', background: 'var(--surface)', boxShadow: '0 2px 0 0 var(--ink-black)', color: 'var(--cream)', fontFamily: PIXEL, fontSize: 14, lineHeight: 1 }}
+        >
+          {'×'}
+        </button>
+      </div>
+      {/* Pitch — LineupSlot uses % coords, so any container height works. */}
+      <div className="relative shrink-0" style={{ height: '46vh', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', background: 'linear-gradient(180deg, #1f7a37 0%, #17632c 100%)', overflow: 'hidden' }}>
+        {formation.slots.map((slot, i) => (
+          <LineupSlot
+            key={i}
+            slot={slot}
+            card={xi[i]}
+            justPlaced={false}
+            showFitness
+            onClick={xi[i] ? () => onInspect(xi[i]!) : undefined}
+          />
+        ))}
+      </div>
+      {/* Bench + reserves — same tiles as the squad screen, inspect-only. */}
+      <div className="flex-1 min-h-0 overflow-y-auto" style={{ marginTop: 8, overscrollBehavior: 'contain' }}>
+        <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)' }}>BENCH {benchCards.length}</span>
+        <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', marginTop: 4 }}>
+          {benchCards.map((c) => (
+            <BenchTile key={c.id} card={c} onPointerUp={() => onInspect(c)} />
+          ))}
+        </div>
+        <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)', display: 'block', marginTop: 8 }}>RESERVES {reserves.length}</span>
+        <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', marginTop: 4 }}>
+          {reserves.map((c) => (
+            <BenchTile key={c.id} card={c} onPointerUp={() => onInspect(c)} />
+          ))}
         </div>
       </div>
     </div>
