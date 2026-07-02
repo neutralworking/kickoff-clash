@@ -17,6 +17,7 @@
  */
 
 import type { RunState, MatchResult } from '../lib/run';
+import type { MatchVerdict } from '../lib/match-v5';
 import { cupSize, MAX_CUPS } from '../lib/run';
 import { PIXEL } from './cards/cardTokens';
 
@@ -37,6 +38,9 @@ export default function EndScreen({ state, onNewRun }: EndScreenProps) {
   // The fatal / final match is the last one played.
   const finalMatch = history[history.length - 1];
   const matchesSurvived = won ? totalMatches : Math.max(history.length - 1, 0);
+  // The engine's verdict on that match: for a LOST run it is why the run ended;
+  // for a WON run, how the final was won. Absent on pre-verdict saves.
+  const finalVerdict = finalMatch?.verdict;
 
   // Best win by goal difference — the run's highlight.
   const bestWin = history
@@ -114,6 +118,10 @@ export default function EndScreen({ state, onNewRun }: EndScreenProps) {
         >
           {subline}
         </p>
+
+        {/* Why the run ended (lost) / how the final was won (won) — the engine's
+            verdict on the last match. Renders nothing on pre-verdict saves. */}
+        {finalVerdict && <VerdictCard verdict={finalVerdict} won={won} />}
       </div>
 
       <div className="shrink-0" style={{ flex: 1 }} />
@@ -228,6 +236,94 @@ function SectionLabel({ text }: { text: string }) {
         {text}
       </span>
       <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+    </div>
+  );
+}
+
+/** Subtle for/against tone from a verdict factor's signed swing (+ favours you,
+ *  − the opponent); near-zero swings stay neutral. Colour only — never copy. */
+function factorTone(swing: number): string {
+  if (swing > 0.12) return 'var(--success)';
+  if (swing < -0.12) return 'var(--danger)';
+  return 'var(--dust)';
+}
+
+/** The engine's verdict on the final match. On a LOST run it is why the run
+ *  ended — prominent, danger-railed, headline + top factors. On a WON run it
+ *  shows quietly as a headline one-liner. Headline / labels / details render
+ *  VERBATIM from the engine; the only added string is the plain section label. */
+function VerdictCard({ verdict, won }: { verdict: MatchVerdict; won: boolean }) {
+  if (won) {
+    return (
+      <div
+        className="flex items-start text-left w-full"
+        style={{
+          marginTop: 3,
+          maxWidth: 336,
+          gap: 9,
+          padding: '9px 11px',
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--border)',
+          background: 'rgba(0,0,0,0.18)',
+        }}
+      >
+        <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)', marginTop: 2, flexShrink: 0 }}>
+          WHY
+        </span>
+        <span style={{ fontSize: 11, lineHeight: 1.45, color: 'var(--cream-soft)' }}>{verdict.headline}</span>
+      </div>
+    );
+  }
+
+  // Some headline branches restate the decisive factor's detail word-for-word —
+  // skip that duplicate row (presentation only, no copy altered).
+  const headline = verdict.headline.toLowerCase();
+  const top = verdict.factors
+    .filter((f) => !headline.includes(f.detail.toLowerCase()))
+    .slice(0, 2);
+  return (
+    <div
+      className="flex items-stretch text-left w-full"
+      style={{
+        marginTop: 3,
+        maxWidth: 336,
+        gap: 10,
+        padding: '10px 12px',
+        borderRadius: 'var(--radius)',
+        border: '2px solid var(--ink-black)',
+        background: 'var(--surface)',
+        boxShadow: '0 2px 0 0 var(--ink-black)',
+      }}
+    >
+      <span style={{ width: 4, background: 'var(--danger)', borderRadius: 1, flexShrink: 0, boxShadow: '0 0 8px var(--danger)' }} />
+      <div className="flex flex-col" style={{ gap: 6, minWidth: 0 }}>
+        <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>WHY</span>
+        <span style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--cream)' }}>{verdict.headline}</span>
+        {top.map((f) => {
+          const tone = factorTone(f.swing);
+          return (
+            <div key={f.key} className="flex items-start" style={{ gap: 7 }}>
+              <span
+                style={{
+                  width: 5,
+                  height: 5,
+                  marginTop: 4.5,
+                  borderRadius: 1,
+                  background: tone,
+                  boxShadow: tone === 'var(--dust)' ? 'none' : `0 0 6px ${tone}`,
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ fontSize: 10, lineHeight: 1.5, color: 'var(--cream-soft)' }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.7, color: tone, marginRight: 6 }}>
+                  {f.label.toUpperCase()}
+                </span>
+                {f.detail}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
