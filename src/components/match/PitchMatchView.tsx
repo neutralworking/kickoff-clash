@@ -10,6 +10,7 @@ import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard } from '../../lib/tactics';
 import { getTacticById, chargesLeft } from '../../lib/tactics';
 import { getOpponentPlayById } from '../../lib/opponent';
+import { attackLanes } from '../../lib/plays';
 import type { OpponentBuild, TeamIntent } from '../../lib/run';
 import type { Card } from '../../lib/scoring';
 import { subBlockReason, cumulativeStats } from '../../lib/match-v5';
@@ -20,7 +21,7 @@ import { traitCopy } from '../../lib/trait-copy';
 import type { TraitKind } from '../../lib/trait-copy';
 import CardModal from '../cards/CardModal';
 import type { GameCardModel } from '../cards/GameCard';
-import { PIXEL, lastName, POSITION_COLOR, RARITY_COLOR, TACTIC_CAT_COLOR } from '../cards/cardTokens';
+import { PIXEL, lastName, POSITION_COLOR, RARITY_COLOR } from '../cards/cardTokens';
 
 interface PitchMatchViewProps {
   matchState: MatchV5State;
@@ -297,6 +298,93 @@ function SubCard({ card, dim }: { card: Card; dim?: boolean }) {
         <div style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.2, color: 'var(--dust)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{archCode(card.archetype) ?? card.archetype}</div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CALLED PLAYS — the break-console hand (one call per spell).
+//
+// A play's class sets its accent (the call vocabulary, all KC tokens):
+//   attacking → kit-red · defensive → kit-blue · control → gold.
+// ChargeDots is the per-match charge meter (filled = remaining); CallPill is
+// one owned play in the hand row — tap calls it for THIS spell (ringed CALLED),
+// tap again clears, zero charges disables. The inspect pip opens the existing
+// tactic CardModal. Pixel-flat content on a hard-shadowed surface.
+// ---------------------------------------------------------------------------
+
+const PLAY_CLASS_COLOR: Record<TacticCard['playClass'], string> = {
+  attacking: 'var(--kit-red)',
+  defensive: 'var(--kit-blue)',
+  control: 'var(--gold)',
+};
+
+type CallState = 'called' | 'callable' | 'blocked';
+
+function ChargeDots({ left, total, accent }: { left: number; total: number; accent: string }) {
+  return (
+    <span aria-label={`${left} of ${total} charges left`} style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
+      {Array.from({ length: total }).map((_, i) => (
+        <span key={i} style={{ width: 5, height: 5, borderRadius: 1, background: i < left ? accent : 'rgba(0,0,0,0.45)', border: '1px solid var(--ink-black)' }} />
+      ))}
+    </span>
+  );
+}
+
+function CallPill({ tactic, state, left, onCall, onInspect }: {
+  tactic: TacticCard;
+  state: CallState;
+  left: number;
+  onCall: () => void;
+  onInspect: () => void;
+}) {
+  const accent = PLAY_CLASS_COLOR[tactic.playClass] ?? 'var(--gold)';
+  const called = state === 'called';
+  const blocked = state === 'blocked';
+  return (
+    // No `disabled` attr — the inspect pip must stay tappable on a no-charges
+    // play; the call tap itself is guarded below.
+    <button
+      onClick={() => { if (!blocked) onCall(); }}
+      aria-disabled={blocked}
+      aria-pressed={called}
+      aria-label={`${tactic.name}, ${called ? 'called this spell, tap to clear' : blocked ? 'no charges left' : 'tap to call'}`}
+      style={{
+        position: 'relative', flexShrink: 0, textAlign: 'left', padding: 0,
+        display: 'flex', alignItems: 'stretch',
+        height: 46,
+        borderRadius: 'var(--radius-sm)',
+        border: `2px solid ${called ? accent : 'var(--ink-black)'}`,
+        boxShadow: called ? `0 0 0 2px ${accent}, 0 2px 0 0 var(--ink-black)` : '0 2px 0 0 var(--ink-black)',
+        background: called
+          ? `linear-gradient(165deg, color-mix(in srgb, ${accent} 22%, var(--surface)), var(--surface))`
+          : 'linear-gradient(165deg, var(--surface-raised), var(--surface))',
+        opacity: blocked ? 0.45 : 1,
+        cursor: blocked ? 'not-allowed' : 'pointer',
+        overflow: 'hidden',
+        transition: 'box-shadow 160ms, border-color 160ms',
+      }}
+    >
+      {/* play-class accent rail */}
+      <span aria-hidden style={{ width: 3, background: accent, flexShrink: 0 }} />
+      <span style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4, padding: '0 8px', minWidth: 0 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--cream)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 112, lineHeight: 1.1 }}>{tactic.name}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <ChargeDots left={left} total={tactic.charges} accent={accent} />
+          {called && (
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--ink-black)', background: accent, borderRadius: 2, padding: '2px 3px', lineHeight: 1 }}>CALLED</span>
+          )}
+        </span>
+      </span>
+      {/* inspect pip — opens the existing tactic CardModal; stopPropagation so a
+          tap here never toggles the call (same pattern as the pitch-card pip). */}
+      <span
+        role="button"
+        aria-label={`Inspect ${tactic.name}`}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); onInspect(); }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 18, alignSelf: 'stretch', flexShrink: 0, borderLeft: '1px solid rgba(0,0,0,0.35)', color: 'var(--dust)', fontFamily: PIXEL, fontSize: 8, cursor: 'pointer' }}
+      >i</span>
+    </button>
   );
 }
 
@@ -1474,11 +1562,13 @@ export default function PitchMatchView({
       : null),
     [matchState.calledPlayId, availableTactics],
   );
-  const deployedTactics = calledPlay ? [calledPlay] : [];
-  const deployedIds = new Set(deployedTactics.map((t) => t.id));
-  const playChargesUsed = matchState.playChargesUsed ?? {};
+  const playChargesUsed = useMemo(
+    () => matchState.playChargesUsed ?? {},
+    [matchState.playChargesUsed],
+  );
 
-  // The opponent's telegraph line(s) for the coming spell — plain factual strings.
+  // The opponent's telegraph line(s) for the coming spell — plain factual engine
+  // strings, verbatim. The Adaptive style telegraphs 2 candidates, joined " or ".
   const telegraphText = useMemo(() => {
     const ids = matchState.opponentPlayCandidates?.length
       ? matchState.opponentPlayCandidates
@@ -1486,27 +1576,68 @@ export default function PitchMatchView({
     const lines = ids
       .map((id) => getOpponentPlayById(id)?.telegraph)
       .filter((t): t is string => Boolean(t));
-    return lines.join(' — or — ');
+    return lines.join(' or ');
   }, [matchState.opponentPlayCandidates, matchState.opponentPlay]);
 
-  // ── TACTIC DECK STATE (display-only) ──────────────────────────────────────
+  // ── THREAT LANES — where the telegraphed play commits its attack. Read from
+  // the play's records (attackLanes, plays.ts) rather than id-matching; only a
+  // TARGETED read pulses (1–2 lanes — an overload/route-one), never a whole-field
+  // amplify. The engine couples same-lane, so their lane L lands in your lane L. ──
+  const threatLanes = useMemo<Lane[]>(() => {
+    if (mode !== 'plan') return [];
+    const ids = matchState.opponentPlayCandidates?.length
+      ? matchState.opponentPlayCandidates
+      : matchState.opponentPlay ? [matchState.opponentPlay.id] : [];
+    const union = new Set<Lane>();
+    for (const id of ids) {
+      const play = getOpponentPlayById(id);
+      if (!play) continue;
+      const lanes = attackLanes(play.records);
+      if (lanes.size > 0 && lanes.size <= 2) for (const l of lanes) union.add(l);
+    }
+    return [...union];
+  }, [mode, matchState.opponentPlayCandidates, matchState.opponentPlay]);
+
+  // ── THE HAND (display-only) ────────────────────────────────────────────────
   // The engine (onToggleTactic → callPlay in match-v5.ts) is the single source of
-  // truth; here we mirror it to a label so a tap is never a silent no-op:
-  //   • deployed   — the play called for THIS spell   → tap clears the call
-  //   • deployable — charges remain                    → tap calls it (replacing any call)
-  //   • blocked    — no charges left this match        → tap is a no-op, so we disable
-  type TacticState = 'deployed' | 'deployable' | 'blocked';
-  const tacticView = useMemo(() => {
+  // truth; here we mirror it to a state so a tap is never a silent no-op:
+  //   • called   — the play called for THIS spell → tap clears the call
+  //   • callable — charges remain                 → tap calls it (replacing any call)
+  //   • blocked  — no charges left this match     → the call tap is disabled
+  const callHand = useMemo(() => {
     return availableTactics.map((tactic) => {
       const left = chargesLeft(tactic, playChargesUsed);
-      const state: TacticState = deployedIds.has(tactic.id)
-        ? 'deployed'
-        : left > 0 ? 'deployable' : 'blocked';
+      const state: CallState = calledPlay?.id === tactic.id
+        ? 'called'
+        : left > 0 ? 'callable' : 'blocked';
       return { tactic, state, left };
     });
-    // deployedIds is derived from calledPlay, so calledPlay is the real dep.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availableTactics, calledPlay, playChargesUsed]);
+
+  // ── CALL VERDICT + COUNTERFACTUAL IMPACT (resolve payoff, engine verbatim) ──
+  // callGrade names how the call graded (neutral shows nothing); playImpact is
+  // the engine's same-seed counterfactual xG swing — hidden when null / zero-ish
+  // (rounds to 0.0 at one decimal).
+  const callVerdict = useMemo(() => {
+    if (!resolving || !currentResult) return null;
+    const { callGrade, calledPlayName, opponentPlayName } = currentResult;
+    if (!callGrade || callGrade === 'neutral' || !calledPlayName || !opponentPlayName) return null;
+    return { answered: callGrade === 'answered', calledPlayName, opponentPlayName };
+  }, [resolving, currentResult]);
+
+  const impactChips = useMemo(() => {
+    const pi = currentResult?.playImpact;
+    if (!resolving || !pi) return [];
+    const fmt = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)} xG`;
+    const chips: { key: string; label: string; text: string; color: string }[] = [];
+    if (Math.abs(pi.yourCallXG) >= 0.05) {
+      chips.push({ key: 'call', label: 'YOUR CALL', text: fmt(pi.yourCallXG), color: pi.yourCallXG > 0 ? 'var(--success)' : 'var(--danger)' });
+    }
+    if (Math.abs(pi.theirPlayXG) >= 0.05) {
+      chips.push({ key: 'play', label: 'THEIR PLAY', text: fmt(pi.theirPlayXG), color: pi.theirPlayXG > 0 ? 'var(--danger)' : 'var(--success)' });
+    }
+    return chips;
+  }, [resolving, currentResult]);
 
   // FIX 1 — A MATCH CLOCK THAT COUNTS (mm:ss).
   //   • PLANNING: show the elapsed time = the last completed increment's end
@@ -1556,9 +1687,10 @@ export default function PitchMatchView({
   const showSubPrompt = planning && canSubFlag && bench.length > 0;
 
   const hasCallableTactic = availableTactics.some(
-    (t) => !deployedIds.has(t.id) && chargesLeft(t, playChargesUsed) > 0,
+    (t) => t.id !== calledPlay?.id && chargesLeft(t, playChargesUsed) > 0,
   );
-  const showTacticPrompt = planning && !calledPlay && hasCallableTactic;
+  // Nudge the YOUR CALL tab while no play is called and one could be.
+  const showCallNudge = planning && !calledPlay && hasCallableTactic;
 
   // The team-talk break: planning, not scouting the opposition. At a real break
   // (kickoff / halftime / between) the coach panel and the SHAPE + TACTICS entry
@@ -1828,10 +1960,11 @@ export default function PitchMatchView({
             <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--amber)', borderRadius: 3, padding: '3px 5px', lineHeight: 1, flexShrink: 0 }}>COACH</span>
             <span style={{ fontSize: 12, color: 'var(--cream-soft)', lineHeight: 1.35 }}>Set your XI and shape, then kick off. Drag a player to swap; tap to inspect.</span>
           </div>
-        ) : resolving && (planLines.length > 0 || traitCallouts.length > 0) ? (
-          // THIS SPELL — ONE panel for "your plan paid off": the cascade's tactic /
-          // manager / chemistry lines (label + attack points, straight off the
-          // engine), then the trait firings beneath. Replaces the TRAITS-only panel.
+        ) : resolving && (planLines.length > 0 || traitCallouts.length > 0 || impactChips.length > 0) ? (
+          // THIS SPELL — ONE panel for "your plan paid off": the call's
+          // counterfactual xG chips (engine playImpact, verbatim), the cascade's
+          // tactic / manager / chemistry lines (label + attack points, straight
+          // off the engine), then the trait firings beneath.
           <div data-this-spell style={{ display: 'grid', gap: 3, minHeight: 51 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>THIS SPELL</span>
@@ -1839,6 +1972,19 @@ export default function PitchMatchView({
                 <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--dust)', marginLeft: 'auto' }}>+{traitCallouts.length - 2} MORE</span>
               )}
             </div>
+            {/* COUNTERFACTUAL CHIPS — the call's net xG swing this spell (same seed,
+                re-read without the play). + on YOUR CALL favours you (green); + on
+                THEIR PLAY favours them (red). Hidden when null / zero-ish. */}
+            {impactChips.length > 0 && (
+              <div data-play-impact style={{ display: 'flex', alignItems: 'center', gap: 5, height: 18 }}>
+                {impactChips.map((c, i) => (
+                  <span key={c.key} className="kc-impact-chip" style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, padding: '3px 5px', borderRadius: 3, border: `1px solid ${c.color}`, background: 'rgba(0,0,0,0.3)', animationDelay: `${i * 70}ms`, lineHeight: 1, flexShrink: 0 }}>
+                    <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--dust)' }}>{c.label}</span>
+                    <span style={{ fontFamily: PIXEL, fontSize: 8.5, color: c.color, fontVariantNumeric: 'tabular-nums' }}>{c.text}</span>
+                  </span>
+                ))}
+              </div>
+            )}
             {planLines.length > 0 && (
               <div data-plan-line className="coach-line-in" style={{ display: 'flex', alignItems: 'baseline', gap: 0, height: 16, lineHeight: '16px', overflow: 'hidden', whiteSpace: 'nowrap', minWidth: 0 }}>
                 {planLines.map((p, i) => (
@@ -1877,55 +2023,60 @@ export default function PitchMatchView({
       </button>
       )}
 
-      {/* PLAN STRIP — one compact line: manager · opponent read · deployed tactic
-          NAMES · the TACTICS trigger with the slot meter. Tap a pill to inspect
-          (the modal carries the full effect); deploy/swap detail lives in the
-          shelf, so nothing is restated here. */}
-      <div style={{ display: 'flex', alignItems: 'stretch', gap: 6, margin: '0 16px 8px', flexShrink: 0, height: 40 }}>
-        {/* Manager pill */}
-        <button
-          onClick={() => { if (manager) setModal({ variant: 'manager', manager }); else setTrayOpen(true); }}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '0 8px', borderRadius: 'var(--radius)', border: `2px solid ${manager ? 'var(--gold)' : 'var(--border)'}`, background: manager ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0, maxWidth: 118, minWidth: 0 }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>MGR</span>
-          <span style={{ fontSize: 10, fontWeight: 800, color: manager ? 'var(--cream)' : 'var(--dust)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.1 }}>{manager ? lastName(manager.name) : 'None'}</span>
-        </button>
-        {/* Scrollable middle: the terse opponent read + deployed tactic names. */}
-        <div className="match-joker-row" style={{ display: 'flex', gap: 6, alignItems: 'stretch', overflowX: 'auto', overflowY: 'hidden', flex: 1, minWidth: 0, scrollbarWidth: 'none' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0 8px', borderRadius: 'var(--radius)', border: '2px solid var(--success)', background: 'rgba(52,196,106,0.08)', flexShrink: 0 }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--ink-black)', background: 'var(--success)', borderRadius: 2, padding: '2px 3px', lineHeight: 1, flexShrink: 0 }}>VS</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--cream-soft)', whiteSpace: 'nowrap' }}>{oppStyleLabel.toUpperCase()}</span>
-          </span>
-          {/* THE TELEGRAPH — the opponent's play for the coming spell (Adaptive shows
-              two candidates; the real one plays). Plain factual engine string. */}
-          {mode === 'plan' && telegraphText && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0 8px', borderRadius: 'var(--radius)', border: '2px solid var(--kit-blue)', background: 'rgba(58,110,165,0.10)', flexShrink: 0 }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--ink-black)', background: 'var(--kit-blue)', borderRadius: 2, padding: '2px 3px', lineHeight: 1, flexShrink: 0 }}>READ</span>
-              <span style={{ fontSize: 10, color: 'var(--cream-soft)', whiteSpace: 'nowrap' }}>{telegraphText}</span>
-            </span>
-          )}
-          {deployedTactics.map((t) => {
-            const cat = TACTIC_CAT_COLOR[t.category] ?? 'var(--gold)';
-            return (
-              <button key={t.id} onClick={() => setModal({ variant: 'tactic', tactic: t })}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 9px', borderRadius: 'var(--radius)', border: `2px solid ${cat}`, background: 'rgba(0,0,0,0.32)', cursor: 'pointer', flexShrink: 0 }}>
-                <span style={{ width: 6, height: 6, borderRadius: 2, background: cat, flexShrink: 0 }} />
-                <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--cream)', whiteSpace: 'nowrap' }}>{t.name}</span>
+      {/* ── BREAK CONSOLE — the Called Plays instrument (the 3-slot plan strip is
+          gone). One glass panel, two rows:
+            Row 1 · THE TELEGRAPH — the opponent's play for the coming spell,
+            verbatim (Adaptive shows both candidates, "X or Y"). The problem
+            statement of the break. DETAILS opens the full play sheet (manager +
+            full effects + charges).
+            Row 2 · YOUR HAND — every owned play as a call pill: tap = call for
+            this spell, tap the called play again = clear, no charges = disabled.
+          Shown at every planning break (the pre-kickoff talk shows the first
+          telegraph, rolled at init); the hand hides while scouting the rival. */}
+      {mode === 'plan' && (
+        <div className="glass-surface sheen" style={{ margin: '0 16px 8px', borderRadius: 'var(--radius)', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: oppView ? '8px 10px' : '7px 10px 6px', borderBottom: oppView ? 'none' : '1px solid var(--glass-border)', position: 'relative', zIndex: 2 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--line-white)', background: 'var(--kit-red)', border: '1px solid var(--ink-black)', borderRadius: 3, padding: '3px 4px', lineHeight: 1, flexShrink: 0 }}>OPP PLAY</span>
+            <span data-telegraph style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--cream)', lineHeight: 1.25, minWidth: 0, flex: 1 }}>{telegraphText || '—'}</span>
+            {!oppView && (
+              <button onClick={() => setTrayOpen(true)} aria-label="Play details"
+                style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0, background: 'none', border: 'none', color: 'var(--dust)', fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.4, cursor: 'pointer', padding: '8px 0 8px 8px', lineHeight: 1 }}>
+                DETAILS <span style={{ fontSize: 9 }}>{'›'}</span>
               </button>
-            );
-          })}
+            )}
+          </div>
+          {!oppView && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 10px 8px', position: 'relative', zIndex: 2 }}>
+              <span className={showCallNudge ? 'carrier-glow' : undefined}
+                style={{ flexShrink: 0, fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: showCallNudge ? 'var(--ink-black)' : 'var(--dust)', background: showCallNudge ? 'var(--amber)' : 'rgba(0,0,0,0.3)', border: '1px solid var(--ink-black)', borderRadius: 3, padding: '3px 4px', lineHeight: 1.35, width: 32, textAlign: 'center' }}>
+                YOUR CALL
+              </span>
+              <div className="kc-call-row" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden', flex: 1, minWidth: 0 }}>
+                {callHand.length === 0 && <span style={{ fontSize: 10, color: 'var(--dust)' }}>No plays drafted for this fixture.</span>}
+                {callHand.map(({ tactic, state, left }) => (
+                  <CallPill key={tactic.id} tactic={tactic} state={state} left={left}
+                    onCall={() => onToggleTactic(tactic.id)}
+                    onInspect={() => setModal({ variant: 'tactic', tactic })} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-        {/* TACTICS trigger — the ONE deploy/swap entry point, carrying the slot
-            meter (n/N). Sits outside the scroll area so pills can't push it off.
-            Pulses gold when there's a free slot and an undeployed tactic. */}
-        {mode === 'plan' && !oppView && (
-          <button onClick={() => setTrayOpen(true)} aria-label="Edit tactics"
-            className={showTacticPrompt ? 'carrier-glow' : undefined}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px', borderRadius: 'var(--radius)', border: `2px ${deployedTactics.length === 0 ? 'dashed' : 'solid'} ${showTacticPrompt ? 'var(--gold)' : 'var(--border)'}`, background: showTacticPrompt ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0 }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.4, color: showTacticPrompt ? 'var(--gold)' : 'var(--cream-soft)', lineHeight: 1 }}>CALL PLAY</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{calledPlay ? '1' : '0'}/1</span>
-          </button>
-        )}
-      </div>
+      )}
+
+      {/* ── CALL VERDICT — the resolve payoff, in the console's slot. Names both
+          plays; answered = green, countered = red; a neutral grade (or no call)
+          shows nothing. Engine strings verbatim (IncrementResult). ── */}
+      {callVerdict && (
+        <div className="kc-verdict-in glass-surface" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 16px 8px', padding: '7px 10px', borderRadius: 'var(--radius)', border: `2px solid ${callVerdict.answered ? 'var(--success)' : 'var(--danger)'}`, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, color: callVerdict.answered ? 'var(--ink-black)' : 'var(--line-white)', background: callVerdict.answered ? 'var(--success)' : 'var(--danger)', border: '1px solid var(--ink-black)', borderRadius: 3, padding: '3px 5px', lineHeight: 1, flexShrink: 0, position: 'relative', zIndex: 2 }}>
+            {callVerdict.answered ? 'ANSWERED' : 'COUNTERED'}
+          </span>
+          <span style={{ fontSize: 11.5, color: 'var(--cream)', lineHeight: 1.3, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', position: 'relative', zIndex: 2 }}>
+            <b>{callVerdict.calledPlayName}</b> met <b>{callVerdict.opponentPlayName}</b>
+          </span>
+        </div>
+      )}
 
       {/* INTENT — the attacking lean (DEF/BAL/ATT). Surfaced in the team talk so the
           player can change it between periods; the engine reads state.intent fresh each
@@ -2005,6 +2156,16 @@ export default function PitchMatchView({
         {/* Goals (top = the goal your XI attacks; bottom = your own goal the opponent attacks) */}
         <div className={shake === (oppView ? 'opp' : 'you') ? 'net-shake' : undefined} style={{ position: 'absolute', left: '50%', top: 0, transform: 'translateX(-50%)', width: 78, height: 14, borderRadius: '0 0 6px 6px', border: `2px solid ${LINE}`, borderTop: 'none', background: 'repeating-linear-gradient(90deg, rgba(242,246,239,0.10) 0 3px, transparent 3px 6px)' }} />
         <div className={shake === (oppView ? 'you' : 'opp') ? 'net-shake' : undefined} style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: 78, height: 14, borderRadius: '6px 6px 0 0', border: `2px solid ${LINE}`, borderBottom: 'none', background: 'repeating-linear-gradient(90deg, rgba(242,246,239,0.10) 0 3px, transparent 3px 6px)' }} />
+
+        {/* ── TELEGRAPH LANE PULSE (planning) — where the telegraphed play commits
+            its attack, read from the play's records. Their commitment lands in
+            YOUR half (same lane), so the band shades the defensive end toward
+            your goal. Subtle breathing tint under the player cards; static under
+            reduced motion. Your-team view only (the rival view flips ends). ── */}
+        {mode === 'plan' && !oppView && threatLanes.map((lane) => (
+          <div key={`threat-${lane}`} className="kc-lane-pulse" aria-hidden
+            style={{ position: 'absolute', left: `${LANE_X[lane] - 11}%`, width: '22%', top: '50%', height: '46%', background: 'linear-gradient(180deg, transparent, var(--kit-red))', borderRadius: 4, zIndex: 1, pointerEvents: 'none' }} />
+        ))}
 
         {/* Players — now compact pixel CARDS, not circles. Drag/inspect, carrier
             glow, condition flags and the star marker are all preserved. */}
@@ -2144,12 +2305,19 @@ export default function PitchMatchView({
                   {`ASSIST · ${lastName(assister).toUpperCase()}`}
                 </span>
               )}
-              {/* The play that produced it — the engine's playName, yours only. */}
-              {scored && currentResult?.split.playName && (
-                <span style={{ fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1, color: 'var(--dust)', letterSpacing: 0.4 }}>
-                  {currentResult.split.playName.toUpperCase()}
-                </span>
-              )}
+              {/* The play that produced it — a goal in a lane your CALLED play
+                  boosted carries the play's name (beat.viaPlay, gold); otherwise
+                  the engine's emergent pattern name. Yours only. */}
+              {scored && (() => {
+                const via = beat.source?.viaPlay ?? null;
+                const label = via ? `VIA ${via.toUpperCase()}` : currentResult?.split.playName?.toUpperCase() ?? null;
+                if (!label) return null;
+                return (
+                  <span style={{ fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1, color: via ? 'var(--gold)' : 'var(--dust)', letterSpacing: 0.4 }}>
+                    {label}
+                  </span>
+                );
+              })()}
             </div>
           );
         })()}
@@ -2340,11 +2508,11 @@ export default function PitchMatchView({
             <div style={{ padding: '8px 16px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--amber)', letterSpacing: 0.8 }}>CALL A PLAY</span>
-                <button onClick={() => setTrayOpen(false)} aria-label="Close tactics" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, marginRight: -8, background: 'none', border: 'none', color: 'var(--dust)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>{'×'}</button>
+                <button onClick={() => setTrayOpen(false)} aria-label="Close plays" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, marginRight: -8, background: 'none', border: 'none', color: 'var(--dust)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>{'×'}</button>
               </div>
               {/* THE CALL — one play per spell; charges are per match. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                <span title={calledPlay ? calledPlay.name : 'No play called'} style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, background: calledPlay ? TACTIC_CAT_COLOR[calledPlay.category] ?? 'var(--amber)' : 'transparent', border: `2px solid ${calledPlay ? TACTIC_CAT_COLOR[calledPlay.category] ?? 'var(--amber)' : 'var(--border)'}` }} />
+                <span title={calledPlay ? calledPlay.name : 'No play called'} style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, background: calledPlay ? PLAY_CLASS_COLOR[calledPlay.playClass] ?? 'var(--amber)' : 'transparent', border: `2px solid ${calledPlay ? PLAY_CLASS_COLOR[calledPlay.playClass] ?? 'var(--amber)' : 'var(--border)'}` }} />
                 <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.5 }}>
                   THIS SPELL
                 </span>
@@ -2382,29 +2550,23 @@ export default function PitchMatchView({
                 </>) : <div style={{ fontSize: 11, color: 'var(--dust)' }}>No manager — sign one in the shop.</div>}
               </div>
 
-              {/* Tactic deck */}
+              {/* The plays — full effects; same call/clear tap as the hand row. */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.8 }}>TACTICAL CARDS</span>
+                <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.8 }}>PLAYS</span>
                 <span style={{ fontSize: 9, color: 'var(--dust)' }}>{availableTactics.length} in deck</span>
               </div>
               <div style={{ display: 'grid', gap: 8 }}>
-                {tacticView.length === 0 && <div style={{ fontSize: 11, color: 'var(--dust)' }}>No plays drafted for this fixture.</div>}
-                {tacticView.map(({ tactic, state, left }) => {
-                  const cat = TACTIC_CAT_COLOR[tactic.category] ?? 'var(--gold)';
+                {callHand.length === 0 && <div style={{ fontSize: 11, color: 'var(--dust)' }}>No plays drafted for this fixture.</div>}
+                {callHand.map(({ tactic, state, left }) => {
+                  const accent = PLAY_CLASS_COLOR[tactic.playClass] ?? 'var(--gold)';
                   const blocked = state === 'blocked';
-                  // The border tells the state apart: amber = the called play,
-                  // category accent = callable, muted = out of charges (disabled).
-                  const borderColor =
-                    state === 'deployed' ? 'var(--amber)'
-                      : blocked ? 'var(--border)' : 'var(--ink-black)';
+                  const called = state === 'called';
+                  // The border tells the state apart: accent = the called play,
+                  // ink = callable, muted = out of charges (disabled).
+                  const borderColor = called ? accent : blocked ? 'var(--border)' : 'var(--ink-black)';
                   // Top-right status label — the action a tap performs RIGHT NOW.
-                  const label =
-                    state === 'deployed' ? 'CALLED'
-                      : blocked ? 'NO CHARGES'
-                        : 'TAP TO CALL';
-                  const labelColor =
-                    state === 'deployed' ? 'var(--amber)'
-                      : blocked ? 'var(--dust)' : 'var(--success)';
+                  const label = called ? 'CALLED' : blocked ? 'NO CHARGES' : 'TAP TO CALL';
+                  const labelColor = called ? accent : blocked ? 'var(--dust)' : 'var(--success)';
                   return (
                     <button
                       key={tactic.id}
@@ -2415,27 +2577,30 @@ export default function PitchMatchView({
                       style={{
                         textAlign: 'left', borderRadius: 'var(--radius)', padding: '10px 12px',
                         cursor: blocked ? 'not-allowed' : 'pointer',
-                        background: state === 'deployed' ? 'rgba(255,122,31,0.08)' : 'var(--surface)',
+                        background: called ? `linear-gradient(165deg, color-mix(in srgb, ${accent} 14%, var(--surface)), var(--surface))` : 'var(--surface)',
                         border: `2px solid ${borderColor}`,
                         opacity: blocked ? 0.5 : 1,
                         position: 'relative', overflow: 'hidden',
                       }}>
-                      {/* category accent rail — the card's identity colour */}
-                      <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: cat }} />
+                      {/* play-class accent rail — the call's identity colour */}
+                      <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: accent }} />
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingLeft: 4 }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                          <span style={{ width: 6, height: 6, borderRadius: 2, background: cat, flexShrink: 0 }} />
+                          <span style={{ width: 6, height: 6, borderRadius: 2, background: accent, flexShrink: 0 }} />
                           <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tactic.name}</span>
                         </span>
                         <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: labelColor, letterSpacing: 0.3, flexShrink: 0, whiteSpace: 'nowrap' }}>{label}</span>
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--cream-soft)', marginTop: 3, lineHeight: 1.4, paddingLeft: 4 }}>{tactic.effect}</div>
-                      {/* STATE LINE — charges remaining, and the clear action. */}
-                      {state === 'deployed' && (
-                        <div style={{ fontSize: 9.5, color: 'var(--amber)', marginTop: 6, paddingLeft: 4 }}>Called this spell — tap to clear</div>
+                      {/* STATE LINE — charges remaining (dots + words), and the clear action. */}
+                      {called && (
+                        <div style={{ fontSize: 9.5, color: accent, marginTop: 6, paddingLeft: 4 }}>Called this spell — tap to clear</div>
                       )}
-                      <div style={{ fontSize: 9.5, color: blocked ? 'var(--dust)' : 'var(--cream-soft)', marginTop: 6, paddingLeft: 4 }}>
-                        {left} of {tactic.charges} charge{tactic.charges === 1 ? '' : 's'} left this match
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, paddingLeft: 4 }}>
+                        <ChargeDots left={left} total={tactic.charges} accent={accent} />
+                        <span style={{ fontSize: 9.5, color: blocked ? 'var(--dust)' : 'var(--cream-soft)', lineHeight: 1 }}>
+                          {left} of {tactic.charges} charge{tactic.charges === 1 ? '' : 's'} left this match
+                        </span>
                       </div>
                     </button>
                   );
