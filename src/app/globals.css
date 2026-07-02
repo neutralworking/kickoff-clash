@@ -871,64 +871,50 @@ h1, h2, h3,
    GPU-cheap (transform/opacity/box-shadow), staggered by event index inline.
    --------------------------------------------------------------------------- */
 
-/* The trait label BANNER pops off the card, HOLDS legibly, then clears — the
-   "what fired" headline. Held long so a player can read the name on a busy pitch;
-   a punchy overshoot in, a long plateau, a gentle lift-off out. */
-@keyframes traitTag {
-  0% { opacity: 0; transform: translate(-50%, 4px) scale(0.6); }
-  12% { opacity: 1; transform: translate(-50%, -12px) scale(1.12); }
-  20% { transform: translate(-50%, -14px) scale(1); }
-  78% { opacity: 1; transform: translate(-50%, -14px) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -26px) scale(0.96); }
+/* PICTORIAL trait firings — the picture is the event; no name banners.
+   The travelling BALL: flies from the firing card toward the goal along
+   (--tx, --ty), fading in on release and out on arrival. */
+@keyframes traitBallFly {
+  0% { opacity: 0; transform: translate(-50%, -50%); }
+  12% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--tx, 0px)), calc(-50% + var(--ty, -90px))); }
 }
-.trait-tag { opacity: 0; animation: traitTag 1.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.trait-ball-fly { opacity: 0; animation: traitBallFly 0.8s cubic-bezier(0.3, 0.7, 0.35, 1) both; }
 
-/* A short whipped arc toward the box — the CROSS delivery (glyph rides up & over). */
-@keyframes traitCross {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6) rotate(-12deg); }
-  25% { opacity: 1; transform: translate(-50%, -120%) scale(1.1) rotate(0deg); }
-  60% { opacity: 1; transform: translate(-50%, -210%) scale(1) rotate(10deg); }
-  100% { opacity: 0; transform: translate(-50%, -300%) scale(0.85) rotate(16deg); }
+/* The placed dead ball: sits still for the run-up beat, then is struck. */
+@keyframes traitBallPlace {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
+  10% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  32% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  85% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--tx, 0px)), calc(-50% + var(--ty, -90px))); }
 }
-.trait-cross { opacity: 0; animation: traitCross 0.78s cubic-bezier(0.33, 0, 0.4, 1) both; }
+.trait-ball-place { opacity: 0; animation: traitBallPlace 1.05s cubic-bezier(0.5, 0, 0.3, 1) both; }
 
-/* A long-range strike streak — the glyph elongates and rockets up the lane. */
-@keyframes traitShot {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5) translateY(0); }
-  18% { opacity: 1; transform: translate(-50%, -50%) scale(1.3) translateY(0); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9) translateY(-58px); }
+/* The TACKLE explosion: a tight flash, then the full starburst blooms and clears. */
+@keyframes traitBurstA {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  25% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.2); }
 }
-.trait-shot { opacity: 0; animation: traitShot 0.7s cubic-bezier(0.4, 0, 0.6, 1) both; }
+.trait-burst-a { opacity: 0; animation: traitBurstA 0.36s ease-out both; }
+@keyframes traitBurstB {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(0deg); }
+  25% { opacity: 1; transform: translate(-50%, -50%) scale(1.05) rotate(14deg); }
+  60% { opacity: 1; transform: translate(-50%, -50%) scale(1.15) rotate(22deg); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.4) rotate(30deg); }
+}
+.trait-burst-b { opacity: 0; animation: traitBurstB 0.64s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 
-/* A dead-ball flag pops up and holds — the SET-PIECE threat planted. */
-@keyframes traitSetpiece {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4) rotate(-18deg); }
-  35% { opacity: 1; transform: translate(-50%, -50%) scale(1.18) rotate(6deg); }
-  55% { transform: translate(-50%, -50%) scale(1) rotate(-3deg); }
-  78% { opacity: 1; transform: translate(-50%, -50%) scale(1.04) rotate(0deg); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+/* The SAVE glove: punches up into the shot line, holds the catch, fades. */
+@keyframes traitGlove {
+  0% { opacity: 0; transform: translate(-50%, -30%) rotate(-10deg); }
+  28% { opacity: 1; transform: translate(-50%, -78%) rotate(4deg); }
+  70% { opacity: 1; transform: translate(-50%, -74%) rotate(0deg); }
+  100% { opacity: 0; transform: translate(-50%, -84%) rotate(0deg); }
 }
-.trait-setpiece { opacity: 0; animation: traitSetpiece 0.86s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-
-/* A sharp pounce — the POACHER snaps in tight, a quick double-beat. */
-@keyframes traitPoach {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.7); }
-  22% { opacity: 1; transform: translate(-50%, -50%) scale(0.78); }
-  44% { transform: translate(-50%, -50%) scale(1.16); }
-  64% { transform: translate(-50%, -50%) scale(0.92); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.05); }
-}
-.trait-poach { opacity: 0; animation: traitPoach 0.7s cubic-bezier(0.5, 0, 0.5, 1) both; }
-
-/* A STOP shield slams shut — the timed TACKLE that snuffs the attack. */
-@keyframes traitTackle {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.9); }
-  30% { opacity: 1; transform: translate(-50%, -50%) scale(0.88); }
-  46% { transform: translate(-50%, -50%) scale(1.06); }
-  62% { transform: translate(-50%, -50%) scale(0.97); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
-}
-.trait-tackle { opacity: 0; animation: traitTackle 0.74s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.trait-glove { opacity: 0; animation: traitGlove 0.9s cubic-bezier(0.34, 1.3, 0.5, 1) both; }
 
 /* A linesman's flag raised — the OFFSIDE trap sprung (hinge up and held). */
 @keyframes traitOffside {
@@ -948,13 +934,6 @@ h1, h2, h3,
 }
 .trait-aura { animation: traitAura 1.5s ease-in-out infinite; }
 
-/* The aura glyph sits centred on the card and pulses gently with the ring. */
-@keyframes traitAuraGlyph {
-  0%, 100% { opacity: 0.7; transform: translate(-50%, -50%) scale(1); }
-  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
-}
-.trait-aura-glyph { animation: traitAuraGlyph 1.5s ease-in-out infinite; }
-
 /* The resolving CTA's "PLAYING" ellipsis breathes so the tap-gate never reads
    as a frozen dead frame — the dead-air fix. Three dots cascade. */
 @keyframes playingDot {
@@ -970,24 +949,21 @@ h1, h2, h3,
 }
 .playing-sweep { animation: playingSweep 1.4s ease-in-out infinite; }
 
-/* Reduced motion: trait firings degrade to an instant, still glyph (no travel,
+/* Reduced motion: trait firings degrade to an instant, still sprite (no travel,
    no infinite pulse). They still APPEAR and clear with the increment, so the
-   information is preserved — only the large motion is removed. */
+   information is preserved — only the motion is removed. */
 @media (prefers-reduced-motion: reduce) {
-  .trait-tag,
-  .trait-cross,
-  .trait-shot,
-  .trait-setpiece,
-  .trait-poach,
-  .trait-tackle,
+  .trait-ball-fly,
+  .trait-ball-place,
+  .trait-burst-a,
+  .trait-burst-b,
+  .trait-glove,
   .trait-offside {
     animation: none;
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
-  .trait-tag { transform: translate(-50%, -12px) scale(1); opacity: 1; }
-  .trait-aura,
-  .trait-aura-glyph { animation: none; opacity: 0.9; transform: translate(-50%, -50%) scale(1); }
+  .trait-aura { animation: none; opacity: 0.9; transform: translate(-50%, -50%) scale(1); }
   .playing-dot { animation: none; opacity: 0.9; }
   .playing-sweep { animation: none; opacity: 0; }
 

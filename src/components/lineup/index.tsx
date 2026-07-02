@@ -4,11 +4,12 @@
  * Kickoff Clash — shared LINEUP surfaces.
  *
  * The pitch chip, the position tag, the fitness meter, the enriched bench tile
- * and the bench-cover summary — extracted from TeamTalk so both the run-start
- * draft (TeamSelect) and the pre-tie Team Talk render the SAME lineup, and the
- * two screens can never drift again. Everything here is pure display; callers
- * own their state, overlays and chrome. The only shared vocabulary is the Card
- * and the formation slot.
+ * and the bench-cover summary — consumed by the unified SquadScreen (which
+ * serves both the run-start draft and the between-ties team talk, so the two
+ * phases can never drift). Everything here is pure display plus pass-through
+ * pointer handlers for the screen's drag layer; callers own their state,
+ * overlays and chrome. The only shared vocabulary is the Card and the
+ * formation slot.
  *
  * Design law honoured here: the position TAG is a colour-keyed pixel code
  * (GK/CB/FB/DM/…) that never truncates in a 54px box — it replaces the old
@@ -16,9 +17,24 @@
  * glass lives on the tile frame, never on the sprite.
  */
 
+import type { PointerEventHandler } from 'react';
 import type { Card } from '../../lib/scoring';
 import type { Formation } from '../../lib/formations';
 import { PIXEL, RARITY_COLOR, POSITION_COLOR, lastName } from '../cards/cardTokens';
+
+// ---------------------------------------------------------------------------
+// Pointer pass-through — the SquadScreen drag layer disambiguates tap (inspect/
+// assign) from drag (move) on the wrapping element; these props just forward
+// the raw events. touch-action is set by the host so the browser never steals
+// the gesture mid-drag.
+// ---------------------------------------------------------------------------
+
+export interface DragPointerHandlers {
+  onPointerDown?: PointerEventHandler<HTMLButtonElement>;
+  onPointerMove?: PointerEventHandler<HTMLButtonElement>;
+  onPointerUp?: PointerEventHandler<HTMLButtonElement>;
+  onPointerCancel?: PointerEventHandler<HTMLButtonElement>;
+}
 
 // ---------------------------------------------------------------------------
 // Fitness read — mirrors the engine's fitnessOf (injured cards start low).
@@ -117,9 +133,10 @@ export function FitnessBar({ card, width = '100%' }: { card: Card; width?: numbe
 // + surname; empty = a dashed target with the slot's role code (never the long
 // word — that is the truncation bug this component exists to kill).
 //
-// `showFitness`/`showMisfit` let TeamSelect run a lighter chip (no injury/fitness
-// state yet at draft time) while TeamTalk turns the full read on. The POSITION
-// tag is always shown for both, empty and filled.
+// Interaction is owner-driven: an empty slot takes `onClick` (open the assign
+// sheet); a filled slot takes the drag pointer handlers (tap = fallback sheet,
+// drag = move — disambiguated by the host). `dim` fades the drag source;
+// `dropHint` rings the chip gold while a dragged player hovers it.
 // ---------------------------------------------------------------------------
 
 export function LineupSlot({
@@ -131,32 +148,47 @@ export function LineupSlot({
   showFitness = false,
   showMisfit = false,
   misfit = false,
+  dim = false,
+  dropHint = false,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
 }: {
   slot: Formation['slots'][number];
   card: Card | undefined;
   justPlaced: boolean;
-  onClick: () => void;
+  onClick?: () => void;
   onInspect?: () => void;
   showFitness?: boolean;
   showMisfit?: boolean;
   misfit?: boolean;
-}) {
+  dim?: boolean;
+  dropHint?: boolean;
+} & DragPointerHandlers) {
   const isGK = slot.type === 'GK';
   const kit = isGK ? '#16a34a' : 'var(--kit-red)';
   const rarityRing = card ? RARITY_COLOR[card.rarity] ?? 'var(--line-white)' : null;
   const activeMisfit = showMisfit && misfit;
-  const ring = activeMisfit ? 'var(--danger)' : rarityRing;
+  const ring = dropHint ? 'var(--gold)' : activeMisfit ? 'var(--danger)' : rarityRing;
 
   return (
     <button
       onClick={onClick}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
       className="absolute flex flex-col items-center active:scale-95"
       style={{
         left: `${slot.x}%`,
         top: `${slot.y}%`,
-        transform: 'translate(-50%, -50%)',
+        transform: `translate(-50%, -50%)${dropHint ? ' scale(1.12)' : ''}`,
         width: 56,
         transition: 'transform 0.1s ease',
+        touchAction: onPointerDown ? 'none' : undefined,
+        opacity: dim ? 0.3 : 1,
+        zIndex: dropHint ? 6 : undefined,
       }}
     >
       {card ? (
@@ -168,9 +200,11 @@ export function LineupSlot({
             borderRadius: '50%',
             background: `radial-gradient(circle at 50% 32%, ${kit}, ${isGK ? '#0f7a35' : '#b62520'})`,
             border: `2px solid ${ring}`,
-            boxShadow: activeMisfit
-              ? '0 0 0 2px var(--danger), 0 2px 0 0 var(--ink-black)'
-              : '0 2px 0 0 var(--ink-black), 0 3px 5px rgba(0,0,0,0.4)',
+            boxShadow: dropHint
+              ? '0 0 0 3px var(--gold-glow), 0 2px 0 0 var(--ink-black)'
+              : activeMisfit
+                ? '0 0 0 2px var(--danger), 0 2px 0 0 var(--ink-black)'
+                : '0 2px 0 0 var(--ink-black), 0 3px 5px rgba(0,0,0,0.4)',
           }}
         >
           <span
@@ -205,19 +239,23 @@ export function LineupSlot({
               +
             </span>
           )}
-          {/* inspect pip (tap chip = swap/clear; this = inspect) */}
+          {/* inspect pip (tap chip = swap/clear; this = inspect). pointerdown is
+              stopped so the pip never begins a drag on the wrapping chip. */}
           {onInspect && (
             <span
               role="button"
               aria-label={`Inspect ${lastName(card.name)}`}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 onInspect();
               }}
               className="absolute flex items-center justify-center"
               style={{
-                bottom: -3,
-                right: -4,
+                // Fully outside the rating circle — at −3/−4 the pip clipped the
+                // score digits; hung off the corner the number stays readable.
+                bottom: -8,
+                right: -9,
                 width: 14,
                 height: 14,
                 borderRadius: '50%',
@@ -241,7 +279,8 @@ export function LineupSlot({
             height: 34,
             borderRadius: '50%',
             background: 'rgba(7,16,11,0.45)',
-            border: '2px dashed rgba(242,246,239,0.7)',
+            border: dropHint ? '2px solid var(--gold)' : '2px dashed rgba(242,246,239,0.7)',
+            boxShadow: dropHint ? '0 0 0 3px var(--gold-glow)' : undefined,
           }}
         >
           <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'rgba(242,246,239,0.9)', lineHeight: 1 }}>
@@ -300,31 +339,49 @@ export function LineupSlot({
 
 // ---------------------------------------------------------------------------
 // BenchTile — every sub reads its POSITION, rating, role + condition.
-// The enriched tile that replaces bare number+surname bench chips.
+// Also serves the RESERVES strip (no onRemove there; touch-action pan-x so the
+// strip still scrolls sideways while a vertical pull starts a drag).
 // ---------------------------------------------------------------------------
 
 export function BenchTile({
   card,
-  onInspect,
   onRemove,
+  dim = false,
+  dropHint = false,
+  touchAction,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
 }: {
   card: Card;
-  onInspect: () => void;
-  onRemove: () => void;
-}) {
+  onRemove?: () => void;
+  dim?: boolean;
+  dropHint?: boolean;
+  touchAction?: 'none' | 'pan-x';
+} & DragPointerHandlers) {
   const ring = RARITY_COLOR[card.rarity] ?? 'var(--border)';
   return (
     <button
-      onClick={onInspect}
-      className="relative flex flex-col items-center active:scale-95 glass-surface overflow-hidden"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      aria-label={lastName(card.name)}
+      className="relative flex flex-col items-center active:scale-95 glass-surface"
       style={{
+        width: '100%',
         height: 62,
         borderRadius: 'var(--radius-sm)',
-        border: `1px solid ${ring}`,
-        boxShadow: `inset 0 1px 0 0 var(--glass-highlight), 0 0 8px ${ring}33, var(--depth-1)`,
+        border: `1px solid ${dropHint ? 'var(--gold)' : ring}`,
+        boxShadow: dropHint
+          ? 'inset 0 1px 0 0 var(--glass-highlight), 0 0 0 2px var(--gold-glow), var(--depth-2)'
+          : `inset 0 1px 0 0 var(--glass-highlight), 0 0 8px ${ring}33, var(--depth-1)`,
         transition: 'transform 0.12s ease',
         minWidth: 0,
         paddingTop: 3,
+        opacity: dim ? 0.3 : 1,
+        touchAction: touchAction ?? (onPointerDown ? 'none' : undefined),
       }}
     >
       {/* top row: POSITION tag + rating */}
@@ -375,39 +432,42 @@ export function BenchTile({
           +
         </span>
       )}
-      {/* remove */}
-      <span
-        role="button"
-        aria-label={`Remove ${lastName(card.name)} from bench`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        className="absolute flex items-center justify-center"
-        style={{
-          top: -5,
-          right: -5,
-          width: 16,
-          height: 16,
-          borderRadius: '50%',
-          background: 'var(--danger)',
-          border: '1.5px solid var(--ink-black)',
-          color: 'var(--line-white)',
-          fontFamily: PIXEL,
-          fontSize: 9,
-          lineHeight: 1,
-          zIndex: 3,
-        }}
-      >
-        {'×'}
-      </span>
+      {/* remove — pointerdown is stopped so the × never begins a drag. */}
+      {onRemove && (
+        <span
+          role="button"
+          aria-label={`Remove ${lastName(card.name)} from bench`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="absolute flex items-center justify-center"
+          style={{
+            top: -5,
+            right: -5,
+            width: 15,
+            height: 15,
+            borderRadius: '50%',
+            background: 'var(--danger)',
+            border: '1.5px solid var(--ink-black)',
+            color: 'var(--line-white)',
+            fontFamily: PIXEL,
+            fontSize: 9,
+            lineHeight: 1,
+            zIndex: 3,
+          }}
+        >
+          {'×'}
+        </span>
+      )}
     </button>
   );
 }
 
 // ---------------------------------------------------------------------------
 // BenchCover — a one-glance read of which lines the bench can refresh,
-// e.g. "DEF 2 · MID 3 · ATT 1".
+// e.g. "DEF 2 · MID 3 · ATT 1". Positioning is the caller's.
 // ---------------------------------------------------------------------------
 
 export function BenchCover({ benchCards }: { benchCards: Card[] }) {
@@ -432,7 +492,7 @@ export function BenchCover({ benchCards }: { benchCards: Card[] }) {
   ].filter((p) => p.n > 0);
   if (!parts.length) return null;
   return (
-    <span className="flex items-center gap-1.5 ml-auto">
+    <span className="flex items-center gap-1.5">
       {parts.map((p) => (
         <span
           key={p.k}

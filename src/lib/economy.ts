@@ -90,6 +90,14 @@ export const STADIUMS: Stadium[] = [
 // back into a challenging band (see the economy sim). ECONOMY §1.
 export const CARD_PICK_COST = 20000;   // was 15000 — the everyday XI upgrade
 export const RARE_PICK_COST = 48000;   // was 35000 — the guaranteed Rare+ upgrade
+/** The cheap DEPTH buy: 3 random Common/Rare players, priced under a match-1 win
+ *  (BASE_WIN_CASH[0] = 6000) so a squad deficiency can be addressed immediately
+ *  after the first game. Bodies, not stars — the elite picks above stay the
+ *  expensive commitment, so the anti-snowball on the top end holds. */
+export const PLAYER_PACK_COST = 5000;
+/** Scouting is a cheap information buy (the squad-screen Scout Report overlay
+ *  charges this to unlock the opponent's estimated lineup). */
+export const SCOUT_COST = 2500;
 
 export const SHOP_ITEMS: ShopItem[] = [
   // NOTE: card_pick/rare_pick here are the source-of-truth prices; the pick UI is driven
@@ -99,6 +107,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   // buyShopItem, while their ShopPhase price labels are separate literals).
   { id: 'card_pick',       name: 'Card Pick',              description: 'Choose 1 of 3 cards',              cost: CARD_PICK_COST, category: 'card' },
   { id: 'rare_pick',       name: 'Rare+ Pick',             description: 'Choose 1 of 3 (Rare or better)',   cost: RARE_PICK_COST, category: 'card' },
+  { id: 'player_pack',     name: 'Player Pack',            description: '3 random players (Common/Rare)',   cost: PLAYER_PACK_COST, category: 'card' },
   { id: 'tactical_pack',   name: 'Tactical Pack',          description: '3 random tactical cards',          cost: 10000, category: 'action_pack' },
   { id: 'moment_pack',     name: 'Moment Pack',            description: '2 random moment cards',            cost: 20000, category: 'action_pack' },
   { id: 'mind_games_pack', name: 'Mind Games Pack',        description: '2 random mind game cards',         cost: 15000, category: 'action_pack' },
@@ -106,7 +115,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'manager_card',    name: 'Manager Card',           description: 'Random manager modifier',          cost: 25000, category: 'manager' }, // == JOKER_COST
   { id: 'reroll',          name: 'Reroll Shop',            description: 'Refresh shop offerings',           cost: 8000,  category: 'utility' },
   { id: 'heal',            name: 'Heal Injured Card',      description: 'Restore an injured card',          cost: 12000, category: 'utility' },
-  { id: 'scout_report',    name: 'Scout Report',           description: 'See next opponent style + strength', cost: 10000, category: 'utility' },
+  { id: 'scout_report',    name: 'Scout Report',           description: 'Unlock the next opponent’s estimated lineup', cost: SCOUT_COST, category: 'utility' },
 ];
 
 // Fan sources from archetypes in XI
