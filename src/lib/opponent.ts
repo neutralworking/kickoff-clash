@@ -88,11 +88,13 @@ const ROUND_POWER = [62, 68, 73, 78, 84];
 // Each cup escalates from soft openers to a boss FINAL. Most of the 20 sudden-death
 // matches are openers (high survival); difficulty is concentrated in the five finals,
 // and the final being a step up is what makes "rest your stars for the final" correct.
-// Tuned on the cup-sweep (scripts/cup-sweep.ts). Re-grounded for the V3.1 BRS pool
-// (data port D.4): the new pool is ~13 power weaker in effective terms, so the boss
-// finals drop to keep a STRONG rotating squad championing at ~37% under naive play
-// (real play adds chemistry/tactics/jokers on top). Cup 5's 6-tie gauntlet is the wall.
-export const CUP_FINAL_POWER = [48, 53, 58, 63, 67]; // boss power per cup (1-5)
+// Tuned on the cup-sweep (scripts/cup-sweep.ts). Re-anchored for the Called Plays
+// rework: opponent plays + the SHOT_MAX dial widened the strong side's edge in
+// mismatches, so the finals rise to keep the gauntlet honest. Bands (cup-sweep):
+// STRONG rotate+calls ~80% champions (the pool's best 18 under ceiling play), STRONG
+// rotate without calls ~38% (calls are load-bearing), MID rotate+calls ~30%. Cup 5's
+// 6-tie gauntlet is the wall.
+export const CUP_FINAL_POWER = [52, 57, 63, 68, 72]; // boss power per cup (1-5)
 export const OPENER_DROP = 18;                       // openers this far below the final
 
 /** The opponent base power for a specific tie: ramps openerPower → final across the cup. */
@@ -177,8 +179,10 @@ const OPP_REACTIVITY: Record<string, number> = {
   Passive: 0.15,
   Balanced: 0.25,
   Attacking: 0.10,
-  Counter: 0.55,
-  Adaptive: 0.70,
+  Counter: 0.50,
+  Adaptive: 0.60, // was 0.70 — at 0.70 the boss's within-spell dodge nullified an
+                  // aimed lane cover, flattening the call layer exactly where the
+                  // magnitude contract needs it to decide matches.
 };
 
 export function reactivityFor(style: string): number {
@@ -248,18 +252,29 @@ function oppDeny(name: string, amount: number): TraitRecord {
   return { name, verb: 'deny', params: { amount }, scope: 'zone', target: { kind: 'zone', zone: 'attack' } };
 }
 
-/** Manufacture flat threat in a specific cell (mirrors squad-transforms overloadLane). */
-function oppGen(name: string, amount: number, zone: 'attack' | 'creation' | 'finishing', band: 'ATT' | 'MID', lane: Lane): TraitRecord {
+/** Manufacture flat threat/cover in a specific cell (mirrors squad-transforms overloadLane). */
+function oppGen(name: string, amount: number, zone: 'attack' | 'creation' | 'finishing' | 'defence', band: 'ATT' | 'MID' | 'DEF', lane: Lane): TraitRecord {
   return { name, verb: 'generate', params: { amount }, scope: 'global', target: { kind: 'zone', zone }, to: { band, lane } };
 }
 
+/** Flat back-line reinforcement spread across all three lanes (the parked bus —
+ *  the opponent can't read your call, so its cover is never lane-aimed). */
+function oppCoverSpread(name: string, total: number): TraitRecord[] {
+  return LANES.map((lane) => oppGen(name, total / LANES.length, 'defence', 'DEF', lane));
+}
+
+// Play magnitudes are sized to the magnitude contract: an UNANSWERED opponent play
+// should threaten ~0.2–0.4 xG for the spell (theirPlayXG on the sweep) — that is what
+// makes answering it worth a charge. Attacking plays load real shot volume into a
+// lane; defensive plays are a prepared denial (deny + flat cover) that punishes a
+// forward commitment called into them.
 export const OPPONENT_PLAYS: OpponentPlay[] = [
   {
     id: 'build_patiently',
     name: 'Build Patiently',
     telegraph: 'Keeping the ball and building slowly',
     records: [
-      oppAmp('Build Patiently', 0.12, 'creation'),
+      oppAmp('Build Patiently', 0.18, 'creation'),
       { name: 'Build Patiently', verb: 'dampen-variance', params: { amount: 0.10 }, scope: 'global', target: { kind: 'zone', zone: 'attack' } },
     ],
   },
@@ -267,15 +282,15 @@ export const OPPONENT_PLAYS: OpponentPlay[] = [
     id: 'high_press',
     name: 'High Press',
     telegraph: 'Pressing your back line high',
-    records: [oppDeny('High Press', 0.12), oppAmp('High Press', 0.08, 'attack')],
+    records: [oppDeny('High Press', 0.18), oppAmp('High Press', 0.45, 'attack')],
   },
   {
     id: 'overload_left',
     name: 'Overload Left',
     telegraph: 'Overloading your left',
     records: [
-      oppGen('Overload Left', 38, 'attack', 'ATT', 'L'),
-      oppGen('Overload Left', 20, 'creation', 'MID', 'L'),
+      oppGen('Overload Left', 235, 'attack', 'ATT', 'L'),
+      oppGen('Overload Left', 125, 'creation', 'MID', 'L'),
     ],
   },
   {
@@ -283,8 +298,8 @@ export const OPPONENT_PLAYS: OpponentPlay[] = [
     name: 'Overload Right',
     telegraph: 'Overloading your right',
     records: [
-      oppGen('Overload Right', 38, 'attack', 'ATT', 'R'),
-      oppGen('Overload Right', 20, 'creation', 'MID', 'R'),
+      oppGen('Overload Right', 235, 'attack', 'ATT', 'R'),
+      oppGen('Overload Right', 125, 'creation', 'MID', 'R'),
     ],
   },
   {
@@ -292,24 +307,30 @@ export const OPPONENT_PLAYS: OpponentPlay[] = [
     name: 'Route One',
     telegraph: 'Playing direct to the striker',
     records: [
-      oppGen('Route One', 26, 'finishing', 'ATT', 'C'),
-      oppGen('Route One', 16, 'attack', 'ATT', 'C'),
+      oppGen('Route One', 180, 'finishing', 'ATT', 'C'),
+      oppGen('Route One', 145, 'attack', 'ATT', 'C'),
     ],
   },
   {
     id: 'drop_deep',
     name: 'Drop Deep',
     telegraph: 'Sitting deep behind the ball',
-    records: [oppDeny('Drop Deep', 0.15), oppAmp('Drop Deep', 0.12, 'defence'), oppAmp('Drop Deep', -0.08, 'attack')],
+    records: [
+      oppDeny('Drop Deep', 0.20),
+      ...oppCoverSpread('Drop Deep', 150),
+      oppAmp('Drop Deep', 0.15, 'defence'),
+      oppAmp('Drop Deep', -0.08, 'attack'),
+    ],
   },
   {
     id: 'kill_the_game',
     name: 'Kill the Game',
     telegraph: 'Slowing the game down',
     records: [
-      oppDeny('Kill the Game', 0.10),
-      oppAmp('Kill the Game', -0.05, 'attack'),
-      { name: 'Kill the Game', verb: 'dampen-variance', params: { amount: 0.15 }, scope: 'global', target: { kind: 'zone', zone: 'attack' } },
+      oppDeny('Kill the Game', 0.15),
+      ...oppCoverSpread('Kill the Game', 90),
+      oppAmp('Kill the Game', -0.08, 'attack'),
+      { name: 'Kill the Game', verb: 'dampen-variance', params: { amount: 0.20 }, scope: 'global', target: { kind: 'zone', zone: 'attack' } },
     ],
   },
   {
@@ -317,7 +338,8 @@ export const OPPONENT_PLAYS: OpponentPlay[] = [
     name: 'Unleash the Star',
     telegraph: 'Playing everything through the star player',
     records: [
-      { name: 'Unleash the Star', verb: 'amplify', params: { amount: 0.25 }, scope: 'global', target: { kind: 'criterion', criterion: 'highest-power' } },
+      { name: 'Unleash the Star', verb: 'amplify', params: { amount: 0.95 }, scope: 'global', target: { kind: 'criterion', criterion: 'highest-power' } },
+      oppAmp('Unleash the Star', 0.25, 'finishing'),
     ],
   },
 ];
@@ -328,11 +350,11 @@ export function getOpponentPlayById(id: string): OpponentPlay | undefined {
 
 /** Style-base weights per play id (unlisted → 0). Scoreline shifts apply on top. */
 const PLAY_WEIGHTS: Record<string, Record<string, number>> = {
-  Passive:   { build_patiently: 3.0, drop_deep: 2.5, kill_the_game: 1.0, route_one: 0.8, high_press: 0.4, overload_left: 0.4, overload_right: 0.4, unleash_star: 0.5 },
+  Passive:   { build_patiently: 3.0, drop_deep: 2.5, kill_the_game: 1.0, route_one: 1.3, high_press: 0.8, overload_left: 0.8, overload_right: 0.8, unleash_star: 0.7 },
   Balanced:  { build_patiently: 1.5, drop_deep: 1.0, kill_the_game: 0.8, route_one: 1.2, high_press: 1.2, overload_left: 1.0, overload_right: 1.0, unleash_star: 1.0 },
   Attacking: { build_patiently: 0.5, drop_deep: 0.3, kill_the_game: 0.3, route_one: 2.2, high_press: 1.8, overload_left: 2.2, overload_right: 2.2, unleash_star: 1.5 },
   Counter:   { build_patiently: 0.6, drop_deep: 2.5, kill_the_game: 1.5, route_one: 1.5, high_press: 0.6, overload_left: 0.6, overload_right: 0.6, unleash_star: 0.8 },
-  Adaptive:  { build_patiently: 1.0, drop_deep: 1.0, kill_the_game: 1.0, route_one: 1.2, high_press: 1.2, overload_left: 1.2, overload_right: 1.2, unleash_star: 1.2 },
+  Adaptive:  { build_patiently: 0.9, drop_deep: 0.9, kill_the_game: 0.9, route_one: 1.4, high_press: 1.4, overload_left: 1.4, overload_right: 1.4, unleash_star: 1.3 },
 };
 
 const ATTACK_PLAY_IDS = new Set(['high_press', 'overload_left', 'overload_right', 'route_one', 'unleash_star']);

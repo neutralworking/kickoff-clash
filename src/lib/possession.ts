@@ -51,7 +51,9 @@ const SHARE_MIN = 0.30;     // Phase 3 Foundation: widen the share band so contr
 const SHARE_MAX = 0.70;     // more (a dominant side now takes up to 70% of possessions)
 const SHOT_BASE = 0.30;      // P(shot) at lane parity
 const SHOT_MIN = 0.04;
-const SHOT_MAX = 0.55;
+const SHOT_MAX = 0.65;    // Called Plays: was 0.55 — a loaded lane saturated at ratio ~1.8,
+                          // capping what a telegraphed overload can threaten (and thus what
+                          // answering it is worth). Parity contests (ratio ~1) are unaffected.
 const XG_BASE = 0.195;       // xG scale
 const XG_MIN = 0.02;
 const XG_MAX = 0.70;

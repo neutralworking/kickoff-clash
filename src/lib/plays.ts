@@ -72,17 +72,39 @@ export function isAttackingPlay(records: TraitRecord[]): boolean {
   return attackLanes(records).size > 0;
 }
 
-/** The lanes your play can ANSWER in: a deny covers every lane (conversion is
- *  global); a defensive amplify/generate covers every lane; a relocate answers
- *  in its destination lane. */
+/** Bodies-forward commitment: loads the ATTACK zone (volume into lanes). Finishing-
+ *  only quality (a rehearsed set piece) is NOT a committed shape — a prepared trap
+ *  has nothing to catch, so it cannot be 'countered' (it also answers nothing). */
+export function commitsBodiesForward(records: TraitRecord[]): boolean {
+  return records.some((r) => {
+    const amount = r.params.amount ?? 0;
+    if (amount <= 0) return false;
+    const zone = recordZone(r);
+    if (r.verb === 'generate') return zone === 'attack';
+    if (r.verb === 'amplify') return zone === null || zone === 'attack';
+    return false;
+  });
+}
+
+/** Materiality floors: 'answered' must mean MECHANICALLY effective (the magnitude
+ *  contract), so a token deny (a nibble like Dark Arts) or a trace defensive amp
+ *  does not grade as an answer. */
+const ANSWER_DENY_MIN = 0.15;
+const ANSWER_AMP_MIN = 0.10;
+
+/** The lanes your play can ANSWER in: a material deny covers every lane (conversion
+ *  is global); a material defensive amplify covers every lane; a defensive generate
+ *  answers in the lane it reinforces (aimed cover is shot-volume denial THERE); a
+ *  relocate answers in its destination lane. */
 function answerLanes(records: TraitRecord[]): Set<Lane> {
   const lanes = new Set<Lane>();
   for (const r of records) {
     const amount = r.params.amount ?? r.params.fraction ?? 0;
     if (amount <= 0) continue;
     const zone = recordZone(r);
-    if (r.verb === 'deny') for (const l of LANES) lanes.add(l);
-    else if ((r.verb === 'amplify' || r.verb === 'generate') && zone === 'defence') for (const l of LANES) lanes.add(l);
+    if (r.verb === 'deny' && amount >= ANSWER_DENY_MIN) for (const l of LANES) lanes.add(l);
+    else if (r.verb === 'amplify' && zone === 'defence' && amount >= ANSWER_AMP_MIN) for (const l of LANES) lanes.add(l);
+    else if (r.verb === 'generate' && zone === 'defence') lanes.add(r.to?.lane ?? 'C');
     else if (r.verb === 'relocate') lanes.add(r.to?.lane ?? 'C');
   }
   return lanes;
@@ -109,14 +131,13 @@ export function gradeCall(
     }
   }
 
-  // Countered: you committed forward into a play that was PURELY a prepared
-  // denial (their own commitment would make it a trade, not a trap).
-  const yourCommit = attackLanes(yourPlayRecords);
+  const theirTrap = hasDefensiveSurface(oppPlayRecords) && theirCommit.size === 0;
+
+  // Countered: you committed BODIES forward into a play that was PURELY a
+  // prepared denial (their own commitment would make it a trade, not a trap).
+  // Finishing-only quality (dead balls) commits no bodies — nothing to catch.
   const yourDefence = hasDefensiveSurface(yourPlayRecords);
-  if (
-    hasDefensiveSurface(oppPlayRecords) && theirCommit.size === 0
-    && yourCommit.size > 0 && !yourDefence
-  ) return 'countered';
+  if (theirTrap && commitsBodiesForward(yourPlayRecords) && !yourDefence) return 'countered';
 
   return 'neutral';
 }

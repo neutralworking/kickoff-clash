@@ -107,7 +107,20 @@ function choosePlay(policy: CallPolicy, s: MatchV5State, seed: number): TacticCa
   }
 
   // 'best': answer the play that will actually run (the clean-counter ceiling —
-  // for the Adaptive style this reads through the decoy).
+  // for the Adaptive style this reads through the decoy). Among answers, prefer a
+  // DEFENSIVE-class play (a true block/trap on their commitment) over a control
+  // play that merely carries a deny; charge exhaustion then rotates the blocks.
+  // When nothing needs answering, prefer an ATTACKING play that is not walking
+  // into a prepared denial (gradeCall filters those to 'countered').
+  // Ties break by the LEARNED play ranking (the per-play swing table this sweep
+  // prints) — the policy models a player who knows their plays, not the card
+  // registry's display order. No per-seed oracle: the ranking is static.
+  const PLAY_RANK: Record<string, number> = {
+    low_block: 16, man_marking: 15, sit_deep: 14, fortress: 13, press_high: 12,  // answers
+    route_one: 11, wing_play: 10, narrow: 9, overload_right: 8, overload_left: 7,
+    high_line: 6, counter_attack: 5, set_piece: 4,                               // commits
+    possession: 3, youth_policy: 2, dark_arts: 1,                                // control
+  };
   const oppRecords = s.opponentPlay ? getOpponentPlayById(s.opponentPlay.id)?.records ?? [] : [];
   const ctx = playCtx(s);
   let best: TacticCard | null = null;
@@ -115,10 +128,23 @@ function choosePlay(policy: CallPolicy, s: MatchV5State, seed: number): TacticCa
   for (const t of available) {
     const records = tacticTraits(t, ctx);
     const grade = gradeCall(t, oppRecords, records);
-    const score = grade === 'answered' ? 2 : grade === 'neutral' && records.length > 0 ? 1 : -1;
+    const base = grade === 'answered'
+      ? (t.playClass === 'defensive' ? 400 : 300)
+      : grade === 'neutral' && records.length > 0
+        ? (t.playClass === 'attacking' ? 200 : 100)
+        : -100;
+    const score = base + (PLAY_RANK[t.id] ?? 0);
     if (score > bestScore) { best = t; bestScore = score; }
   }
   return best;
+}
+
+interface SpellOut {
+  playId: string | null;
+  grade: string | null;
+  yourCallXG: number | null;
+  oppPlayId: string | null;
+  theirPlayXG: number | null;
 }
 
 interface MatchOut {
@@ -127,6 +153,7 @@ interface MatchOut {
   attackMod: number; firstAttack: number;
   calls: number; answered: number; countered: number;
   answeredSwings: number[]; // playImpact.yourCallXG on 'answered' calls
+  spells: SpellOut[];       // per-spell readout (feeds the per-play tables)
 }
 
 function runMatch(deck: { xi: Card[]; bench: Card[] }, round: number, seed: number, policy: CallPolicy): MatchOut {
@@ -136,6 +163,7 @@ function runMatch(deck: { xi: Card[]; bench: Card[] }, round: number, seed: numb
   let firstAttack = 0;
   let calls = 0, answered = 0, countered = 0;
   const answeredSwings: number[] = [];
+  const spells: SpellOut[] = [];
   for (let i = 0; i < 5; i++) {
     state = commitAttackers(state, pickAttackers(state));
     const play = choosePlay(policy, state, seed);
@@ -152,10 +180,17 @@ function runMatch(deck: { xi: Card[]; bench: Card[] }, round: number, seed: numb
         if (result.playImpact) answeredSwings.push(result.playImpact.yourCallXG);
       } else if (result.callGrade === 'countered') countered++;
     }
+    spells.push({
+      playId: state.calledPlayId,
+      grade: result.callGrade,
+      yourCallXG: result.playImpact?.yourCallXG ?? null,
+      oppPlayId: state.opponentPlay?.id ?? null,
+      theirPlayXG: result.playImpact?.theirPlayXG ?? null,
+    });
     state = advanceIncrement(state, result);
   }
   const final = getMatchResult(state);
-  return { result: final.result, gf: state.yourGoals, ga: state.opponentGoals, attackMod, firstAttack, calls, answered, countered, answeredSwings };
+  return { result: final.result, gf: state.yourGoals, ga: state.opponentGoals, attackMod, firstAttack, calls, answered, countered, answeredSwings, spells };
 }
 
 // --- Sweep ---
@@ -164,8 +199,15 @@ console.log(`Power range: ${sorted[N - 1].power}–${sorted[0].power}  (cards=${
 
 const divergence: Record<string, number> = {};
 const policyWins: Record<CallPolicy, { w: number; n: number }> = { none: { w: 0, n: 0 }, random: { w: 0, n: 0 }, best: { w: 0, n: 0 } };
+const policyGoals: Record<CallPolicy, { gf: number; ga: number; d: number }> = {
+  none: { gf: 0, ga: 0, d: 0 }, random: { gf: 0, ga: 0, d: 0 }, best: { gf: 0, ga: 0, d: 0 },
+};
 const allAnsweredSwings: number[] = [];
 let bestCalls = 0, bestAnswered = 0, bestCountered = 0;
+// Per-play swing table (sampled under 'random' — broad, unbiased play coverage) and
+// per-opponent-play unanswered threat (sampled under 'none' — no call interferes).
+const perPlay = new Map<string, { n: number; sum: number; answered: number; countered: number; ansSum: number; ansN: number }>();
+const perOppPlay = new Map<string, { n: number; sum: number }>();
 
 for (const round of [1, 3, 5]) {
   console.log(`── vs Round ${round} (${ROUNDS[round].style}, soft-spot ${ROUNDS[round].weakness}) ──`);
@@ -180,12 +222,28 @@ for (const round of [1, 3, 5]) {
         if (o.result === 'win') w++;
         policyWins[policy].n++;
         if (o.result === 'win') policyWins[policy].w++;
+        policyGoals[policy].gf += o.gf; policyGoals[policy].ga += o.ga;
+        if (o.result === 'draw') policyGoals[policy].d++;
         if (policy === 'best') {
           gf += o.gf; ga += o.ga; am += o.attackMod;
           bestCalls += o.calls; bestAnswered += o.answered; bestCountered += o.countered;
           allAnsweredSwings.push(...o.answeredSwings);
         }
         if (policy === 'none') fa += o.firstAttack;
+        for (const sp of o.spells) {
+          if (policy === 'random' && sp.playId && sp.yourCallXG !== null) {
+            const e = perPlay.get(sp.playId) ?? { n: 0, sum: 0, answered: 0, countered: 0, ansSum: 0, ansN: 0 };
+            e.n++; e.sum += sp.yourCallXG;
+            if (sp.grade === 'answered') { e.answered++; e.ansSum += sp.yourCallXG; e.ansN++; }
+            if (sp.grade === 'countered') e.countered++;
+            perPlay.set(sp.playId, e);
+          }
+          if (policy === 'none' && sp.oppPlayId && sp.theirPlayXG !== null) {
+            const e = perOppPlay.get(sp.oppPlayId) ?? { n: 0, sum: 0 };
+            e.n++; e.sum += sp.theirPlayXG;
+            perOppPlay.set(sp.oppPlayId, e);
+          }
+        }
       }
       winPct[policy] = (w / SEEDS) * 100;
     }
@@ -205,6 +263,8 @@ console.log(`  (win-rate should rise monotonically S1→S5; TOP vs R1 should be 
 console.log(`── Called Plays targets ──`);
 const wp = (p: CallPolicy) => (policyWins[p].n ? (policyWins[p].w / policyWins[p].n) * 100 : 0);
 console.log(`  win% by policy: none=${wp('none').toFixed(1)}%  random=${wp('random').toFixed(1)}%  best=${wp('best').toFixed(1)}%`);
+const gl = (p: CallPolicy) => `${(policyGoals[p].gf / policyWins[p].n).toFixed(2)}/${(policyGoals[p].ga / policyWins[p].n).toFixed(2)} (draw ${((policyGoals[p].d / policyWins[p].n) * 100).toFixed(0)}%)`;
+console.log(`  gf/ga by policy: none=${gl('none')}  random=${gl('random')}  best=${gl('best')}`);
 console.log(`  best-vs-random gap: ${(wp('best') - wp('random')).toFixed(1)}pp  (target ≥15–20pp)`);
 console.log(`  best-vs-none gap:   ${(wp('best') - wp('none')).toFixed(1)}pp`);
 const meanSwing = allAnsweredSwings.length
@@ -212,3 +272,20 @@ const meanSwing = allAnsweredSwings.length
   : 0;
 console.log(`  'best' calls: ${bestCalls} made, ${bestAnswered} answered, ${bestCountered} countered`);
 console.log(`  mean net xG swing of a clean counter (answered call): ${meanSwing >= 0 ? '+' : ''}${meanSwing.toFixed(3)}  (target ±0.25–0.40)\n`);
+
+// --- Per-play swing table (sampled under 'random') --------------------------
+const fmt = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(2)}`;
+console.log(`── Per-play net xG swing (called under 'random'; answered col = swing when it graded 'answered') ──`);
+console.log(`  play             |   n  | mean   | answered (n) | countered n`);
+for (const t of ALL_TACTICS) {
+  const e = perPlay.get(t.id);
+  if (!e) continue;
+  const ans = e.ansN ? `${fmt(e.ansSum / e.ansN)} (${e.ansN})` : '—';
+  console.log(`  ${t.name.padEnd(16)} | ${String(e.n).padStart(4)} | ${fmt(e.sum / e.n).padStart(6)} | ${ans.padStart(12)} | ${e.countered}`);
+}
+console.log('');
+console.log(`── Opponent-play unanswered threat (theirPlayXG under 'none'; target ~+0.2–0.4 for attacking plays) ──`);
+for (const [id, e] of [...perOppPlay.entries()].sort((a, b) => b[1].sum / b[1].n - a[1].sum / a[1].n)) {
+  console.log(`  ${id.padEnd(16)} | ${String(e.n).padStart(4)} | ${fmt(e.sum / e.n)}`);
+}
+console.log('');

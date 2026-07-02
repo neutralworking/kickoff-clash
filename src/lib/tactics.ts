@@ -39,7 +39,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'high_line',
     name: 'High Line',
-    effect: 'This spell: your attack and creation +15%, your defence −10%.',
+    effect: 'This spell: attack and creation +26%, defence −12% — and you risk the break (a further −15% defence) against a set defensive trap.',
     flavour: '"We press from the front. The last line is courage."',
     contradicts: 'low_block',
     category: 'attacking',
@@ -49,7 +49,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'press_high',
     name: 'Press High',
-    effect: 'This spell: their conversion −15%; Engines & Destroyers +20% but lose 0.5 fitness.',
+    effect: 'This spell: their conversion −20%; Engines & Destroyers +20% but lose 0.5 fitness.',
     flavour: '"Every second counts. Suffocate them early."',
     contradicts: 'sit_deep',
     category: 'attacking',
@@ -59,7 +59,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'wing_play',
     name: 'Wing Play',
-    effect: 'This spell: extra attacking threat down both wings; Dribblers & Sprinters +10%.',
+    effect: 'This spell: heavy attacking threat down both wings; Dribblers & Sprinters +12%. Risks the break against a set trap.',
     flavour: '"Stretch them. Make the pitch as wide as possible."',
     contradicts: 'narrow',
     category: 'attacking',
@@ -69,7 +69,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'narrow',
     name: 'Narrow Shape',
-    effect: 'This spell: extra threat through the middle; Controllers & Passers +10%.',
+    effect: 'This spell: heavy threat through the middle; Controllers & Passers +12%. Risks the break against a set trap.',
     flavour: '"Compact. Triangles everywhere. No space for them to breathe."',
     contradicts: 'wing_play',
     category: 'attacking',
@@ -81,7 +81,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'low_block',
     name: 'Low Block',
-    effect: 'This spell: their conversion −20%; your attack −10%.',
+    effect: 'This spell: their conversion −20% and extra cover on the lanes their play loads. If they commit forward you spring the break (attack +26%); called blind, your attack −8%.',
     flavour: '"Let them have the ball. We\'ll take the three points."',
     contradicts: 'high_line',
     category: 'defensive',
@@ -91,7 +91,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'sit_deep',
     name: 'Counter Trap',
-    effect: 'This spell: their conversion −10%; Sprinters & Dribblers +15% — doubled against an attacking play.',
+    effect: 'This spell: their conversion −10% and cover on the lanes their play loads; Sprinters & Dribblers +18% — +50% against an attacking play.',
     flavour: '"Let them come. The space behind them is ours."',
     contradicts: 'press_high',
     category: 'defensive',
@@ -101,7 +101,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'fortress',
     name: 'Fortress',
-    effect: 'This spell: their conversion −25%.',
+    effect: 'This spell: their conversion −25% and a wall of extra cover on the lanes their play loads.',
     flavour: '"Build the wall. Make them break themselves against it."',
     category: 'defensive',
     playClass: 'defensive',
@@ -112,7 +112,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'counter_attack',
     name: 'Counter Attack',
-    effect: 'This spell, if they are on an attacking play or you trail: your attack and finishing +15%.',
+    effect: 'This spell, against an attacking play: their conversion −15% and your attack and finishing +28%. Also fires (without the denial) when you trail.',
     flavour: '"One touch. Three passes. Goal. They never learn."',
     contradicts: 'possession',
     category: 'specialist',
@@ -122,7 +122,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'possession',
     name: 'Possession Game',
-    effect: 'This spell: your creation +12% and a steadier spell (less variance).',
+    effect: 'This spell: your creation +18% — keep the ball and control the possession count.',
     flavour: '"The ball is ours. They can\'t score without it."',
     contradicts: 'counter_attack',
     category: 'specialist',
@@ -132,7 +132,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'set_piece',
     name: 'Set Piece Specialists',
-    effect: 'This spell: a central finishing chance from dead balls; Targets & Commanders +15%.',
+    effect: 'This spell: a central dead-ball chance; Targets & Commanders finish +20%. Escalates against a parked bus — a trap concedes dead balls, and cannot counter one.',
     flavour: '"Every dead ball is a chance. We\'ve rehearsed them all."',
     category: 'specialist',
     playClass: 'attacking',
@@ -141,7 +141,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'dark_arts',
     name: 'Dark Arts',
-    effect: 'This spell: their conversion −8%, and their best player loses 1 fitness.',
+    effect: 'This spell: their conversion −10%, and their best player loses 1.5 fitness.',
     flavour: '"They don\'t call it the beautiful game for nothing. Beautifully ugly."',
     category: 'specialist',
     playClass: 'control',
@@ -161,7 +161,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'overload_left',
     name: 'Overload Left',
-    effect: 'This spell: piles attacking threat into the LEFT lane.',
+    effect: 'This spell: piles attacking threat into the LEFT lane. Risks the break against a set trap.',
     flavour: '"Everything down the left. Make that touchline ours."',
     contradicts: 'overload_right',
     category: 'attacking',
@@ -171,7 +171,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'overload_right',
     name: 'Overload Right',
-    effect: 'This spell: piles attacking threat into the RIGHT lane.',
+    effect: 'This spell: piles attacking threat into the RIGHT lane. Risks the break against a set trap.',
     flavour: '"Swing it right and keep it there. Stretch them until they snap."',
     contradicts: 'overload_left',
     category: 'attacking',
@@ -181,7 +181,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'route_one',
     name: 'Route One',
-    effect: 'This spell: a direct ball makes a central finishing chance up top.',
+    effect: 'This spell: a direct ball makes a central finishing chance up top. Risks the break against a set trap.',
     flavour: '"Why pass it through them when you can go over them?"',
     category: 'attacking',
     playClass: 'attacking',
@@ -190,7 +190,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'man_marking',
     name: 'Man-to-Man Marking',
-    effect: 'This spell: their conversion −20%; your defence +12%.',
+    effect: 'This spell: their conversion −20%, your defence +12%, and cover on the lanes their play loads; duels won against a committed attack spring your attack +18%.',
     flavour: '"Pick a man. Stay with him. Nobody runs free today."',
     category: 'defensive',
     playClass: 'defensive',
