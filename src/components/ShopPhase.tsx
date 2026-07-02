@@ -4,9 +4,9 @@ import { useMemo, useState } from 'react';
 import type { Card } from '../lib/scoring';
 import { seededRandom } from '../lib/scoring';
 import type { RunState } from '../lib/run';
-import { getShopCards, getPlayerPackCards, ALL_CARDS } from '../lib/run';
+import { getShopCards, getPlayerPickCards, ALL_CARDS } from '../lib/run';
 import {
-  CARD_PICK_COST, RARE_PICK_COST, PLAYER_PACK_COST, getTransferFee, getAcademyTier,
+  CARD_PICK_COST, RARE_PICK_COST, PLAYER_PICK_COST, getTransferFee, getAcademyTier,
   generateAcademyDurability, JOKER_COST, getStadiumInvestment,
   getAcademyInvestment, BOX_OFFICE_INVESTMENT,
 } from '../lib/economy';
@@ -22,7 +22,6 @@ import { PIXEL } from './cards/cardTokens';
 interface ShopPhaseProps {
   state: RunState;
   onBuyCard: (card: Card, cost: number) => void;
-  onBuyPlayerPack: (cards: Card[], cost: number) => void;
   onSellCard: (card: Card) => void;
   onBuyJoker: (joker: JokerCardType) => void;
   onBuyAcademy: (card: Card) => void;
@@ -49,7 +48,6 @@ type Tab = 'market' | 'squad' | 'backroom';
 export default function ShopPhase({
   state,
   onBuyCard,
-  onBuyPlayerPack,
   onSellCard,
   onBuyJoker,
   onBuyAcademy,
@@ -76,11 +74,9 @@ export default function ShopPhase({
     () => getShopJokers(shopSeed + 2 + rerollCount * 17, 3),
     [shopSeed, rerollCount],
   );
-  const [showCardPick, setShowCardPick] = useState<'normal' | 'rare' | null>(null);
-  // Player Pack: one per shop visit (a new seed each match re-offers it).
-  const packCards = useMemo(() => getPlayerPackCards(shopSeed + 77), [shopSeed]);
-  const [showPack, setShowPack] = useState(false);
-  const [packBought, setPackBought] = useState(false);
+  const [showCardPick, setShowCardPick] = useState<'budget' | 'normal' | 'rare' | null>(null);
+  // Player Pick (budget): 3 Common/Rare candidates, choose one. Seeded per visit.
+  const budgetCards = useMemo(() => getPlayerPickCards(shopSeed + 77), [shopSeed]);
   const [tab, setTab] = useState<Tab>('market');
   const [sellSheet, setSellSheet] = useState(false);
   const [sellConfirm, setSellConfirm] = useState<Card | null>(null);
@@ -237,8 +233,6 @@ export default function ShopPhase({
             offeredJokers={offeredJokers}
             canPickJoker={canPickJoker}
             setShowCardPick={setShowCardPick}
-            onOpenPack={() => setShowPack(true)}
-            packBought={packBought}
             onBuyJoker={onBuyJoker}
             onRerollShop={onRerollShop}
             setRerollCount={setRerollCount}
@@ -302,8 +296,8 @@ export default function ShopPhase({
       {showCardPick && (
         <BottomSheet title="Pick 1 of 3" onClose={() => setShowCardPick(null)}>
           <div className="grid grid-cols-3 gap-3">
-            {(showCardPick === 'rare' ? rareCards : shopCards).map(card => {
-              const cost = showCardPick === 'rare' ? RARE_PICK_COST : CARD_PICK_COST;
+            {(showCardPick === 'rare' ? rareCards : showCardPick === 'budget' ? budgetCards : shopCards).map(card => {
+              const cost = showCardPick === 'rare' ? RARE_PICK_COST : showCardPick === 'budget' ? PLAYER_PICK_COST : CARD_PICK_COST;
               return (
                 <CardCell
                   key={card.id}
@@ -319,31 +313,6 @@ export default function ShopPhase({
                 />
               );
             })}
-          </div>
-        </BottomSheet>
-      )}
-
-      {/* ── Player Pack bottom sheet: the 3 drawn cards, one price, all join ── */}
-      {showPack && (
-        <BottomSheet title="Player Pack" onClose={() => setShowPack(false)}>
-          <div className="flex flex-col" style={{ gap: 12 }}>
-            <div className="grid grid-cols-3 gap-3">
-              {packCards.map(card => (
-                <button key={card.id} onClick={() => setModal({ variant: 'player', card })} className="active:scale-95" style={{ transition: 'transform 0.1s ease' }}>
-                  <GameCard model={{ variant: 'player', card }} />
-                </button>
-              ))}
-            </div>
-            <SheetButton
-              label={packBought ? 'Signed' : `Sign all 3 — £${PLAYER_PACK_COST.toLocaleString()}`}
-              tone={packBought || state.cash < PLAYER_PACK_COST ? 'muted' : 'primary'}
-              onClick={() => {
-                if (packBought || state.cash < PLAYER_PACK_COST) return;
-                onBuyPlayerPack(packCards, PLAYER_PACK_COST);
-                setPackBought(true);
-                setShowPack(false);
-              }}
-            />
           </div>
         </BottomSheet>
       )}
@@ -417,14 +386,12 @@ export default function ShopPhase({
 
 function MarketTab({
   state, offeredJokers, canPickJoker,
-  setShowCardPick, onOpenPack, packBought, onBuyJoker, onRerollShop, setRerollCount, openModal,
+  setShowCardPick, onBuyJoker, onRerollShop, setRerollCount, openModal,
 }: {
   state: RunState;
   offeredJokers: JokerCardType[];
   canPickJoker: boolean;
-  setShowCardPick: (v: 'normal' | 'rare' | null) => void;
-  onOpenPack: () => void;
-  packBought: boolean;
+  setShowCardPick: (v: 'budget' | 'normal' | 'rare' | null) => void;
   onBuyJoker: (joker: JokerCardType) => void;
   onRerollShop: () => boolean;
   setRerollCount: React.Dispatch<React.SetStateAction<number>>;
@@ -432,15 +399,15 @@ function MarketTab({
 }) {
   return (
     <div className="flex flex-col gap-3 pb-2">
-      {/* Card picks + the cheap depth pack */}
+      {/* The three pick tiers: budget depth, standard, elite */}
       <SectionCard title="Player Market" accent="var(--gold)">
         <div className="grid grid-cols-2 gap-2">
           <BuyTile
-            label="Player Pack"
-            sub={packBought ? 'Signed this window' : '3 random players'}
-            cost={PLAYER_PACK_COST}
-            affordable={!packBought && state.cash >= PLAYER_PACK_COST}
-            onClick={() => { if (!packBought) onOpenPack(); }}
+            label="Player Pick"
+            sub="Choose 1 of 3 (Common/Rare)"
+            cost={PLAYER_PICK_COST}
+            affordable={state.cash >= PLAYER_PICK_COST}
+            onClick={() => setShowCardPick('budget')}
           />
           <BuyTile
             label="Card Pick"
@@ -824,9 +791,10 @@ function CardCell({
         {badge && (
           <span
             style={{
+              // Off the corner — the card's top-right is the rating; never cover it.
               position: 'absolute',
-              top: 4,
-              right: 4,
+              top: -5,
+              right: -5,
               fontFamily: PIXEL,
               fontSize: 8,
               color: 'var(--ink-black)',
