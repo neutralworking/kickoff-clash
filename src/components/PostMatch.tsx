@@ -28,6 +28,7 @@
 import { useState } from 'react';
 import type { Card } from '../lib/scoring';
 import type { MatchResult } from '../lib/run';
+import type { MatchVerdict, VerdictFactor } from '../lib/match-v5';
 import { cupSize, isCupFinal } from '../lib/run';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
@@ -43,6 +44,9 @@ interface PostMatchProps {
     result: 'win' | 'draw' | 'loss';
     attendance: number;
     revenue: number; // the actual reward earned (a draw is already halved upstream)
+    /** Why the match went the way it did — engine-computed (match-v5). Absent on
+     *  saves recorded before the verdict existed; render nothing then. */
+    verdict?: MatchVerdict;
   };
   durabilityResult: {
     shattered: Card[];
@@ -288,6 +292,11 @@ function SurvivalTab({
       ? 'The last cup is yours — champions.'
       : `Cup ${round} cleared — into the shop, then Cup ${round + 1}.`
     : survivalLine(matchResult, round, matchInCup, ties);
+  // The engine's verdict headline (why the match went that way) is the lead line
+  // whenever it exists; the progression line is the fallback for pre-verdict
+  // saves. Cup/tie progression stays legible via the marker row + the pip arc.
+  const verdict = matchResult.verdict;
+  const leadLine = verdict?.headline ?? arcLine;
   const rewardSub = matchResult.result === 'draw' ? 'reduced gate' : 'gate banked';
 
   return (
@@ -336,9 +345,13 @@ function SurvivalTab({
         >
           {heroWord}
         </span>
-        <span style={{ fontSize: 12.5, color: 'var(--cream-soft)', lineHeight: 1.45, maxWidth: 280 }}>
-          {arcLine}
+        <span style={{ fontSize: 12.5, color: 'var(--cream-soft)', lineHeight: 1.45, maxWidth: 300 }}>
+          {leadLine}
         </span>
+
+        {/* The verdict's ranked factors — the quiet evidence under the headline.
+            Engine copy verbatim; absent on pre-verdict saves (renders nothing). */}
+        {verdict && verdict.factors.length > 0 && <VerdictList verdict={verdict} />}
 
         {/* Tie arc for THIS cup — a pip per tie so the cup's shape is legible at a
             glance: played ties coloured by outcome, the current one ringed, rest pending. */}
@@ -621,6 +634,59 @@ function TabButton({
         </span>
       )}
     </button>
+  );
+}
+
+/** Subtle for/against tone from a verdict factor's signed swing (+ favours you,
+ *  − the opponent); near-zero swings stay neutral. Colour only — never copy. */
+function factorTone(swing: number): string {
+  if (swing > 0.12) return 'var(--success)';
+  if (swing < -0.12) return 'var(--danger)';
+  return 'var(--dust)';
+}
+
+/** The verdict's top factors as a quiet, left-aligned evidence list beneath the
+ *  headline. Label + detail render VERBATIM from the engine; the only string
+ *  this component adds is the plain section label. Some headline branches
+ *  restate the decisive factor's detail word-for-word — that duplicate row is
+ *  skipped (presentation only, no copy altered). */
+function VerdictList({ verdict }: { verdict: MatchVerdict }) {
+  const headline = verdict.headline.toLowerCase();
+  const top = verdict.factors
+    .filter((f: VerdictFactor) => !headline.includes(f.detail.toLowerCase()))
+    .slice(0, 3);
+  return (
+    <div className="flex flex-col w-full" style={{ gap: 7, maxWidth: 304 }}>
+      <div className="flex items-center" style={{ gap: 8 }}>
+        <span style={{ flex: 1, height: 1, background: 'var(--glass-border)' }} />
+        <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>WHY</span>
+        <span style={{ flex: 1, height: 1, background: 'var(--glass-border)' }} />
+      </div>
+      {top.map((f) => {
+        const tone = factorTone(f.swing);
+        return (
+          <div key={f.key} className="flex items-start text-left" style={{ gap: 7 }}>
+            <span
+              style={{
+                width: 5,
+                height: 5,
+                marginTop: 5,
+                borderRadius: 1,
+                background: tone,
+                boxShadow: tone === 'var(--dust)' ? 'none' : `0 0 6px ${tone}`,
+                flexShrink: 0,
+              }}
+            />
+            <span style={{ fontSize: 10.5, lineHeight: 1.5, color: 'var(--cream-soft)' }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.7, color: tone, marginRight: 6 }}>
+                {f.label.toUpperCase()}
+              </span>
+              {f.detail}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

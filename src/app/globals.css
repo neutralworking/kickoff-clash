@@ -990,4 +990,13 @@ h1, h2, h3,
   .trait-aura-glyph { animation: none; opacity: 0.9; transform: translate(-50%, -50%) scale(1); }
   .playing-dot { animation: none; opacity: 0.9; }
   .playing-sweep { animation: none; opacity: 0; }
+
+  /* Match-screen parity: deal-in rows land settled, bars land filled, and the
+     infinite pulses become STATIC highlights — the nudge/glow information is
+     kept, only the looping motion is removed. */
+  .coach-line-in,
+  .stat-row-in { animation: none; opacity: 1; transform: none; }
+  .stat-bar-grow { animation: none; transform: scaleX(1); }
+  .carrier-glow { animation: none; box-shadow: 0 0 0 3px var(--gold-glow); }
+  .advance-btn-pulse { animation: none; box-shadow: 0 0 10px var(--amber-glow); }
 }
