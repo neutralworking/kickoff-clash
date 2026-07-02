@@ -878,6 +878,13 @@ export function getShopCards(seed: number, rareOnly: boolean = false): Card[] {
   return seededShuffle(pool, seed).slice(0, 3);
 }
 
+/** The Player Pack draw: 3 seeded Common/Rare players — cheap DEPTH bodies (the
+ *  elite acquisitions stay behind the pricier picks). Deterministic per seed. */
+export function getPlayerPackCards(seed: number): Card[] {
+  const pool = ALL_CARDS.filter(c => c.rarity === 'Common' || c.rarity === 'Rare');
+  return seededShuffle(pool, seed).slice(0, 3);
+}
+
 /**
  * Add a card to the deck
  */

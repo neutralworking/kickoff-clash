@@ -374,6 +374,16 @@ export default function GameShell() {
     });
   }, []);
 
+  // Player Pack: all the drawn cards join the deck for one price (cheap depth).
+  const handleBuyPlayerPack = useCallback((cards: Card[], cost: number) => {
+    setRunState(prev => {
+      if (!prev || prev.cash < cost) return prev;
+      let next = prev;
+      for (const card of cards) next = addCardToDeck(next, card);
+      return { ...next, cash: next.cash - cost };
+    });
+  }, []);
+
   const handleSellCard = useCallback((card: Card) => {
     setRunState(prev => {
       if (!prev) return prev;
@@ -562,6 +572,7 @@ export default function GameShell() {
           <ShopPhase
             state={runState}
             onBuyCard={handleBuyCard}
+            onBuyPlayerPack={handleBuyPlayerPack}
             onSellCard={handleSellCard}
             onBuyJoker={handleBuyJoker}
             onBuyAcademy={handleBuyAcademy}

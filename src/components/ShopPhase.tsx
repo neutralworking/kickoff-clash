@@ -4,9 +4,9 @@ import { useMemo, useState } from 'react';
 import type { Card } from '../lib/scoring';
 import { seededRandom } from '../lib/scoring';
 import type { RunState } from '../lib/run';
-import { getShopCards, ALL_CARDS } from '../lib/run';
+import { getShopCards, getPlayerPackCards, ALL_CARDS } from '../lib/run';
 import {
-  CARD_PICK_COST, RARE_PICK_COST, getTransferFee, getAcademyTier,
+  CARD_PICK_COST, RARE_PICK_COST, PLAYER_PACK_COST, getTransferFee, getAcademyTier,
   generateAcademyDurability, JOKER_COST, getStadiumInvestment,
   getAcademyInvestment, BOX_OFFICE_INVESTMENT,
 } from '../lib/economy';
@@ -22,6 +22,7 @@ import { PIXEL } from './cards/cardTokens';
 interface ShopPhaseProps {
   state: RunState;
   onBuyCard: (card: Card, cost: number) => void;
+  onBuyPlayerPack: (cards: Card[], cost: number) => void;
   onSellCard: (card: Card) => void;
   onBuyJoker: (joker: JokerCardType) => void;
   onBuyAcademy: (card: Card) => void;
@@ -48,6 +49,7 @@ type Tab = 'market' | 'squad' | 'backroom';
 export default function ShopPhase({
   state,
   onBuyCard,
+  onBuyPlayerPack,
   onSellCard,
   onBuyJoker,
   onBuyAcademy,
@@ -75,6 +77,10 @@ export default function ShopPhase({
     [shopSeed, rerollCount],
   );
   const [showCardPick, setShowCardPick] = useState<'normal' | 'rare' | null>(null);
+  // Player Pack: one per shop visit (a new seed each match re-offers it).
+  const packCards = useMemo(() => getPlayerPackCards(shopSeed + 77), [shopSeed]);
+  const [showPack, setShowPack] = useState(false);
+  const [packBought, setPackBought] = useState(false);
   const [tab, setTab] = useState<Tab>('market');
   const [sellSheet, setSellSheet] = useState(false);
   const [sellConfirm, setSellConfirm] = useState<Card | null>(null);
@@ -231,6 +237,8 @@ export default function ShopPhase({
             offeredJokers={offeredJokers}
             canPickJoker={canPickJoker}
             setShowCardPick={setShowCardPick}
+            onOpenPack={() => setShowPack(true)}
+            packBought={packBought}
             onBuyJoker={onBuyJoker}
             onRerollShop={onRerollShop}
             setRerollCount={setRerollCount}
@@ -315,6 +323,31 @@ export default function ShopPhase({
         </BottomSheet>
       )}
 
+      {/* ── Player Pack bottom sheet: the 3 drawn cards, one price, all join ── */}
+      {showPack && (
+        <BottomSheet title="Player Pack" onClose={() => setShowPack(false)}>
+          <div className="flex flex-col" style={{ gap: 12 }}>
+            <div className="grid grid-cols-3 gap-3">
+              {packCards.map(card => (
+                <button key={card.id} onClick={() => setModal({ variant: 'player', card })} className="active:scale-95" style={{ transition: 'transform 0.1s ease' }}>
+                  <GameCard model={{ variant: 'player', card }} />
+                </button>
+              ))}
+            </div>
+            <SheetButton
+              label={packBought ? 'Signed' : `Sign all 3 — £${PLAYER_PACK_COST.toLocaleString()}`}
+              tone={packBought || state.cash < PLAYER_PACK_COST ? 'muted' : 'primary'}
+              onClick={() => {
+                if (packBought || state.cash < PLAYER_PACK_COST) return;
+                onBuyPlayerPack(packCards, PLAYER_PACK_COST);
+                setPackBought(true);
+                setShowPack(false);
+              }}
+            />
+          </div>
+        </BottomSheet>
+      )}
+
       {/* ── Sell bottom sheet (replaces confirm()) ──────────────────────── */}
       {sellSheet && (
         <BottomSheet
@@ -384,12 +417,14 @@ export default function ShopPhase({
 
 function MarketTab({
   state, offeredJokers, canPickJoker,
-  setShowCardPick, onBuyJoker, onRerollShop, setRerollCount, openModal,
+  setShowCardPick, onOpenPack, packBought, onBuyJoker, onRerollShop, setRerollCount, openModal,
 }: {
   state: RunState;
   offeredJokers: JokerCardType[];
   canPickJoker: boolean;
   setShowCardPick: (v: 'normal' | 'rare' | null) => void;
+  onOpenPack: () => void;
+  packBought: boolean;
   onBuyJoker: (joker: JokerCardType) => void;
   onRerollShop: () => boolean;
   setRerollCount: React.Dispatch<React.SetStateAction<number>>;
@@ -397,9 +432,16 @@ function MarketTab({
 }) {
   return (
     <div className="flex flex-col gap-3 pb-2">
-      {/* Card picks */}
+      {/* Card picks + the cheap depth pack */}
       <SectionCard title="Player Market" accent="var(--gold)">
         <div className="grid grid-cols-2 gap-2">
+          <BuyTile
+            label="Player Pack"
+            sub={packBought ? 'Signed this window' : '3 random players'}
+            cost={PLAYER_PACK_COST}
+            affordable={!packBought && state.cash >= PLAYER_PACK_COST}
+            onClick={() => { if (!packBought) onOpenPack(); }}
+          />
           <BuyTile
             label="Card Pick"
             sub="Choose 1 of 3"
@@ -1015,26 +1057,32 @@ function SheetButton({
   label, tone, onClick,
 }: {
   label: string;
-  tone: 'muted' | 'danger';
+  tone: 'muted' | 'danger' | 'primary';
   onClick: () => void;
 }) {
   const danger = tone === 'danger';
+  const primary = tone === 'primary';
+  const solid = danger || primary;
   return (
     <button
       onClick={onClick}
-      className={`flex-1 active:scale-[0.98] relative overflow-hidden ${danger ? 'sheen-strong' : 'glass-raised sheen'}`}
+      className={`flex-1 active:scale-[0.98] relative overflow-hidden ${solid ? 'sheen-strong' : 'glass-raised sheen'}`}
       style={{
         height: 46,
         borderRadius: 'var(--radius-sm)',
-        border: danger ? '2px solid var(--ink-black)' : undefined,
-        background: danger ? 'linear-gradient(135deg, var(--kit-red), #c0241e)' : undefined,
-        boxShadow: danger
+        border: solid ? '2px solid var(--ink-black)' : undefined,
+        background: danger
+          ? 'linear-gradient(135deg, var(--kit-red), #c0241e)'
+          : primary
+            ? 'linear-gradient(180deg, var(--amber) 0%, var(--amber-soft) 100%)'
+            : undefined,
+        boxShadow: solid
           ? 'inset 0 1px 0 0 var(--glass-highlight), 0 2px 0 0 var(--ink-black)'
           : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
         fontFamily: PIXEL,
         fontSize: 11,
         letterSpacing: 0.4,
-        color: danger ? 'var(--line-white)' : 'var(--cream)',
+        color: solid ? 'var(--line-white)' : 'var(--cream)',
         textTransform: 'uppercase',
       }}
     >
