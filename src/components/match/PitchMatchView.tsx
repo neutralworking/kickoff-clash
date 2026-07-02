@@ -1240,6 +1240,23 @@ export default function PitchMatchView({
     [traitFirings],
   );
 
+  // ── THIS SPELL — the plan paying off (Tier B). The engine's own cascade
+  // (split.attackBreakdown) carries the attack points each tactic / manager /
+  // chemistry line contributed this increment; we surface exactly those lines,
+  // label + value, summed by label, zeros dropped. Display-only. ──
+  const planLines = useMemo(() => {
+    if (!currentResult) return [];
+    const agg = new Map<string, number>();
+    for (const line of currentResult.split.attackBreakdown) {
+      if (line.type !== 'tactic' && line.type !== 'manager' && line.type !== 'synergy') continue;
+      agg.set(line.label, (agg.get(line.label) ?? 0) + line.value);
+    }
+    return [...agg.entries()]
+      .filter(([, value]) => value !== 0)
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value)); // biggest first — the one-line row clips the tail
+  }, [currentResult]);
+
   // Reset the playhead when we leave resolve mode (back to planning).
   useEffect(() => {
     if (mode === 'resolve') return;
@@ -1414,15 +1431,16 @@ export default function PitchMatchView({
   const hasPlayed = matchState.scores.length > 0;
   const hasPoorRating = hasPlayed && playerStatsList.some((s) => s.rating < 6);
 
-  // FIX 5 — the assistant's reads for this break (assistant.coachNotes). Pass the
-  // opponent's soft-spot blurb, the live tactic slots, and whether an undeployed
-  // tactic is still in hand, so the tactics read is accurate. Capped at ~4 lines.
+  // FIX 5 — the assistant's reads for this break (assistant.coachNotes). The
+  // 'tactics' kind is dropped display-side: it only restates the slot count the
+  // plan strip already shows. What remains (weakness / fitness / momentum) is
+  // genuinely situational; when nothing remains the panel doesn't render.
   const notes = useMemo<CoachNote[]>(
     () => (isBreak ? coachNotes(matchState, {
       weaknessLabel: opponentBuild.weakness,
       tacticSlots,
       hasUndeployedTactic,
-    }) : []),
+    }).filter((n) => n.kind !== 'tactics') : []),
     [isBreak, matchState, opponentBuild.weakness, tacticSlots, hasUndeployedTactic],
   );
 
@@ -1668,14 +1686,28 @@ export default function PitchMatchView({
             <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--amber)', borderRadius: 3, padding: '3px 5px', lineHeight: 1, flexShrink: 0 }}>COACH</span>
             <span style={{ fontSize: 12, color: 'var(--cream-soft)', lineHeight: 1.35 }}>Set your XI and shape, then kick off. Drag a player to swap; tap to inspect.</span>
           </div>
-        ) : resolving && traitCallouts.length > 0 ? (
-          // FIX 1 — TRAIT CALLOUTS: the firings as commentary. A leading ⚑ TRAITS tag,
-          // then up to 3 styled lines (accent glyph · PLAYER · TRAIT — what it does).
-          <div style={{ display: 'grid', gap: 3, minHeight: 51 }}>
+        ) : resolving && (planLines.length > 0 || traitCallouts.length > 0) ? (
+          // THIS SPELL — ONE panel for "your plan paid off": the cascade's tactic /
+          // manager / chemistry lines (label + attack points, straight off the
+          // engine), then the trait firings beneath. Replaces the TRAITS-only panel.
+          <div data-this-spell style={{ display: 'grid', gap: 3, minHeight: 51 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>TRAITS</span>
-              <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--dust)' }}>{traitCallouts.length} FIRED THIS SPELL</span>
+              <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>THIS SPELL</span>
+              {traitCallouts.length > 2 && (
+                <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--dust)', marginLeft: 'auto' }}>+{traitCallouts.length - 2} MORE</span>
+              )}
             </div>
+            {planLines.length > 0 && (
+              <div data-plan-line className="coach-line-in" style={{ display: 'flex', alignItems: 'baseline', gap: 0, height: 16, lineHeight: '16px', overflow: 'hidden', whiteSpace: 'nowrap', minWidth: 0 }}>
+                {planLines.map((p, i) => (
+                  <span key={p.label} style={{ display: 'inline-flex', alignItems: 'baseline', flexShrink: i === 0 ? 0 : undefined, minWidth: 0 }}>
+                    {i > 0 && <span style={{ color: 'var(--dust)', fontSize: 10, padding: '0 5px' }}>·</span>}
+                    <span style={{ fontSize: 10.5, color: 'var(--cream-soft)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.label}</span>
+                    <span style={{ fontFamily: PIXEL, fontSize: 9.5, color: p.value > 0 ? 'var(--gold)' : 'var(--danger)', marginLeft: 4, fontVariantNumeric: 'tabular-nums' }}>{p.value > 0 ? `+${p.value}` : p.value}</span>
+                  </span>
+                ))}
+              </div>
+            )}
             {traitCallouts.slice(0, 2).map((c) => (
               <div key={c.key} data-trait-callout className="coach-line-in" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, height: 16, lineHeight: '16px' }}>
                 <span style={{ fontFamily: PIXEL, fontSize: 11, color: c.accent, flexShrink: 0, width: 13, textAlign: 'center' }}>{c.glyph}</span>
@@ -1685,9 +1717,6 @@ export default function PitchMatchView({
                 </span>
               </div>
             ))}
-            {traitCallouts.length > 2 && (
-              <div style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)', letterSpacing: 0.3, paddingLeft: 19 }}>+{traitCallouts.length - 2} more — tap for the full log</div>
-            )}
           </div>
         ) : (
           tickerLines.map((e, i) => {
@@ -1706,85 +1735,44 @@ export default function PitchMatchView({
       </button>
       )}
 
-      {/* TACTICS + MANAGER ON SCREEN — FIX 3: the strip now carries real info, not
-          just names. A leading opponent-read chip (their PLAY style + SOFT SPOT), then
-          per-deployed-tactic rich pills (category tab · name · what it DOES · what it
-          can't pair with), and a clear empty/deployable slot chip. Tap a pill to
-          inspect; the TACTICS trigger opens the full shelf to deploy/swap. */}
-      <div style={{ display: 'flex', alignItems: 'stretch', gap: 6, margin: '0 16px 8px', flexShrink: 0 }}>
+      {/* PLAN STRIP — one compact line: manager · opponent read · deployed tactic
+          NAMES · the TACTICS trigger with the slot meter. Tap a pill to inspect
+          (the modal carries the full effect); deploy/swap detail lives in the
+          shelf, so nothing is restated here. */}
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 6, margin: '0 16px 8px', flexShrink: 0, height: 40 }}>
         {/* Manager pill */}
         <button
           onClick={() => { if (manager) setModal({ variant: 'manager', manager }); else setTrayOpen(true); }}
-          style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3, padding: '5px 8px', borderRadius: 'var(--radius)', border: `2px solid ${manager ? 'var(--gold)' : 'var(--border)'}`, background: manager ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0, width: 82, textAlign: 'left' }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, alignSelf: 'flex-start' }}>MGR</span>
-          <span style={{ fontSize: 10, fontWeight: 800, color: manager ? 'var(--cream)' : 'var(--dust)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.1 }}>{manager ? lastName(manager.name) : 'No manager'}</span>
+          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '0 8px', borderRadius: 'var(--radius)', border: `2px solid ${manager ? 'var(--gold)' : 'var(--border)'}`, background: manager ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0, maxWidth: 118, minWidth: 0 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>MGR</span>
+          <span style={{ fontSize: 10, fontWeight: 800, color: manager ? 'var(--cream)' : 'var(--dust)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.1 }}>{manager ? lastName(manager.name) : 'None'}</span>
         </button>
-        {/* Rich tactic strip — opponent read first, then deployed effects, then the
-            free/deployable slot. No-wrap horizontal scroll keeps it one band tall. */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'stretch', overflowX: 'auto', overflowY: 'hidden', flex: 1, scrollbarWidth: 'none', minWidth: 0 }} className="match-joker-row">
-          {/* OPPONENT READ — their playing style + the soft spot to exploit. */}
-          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '4px 8px', borderRadius: 'var(--radius)', border: '2px solid var(--success)', background: 'rgba(52,196,106,0.08)', flexShrink: 0, width: 132 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, lineHeight: 1 }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--ink-black)', background: 'var(--success)', borderRadius: 2, padding: '2px 3px', lineHeight: 1, flexShrink: 0 }}>VS</span>
-              <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--cream-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oppStyleLabel.toUpperCase()}</span>
-            </span>
-            <span style={{ fontSize: 9, color: 'var(--success)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.1 }}>
-              <span style={{ color: 'var(--dust)' }}>soft spot </span><b>{opponentBuild.weakness.toLowerCase()}</b>
-            </span>
-          </div>
-          {/* DEPLOYED tactics — each pill: category tab · name · effect summary. */}
+        {/* Scrollable middle: the terse opponent read + deployed tactic names. */}
+        <div className="match-joker-row" style={{ display: 'flex', gap: 6, alignItems: 'stretch', overflowX: 'auto', overflowY: 'hidden', flex: 1, minWidth: 0, scrollbarWidth: 'none' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0 8px', borderRadius: 'var(--radius)', border: '2px solid var(--success)', background: 'rgba(52,196,106,0.08)', flexShrink: 0 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--ink-black)', background: 'var(--success)', borderRadius: 2, padding: '2px 3px', lineHeight: 1, flexShrink: 0 }}>VS</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--cream-soft)', whiteSpace: 'nowrap' }}>{oppStyleLabel.toUpperCase()}</span>
+          </span>
           {deployedTactics.map((t) => {
             const cat = TACTIC_CAT_COLOR[t.category] ?? 'var(--gold)';
-            const contra = t.contradicts ? getTacticById(t.contradicts)?.name ?? null : null;
             return (
               <button key={t.id} onClick={() => setModal({ variant: 'tactic', tactic: t })}
-                style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '5px 8px', borderRadius: 'var(--radius)', border: `2px solid ${cat}`, background: 'rgba(0,0,0,0.32)', cursor: 'pointer', flexShrink: 0, width: 168, textAlign: 'left', overflow: 'hidden' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-                  <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.2, color: 'var(--ink-black)', background: cat, borderRadius: 2, padding: '2px 3px', lineHeight: 1, flexShrink: 0 }}>{t.category.slice(0, 3).toUpperCase()}</span>
-                  <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
-                </span>
-                {/* WHAT IT DOES — the effect, clamped to two lines so the pill stays short. */}
-                <span style={{ fontSize: 9, color: 'var(--cream-soft)', lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.effect}</span>
-                {/* CONTRADICTION — what it can't pair with (only when it has one). */}
-                {contra && (
-                  <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.2, color: 'var(--danger)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✕ NO {contra.toUpperCase()}</span>
-                )}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 9px', borderRadius: 'var(--radius)', border: `2px solid ${cat}`, background: 'rgba(0,0,0,0.32)', cursor: 'pointer', flexShrink: 0 }}>
+                <span style={{ width: 6, height: 6, borderRadius: 2, background: cat, flexShrink: 0 }} />
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--cream)', whiteSpace: 'nowrap' }}>{t.name}</span>
               </button>
             );
           })}
-          {/* EMPTY / DEPLOYABLE slot — legible state when there's room (req: empty-slot
-              state). A dashed deployable chip in plan; a muted "no tactics" otherwise. */}
-          {emptyTacticSlots > 0 && mode === 'plan' && !oppView && (
-            <button onClick={() => setTrayOpen(true)}
-              className={showTacticPrompt ? 'carrier-glow' : undefined}
-              style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '5px 9px', borderRadius: 'var(--radius)', border: `2px dashed ${showTacticPrompt ? 'var(--gold)' : 'var(--border)'}`, background: showTacticPrompt ? 'rgba(245,197,66,0.08)' : 'rgba(0,0,0,0.2)', cursor: 'pointer', flexShrink: 0, width: 96, textAlign: 'left' }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.3, color: showTacticPrompt ? 'var(--gold)' : 'var(--dust)', lineHeight: 1 }}>+ {emptyTacticSlots} FREE</span>
-              <span style={{ fontSize: 9, color: 'var(--cream-soft)', lineHeight: 1.15 }}>{hasUndeployedTactic ? 'Deploy a tactic' : 'Slot open'}</span>
-            </button>
-          )}
-          {deployedTactics.length === 0 && (mode !== 'plan' || oppView) && (
-            <span style={{ fontSize: 10, color: 'var(--dust)', alignSelf: 'center', paddingLeft: 2, whiteSpace: 'nowrap' }}>No tactics deployed</span>
-          )}
         </div>
-        {/* FIX 2 — the tactics tray trigger. An ALWAYS-VISIBLE control beside the
-            active-tactics strip (sits outside the scroll area so deployed pills can
-            never push it off-screen). Opens the tactical shelf to deploy/toggle.
-            Pulses gold when there's a free slot and an undeployed tactic to suggest. */}
+        {/* TACTICS trigger — the ONE deploy/swap entry point, carrying the slot
+            meter (n/N). Sits outside the scroll area so pills can't push it off.
+            Pulses gold when there's a free slot and an undeployed tactic. */}
         {mode === 'plan' && !oppView && (
           <button onClick={() => setTrayOpen(true)} aria-label="Edit tactics"
             className={showTacticPrompt ? 'carrier-glow' : undefined}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '4px 10px', borderRadius: 'var(--radius)', border: `2px ${deployedTactics.length === 0 ? 'dashed' : 'solid'} ${showTacticPrompt ? 'var(--gold)' : 'var(--border)'}`, background: showTacticPrompt ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0 }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px', borderRadius: 'var(--radius)', border: `2px ${deployedTactics.length === 0 ? 'dashed' : 'solid'} ${showTacticPrompt ? 'var(--gold)' : 'var(--border)'}`, background: showTacticPrompt ? 'rgba(245,197,66,0.10)' : 'rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0 }}>
             <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.4, color: showTacticPrompt ? 'var(--gold)' : 'var(--cream-soft)', lineHeight: 1 }}>TACTICS</span>
-            {/* Slot pips mirror the shelf's meter so deployed capacity reads here too. */}
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, lineHeight: 1 }}>
-              {tacticSlots.slots.map((slot, i) => {
-                const cat = slot ? TACTIC_CAT_COLOR[slot.category] ?? 'var(--amber)' : null;
-                return (
-                  <span key={i} style={{ width: 7, height: 7, borderRadius: 2, flexShrink: 0, background: cat ?? 'transparent', border: `1.5px solid ${cat ?? 'var(--dust)'}` }} />
-                );
-              })}
-              <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', marginLeft: 2, lineHeight: 1 }}>+</span>
-            </span>
+            <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{deployedIds.size}/{tacticSlots.slots.length}</span>
           </button>
         )}
       </div>
@@ -1826,21 +1814,16 @@ export default function PitchMatchView({
 
       {/* FIX 1 + FIX 4 — the TEAM-TALK action row. At a break the player's levers
           are surfaced together as proper buttons rather than buried in a side rail:
-          change SHAPE, open TACTICS, read RATINGS (once a period's played), and
-          (pre-kickoff only) AUTO-PICK the strongest fitness-aware XI. Only shown at
-          a real break, not while scouting the opposition or mid-resolve. */}
+          change SHAPE, read RATINGS (once a period's played), and (pre-kickoff only)
+          AUTO-PICK the strongest fitness-aware XI. TACTICS is NOT repeated here —
+          the plan strip's trigger above is the one entry. Only shown at a real
+          break, not while scouting the opposition or mid-resolve. */}
       {isBreak && (
         <div style={{ display: 'flex', gap: 6, margin: '0 16px 8px', flexShrink: 0 }}>
           <button onClick={() => setFormSheet(true)}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: 'var(--surface)', cursor: 'pointer' }}>
             <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: 'var(--kit-blue)', lineHeight: 1 }}>SHAPE</span>
             <span style={{ fontSize: 9.5, color: 'var(--cream-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{formation.name}</span>
-          </button>
-          <button onClick={() => setTrayOpen(true)}
-            className={showTacticPrompt ? 'carrier-glow' : undefined}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: `2px solid ${showTacticPrompt ? 'var(--gold)' : 'var(--ink-black)'}`, boxShadow: '0 3px 0 0 var(--ink-black)', background: showTacticPrompt ? 'rgba(245,197,66,0.10)' : 'var(--surface)', cursor: 'pointer' }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: showTacticPrompt ? 'var(--gold)' : 'var(--amber)', lineHeight: 1 }}>TACTICS</span>
-            <span style={{ fontSize: 9.5, color: 'var(--cream-soft)', lineHeight: 1 }}>{deployedIds.size}/{tacticSlots.slots.length} live{emptyTacticSlots > 0 ? ' · spare' : ''}</span>
           </button>
           {/* RATINGS (req 5) — open the per-player ratings sheet to decide who to hook.
               Shown once a period's been played; pulses if anyone's rating is poor. */}
@@ -2011,6 +1994,12 @@ export default function PitchMatchView({
                   {`ASSIST · ${lastName(assister).toUpperCase()}`}
                 </span>
               )}
+              {/* The play that produced it — the engine's playName, yours only. */}
+              {scored && currentResult?.split.playName && (
+                <span style={{ fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1, color: 'var(--dust)', letterSpacing: 0.4 }}>
+                  {currentResult.split.playName.toUpperCase()}
+                </span>
+              )}
             </div>
           );
         })()}
@@ -2040,19 +2029,6 @@ export default function PitchMatchView({
           <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: 8, zIndex: 5 }}>
             <button onClick={() => setFormSheet(true)} style={{ writingMode: 'vertical-rl', padding: '12px 6px', borderRadius: 'var(--radius) 0 0 var(--radius)', border: '2px solid var(--ink-black)', borderRight: 'none', background: 'var(--kit-blue)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 9, letterSpacing: 1, cursor: 'pointer' }}>SHAPE · {formation.name}</button>
           </div>
-        )}
-
-        {/* "Deploy a tactic?" pill — contextual nudge toward the opponent's weakness.
-            FIX 3 (related) — anchored to the TOP-LEFT of the pitch (the clear zone
-            by the opponent's goal mouth) so it never covers the GK at the bottom or
-            any central player. Fully opaque; sits below the side rail in z-order.
-            Suppressed at a break — the TACTICS button in the action row already
-            glows the same nudge there. */}
-        {showTacticPrompt && !isBreak && (
-          <button onClick={() => setTrayOpen(true)} style={{ position: 'absolute', left: 8, top: 8, zIndex: 6, display: 'flex', alignItems: 'center', gap: 6, maxWidth: 160, background: 'var(--surface)', border: '2px solid var(--gold)', borderRadius: 'var(--radius)', padding: '6px 9px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 2px 0 0 var(--ink-black)' }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>TIP</span>
-            <span style={{ fontSize: 10, color: 'var(--cream-soft)', lineHeight: 1.25 }}>Deploy a tactic to exploit <b style={{ color: 'var(--gold)' }}>{opponentBuild.weakness.toLowerCase()}</b>.</span>
-          </button>
         )}
 
         {/* Drag ghost following the finger — a lifted mini card. */}

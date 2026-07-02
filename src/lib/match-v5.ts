@@ -850,11 +850,28 @@ export function evaluateSplit(
     finalFinishingProj += dispatched.cells[cell].finishing * FINISHING_BAND[bandOf(cell)];
   }
 
+  // Squad-source records (deployed tactics + manager + intent) ride the synthetic
+  // owner (cardId −1). Attribute their attack/defence deltas as NAMED cascade
+  // lines — type 'manager' when the record name is the manager's, else 'tactic' —
+  // so the player's PLAN is visible in the breakdown instead of dissolving into
+  // the generic ability aggregate. Attack/defence aggregate raw in the dispatcher,
+  // so log values match the zone deltas 1:1; creation/finishing are band-weighted
+  // projections, so those stay in the aggregate (raw log values wouldn't match).
+  const managerNames = new Set(jokers.map((j) => j.name));
+  const squadAttack = new Map<string, number>();
+  const squadDefence = new Map<string, number>();
+  for (const line of dispatched.log) {
+    if (line.cardId !== -1 || !line.value) continue;
+    if (line.zone === 'attack') squadAttack.set(line.trait, (squadAttack.get(line.trait) ?? 0) + line.value);
+    if (line.zone === 'defence') squadDefence.set(line.trait, (squadDefence.get(line.trait) ?? 0) + line.value);
+  }
+
   const transformLabels: Record<ZoneName, Set<string>> = {
     attack: new Set(), defence: new Set(), creation: new Set(), finishing: new Set(),
   };
   for (const line of dispatched.log) {
-    if (line.zone) transformLabels[line.zone].add(line.trait);
+    // Squad records get their own named lines; keep them out of the ability label.
+    if (line.zone && line.cardId !== -1) transformLabels[line.zone].add(line.trait);
   }
 
   const newAttack = Math.max(0, Math.round(dispatched.zones.attack));
@@ -868,11 +885,28 @@ export function evaluateSplit(
   const baseCreation = Math.max(0, Math.round(finalCreationProj));
   const baseFinishing = Math.max(0, Math.round(finalFinishingProj));
 
-  if (attackDelta !== 0) {
-    attackBreakdown.push({ label: `${[...transformLabels.attack].join(' + ') || 'Verb dispatcher'}`, value: attackDelta, type: 'ability' });
+  // Named plan lines first (tactics / manager / intent), then the residual
+  // player-trait delta as the ability aggregate. The split is display-only —
+  // the lines still sum to the same attack/defence deltas.
+  let squadAttackTotal = 0;
+  for (const [name, value] of squadAttack) {
+    const v = Math.round(value);
+    if (v === 0) continue;
+    squadAttackTotal += v;
+    attackBreakdown.push({ label: name, value: v, type: managerNames.has(name) ? 'manager' : 'tactic' });
   }
-  if (defenceDelta !== 0) {
-    defenceBreakdown.push({ label: `${[...transformLabels.defence].join(' + ') || 'Verb dispatcher'}`, value: defenceDelta, type: 'ability' });
+  let squadDefenceTotal = 0;
+  for (const [name, value] of squadDefence) {
+    const v = Math.round(value);
+    if (v === 0) continue;
+    squadDefenceTotal += v;
+    defenceBreakdown.push({ label: name, value: v, type: managerNames.has(name) ? 'manager' : 'tactic' });
+  }
+  if (attackDelta - squadAttackTotal !== 0) {
+    attackBreakdown.push({ label: `${[...transformLabels.attack].join(' + ') || 'Verb dispatcher'}`, value: attackDelta - squadAttackTotal, type: 'ability' });
+  }
+  if (defenceDelta - squadDefenceTotal !== 0) {
+    defenceBreakdown.push({ label: `${[...transformLabels.defence].join(' + ') || 'Verb dispatcher'}`, value: defenceDelta - squadDefenceTotal, type: 'ability' });
   }
   if (creationDelta !== 0) {
     attackBreakdown.push({ label: `${[...transformLabels.creation].join(' + ') || 'Movement'} (creation)`, value: creationDelta, type: 'ability' });
