@@ -216,8 +216,10 @@ export function LineupSlot({
               }}
               className="absolute flex items-center justify-center"
               style={{
-                bottom: -3,
-                right: -4,
+                // Fully outside the rating circle — at −3/−4 the pip clipped the
+                // score digits; hung off the corner the number stays readable.
+                bottom: -8,
+                right: -9,
                 width: 14,
                 height: 14,
                 borderRadius: '50%',
