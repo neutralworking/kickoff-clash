@@ -592,7 +592,9 @@ export function initMatch(
     remainingDeck,
     attackerIds: new Set(),
     attackerOrder: [],
-    subsRemaining: 5,
+    // Every player you named to the bench can come on — the substitution allowance is
+    // the size of the bench you picked (was a flat 5, which stranded 2 of a 7-man bench).
+    subsRemaining: bench.length,
     discardsRemaining: 3 + getExtraDiscards(jokers),
     subsUsed: [],
     currentIncrement: 0,

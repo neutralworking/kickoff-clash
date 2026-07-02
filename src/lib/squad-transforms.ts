@@ -178,8 +178,11 @@ export function managerTraits(joker: JokerCard, ctx: SquadContext): TraitRecord[
       return c > 0 ? [ampZone(n, Math.min(0.30, c * 0.02), 'attack')] : [];
     }
     case 'scouts_eye':
+      // Squad depth — a modest all-round lift (the old +1-discard bonus fed an
+      // unsurfaced mechanic, so it now does something the player can actually see).
+      return [ampZone(n, 0.05, 'attack'), ampZone(n, 0.05, 'defence')];
     default:
-      return []; // +1 discard is a non-field effect (getExtraDiscards handles it)
+      return [];
   }
 }
 

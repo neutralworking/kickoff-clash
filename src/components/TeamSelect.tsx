@@ -18,12 +18,6 @@ import CardModal from './cards/CardModal';
 import { PIXEL } from './cards/cardTokens';
 import { BenchTile, BenchCover, LineupSlot } from './lineup';
 
-// A matchday squad is the XI + BENCH_SIZE subs; only MAX_SUBS of them can come
-// on during a tie. We surface both numbers so "pick 7, use 5" reads as real
-// football (18-player squad, 5 substitutions) rather than a broken cap.
-const MATCHDAY_SQUAD = 11 + BENCH_SIZE; // 18
-const MAX_SUBS = 5;
-
 interface TeamSelectProps {
   contents: PackContents;
   /** Pre-selected gaffer carried from the manager pack reveal. */
@@ -159,7 +153,7 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
             Name Your Squad
           </span>
           <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1, color: 'var(--dust)', marginTop: 2 }}>
-            XI {filled}/{slotCount} {'·'} BENCH {sel.bench.length}/{BENCH_SIZE} {'·'} {MATCHDAY_SQUAD}-MAN SQUAD
+            XI {filled}/{slotCount} {'·'} BENCH {sel.bench.length}/{BENCH_SIZE}
           </span>
         </div>
 
@@ -271,7 +265,7 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
           <span className="relative" style={{ fontSize: 16, flexShrink: 0, zIndex: 2 }}>{'\u{1F454}'}</span>
           <span className="flex flex-col items-start min-w-0 relative" style={{ zIndex: 2 }}>
             <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: manager ? 'var(--kit-red)' : 'var(--dust)' }}>
-              {manager ? 'GAFFER' : 'PICK GAFFER'}
+              {manager ? 'MANAGER' : 'PICK MANAGER'}
             </span>
             <span className="truncate" style={{ fontSize: 11, fontWeight: 700, color: manager ? 'var(--cream)' : 'var(--dust)', maxWidth: 86 }}>
               {manager ? manager.name : 'Tap to choose'}
@@ -296,15 +290,7 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
       <div className="shrink-0 px-3 mt-2">
         <div className="flex items-center gap-2 mb-1">
           <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)' }}>
-            BENCH {sel.bench.length}/{BENCH_SIZE}
-          </span>
-          {/* substitutions resource — a distinct in-match number, not a mis-cap. */}
-          <span
-            className="flex items-center gap-1"
-            style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--cream-soft)' }}
-          >
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />
-            {MAX_SUBS} SUBS IN-MATCH
+            SUBS {sel.bench.length}/{BENCH_SIZE}
           </span>
           {/* cover read: which lines the bench can refresh */}
           <BenchCover benchCards={benchCards} />
@@ -318,8 +304,6 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
           {Array.from({ length: BENCH_SIZE }).map((_, i) => {
             const cardId = sel.bench[i];
             const card = cardId != null ? byId.get(cardId) : undefined;
-            // The two slots past MAX_SUBS are squad depth / injury cover — label them so.
-            const depthSlot = i >= MAX_SUBS;
             return card ? (
               <BenchTile
                 key={i}
@@ -342,20 +326,13 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
                 }}
               >
                 <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'var(--ink)' }}>+</span>
-                {depthSlot && (
-                  <span
-                    style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: 'var(--dust)', marginTop: 2, lineHeight: 1 }}
-                  >
-                    COVER
-                  </span>
-                )}
               </button>
             );
           })}
         </div>
-        {/* One-line framing so the XI+7 vs 5-subs asymmetry reads as football. */}
+        {/* Every player you name to the bench can be brought on during the match. */}
         <p style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--dust)', margin: '5px 0 0', textAlign: 'center', lineHeight: 1.3 }}>
-          {MATCHDAY_SQUAD}-MAN MATCHDAY SQUAD {'·'} {MAX_SUBS} SUBSTITUTIONS PER TIE {'·'} LAST 2 ARE INJURY COVER
+          Any player on the bench can be brought on during the match.
         </p>
       </div>
 
@@ -392,7 +369,7 @@ export default function TeamSelect({ contents, initialManagerId, onConfirm }: Te
             <div className="flex items-center justify-between px-3 pb-2 shrink-0 relative" style={{ zIndex: 2 }}>
               <span style={{ fontFamily: PIXEL, fontSize: 13, letterSpacing: 0.5, color: 'var(--cream)' }}>
                 {overlay.kind === 'manager'
-                  ? 'PICK GAFFER'
+                  ? 'PICK MANAGER'
                   : overlay.kind === 'formation'
                     ? 'PICK SHAPE'
                     : overlay.kind === 'bench'

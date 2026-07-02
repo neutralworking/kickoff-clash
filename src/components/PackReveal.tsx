@@ -49,26 +49,26 @@ const STAGE_META: Record<Stage, StageMeta> = {
   players: {
     key: 'players',
     index: 1,
-    packLabel: 'THE SIGNING SHEET',
-    packSub: 'Fresh off the coach.',
+    packLabel: 'PLAYER PACK',
+    packSub: 'The squad',
     packAccent: 'var(--gold)',
     cardsHeader: 'YOUR SQUAD',
-    teach: 'Tap any card to inspect it. Next screen you name your XI and subs from this squad.',
+    teach: 'Tap any card to inspect it. Next up: the manager pack.',
   },
   managers: {
     key: 'managers',
     index: 2,
-    packLabel: 'THE HOT SEAT',
-    packSub: 'Two men want the job.',
+    packLabel: 'MANAGER PACK',
+    packSub: 'The managers',
     packAccent: 'var(--kit-red)',
     cardsHeader: 'PICK 1 OF 2',
-    teach: 'A gaffer shapes the whole team through their traits. Tap to inspect, then pick one.',
+    teach: 'A manager shapes the whole team through their effect. Tap to inspect, then pick one.',
   },
   tactics: {
     key: 'tactics',
     index: 3,
-    packLabel: 'THE DUGOUT',
-    packSub: 'Instructions for the touchline.',
+    packLabel: 'TACTICAL PACK',
+    packSub: 'The playbook',
     packAccent: 'var(--kit-blue)',
     cardsHeader: 'YOUR IN-MATCH HAND',
     teach: 'Tactics are your in-match hand — drawn and played as the game unfolds. Tap to inspect.',
@@ -362,7 +362,7 @@ function ManagerReveal({
                   cursor: 'pointer',
                 }}
               >
-                {picked ? 'PICKED ✓' : 'PICK GAFFER'}
+                {picked ? 'PICKED ✓' : 'PICK MANAGER'}
               </button>
             </div>
           );
@@ -436,12 +436,12 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
 
   const count =
     stage === 'players' ? contents.players.length : stage === 'managers' ? contents.managers.length : contents.tactics.length;
-  const countNoun = stage === 'players' ? 'players' : stage === 'managers' ? 'gaffers' : 'tactics';
+  const countNoun = stage === 'players' ? 'players' : stage === 'managers' ? 'managers' : 'tactics';
 
   // On the manager stage the continue button is gated on a pick.
   const managerGated = stage === 'managers' && pickedManagerId === null;
   const continueLabel =
-    stage === 'tactics' ? 'Pick Your Team →' : stage === 'managers' ? (managerGated ? 'Pick a Gaffer' : 'Next Pack →') : 'Next Pack →';
+    stage === 'tactics' ? 'Pick Your Team →' : stage === 'managers' ? (managerGated ? 'Pick a Manager' : 'Next Pack →') : 'Next Pack →';
 
   return (
     <div
@@ -535,9 +535,9 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
           <SealedPack meta={meta} count={count} countNoun={countNoun} ripping={phase === 'ripping'} onRip={rip} />
         ) : (
           <>
-            {/* Run-context strip — PLAYER pack only. Pinned in the upper dead
-                zone above the grid, matching the bottom hint pill. This is the
-                headline correction: the 24-card draft is your WHOLE run squad. */}
+            {/* Run-context strip — PLAYER pack only. Pinned above the grid, matching
+                the bottom hint pill: the starting draft is random and the lineup is
+                improved in the shop (players can be bought and sold). */}
             {stage === 'players' && (
               <div
                 className="chip-reveal glass-surface shrink-0 relative overflow-hidden"
@@ -555,10 +555,10 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
                 <span className="relative" style={{ fontSize: 15, flexShrink: 0, zIndex: 2 }}>{'\u{1F4A1}'}</span>
                 <span className="relative flex flex-col" style={{ zIndex: 2, minWidth: 0 }}>
                   <span style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.3, color: 'var(--gold)', lineHeight: 1.35 }}>
-                    These {count} players are your whole squad for the run.
+                    {count} players, drawn at random.
                   </span>
                   <span style={{ fontSize: 10.5, lineHeight: 1.3, color: 'var(--cream-soft)', marginTop: 2 }}>
-                    Name your XI and subs — you keep them all to rotate, and strengthen them in the store between ties.
+                    Pick your team from them — and buy, sell or improve your lineup in the store.
                   </span>
                 </span>
               </div>

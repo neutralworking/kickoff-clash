@@ -4,11 +4,11 @@ import type { Connection } from './chemistry';
 
 export interface JokerCard {
   id: string;
-  name: string;            // the gaffer (a person)
+  name: string;            // the manager (a person)
   philosophy: string;      // one-line persona
   traits: string[];        // readable trait tags (backed by managerTraits records)
   nation?: string;
-  effect: string;          // legacy human-readable effect (hand.ts scoring path)
+  effect: string;          // what the manager actually does (matches squad-transforms.ts managerTraits)
   flavour: string;
   rarity: 'common' | 'uncommon' | 'rare';
   compute: (xi: Card[], connections: Connection[]) => number; // legacy bonus points
@@ -21,7 +21,7 @@ export const ALL_JOKERS: JokerCard[] = [
     philosophy: 'Get it forward and win the second ball.',
     traits: ['Direct Play', 'Aerial Targets'],
     nation: 'England',
-    effect: '+30 per Target or Powerhouse in XI',
+    effect: 'Targets & Powerhouses play at +18%.',
     flavour: 'Route one. Every time.',
     rarity: 'common',
     compute: (xi) => xi.filter(c => c.archetype === 'Target' || c.archetype === 'Powerhouse').length * 30,
@@ -32,7 +32,7 @@ export const ALL_JOKERS: JokerCard[] = [
     philosophy: 'Keep the ball; the goals will come.',
     traits: ['Possession', 'Patient Build-up'],
     nation: 'France',
-    effect: '+25 per Controller or Passer',
+    effect: 'Controllers & Passers play at +15%.',
     flavour: 'The game is simple.',
     rarity: 'common',
     compute: (xi) => xi.filter(c => c.archetype === 'Controller' || c.archetype === 'Passer').length * 25,
@@ -43,7 +43,7 @@ export const ALL_JOKERS: JokerCard[] = [
     philosophy: 'Fortune favours the brave.',
     traits: ['High Risk', 'Backs Mavericks'],
     nation: 'Scotland',
-    effect: 'Glass and Phoenix cards get +40 power',
+    effect: 'Glass & Phoenix cards get +3% power each (up to +20%).',
     flavour: 'Fortune favours the brave.',
     rarity: 'uncommon',
     compute: (xi) => xi.filter(c => c.durability === 'glass' || c.durability === 'phoenix').length * 40,
@@ -54,7 +54,7 @@ export const ALL_JOKERS: JokerCard[] = [
     philosophy: 'Trust the kids and they repay you.',
     traits: ['Youth Project', 'Raw Talent'],
     nation: 'Sweden',
-    effect: '+20 per Common card in XI',
+    effect: 'Common cards get +3% attack each (up to +20%).',
     flavour: 'Give the kids a chance.',
     rarity: 'common',
     compute: (xi) => xi.filter(c => c.rarity === 'Common').length * 20,
@@ -65,7 +65,7 @@ export const ALL_JOKERS: JokerCard[] = [
     philosophy: 'Concede nothing, punish everything.',
     traits: ['Low Block', 'Counter-Punch'],
     nation: 'Portugal',
-    effect: '+50 per Destroyer or Cover',
+    effect: 'Destroyers & Cover play at +20%.',
     flavour: 'Park the bus. Win the league.',
     rarity: 'uncommon',
     compute: (xi) => xi.filter(c => c.archetype === 'Destroyer' || c.archetype === 'Cover').length * 50,
@@ -76,7 +76,7 @@ export const ALL_JOKERS: JokerCard[] = [
     philosophy: 'Leaders set the standard; everyone follows.',
     traits: ['Motivator', 'Leaders Thrive'],
     nation: 'Scotland',
-    effect: '+80 if a Captain personality is in XI',
+    effect: 'With a Captain in your XI, the whole team gets +10% attack & defence.',
     flavour: "Nobody's sitting down.",
     rarity: 'rare',
     compute: (xi) => xi.some(c => c.personalityTheme === 'Captain') ? 80 : 0,
@@ -87,7 +87,7 @@ export const ALL_JOKERS: JokerCard[] = [
     philosophy: 'The whole is greater than the sum.',
     traits: ['Team Cohesion', 'Chemistry'],
     nation: 'Brazil',
-    effect: 'Each synergy connection gives +15 extra',
+    effect: '+2% attack for every chemistry link (up to +30%).',
     flavour: 'The whole is greater than the sum.',
     rarity: 'uncommon',
     compute: (_, connections) => connections.length * 15,
@@ -98,7 +98,7 @@ export const ALL_JOKERS: JokerCard[] = [
     philosophy: 'I always know a player.',
     traits: ['Scouting Network', 'Squad Depth'],
     nation: 'Germany',
-    effect: '+1 discard per match',
+    effect: 'The whole squad plays at +5%.',
     flavour: 'I know a player...',
     rarity: 'rare',
     compute: () => 0, // bonus discards handled separately in hand logic
