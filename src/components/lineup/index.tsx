@@ -259,7 +259,7 @@ export function LineupSlot({
                 width: 14,
                 height: 14,
                 borderRadius: '50%',
-                background: 'var(--surface)',
+                background: 'var(--ink-black)',
                 border: '1.5px solid var(--line-white)',
                 color: 'var(--line-white)',
                 fontFamily: PIXEL,

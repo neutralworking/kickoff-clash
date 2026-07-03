@@ -103,7 +103,7 @@ function SealedPack({
               width: 220,
               height: 220,
               borderRadius: '50%',
-              background: 'radial-gradient(circle, var(--cream) 0%, rgba(245,240,224,0.4) 40%, transparent 70%)',
+              background: 'radial-gradient(circle, var(--line-white) 0%, rgba(255,250,240,0.4) 40%, transparent 70%)',
               pointerEvents: 'none',
             }}
           />
@@ -120,7 +120,7 @@ function SealedPack({
             height: 232,
             border: '3px solid var(--ink-black)',
             borderRadius: 'var(--radius-lg)',
-            background: `linear-gradient(160deg, var(--surface-raised) 0%, var(--surface) 55%, #0c1d12 100%)`,
+            background: `linear-gradient(160deg, var(--surface-raised) 0%, var(--surface) 55%, var(--felt) 100%)`,
             boxShadow: `0 0 0 2px ${meta.packAccent}, 0 14px 30px rgba(0,0,0,0.55)`,
             display: 'flex',
             flexDirection: 'column',
@@ -139,7 +139,7 @@ function SealedPack({
               left: 8,
               right: 8,
               height: 0,
-              borderTop: '2px dashed rgba(242,246,239,0.25)',
+              borderTop: '2px dashed rgba(251,247,236,0.25)',
             }}
           />
           <div
@@ -273,7 +273,7 @@ function PlayerReveal({ players, onOpen }: { players: Card[]; onOpen: (c: Card) 
                 width: i === page ? 22 : 8,
                 height: 8,
                 borderRadius: 4,
-                background: i === page ? 'var(--gold)' : 'rgba(242,246,239,0.25)',
+                background: i === page ? 'var(--gold)' : 'rgba(251,247,236,0.22)',
                 transition: 'all 0.25s ease',
               }}
             />
@@ -297,7 +297,7 @@ function PagerBtn({ dir, disabled, onClick }: { dir: 'prev' | 'next'; disabled: 
         height: 40,
         borderRadius: 'var(--radius-sm)',
         border: '2px solid var(--ink-black)',
-        background: disabled ? 'rgba(255,255,255,0.04)' : 'var(--surface-raised)',
+        background: disabled ? 'rgba(255,255,255,0.05)' : 'var(--surface-raised)',
         color: disabled ? 'var(--ink)' : 'var(--cream)',
         fontFamily: PIXEL,
         fontSize: 14,
@@ -460,7 +460,7 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            'radial-gradient(ellipse at 50% 22%, rgba(31,157,79,0.16) 0%, transparent 55%)',
+            'radial-gradient(ellipse at 50% 22%, rgba(31,157,79,0.10) 0%, transparent 55%)',
         }}
       />
 
@@ -480,8 +480,8 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
                   background: active
                     ? STAGE_META[s].packAccent
                     : done
-                      ? 'rgba(242,246,239,0.5)'
-                      : 'rgba(242,246,239,0.18)',
+                      ? 'rgba(251,247,236,0.5)'
+                      : 'rgba(251,247,236,0.18)',
                   transition: 'all 0.3s ease',
                 }}
               />
@@ -599,8 +599,8 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
             <div
               className="chip-reveal"
               style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(242,246,239,0.12)',
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(251,247,236,0.14)',
                 borderRadius: 'var(--radius-sm)',
                 padding: '9px 12px',
                 marginBottom: 10,

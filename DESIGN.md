@@ -1,10 +1,17 @@
 # Kickoff Clash — Design System
 
 > **Canonical visual source of truth.** This document supersedes the legacy
-> casino/felt-and-leather look. Everything ships in the **refreshed Sensible
-> Soccer** style: bold flat colour blocks, hard high-contrast pixel edges,
-> chunky display type, sprite-like player chips, bright pitch greens, kit-red
-> and kit-blue accents — modernised for a phone, not a literal retro clone.
+> casino/felt-and-leather look, the earlier night-pitch dark-mode pass, AND
+> the short-lived cream/parchment "sticker album pages" misreading. The real
+> reference is the 1995 Panini Merlin Premier League album **COVER**: an
+> ornate black background with gold foil embossed lettering, crest artwork,
+> and border. Everything ships **black-and-gold**: true near-black surfaces,
+> gold foil as the dominant, load-bearing accent (borders, dividers, headers,
+> CTAs, glass chrome, glow halos), hard high-contrast `--ink-black`
+> sticker-cutout edges, chunky display type, sprite-like player chips, and one
+> bright turf green held in reserve for the pitch itself — a premium
+> trophy-case/treasure-chest feel, modernised for a phone, not a literal
+> retro clone.
 >
 > Tokens live in `src/app/globals.css` (`@theme inline`). Fonts are wired in
 > `src/app/layout.tsx`. **Change the look at the token layer, never with one-off
@@ -30,46 +37,58 @@ cards, your XI is your hand, chemistry is synergy, managers are jokers.
 
 ## Color
 
-Deep night-pitch surfaces, hard `--ink-black` borders, one bright turf green,
-and a tight accent set (warm amber/gold + kit red/blue). High contrast and
-legible on a phone in one hand.
+**1995 Panini Merlin sticker-album COVER: black-and-gold.** True near-black
+surfaces dominate — this is a dark-mode system again, a trophy case/treasure
+chest, not a paper collectible — with **gold foil as the primary, dominant
+accent**: borders, dividers, headers, CTA treatments and glow halos all lean
+gold before anything else. Kit-red and kit-blue are flat poster primaries held
+firmly secondary (badges, kit accents, rare-rarity ring) so they never compete
+with gold for attention. One bright turf green stays held in reserve for the
+pitch itself. Hard `--ink-black` sticker-cutout borders remain the defining
+edge. High contrast and legible on a phone in one hand.
 
 ### Foundation
 
 | Token | Hex | Intent |
 |---|---|---|
-| `--ink-black` | `#07100b` | Hard pixel border / drop-shadow. The defining edge of the system. |
-| `--line-white` | `#f2f6ef` | Pitch-line white; brightest text and hairlines. |
-| `--pitch-bright` | `#1f9d4f` | Bold flat turf for pixel surfaces (pitch stripes, chips). |
+| `--ink-black` | `#0b0703` | Hard pixel border / drop-shadow — the "sticker cutout" edge, true near-black. The defining edge of the system. |
+| `--line-white` | `#fbf7ec` | Warm ivory white. Brightest text/highlight — use ONLY on saturated or dark fills (kit badges, ink-black chips), or directly on a black surface where it's the loudest possible signal. |
+| `--pitch-bright` | `#1f9d4f` | Bold flat turf, reserved for the pitch itself (pitch stripes, the team-select/match pitch). Not a general surface colour. |
 | `--pitch-stripe` | `#1a8a45` | Alternate mow stripe. |
-| `--kit-red` | `#e8362f` | Primary kit-red accent / home kit / CTA. Also `--danger`. |
-| `--kit-blue` | `#2f7fe0` | Away-kit blue accent / secondary CTA. |
+| `--kit-red` | `#e0332d` | Secondary kit-red accent / home kit — flat poster red. Also `--danger`. Never the dominant accent — that's gold now. |
+| `--kit-blue` | `#2b74e0` | Secondary away-kit blue accent — flat poster blue. |
 
 ### Surfaces
 
 | Token | Hex | Intent |
 |---|---|---|
-| `--felt` | `#0a160e` | App background — deep night pitch. |
-| `--felt-light` | `#0f1f15` | Raised background band. |
-| `--surface` / `--leather` | `#122a1b` | Default panel / card surface. (`--leather` aliases this.) |
-| `--surface-raised` / `--leather-light` | `#18371f` | Hovered / elevated surface. |
+| `--felt` | `#120d07` | App background — true near-black with a whisper of warmth toward gold (the "case" the cards sit in). |
+| `--felt-light` | `#1a130a` | Raised background band. |
+| `--surface` / `--leather` | `#221a0f` | Default panel / card surface. (`--leather` aliases this.) |
+| `--surface-raised` / `--leather-light` | `#2f2415` | Hovered / elevated surface — the lightest step, still firmly dark. |
+
+Surfaces get progressively **lighter** as they elevate (felt → surface →
+surface-raised) — genuine depth in a trophy case, not a flat wash. The ramp
+is warm-neutral toward gold, deliberately NOT toward the old night-pitch
+green (green being the dominant tone was the original complaint) and NOT
+toward the cream/parchment overcorrection that followed it.
 
 ### Borders
 
 | Token | Hex | Intent |
 |---|---|---|
-| `--border` | `#2c5238` | Default hairline border on dark surfaces. |
+| `--border` | `#5c4526` | Default hairline border on dark surfaces — a dim bronze-gold line, part of the gold family without competing with full-strength `--gold`. |
 | `--border-strong` | → `--ink-black` | Hard pixel edge for chips, packs, buttons. |
 
 ### Accents (warm)
 
 | Token | Hex | Intent |
 |---|---|---|
-| `--amber` | `#ff7a1f` | Primary warm accent / main CTA. |
+| `--amber` | `#ff7a1f` | Warm accent — flat poster orange, secondary to gold (used for some CTA glows/pulses). |
 | `--amber-soft` | `#e0600f` | CTA gradient base. |
-| `--amber-glow` | `rgba(255,122,31,.4)` | Glow halo behind warm CTAs. |
-| `--gold` | `#f5c542` | Legendary / highlight gold; trait pills, dividers. |
-| `--gold-glow` | `rgba(245,197,66,.35)` | Glow halo for gold. |
+| `--amber-glow` | `rgba(255,122,31,.42)` | Glow halo behind warm CTAs. |
+| `--gold` | `#e8b23a` | **THE dominant accent.** Foil gold on black — borders, dividers, headers, CTA treatments, glow halos, the Legendary rarity ramp. Brighter/richer than either the night-pitch original or the cream-pass "reads as text on cream" deepened value, because it now needs to read as glowing foil against true black. |
+| `--gold-glow` | `rgba(232,178,60,.55)` | Glow halo for gold — the foil-catching-light halo, stronger now that gold is load-bearing everywhere, not just Legendary. |
 
 ### Pitch (legacy names → bright turf)
 
@@ -77,29 +96,37 @@ legible on a phone in one hand.
 |---|---|---|
 | `--pitch-green` | `#1f9d4f` | Primary turf. |
 | `--pitch-dark` | `#14723a` | Shaded turf. |
-| `--pitch-light` | `#34c46a` | Highlight turf / positive commentary. |
+| `--pitch-light` | `#2fae63` | Highlight turf / positive commentary. |
+
+Pitch tokens are unchanged from the cream pass — demoting green to "just the
+pitch, not the whole app" was already correct and stays correct here.
 
 ### Semantic
 
 | Token | Hex | Intent |
 |---|---|---|
-| `--success` | `#34c46a` | Win / positive deltas. |
-| `--danger` | `#e8362f` | Loss / negative — unified with `--kit-red`. |
-| `--warning` | `#f5c542` | Caution / unified with `--gold`. |
+| `--success` | `#34c46a` | Win / positive deltas — a bright flat green, legible on black. |
+| `--danger` | `#e0332d` | Loss / negative — unified with `--kit-red`. |
+| `--warning` | `#e8b23a` | Caution / unified with `--gold`. |
 
 ### Text
 
 | Token | Hex | Intent |
 |---|---|---|
-| `--cream` | `#f2f6ef` | Primary text. |
-| `--cream-soft` | `#c3d2c0` | Secondary text. |
-| `--dust` | `#88a08c` | Muted / caption text. |
-| `--ink` | `#5a7561` | Disabled / faint text on dark. |
+| `--cream` | `#f2ead6` | Primary text — warm ivory, near-white. (Restored to light-on-dark: surfaces are black again, so this is the brightest primary-copy token.) |
+| `--cream-soft` | `#c9bb95` | Secondary text — warm parchment-gold grey. |
+| `--dust` | `#9a8b6a` | Muted / caption text — dim warm taupe. |
+| `--ink` | `#5c5340` | Disabled / faint text on dark surfaces — dim, deliberately low-contrast (disabled reads as unavailable). |
 
-**Contrast law:** body text uses `--cream` / `--cream-soft` on surfaces; never
-place `--dust` or `--ink` text on `--felt` for anything that must be read.
-Position/rarity colours (gold, purple, kit-blue, grey) ring the player chips —
-ratings are always `--line-white` for legibility.
+**Contrast law (restored for the black-surface system):** body text uses
+`--cream` / `--cream-soft` on `--felt` / `--surface` / `--surface-raised` —
+`--line-white` is reserved for the loudest signals: text sitting on a
+saturated fill (kit badges, gold chips, `--ink-black` tabs) or the single
+brightest number on a screen (e.g. a hero scoreline). `--dust` / `--ink` stay
+legible-but-quiet captions on the dark surfaces; they were never meant to
+carry primary copy. Position/rarity colours (gold, purple, kit-blue, grey)
+ring the player chips — ratings are always `--line-white` **on their coloured
+badge**, or `--cream` where a rating sits directly on a card/panel surface.
 
 ---
 
@@ -225,36 +252,41 @@ the match and team-select pitches.
 > identity intact. The rule is one sentence: **glass shell, pixel content.**
 
 The app **SHELL** — panels, HUD, tab bars, buttons, sheets, scrims, phase
-backgrounds — is premium **frosted glass with depth** (a polished Telegram
-mini-game feel): translucent night-pitch fills over a blurred backdrop, a bright
-top inner-highlight, a soft diagonal sheen, a tight accent/rarity glow, and a
-real elevation-shadow hierarchy. The **CONTENT** — cards, player/gaffer/tactic
-sprites, the pitch, scoreline glyphs, Silkscreen type — stays crisp **pixel
-art**. Depth lives *under* and *around* the pixels (frame, glow, shadow); it
-**never blurs or soft-shadows a sprite or an `--ink-black` pixel edge** — that is
-the cardinal sin. The card is where the two meet: a glassy frame wrapping a pixel
-interior.
+backgrounds — is premium **frosted glass with depth**, re-grounded for a
+black backdrop (a gold-foil-on-black cover feel, not a parchment one):
+translucent near-black fills over a blurred backdrop, a bright warm-gold top
+inner-highlight (the foil sheen), a soft diagonal sheen, a tight accent/rarity
+glow, and a real elevation-shadow hierarchy. Gold is the load-bearing glass
+accent — the default `.glass-border` and `.glow-edge` halo both read gold, so
+every panel/HUD/sheet in the shell inherits the cover's gold-on-black chrome
+without needing a per-component override. The **CONTENT** — cards,
+player/gaffer/tactic sprites, the pitch, scoreline glyphs, Silkscreen type —
+stays crisp **pixel art**. Depth lives *under* and *around* the pixels (frame,
+glow, shadow); it **never blurs or soft-shadows a sprite or an `--ink-black`
+pixel edge** — that is the cardinal sin. The card is where the two meet: a
+glassy frame wrapping a pixel interior.
 
 ### Tokens (in `globals.css` `@theme`)
 
 | Token | Value | Intent |
 |---|---|---|
-| `--glass-fill` | `rgba(18,42,27,.58)` | Translucent `--surface` fill for `.glass-surface`. |
-| `--glass-fill-strong` | `rgba(24,55,31,.78)` | Denser fill for raised glass. |
-| `--glass-border` | `rgba(180,226,196,.16)` | Subtle 1px light edge on glass. |
-| `--glass-highlight` | `rgba(242,246,239,.22)` | Bright top inner-highlight (the "lit glass" tell). |
-| `--glass-fallback` / `--glass-fallback-strong` | `#122a1b` / `#18371f` | Opaque fills where `backdrop-filter` is unsupported. |
+| `--glass-fill` | `rgba(20,15,8,.58)` | Translucent `--surface` fill for `.glass-surface`. |
+| `--glass-fill-strong` | `rgba(28,21,11,.80)` | Denser fill for raised glass. |
+| `--glass-border` | `rgba(232,178,60,.20)` | Gold-foil hairline edge — gold as chrome everywhere, not just rarity. |
+| `--glass-highlight` | `rgba(255,240,205,.24)` | Bright warm-gold top inner-highlight (the "lit glass"/foil-sheen tell). |
+| `--glass-fallback` / `--glass-fallback-strong` | `#221a0f` / `#2f2415` | Opaque fills where `backdrop-filter` is unsupported. |
 | `--purple` | `#8b5cf6` | Epic rarity hue (also the card Epic accent). |
-| `--glow-soft` | `rgba(242,246,239,.20)` | Neutral focus halo (default for `.glow-edge`). |
-| `--glow-rare` | `rgba(47,127,224,.50)` | Rare halo (kit-blue). |
-| `--glow-epic` | `rgba(139,92,246,.52)` | Epic halo (purple). |
-| `--glow-legendary` | `rgba(245,197,66,.52)` | Legendary halo (gold). |
+| `--glow-soft` | `rgba(232,178,60,.26)` | Neutral focus halo (default for `.glow-edge`) — gold, the dominant accent. |
+| `--glow-rare` | `rgba(43,116,224,.55)` | Rare halo (kit-blue). |
+| `--glow-epic` | `rgba(139,92,246,.55)` | Epic halo (purple). |
+| `--glow-legendary` | `rgba(232,178,60,.60)` | Legendary halo (gold) — the hero glow, strongest in the set. |
 
 ### Elevation system
 
 A three-step layered-shadow scale; height **and** spread rise together so a
-"raised" surface is genuinely *higher*, not just lighter green. Pairs with the
-hard `--ink-black` pixel-edge drop on pixel tokens.
+"raised" surface is genuinely *higher*, not just lighter. Genuine dark drop
+shadows on black — pairs with the hard `--ink-black` pixel-edge drop on pixel
+tokens.
 
 | Token | Use |
 |---|---|
@@ -271,12 +303,13 @@ hard `--ink-black` pixel-edge drop on pixel tokens.
 | `.sheen` / `.sheen-strong` | A `::before` diagonal gloss sweep (`pointer-events:none`). Strong variant for CTAs/heroes. Host needs `position` + `overflow:hidden`; content sits at `z-index:2`. |
 | `.glow-edge` | Outer accent glow ring driven by `--glow`. Callers set the colour: `style={{ '--glow': 'var(--glow-legendary)' }}`. |
 | `.depth-1` / `.depth-2` / `.depth-3` | Elevation utilities mapping to the tokens. |
-| `.kc-app-bg` | The deep glassy night-pitch app background (top sheen + turf glow + edge vignette over `--felt`). Use in place of `background: var(--felt)` on a phase root. |
+| `.kc-app-bg` | The glassy black-and-gold app background (a faint gold sheen near the top — foil catching light — a whisper of turf glow, and a dark edge vignette deepening to true black over `--felt`). Use in place of `background: var(--felt)` on a phase root. |
 
-The `.phase-*` shells were re-grounded to read as deep glassy night-pitch (a
-phase-accent top sheen + an edge vignette over `--felt`), without fighting pixel
-content. `.pixel-edge`, `.pitch-stripes`, `.pixelated` are unchanged — that is
-the pixel layer.
+The `.phase-*` shells were re-grounded to read as glassy black-and-gold (a
+phase-accent top sheen + a dark edge vignette over `--felt`), without fighting
+pixel content; `.phase-reveal` (the pack-opening hero moment) leans hardest
+into the gold vignette since it's where the foil payoff lands. `.pixel-edge`,
+`.pitch-stripes`, `.pixelated` are unchanged — that is the pixel layer.
 
 ### Backdrop-filter fallback (binding)
 
@@ -312,8 +345,8 @@ Source: `src/components/cards/`
 
 Every card is a true **2.5 : 3.5 playing-card** rectangle: hard
 `--ink-black` border (2px grid / 3px full), `--radius-sm` (grid) / `--radius`
-(full) corners, a flat night-pitch gradient fill
-(`--surface-raised → --surface → #0c1d12`), and the signature stacked pixel drop
+(full) corners, a flat near-black gradient fill
+(`--surface-raised → --surface → --felt`), and the signature stacked pixel drop
 shadow. An **accent rail** runs across the top and bottom of every card — this
 colour is the card's identity:
 
@@ -324,16 +357,30 @@ colour is the card's identity:
   `specialist` gold).
 
 `selected` adds an accent inset ring; `dimmed` drops opacity to ~0.42 for
-ineligible picks. Ratings are always `--line-white` (contrast law).
+ineligible picks. Ratings sit directly on the card's dark surface fill, so
+they read in `--cream` (bright ivory) — `--line-white` is reserved for a
+rating that sits on a saturated/dark badge fill instead (contrast law).
 
 ### The three variants
 
 All three share the frame but carry a variant-specific **pixel-art sprite**
 (flat CSS/SVG blocks, `shapeRendering: crispEdges`, no image assets) and body.
 
-- **PLAYER** — position tab (left) + big rating (right); a pixel kit-and-head
-  sprite in the kit colour with an accent crest block; surname; archetype +
-  nation flag/code.
+- **PLAYER** — the sprite is a SMALL CORNER BADGE (top-left), not a centre-stage
+  hero: a pixel kit-and-head portrait in a hard-bordered tile, sized to leave
+  the header room to breathe even at the tightest grid width. Beside it, the
+  nation (flag + code) in a genuinely shrinkable column (`minWidth: 0` +
+  `overflow: hidden` down to the glyph) so it clips before it can ever overlap
+  the rating; top-right, the big rating (`flexShrink: 0`) with a quiet OVR
+  caption at `full` only — durability lives in the expanded view (CardModal,
+  a tappable row directly below FITNESS, with a mechanics-grounded explainer;
+  ROLE gets the same tap-to-open treatment). Below the header, an ATTRIBUTES
+  row of "can operate" position
+  chips (own slot filled, alternates outlined — `grid` caps at 3 for a
+  guaranteed single line, `full` shows every eligible slot). Then the nameplate
+  (surname + role), the fitness meter, and the defining-trait pill rail — the
+  same data stack CardModal's detail panel expands on, now legible on the card
+  face itself instead of hidden behind a tap.
 - **MANAGER** — `GAFFER` tab + nation; a pixel suit-and-tie sprite (tie in
   accent); name; italic philosophy flavour; trait pills.
 - **TACTIC** — category tab; a pixel chevron / tactic-board sprite; name;

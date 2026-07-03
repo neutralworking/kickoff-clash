@@ -281,7 +281,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
               style={{
                 fontFamily: 'var(--font-pixel, sans-serif)',
                 fontSize: 48,
-                color: 'var(--line-white)',
+                color: 'var(--cream)',
                 lineHeight: 1,
                 textShadow: '0 3px 0 var(--ink-black)',
               }}

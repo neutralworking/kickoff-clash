@@ -290,7 +290,7 @@ function SubCard({ card, dim }: { card: Card; dim?: boolean }) {
         {/* Position tab · level */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
           <span style={{ background: posColor, color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 7, lineHeight: 1, padding: '2px 3px', borderRadius: 2 }}>{card.position}</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, color: 'var(--line-white)' }}>{Math.round(card.power)}</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, color: 'var(--cream)' }}>{Math.round(card.power)}</span>
         </div>
         {/* Surname */}
         <div style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--cream)', lineHeight: 1.05, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lastName(card.name)}</div>
@@ -1912,15 +1912,15 @@ export default function PitchMatchView({
             {/* ISSUE 1 — clear average opposition strength badge (real XI mean power) */}
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
               <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1 }}>AVG</span>
-              <span style={{ fontSize: 11, color: 'var(--dust)' }}>OPP STRENGTH <b style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--line-white)' }}>{oppStrength}</b></span>
+              <span style={{ fontSize: 11, color: 'var(--dust)' }}>OPP STRENGTH <b style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--cream)' }}>{oppStrength}</b></span>
             </div>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontFamily: PIXEL, fontSize: 22, lineHeight: 1, color: 'var(--line-white)', display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
-            <span className={shake === 'you' ? 'score-tick' : undefined} style={{ display: 'inline-block', color: shake === 'you' ? 'var(--success)' : 'var(--line-white)' }}>{displayGoals.you}</span>
+          <div style={{ fontFamily: PIXEL, fontSize: 22, lineHeight: 1, color: 'var(--cream)', display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+            <span className={shake === 'you' ? 'score-tick' : undefined} style={{ display: 'inline-block', color: shake === 'you' ? 'var(--success)' : 'var(--cream)' }}>{displayGoals.you}</span>
             <span style={{ color: 'var(--dust)' }}>–</span>
-            <span className={shake === 'opp' ? 'score-tick' : undefined} style={{ display: 'inline-block', color: shake === 'opp' ? 'var(--danger)' : 'var(--line-white)' }}>{displayGoals.opp}</span>
+            <span className={shake === 'opp' ? 'score-tick' : undefined} style={{ display: 'inline-block', color: shake === 'opp' ? 'var(--danger)' : 'var(--cream)' }}>{displayGoals.opp}</span>
           </div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: resolving ? 'var(--success)' : 'var(--dust)', flexShrink: 0, boxShadow: resolving ? '0 0 5px var(--success)' : undefined }} className={resolving ? 'carrier-glow' : undefined} />
