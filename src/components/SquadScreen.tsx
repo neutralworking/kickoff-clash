@@ -964,7 +964,7 @@ function GhostTile({ card }: { card: Card }) {
       <div style={{ padding: '4px 5px 5px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 3 }}>
           <PosTag position={card.position} />
-          <span style={{ fontFamily: PIXEL, fontSize: 12, lineHeight: 1, color: 'var(--line-white)' }}>{Math.round(card.power)}</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 12, lineHeight: 1, color: 'var(--cream)' }}>{Math.round(card.power)}</span>
         </div>
         <div
           style={{
@@ -997,7 +997,7 @@ function StatBadge({ value, label, accent }: { value: string | number; label: st
       className="glass-surface flex flex-col items-center justify-center shrink-0 relative overflow-hidden"
       style={{ width: 44, height: 42, borderRadius: 'var(--radius-sm)', boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)' }}
     >
-      <span style={{ fontFamily: PIXEL, fontSize: fs, lineHeight: 1, color: accent ?? 'var(--line-white)' }}>{value}</span>
+      <span style={{ fontFamily: PIXEL, fontSize: fs, lineHeight: 1, color: accent ?? 'var(--cream)' }}>{value}</span>
       <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)', marginTop: 2 }}>{label}</span>
     </div>
   );
@@ -1127,7 +1127,7 @@ function ScoutSheet({
               style={{ borderRadius: 'var(--radius-sm)', padding: '7px 9px', boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)' }}
             >
               <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: 'var(--dust)' }}>STRENGTH</span>
-              <p style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--line-white)', margin: '3px 0 0' }}>
+              <p style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)', margin: '3px 0 0' }}>
                 PWR {Math.round(opp.baseStrength)}
               </p>
             </div>
@@ -1153,7 +1153,7 @@ function ScoutSheet({
                 >
                   <PosTag position={p.position} />
                   <span className="truncate" style={{ fontSize: 9.5, color: 'var(--cream-soft)', flex: 1, minWidth: 0 }}>{lastName(p.name)}</span>
-                  <span style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--line-white)' }}>{Math.round(p.power)}</span>
+                  <span style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)' }}>{Math.round(p.power)}</span>
                 </div>
               ))}
             </div>
@@ -1243,7 +1243,7 @@ function PlayerSheet({
                 width: 16,
                 height: 16,
                 borderRadius: '50%',
-                background: 'var(--surface)',
+                background: 'var(--ink-black)',
                 border: '1.5px solid var(--line-white)',
                 color: 'var(--line-white)',
                 fontFamily: PIXEL,
@@ -1298,7 +1298,7 @@ function ManagerSheet({
                 width: 16,
                 height: 16,
                 borderRadius: '50%',
-                background: 'var(--surface)',
+                background: 'var(--ink-black)',
                 border: '1.5px solid var(--line-white)',
                 color: 'var(--line-white)',
                 fontFamily: PIXEL,

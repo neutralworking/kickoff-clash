@@ -441,13 +441,18 @@ export function roleEmblem(role: string | undefined, position: string): EmblemRe
 }
 
 // Durability → readable label + colour. Backed by scoring.ts Durability union.
-export const DURABILITY_META: Record<string, { label: string; color: string }> = {
-  glass: { label: 'Glass', color: '#fca5a5' },
-  fragile: { label: 'Fragile', color: '#f6b765' },
-  standard: { label: 'Standard', color: 'var(--cream-soft)' },
-  iron: { label: 'Iron', color: '#9fc7e8' },
-  titanium: { label: 'Titanium', color: '#cfe3f5' },
-  phoenix: { label: 'Phoenix', color: '#f6a25a' },
+// `short` is a fixed-width 3-letter code for the on-card durability chip (grid
+// size has no room for "Titanium"); `label` stays the full word for the modal.
+// Colours are deepened flat tones (not pastels) so they stay legible as text
+// directly on the card's light parchment interior — pastels tuned for a dark
+// card face lose almost all contrast once the face is cream.
+export const DURABILITY_META: Record<string, { label: string; short: string; color: string }> = {
+  glass: { label: 'Glass', short: 'GLS', color: '#a8342f' },
+  fragile: { label: 'Fragile', short: 'FRA', color: '#a3641b' },
+  standard: { label: 'Standard', short: 'STD', color: 'var(--cream-soft)' },
+  iron: { label: 'Iron', short: 'IRN', color: '#2f5a7d' },
+  titanium: { label: 'Titanium', short: 'TIT', color: '#4a6178' },
+  phoenix: { label: 'Phoenix', short: 'PHX', color: '#a4481c' },
 };
 
 // Tactic category → accent, matching PackReveal's existing palette.
@@ -819,6 +824,23 @@ export function eligiblePositions(position: string): string[] {
     }
   }
   return out;
+}
+
+/**
+ * Shared visual resolver for a "can operate at position P" chip — used by both
+ * the GameCard face (grid + full) and CardModal's detail panel so a position
+ * chip always reads the same: the card's own/primary slot is a FILLED pixel
+ * chip in the position colour, every other eligible slot is an outline in the
+ * same colour. One function, two render sites — the single source of truth
+ * the family depends on.
+ */
+export function positionChipVisual(pos: string, primary: boolean): { text: string; bg: string; border: string } {
+  const color = POSITION_COLOR[pos] ?? 'var(--dust)';
+  return {
+    text: primary ? 'var(--line-white)' : color,
+    bg: primary ? color : 'transparent',
+    border: color,
+  };
 }
 
 /**

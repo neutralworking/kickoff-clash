@@ -27,12 +27,12 @@ import GameCard, { type GameCardModel } from './GameCard';
 import {
   PIXEL,
   RARITY_COLOR,
-  POSITION_COLOR,
   POSITION_LABEL,
   DURABILITY_META,
   TACTIC_CAT_COLOR,
   INVESTMENT_META,
   eligiblePositions,
+  positionChipVisual,
   fitnessMeter,
   formatCash,
   nationFlag,
@@ -260,7 +260,7 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
           </span>
         </div>
         <div className="grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 6 }}>
-          <StatCell label="RATING" value={String(Math.round(card.power))} color="var(--line-white)" />
+          <StatCell label="RATING" value={String(Math.round(card.power))} />
           <StatCell label="POSITION" value={POSITION_LABEL[card.position] ?? card.position} />
           <StatCell label="NATION" value={flag ? card.nation ?? '—' : nationCode(card.nation) || '—'} />
           {/* ROLE is the prominent, accent-coloured identity where ARCHETYPE was —
@@ -428,9 +428,11 @@ function TraitRow({ trait }: { trait: ResolvedTrait }) {
   );
 }
 
-/** A small pixel position chip — the player's own slot is filled (primary). */
+/** A small pixel position chip — the player's own slot is filled (primary).
+ *  Uses the same `positionChipVisual` resolver as the on-card face, so the
+ *  grid/full card and this detail panel read as one visual language. */
 function PositionChip({ pos, primary }: { pos: string; primary: boolean }) {
-  const color = POSITION_COLOR[pos] ?? 'var(--dust)';
+  const v = positionChipVisual(pos, primary);
   return (
     <span
       style={{
@@ -438,9 +440,9 @@ function PositionChip({ pos, primary }: { pos: string; primary: boolean }) {
         fontSize: 9,
         letterSpacing: 0.4,
         lineHeight: 1,
-        color: primary ? 'var(--line-white)' : color,
-        background: primary ? color : 'transparent',
-        border: `1px solid ${color}`,
+        color: v.text,
+        background: v.bg,
+        border: `1px solid ${v.border}`,
         borderRadius: 3,
         padding: '4px 6px',
         boxShadow: primary ? 'inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -1px 0 rgba(0,0,0,0.3)' : undefined,

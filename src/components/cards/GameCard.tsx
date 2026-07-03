@@ -32,6 +32,7 @@ import {
   RARITY_COLOR,
   RARITY_GLASS,
   POSITION_COLOR,
+  DURABILITY_META,
   TACTIC_CAT_COLOR,
   INVESTMENT_META,
   fitnessMeter,
@@ -45,6 +46,8 @@ import {
   roleEmblem,
   managerAccent,
   managerTraitStyle,
+  eligiblePositions,
+  positionChipVisual,
   TACTIC_ICON,
   type BodyKind,
   type EmblemRect,
@@ -139,7 +142,7 @@ export default function GameCard({
     aspectRatio: `${ASPECT}`,
     borderRadius: full ? 'var(--radius)' : 'var(--radius-sm)',
     border: `${full ? 3 : 2}px solid var(--ink-black)`,
-    background: 'linear-gradient(165deg, var(--surface-raised) 0%, var(--surface) 55%, #0c1d12 100%)',
+    background: 'linear-gradient(165deg, var(--surface-raised) 0%, var(--surface) 55%, var(--felt) 100%)',
     boxShadow,
     overflow: 'hidden',
     opacity: dimmed ? 0.42 : 1,
@@ -336,6 +339,7 @@ function accentFor(model: GameCardModel): string {
 function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent: string }) {
   const posColor = POSITION_COLOR[card.position] ?? 'var(--dust)';
   const flag = nationFlag(card.nation);
+  const nationText = nationCode(card.nation);
   const hasFitness = typeof card.fitness === 'number';
   // The role drives the sprite silhouette + emblem; the sub-line prints the ROLE
   // (a real, evocative identity) rather than the scoring-internal archetype.
@@ -344,73 +348,102 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
   const subLine = card.tacticalRole ?? card.archetype;
   // Defining traits — N pills where N = rarity (so rarity reads as trait depth).
   const traits = definingTraitsFor(card);
+  const dur = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
+  const positions = eligiblePositions(card.position);
+  // The sprite is now a SMALL CORNER BADGE, not a centre-stage hero — freeing the
+  // card's midsection for the data the owner asked to see (playable positions,
+  // durability) at a legible size. It keeps its own hard ink frame so it still
+  // reads as a distinct object seated in the card, not a stray icon. Sized to
+  // leave the header row room to breathe even at the tightest grid width (the
+  // 4-up pack-reveal page — the narrowest real card on screen).
+  const badgeSize = full ? 42 : 24;
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: full ? 11 : '5px 6px' }}>
-      {/* Header row: position tab (+ nation) · rating. The rating is the strongest
-          single signal, so it sits largest, top-right, always --line-white. */}
-      <div className="flex items-start justify-between" style={{ gap: 4 }}>
-        <div className="flex items-center" style={{ gap: full ? 5 : 3, minWidth: 0 }}>
-          <span
+      {/* Header row: [sprite badge · nation] on the left, the BIG rating on the
+          right — still the strongest single signal, always --line-white. The
+          sprite lives here now (top-left corner), not centre-stage. The primary
+          POSITION is no longer a separate header tab — it's the first (filled)
+          chip in the attributes row below, so it isn't drawn twice and the
+          header keeps real room for the badge + nation instead of a squeeze. */}
+      <div className="flex items-start justify-between" style={{ gap: full ? 6 : 4 }}>
+        <div className="flex items-center" style={{ gap: full ? 7 : 5, minWidth: 0 }}>
+          <div
             style={{
-              background: posColor,
-              color: 'var(--line-white)',
-              fontFamily: PIXEL,
-              fontSize: full ? 11 : 8,
-              lineHeight: 1,
-              padding: full ? '5px 6px' : '3px 4px',
-              borderRadius: 3,
+              width: badgeSize,
+              height: badgeSize,
               flexShrink: 0,
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 'var(--radius-sm)',
+              border: `${full ? 2 : 1.5}px solid var(--ink-black)`,
+              background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(0,0,0,0.32))',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -1px 0 rgba(0,0,0,0.4)',
+              overflow: 'hidden',
             }}
           >
-            {card.position}
-          </span>
-          {flag ? (
-            <span style={{ fontSize: full ? 14 : 10, flexShrink: 0, lineHeight: 1 }}>{flag}</span>
-          ) : card.nation ? (
-            <span style={{ fontFamily: PIXEL, fontSize: full ? 8 : 6.5, color: 'var(--dust)', flexShrink: 0, lineHeight: 1 }}>
-              {nationCode(card.nation)}
-            </span>
-          ) : null}
+            <PlayerSprite
+              accent={accent}
+              posColor={posColor}
+              bodyKind={bodyKind}
+              emblem={emblem}
+              isGK={card.position === 'GK'}
+              size={badgeSize}
+            />
+          </div>
+          {/* Nation — a bigger flag (+ code once there's room at `full`), reading
+              as its own signal rather than a tucked-away afterthought. */}
+          {(flag || nationText) && (
+            <div className="flex flex-col" style={{ gap: 1, minWidth: 0 }}>
+              {flag && <span style={{ fontSize: full ? 20 : 15, lineHeight: 1 }}>{flag}</span>}
+              {(full || !flag) && nationText && (
+                <span style={{ fontFamily: PIXEL, fontSize: full ? 9 : 7, color: 'var(--dust)', lineHeight: 1, letterSpacing: 0.3, whiteSpace: 'nowrap' }}>
+                  {nationText}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex flex-col items-end" style={{ flexShrink: 0 }}>
-          <span style={{ fontFamily: PIXEL, fontSize: full ? 26 : 14, lineHeight: 0.9, color: 'var(--line-white)', textShadow: '0 2px 0 var(--ink-black)' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: full ? 28 : 16, lineHeight: 0.9, color: 'var(--cream)', textShadow: '0 2px 0 var(--ink-black)' }}>
             {Math.round(card.power)}
           </span>
-          {full && (
-            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)', lineHeight: 1, marginTop: 2 }}>
-              OVR
-            </span>
-          )}
+          {/* DURABILITY sits where a plain "OVR" caption used to be — the rating's
+              own condition/tier read at a glance, colour-coded to DURABILITY_META
+              (the CardModal single source of truth). Short code at grid, full word
+              at `full` where there's room. */}
+          <span style={{ fontFamily: PIXEL, fontSize: full ? 8.5 : 6, letterSpacing: 0.6, color: dur.color, lineHeight: 1, marginTop: 2 }}>
+            {full ? dur.label.toUpperCase() : dur.short}
+          </span>
         </div>
       </div>
 
-      {/* Sprite portrait — a per-role pixel BODY tinted by position + a role emblem.
-          It has a FLOOR height at grid size so the silhouette always reads (fixing
-          the vanishing sprite): flex-grows to fill spare room but never collapses
-          below `minHeight`. The trait rail below is trimmed on grid to keep the room. */}
-      <div style={{ flex: 1, minHeight: full ? 58 : 44, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: full ? '6px 0' : '2px 0', overflow: 'hidden' }}>
-        <PlayerSprite
-          accent={accent}
-          posColor={posColor}
-          bodyKind={bodyKind}
-          emblem={emblem}
-          isGK={card.position === 'GK'}
-          full={full}
-        />
+      {/* Attributes row (NEW) — the space the sprite used to hog centre-stage is
+          now spent on data: every position this card is ELIGIBLE to fill (own
+          slot filled, alternates outlined — same visual language as CardModal's
+          "CAN OPERATE" chips). This row owns the card's full width (nothing
+          squeezed beside a badge). Grid caps at 3 — a single line at the
+          tightest card width, own slot always included — full shows every slot
+          (rarely more than 4). No overflow "+N" chip at grid: it would push a
+           4th item onto a second line and reintroduce the clip the cap exists
+          to prevent; CardModal always has the complete list. */}
+      <div className="flex flex-wrap items-center" style={{ gap: full ? 5 : 2, marginTop: full ? 9 : 6 }}>
+        {(full ? positions : positions.slice(0, 3)).map((p, i) => (
+          <PositionPill key={p} pos={p} primary={i === 0} full={full} />
+        ))}
       </div>
 
       {/* Nameplate — surname is the second-strongest signal, so it reads large and
-          bright; the archetype is the quiet sub-line. A hard accent rule under the
+          bright; the role is the quiet sub-line. A hard accent rule under the
           name seats it as the card's identity band. */}
-      <div style={{ borderTop: `2px solid ${accent}`, paddingTop: full ? 6 : 3, marginTop: full ? 4 : 2 }}>
+      <div style={{ borderTop: `2px solid ${accent}`, paddingTop: full ? 6 : 3, marginTop: full ? 7 : 5 }}>
         <span
           className="truncate"
-          style={{ display: 'block', fontFamily: PIXEL, fontSize: full ? 14 : 10, color: 'var(--cream)', lineHeight: 1.05, textShadow: '0 1px 0 var(--ink-black)' }}
+          style={{ display: 'block', fontFamily: PIXEL, fontSize: full ? 16 : 12, color: 'var(--cream)', lineHeight: 1.05, textShadow: '0 1px 0 var(--ink-black)' }}
         >
           {lastName(card.name).toUpperCase()}
         </span>
-        <span className="truncate" style={{ display: 'block', fontSize: full ? 10 : 8, color: 'var(--dust)', letterSpacing: 0.2, lineHeight: 1.1, marginTop: 1 }}>
+        <span className="truncate" style={{ display: 'block', fontSize: full ? 11 : 8.5, color: 'var(--dust)', letterSpacing: 0.2, lineHeight: 1.1, marginTop: 1 }}>
           {subLine}
         </span>
       </div>
@@ -424,6 +457,31 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
           than a Common. Coloured by trait kind. */}
       {traits.length > 0 && <TraitPillStrip traits={traits} full={full} />}
     </div>
+  );
+}
+
+/** "CAN OPERATE" position chip — own slot FILLED in the position colour, every
+ *  other eligible slot outlined. Mirrors CardModal's PositionChip so the on-card
+ *  face and the expanded detail read as the same visual language. */
+function PositionPill({ pos, primary, full }: { pos: string; primary: boolean; full: boolean }) {
+  const v = positionChipVisual(pos, primary);
+  return (
+    <span
+      style={{
+        fontFamily: PIXEL,
+        fontSize: full ? 9.5 : 6.5,
+        letterSpacing: 0.2,
+        lineHeight: 1,
+        color: v.text,
+        background: v.bg,
+        border: `1px solid ${v.border}`,
+        borderRadius: 3,
+        padding: full ? '4px 6px' : '2px 3px',
+        boxShadow: primary ? 'inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -1px 0 rgba(0,0,0,0.3)' : undefined,
+      }}
+    >
+      {pos}
+    </span>
   );
 }
 
@@ -532,7 +590,11 @@ function FitnessMeter({ fitness, full }: { fitness: number; full: boolean }) {
  * EMBLEM[role]. One light source TOP-LEFT on every body (highlights on top/left,
  * base in the middle, shadow on bottom/right, a 1px rim-light on the lit edge),
  * ~5-colour palette derived from the position tint. Seven bodies cover all 23
- * roles; the emblem is a tiny role motif stamped on the chest. Reads at grid size.
+ * roles; the emblem is a tiny role motif stamped on the chest.
+ *
+ * Rendered as a small CORNER BADGE (not a centre-stage hero) at a fixed pixel
+ * `size` — the whole 24×24 figure scales down uniformly into the badge, so it
+ * stays a complete, crisp silhouette rather than a cropped close-up.
  */
 function PlayerSprite({
   accent,
@@ -540,14 +602,14 @@ function PlayerSprite({
   bodyKind,
   emblem,
   isGK,
-  full,
+  size,
 }: {
   accent: string;
   posColor: string;
   bodyKind: BodyKind;
   emblem: EmblemRect[];
   isGK: boolean;
-  full: boolean;
+  size: number;
 }) {
   // Kit ramp (3-value) derived from the pitch-position tint so a defender's kit
   // reads blue, a forward's red, etc. — the body silhouette carries the role, the
@@ -571,7 +633,7 @@ function PlayerSprite({
     <svg
       className="pixelated"
       viewBox="0 0 24 24"
-      style={{ width: full ? '58%' : '80%', maxWidth: full ? 92 : 54, height: '100%', maxHeight: full ? 96 : 56, aspectRatio: '1', display: 'block' }}
+      style={{ width: size, height: size, display: 'block' }}
       shapeRendering="crispEdges"
     >
       {/* seat plate — a soft dark disc so the sprite reads off the card fill */}

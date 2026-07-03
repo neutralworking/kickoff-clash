@@ -706,7 +706,7 @@ function PanelHeader({ accent, title, right }: { accent: string; title: string; 
   );
 }
 
-/** A large scoreline digit; the winning side reads in --line-white, the other dimmed. */
+/** A large scoreline digit; the winning side reads in --cream (full ink), the other dimmed. */
 function ScoreNum({ value, win }: { value: number; win: boolean }) {
   return (
     <span
@@ -714,7 +714,7 @@ function ScoreNum({ value, win }: { value: number; win: boolean }) {
         fontFamily: PIXEL,
         fontSize: 40,
         lineHeight: 0.9,
-        color: win ? 'var(--line-white)' : 'var(--cream-soft)',
+        color: win ? 'var(--cream)' : 'var(--cream-soft)',
         textShadow: win ? '0 3px 0 var(--ink-black)' : '0 2px 0 var(--ink-black)',
       }}
     >
