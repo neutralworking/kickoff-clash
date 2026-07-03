@@ -32,7 +32,6 @@ import {
   RARITY_COLOR,
   RARITY_GLASS,
   POSITION_COLOR,
-  DURABILITY_META,
   TACTIC_CAT_COLOR,
   INVESTMENT_META,
   fitnessMeter,
@@ -348,11 +347,10 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
   const subLine = card.tacticalRole ?? card.archetype;
   // Defining traits — N pills where N = rarity (so rarity reads as trait depth).
   const traits = definingTraitsFor(card);
-  const dur = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
   const positions = eligiblePositions(card.position);
   // The sprite is now a SMALL CORNER BADGE, not a centre-stage hero — freeing the
-  // card's midsection for the data the owner asked to see (playable positions,
-  // durability) at a legible size. It keeps its own hard ink frame so it still
+  // card's midsection for the data the owner asked to see (playable positions)
+  // at a legible size. It keeps its own hard ink frame so it still
   // reads as a distinct object seated in the card, not a stray icon. Sized to
   // leave the header row room to breathe even at the tightest grid width (the
   // 4-up pack-reveal page — the narrowest real card on screen).
@@ -366,7 +364,12 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
           chip in the attributes row below, so it isn't drawn twice and the
           header keeps real room for the badge + nation instead of a squeeze. */}
       <div className="flex items-start justify-between" style={{ gap: full ? 6 : 4 }}>
-        <div className="flex items-center" style={{ gap: full ? 7 : 5, minWidth: 0 }}>
+        {/* Left group is the SHRINKABLE side of the header: minWidth 0 + overflow
+            hidden all the way down so the flag column clips before it can ever
+            reach the rating (which is flexShrink 0). Emoji flags render wider on
+            real devices than headless metrics suggest — the overlap fix must be
+            structural, not eyeballed. */}
+        <div className="flex items-center" style={{ gap: full ? 7 : 5, minWidth: 0, flex: '1 1 auto', overflow: 'hidden' }}>
           <div
             style={{
               width: badgeSize,
@@ -391,13 +394,28 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
               size={badgeSize}
             />
           </div>
-          {/* Nation — a bigger flag (+ code once there's room at `full`), reading
-              as its own signal rather than a tucked-away afterthought. */}
+          {/* Nation — a flag (+ code once there's room at `full`), reading as its
+              own signal. The column is genuinely truncatable (minWidth 0 +
+              overflow hidden on BOTH the column and the glyph line) so the flag
+              can only ever clip against its own box, never spill under the
+              rating — the grid glyph is also a step smaller than `full` since
+              the 4-up pack grid is the tightest real card on screen. */}
           {(flag || nationText) && (
-            <div className="flex flex-col" style={{ gap: 1, minWidth: 0 }}>
-              {flag && <span style={{ fontSize: full ? 20 : 15, lineHeight: 1 }}>{flag}</span>}
+            <div className="flex flex-col" style={{ gap: 1, minWidth: 0, overflow: 'hidden' }}>
+              {flag && (
+                <span
+                  data-kc="nation-flag"
+                  style={{ fontSize: full ? 20 : 13, lineHeight: 1.2, display: 'block', maxWidth: '100%', overflow: 'hidden' }}
+                >
+                  {flag}
+                </span>
+              )}
               {(full || !flag) && nationText && (
-                <span style={{ fontFamily: PIXEL, fontSize: full ? 9 : 7, color: 'var(--dust)', lineHeight: 1, letterSpacing: 0.3, whiteSpace: 'nowrap' }}>
+                <span
+                  data-kc="nation-code"
+                  className="truncate"
+                  style={{ display: 'block', maxWidth: '100%', fontFamily: PIXEL, fontSize: full ? 9 : 7, color: 'var(--dust)', lineHeight: 1, letterSpacing: 0.3 }}
+                >
                   {nationText}
                 </span>
               )}
@@ -405,16 +423,17 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
           )}
         </div>
         <div className="flex flex-col items-end" style={{ flexShrink: 0 }}>
-          <span style={{ fontFamily: PIXEL, fontSize: full ? 28 : 16, lineHeight: 0.9, color: 'var(--cream)', textShadow: '0 2px 0 var(--ink-black)' }}>
+          <span data-kc="rating" style={{ fontFamily: PIXEL, fontSize: full ? 28 : 16, lineHeight: 0.9, color: 'var(--cream)', textShadow: '0 2px 0 var(--ink-black)' }}>
             {Math.round(card.power)}
           </span>
-          {/* DURABILITY sits where a plain "OVR" caption used to be — the rating's
-              own condition/tier read at a glance, colour-coded to DURABILITY_META
-              (the CardModal single source of truth). Short code at grid, full word
-              at `full` where there's room. */}
-          <span style={{ fontFamily: PIXEL, fontSize: full ? 8.5 : 6, letterSpacing: 0.6, color: dur.color, lineHeight: 1, marginTop: 2 }}>
-            {full ? dur.label.toUpperCase() : dur.short}
-          </span>
+          {/* A quiet OVR caption at `full` only — durability moved to the expanded
+              view (CardModal, below FITNESS), per the owner. At `grid` the rating
+              stands alone so the header stays maximally uncrowded. */}
+          {full && (
+            <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.6, color: 'var(--dust)', lineHeight: 1, marginTop: 2 }}>
+              OVR
+            </span>
+          )}
         </div>
       </div>
 

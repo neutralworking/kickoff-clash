@@ -2,50 +2,53 @@
 
 /* ===========================================================================
    KICKOFF CLASH — CANONICAL DESIGN SYSTEM
-   1995 Merlin Premier League sticker-album pixel look. Single source of
-   truth: DESIGN.md.
+   1995 Merlin Premier League sticker-album pixel look — the COVER, not the
+   inside pages: black-and-gold. Single source of truth: DESIGN.md.
 
    This @theme block is the token layer. The legacy casino/felt names
    (--felt, --leather, --amber, --gold, --cream, --dust, --ink, --danger,
    --pitch-*) are RETAINED so existing screens keep working, but their VALUES
-   now resolve to the Merlin-album system: warm cream/parchment surfaces, hard
-   --ink-black pixel borders, one bold turf green reserved for the pitch, and
-   flat-poster kit-red / kit-blue / amber / gold accents. Redefine here, not
-   in components.
+   now resolve to the Merlin-COVER system: true near-black surfaces, gold
+   foil as the dominant load-bearing accent (borders, dividers, headers,
+   CTAs, glass chrome, glow halos), hard --ink-black pixel borders, one bold
+   turf green still held in reserve for the pitch, and kit-red / kit-blue as
+   secondary flat-poster accents that never compete with gold. Redefine here,
+   not in components.
    =========================================================================== */
 @theme inline {
   /* --- Foundation: the Merlin sticker-album pixel core --------------------
-     The hard ink border is the "sticker cutout" edge — it stays a deep warm
-     near-black so every pixel block reads as a die-cut sticker on the page. */
-  --ink-black: #1a1108;       /* hard pixel border / drop-shadow (warm ink) */
+     The hard ink border is the "sticker cutout" edge — true near-black so
+     every pixel block reads as a die-cut sticker seated on black card stock. */
+  --ink-black: #0b0703;       /* hard pixel border / drop-shadow — truest black */
   --line-white: #fbf7ec;      /* brightest text — ONLY on saturated/dark fills */
 
   --pitch-bright: #1f9d4f;    /* bold flat turf — reserved for the pitch itself */
   --pitch-stripe: #1a8a45;    /* alternate mow stripe */
-  --kit-red: #d1262b;         /* primary kit-red accent / CTA — flat poster red */
-  --kit-blue: #2159c9;        /* away-kit blue accent — flat poster blue */
+  --kit-red: #e0332d;         /* secondary kit-red accent — flat poster red, never competes with gold */
+  --kit-blue: #2b74e0;        /* secondary away-kit blue accent — flat poster blue */
 
-  /* --- Surfaces (warm cream/parchment, flat bold blocks) ------------------
-     A light-mode system: the "table" is a deep parchment, panels/cards get
-     progressively brighter/whiter as they elevate — real paper stacked on a
-     sticker-album page, not a night-mode app. */
-  --felt: #eddcb0;            /* app background — warm parchment page */
-  --felt-light: #f3e6c4;      /* raised background band */
-  --surface: #faf3e2;         /* default panel/card surface */
-  --surface-raised: #fffaf0;  /* hovered / elevated surface (near-white cream) */
-  --leather: #faf3e2;         /* legacy panel name → surface */
-  --leather-light: #fffaf0;   /* legacy raised name → surface-raised */
+  /* --- Surfaces (true near-black, flat bold blocks) ------------------------
+     A dark-mode system again: the "table" is near-true-black with a whisper
+     of warmth toward gold (not toward the old night-pitch green), panels/
+     cards get progressively LIGHTER as they elevate — real depth in a
+     trophy case, not just a hue shift. */
+  --felt: #120d07;            /* app background — near-black, warm undertone */
+  --felt-light: #1a130a;      /* raised background band */
+  --surface: #221a0f;         /* default panel/card surface */
+  --surface-raised: #2f2415;  /* hovered / elevated surface */
+  --leather: #221a0f;         /* legacy panel name → surface */
+  --leather-light: #2f2415;   /* legacy raised name → surface-raised */
 
   /* --- Borders ------------------------------------------------------------ */
-  --border: #c7ac78;          /* default hairline border (on light surface) */
+  --border: #5c4526;          /* default hairline border (on dark surface) — a dim bronze-gold */
   --border-strong: var(--ink-black); /* hard pixel edge */
 
   /* --- Accents (warm) ----------------------------------------------------- */
-  --amber: #ee6f13;           /* primary warm accent / CTA — flat poster orange */
-  --amber-soft: #c65209;      /* CTA gradient base */
-  --amber-glow: rgba(238, 111, 19, 0.45);
-  --gold: #c2911f;            /* legendary / highlight gold — deep foil gold, reads as text */
-  --gold-glow: rgba(245, 197, 66, 0.45); /* halo stays the brighter gold hue */
+  --amber: #ff7a1f;           /* warm accent — flat poster orange, secondary to gold */
+  --amber-soft: #e0600f;      /* CTA gradient base */
+  --amber-glow: rgba(255, 122, 31, 0.42);
+  --gold: #e8b23a;            /* THE dominant accent — foil gold on black, borders/dividers/headers/CTAs */
+  --gold-glow: rgba(232, 178, 60, 0.55); /* halo — the foil glow */
 
   /* --- Pitch (legacy names → bright turf) --------------------------------- */
   --pitch-green: #1f9d4f;
@@ -53,44 +56,44 @@
   --pitch-light: #2fae63;
 
   /* --- Semantic ----------------------------------------------------------- */
-  --success: #1c8a4b;         /* win / positive — deep flat green, doubles as text */
-  --danger: #d1262b;          /* loss / negative — unified with kit-red */
-  --warning: #c2911f;         /* unified with gold */
+  --success: #34c46a;         /* win / positive — bright flat green, legible on black */
+  --danger: #e0332d;          /* loss / negative — unified with kit-red */
+  --warning: #e8b23a;         /* unified with gold */
 
-  /* --- Text (dark ink on light paper — inverted from the old night-pitch
-     system; see DESIGN.md contrast law) ------------------------------------ */
-  --cream: #241a10;           /* primary text — near-black warm ink */
-  --cream-soft: #5c4a34;      /* secondary text — mid warm brown */
-  --dust: #7d6a4e;            /* muted / caption text — soft warm taupe */
-  --ink: #a2916e;             /* disabled / faint text on light — pale taupe */
+  /* --- Text (light text on black — restored for the black-and-gold cover;
+     see DESIGN.md contrast law) ---------------------------------------------- */
+  --cream: #f2ead6;           /* primary text — warm ivory, near-white */
+  --cream-soft: #c9bb95;      /* secondary text — warm parchment-gold grey */
+  --dust: #9a8b6a;            /* muted / caption text — dim warm taupe */
+  --ink: #5c5340;             /* disabled / faint text on dark — dim, deliberately low-contrast */
 
   /* --- Glass chrome (depth layer — see DESIGN.md › Glass chrome) ----------
-     The shell stays premium frosted glass, re-grounded for a light backdrop:
-     translucent warm-white fills over a blurred parchment backdrop, a bright
-     top inner-highlight (a glossy sticker-foil sheen), a tight accent/rarity
-     glow, and a real elevation-shadow hierarchy. These live UNDER and AROUND
-     the pixel content — they never smudge a sprite or an --ink-black pixel
-     edge. Always paired with a solid fallback.                              */
-  --glass-fill: rgba(255, 250, 240, 0.6);        /* translucent --surface */
-  --glass-fill-strong: rgba(255, 250, 240, 0.82); /* denser raised glass */
-  --glass-border: rgba(36, 26, 16, 0.14);        /* subtle dark edge (definition on light) */
-  --glass-highlight: rgba(255, 255, 255, 0.75);  /* bright top inner-highlight (foil sheen) */
-  --glass-fallback: #faf3e2;                     /* opaque where blur absent */
-  --glass-fallback-strong: #fffaf0;
+     The shell is premium frosted glass again, re-grounded for a black
+     backdrop: translucent near-black fills over a blurred backdrop, a bright
+     warm-gold top inner-highlight (the foil-catching-light tell), a tight
+     accent/rarity glow, and a real elevation-shadow hierarchy. These live
+     UNDER and AROUND the pixel content — they never smudge a sprite or an
+     --ink-black pixel edge. Always paired with a solid fallback.            */
+  --glass-fill: rgba(20, 15, 8, 0.58);           /* translucent --surface */
+  --glass-fill-strong: rgba(28, 21, 11, 0.80);   /* denser raised glass */
+  --glass-border: rgba(232, 178, 60, 0.20);      /* gold-foil hairline edge — gold as chrome, not just rarity */
+  --glass-highlight: rgba(255, 240, 205, 0.24);  /* bright warm top inner-highlight (foil sheen) */
+  --glass-fallback: #221a0f;                     /* opaque where blur absent */
+  --glass-fallback-strong: #2f2415;
 
   /* Accent / rarity glows — tight coloured halos for focus & rarity. */
   --purple: #8b5cf6;                             /* epic rarity hue */
-  --glow-soft: rgba(201, 151, 42, 0.22);         /* neutral focus halo — warm gold */
-  --glow-rare: rgba(33, 89, 201, 0.55);          /* kit-blue */
+  --glow-soft: rgba(232, 178, 60, 0.26);         /* neutral focus halo — gold, the dominant accent */
+  --glow-rare: rgba(43, 116, 224, 0.55);         /* kit-blue */
   --glow-epic: rgba(139, 92, 246, 0.55);         /* purple */
-  --glow-legendary: rgba(245, 197, 66, 0.58);    /* gold */
+  --glow-legendary: rgba(232, 178, 60, 0.60);    /* gold — the hero glow */
 
   /* Elevation scale — layered soft shadows; height + spread rise together.
      Pairs with the pixel-edge drop shadow on hard-edged tokens; here it lifts
-     glass panels to real heights — a true drop shadow under raised paper. */
-  --depth-1: 0 1px 2px rgba(26, 17, 8, 0.16), 0 2px 6px rgba(26, 17, 8, 0.12);
-  --depth-2: 0 2px 4px rgba(26, 17, 8, 0.18), 0 6px 16px rgba(26, 17, 8, 0.20);
-  --depth-3: 0 4px 8px rgba(26, 17, 8, 0.22), 0 14px 36px rgba(26, 17, 8, 0.26);
+     glass panels to real heights — genuine dark drop shadows on black. */
+  --depth-1: 0 1px 2px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --depth-2: 0 2px 4px rgba(0, 0, 0, 0.50), 0 6px 16px rgba(0, 0, 0, 0.45);
+  --depth-3: 0 4px 8px rgba(0, 0, 0, 0.55), 0 14px 36px rgba(0, 0, 0, 0.55);
 
   /* --- Radius (pixel system stays tight) ---------------------------------- */
   --radius: 8px;
@@ -116,16 +119,16 @@ body {
   font-family: var(--font-body);
 }
 
-/* .kc-app-bg — the glassy parchment app background: a faint bright sheen near
-   the top (paper catching light), a whisper of turf glow, and a soft warm-ink
-   edge vignette over --felt. Richer than a flat fill, but quiet enough that
-   pixel content reads cleanly on top. Use on a phase shell's root in place of
-   `background: var(--felt)`. */
+/* .kc-app-bg — the glassy black-and-gold app background: a faint gold sheen
+   near the top (foil catching light on the album cover), a whisper of turf
+   glow, and a dark edge vignette deepening to true black over --felt. Richer
+   than a flat fill, but quiet enough that pixel content reads cleanly on top.
+   Use on a phase shell's root in place of `background: var(--felt)`. */
 .kc-app-bg {
   background:
-    radial-gradient(120% 70% at 50% -12%, rgba(255, 255, 255, 0.5) 0%, transparent 46%),
-    radial-gradient(90% 60% at 50% 8%, rgba(31, 157, 79, 0.08) 0%, transparent 60%),
-    radial-gradient(150% 130% at 50% 50%, transparent 58%, rgba(26, 17, 8, 0.10) 100%),
+    radial-gradient(120% 70% at 50% -12%, rgba(232, 178, 60, 0.12) 0%, transparent 46%),
+    radial-gradient(90% 60% at 50% 8%, rgba(31, 157, 79, 0.05) 0%, transparent 60%),
+    radial-gradient(150% 130% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55) 100%),
     var(--felt);
 }
 
@@ -233,9 +236,9 @@ h1, h2, h3,
 
 .phase-setup {
   background:
-    radial-gradient(120% 80% at 50% -10%, rgba(33, 89, 201, 0.10) 0%, transparent 52%),
-    radial-gradient(140% 120% at 50% 50%, transparent 60%, rgba(26, 17, 8, 0.08) 100%),
-    linear-gradient(135deg, #eddcb0 0%, #f2e3ba 30%, #eddcb0 60%, #f0e0b8 100%);
+    radial-gradient(120% 80% at 50% -10%, rgba(43, 116, 224, 0.14) 0%, transparent 52%),
+    radial-gradient(140% 120% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55) 100%),
+    linear-gradient(135deg, #120d07 0%, #180f09 30%, #120d07 60%, #150e08 100%);
   background-size: 100% 100%, 100% 100%, 400% 400%;
   animation: setupGradient 12s ease infinite;
 }
@@ -248,9 +251,9 @@ h1, h2, h3,
 
 .phase-match {
   background:
-    radial-gradient(130% 90% at 50% 0%, rgba(31, 157, 79, 0.14) 0%, transparent 42%),
-    radial-gradient(140% 120% at 50% 50%, transparent 62%, rgba(26, 17, 8, 0.08) 100%),
-    linear-gradient(180deg, rgba(31,157,79,0.08) 0%, transparent 30%, var(--felt) 100%);
+    radial-gradient(130% 90% at 50% 0%, rgba(31, 157, 79, 0.20) 0%, transparent 42%),
+    radial-gradient(140% 120% at 50% 50%, transparent 58%, rgba(0, 0, 0, 0.5) 100%),
+    linear-gradient(180deg, rgba(31,157,79,0.10) 0%, transparent 30%, var(--felt) 100%);
 }
 
 .phase-match .commentary-feed {
@@ -260,16 +263,16 @@ h1, h2, h3,
 
 .phase-shop {
   background:
-    radial-gradient(120% 80% at 50% -8%, rgba(238, 111, 19, 0.14) 0%, transparent 50%),
-    radial-gradient(140% 120% at 50% 50%, transparent 60%, rgba(26, 17, 8, 0.08) 100%),
-    linear-gradient(180deg, rgba(194,145,31,0.10) 0%, transparent 25%, var(--felt) 100%);
+    radial-gradient(120% 80% at 50% -8%, rgba(255, 122, 31, 0.16) 0%, transparent 50%),
+    radial-gradient(140% 120% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55) 100%),
+    linear-gradient(180deg, rgba(232,178,60,0.10) 0%, transparent 25%, var(--felt) 100%);
 }
 
 .phase-postmatch {
   background:
-    radial-gradient(120% 80% at 50% -6%, rgba(232, 98, 26, 0.12) 0%, transparent 50%),
-    radial-gradient(140% 120% at 50% 50%, transparent 60%, rgba(26, 17, 8, 0.08) 100%),
-    radial-gradient(ellipse at center top, rgba(232,98,26,0.06) 0%, transparent 50%, var(--felt) 100%);
+    radial-gradient(120% 80% at 50% -6%, rgba(232, 98, 26, 0.14) 0%, transparent 50%),
+    radial-gradient(140% 120% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55) 100%),
+    radial-gradient(ellipse at center top, rgba(232,98,26,0.07) 0%, transparent 50%, var(--felt) 100%);
 }
 
 /* Goal commentary styling */
@@ -311,12 +314,13 @@ h1, h2, h3,
   animation: fadeIn 0.3s ease-out forwards;
 }
 
-/* Card reveal phase background */
+/* Card reveal phase background — the hero phase for gold foil (pack pulls),
+   so its vignette leans hardest into the gold-on-black cover feel. */
 .phase-reveal {
   background:
-    radial-gradient(120% 80% at 50% 38%, rgba(245, 197, 66, 0.16) 0%, transparent 50%),
-    radial-gradient(140% 120% at 50% 50%, transparent 60%, rgba(26, 17, 8, 0.08) 100%),
-    radial-gradient(ellipse at 50% 40%, rgba(194,145,31,0.06) 0%, transparent 50%, var(--felt) 100%);
+    radial-gradient(120% 80% at 50% 38%, rgba(232, 178, 60, 0.20) 0%, transparent 50%),
+    radial-gradient(140% 120% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55) 100%),
+    radial-gradient(ellipse at 50% 40%, rgba(232,178,60,0.09) 0%, transparent 50%, var(--felt) 100%);
 }
 
 /* 3D card flip system */

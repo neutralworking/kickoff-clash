@@ -440,20 +440,121 @@ export function roleEmblem(role: string | undefined, position: string): EmblemRe
   return EMBLEM_MOTIFS[key] ?? EMBLEM_MOTIFS.anchorBar;
 }
 
-// Durability → readable label + colour. Backed by scoring.ts Durability union.
-// `short` is a fixed-width 3-letter code for the on-card durability chip (grid
-// size has no room for "Titanium"); `label` stays the full word for the modal.
-// Colours are deepened flat tones (not pastels) so they stay legible as text
-// directly on the card's light parchment interior — pastels tuned for a dark
-// card face lose almost all contrast once the face is cream.
-export const DURABILITY_META: Record<string, { label: string; short: string; color: string }> = {
-  glass: { label: 'Glass', short: 'GLS', color: '#a8342f' },
-  fragile: { label: 'Fragile', short: 'FRA', color: '#a3641b' },
-  standard: { label: 'Standard', short: 'STD', color: 'var(--cream-soft)' },
-  iron: { label: 'Iron', short: 'IRN', color: '#2f5a7d' },
-  titanium: { label: 'Titanium', short: 'TIT', color: '#4a6178' },
-  phoenix: { label: 'Phoenix', short: 'PHX', color: '#a4481c' },
+// Durability → readable label + colour + a one-line explainer. Backed by
+// scoring.ts Durability union and grounded in the REAL mechanics that consume
+// it (no invented lore — the owner's hard rule): SHATTER_CHANCE (run.ts
+// postMatchDurabilityCheck — Glass/Phoenix can shatter after a match and leave
+// the deck), INJURY_CHANCE (Fragile can miss the next match), Phoenix promotion
+// (survive 3 matches → Iron), FITNESS_DRAIN (match-v5 — Glass tires fastest,
+// Titanium barely tires), DURABILITY_PRICE_MOD (resale value, economy.ts) and
+// DURABILITY_FAN_BONUS (Glass/Phoenix pull extra fans through the gate).
+// Durability lives in the EXPANDED view only (CardModal, below FITNESS — both
+// are "physical condition" reads); the card face carries just the rating.
+// Colours are bright pastel tones so they stay legible as text directly on
+// the card's near-black interior (the black-and-gold cover system) — deep
+// flat tones read fine on cream but vanish once the face is near-black.
+export const DURABILITY_META: Record<string, { label: string; color: string; blurb: string }> = {
+  glass: {
+    label: 'Glass',
+    color: '#f0928c',
+    blurb: 'Risks shattering after any match — gone from the deck for good. Tires fast on the pitch and sells cheap, but the gamble pulls extra fans through the gate.',
+  },
+  fragile: {
+    label: 'Fragile',
+    color: '#f2b568',
+    blurb: 'Can pick up a knock after a match and sit out the next one. Tires a little faster than most.',
+  },
+  standard: {
+    label: 'Standard',
+    color: 'var(--cream-soft)',
+    blurb: 'No special risk after matches — holds up game to game at the normal rate.',
+  },
+  iron: {
+    label: 'Iron',
+    color: '#9fc7e8',
+    blurb: 'Never shatters and never picks up post-match knocks. Tires slowly and holds a higher resale value.',
+  },
+  titanium: {
+    label: 'Titanium',
+    color: '#cfe3f5',
+    blurb: 'Near-indestructible: no post-match risk, barely tires across 90 minutes, and commands the top resale price.',
+  },
+  phoenix: {
+    label: 'Phoenix',
+    color: '#f6a25a',
+    blurb: 'The biggest shatter risk of all — but survive 3 matches and they are promoted to Iron for good. Fans turn out for the story.',
+  },
 };
+
+// ---------------------------------------------------------------------------
+// ROLE explainers — one plain-English sentence per tactical role, surfaced as
+// the tap-to-open tooltip on CardModal's ROLE cell. Roles are real
+// football-culture identities (CARDS_V1), so each line is the accepted
+// footballing definition; where the game gives a role a clear mechanical lean
+// (role-transforms.ts ROLE_TRANSFORMS / ROLE_ALIASES) the sentence reflects it.
+// Covers every live `role` string in kc_cards.json plus the full §9 role
+// vocabulary (the same key set as ROLE_TO_BODY); anything unmapped falls back
+// to a plain positional read. No invented editorial fluff.
+// ---------------------------------------------------------------------------
+
+export const ROLE_BLURB: Record<string, string> = {
+  // --- Keepers ---
+  Distributor: 'A keeper whose distribution starts the attacks — the first playmaker as well as the last line of defence.',
+  Torwart: 'The German goalkeeper archetype — a commanding last line who organises the defenders in front of them.',
+  'Sweeper Keeper': 'A keeper who plays high off the line, sweeping up danger in the space behind the defence.',
+  'Ball-Playing GK': 'A goalkeeper comfortable with the ball at their feet, building play out from the back.',
+  // --- Centre-backs ---
+  Sweeper: 'A spare defender behind the back line who reads danger, mops up, and carries the ball out to restart play.',
+  Stopper: 'An aggressive centre-back who steps out on the front foot to win the ball early rather than dropping off.',
+  Colossus: 'A towering, dominant centre-back who wins everything in the air and imposes themselves physically.',
+  Centrale: 'The central defender at the heart of the back line, organising and commanding everyone around them.',
+  Zagueiro: 'The Brazilian centre-back — a composed defender who defends first and marshals their line.',
+  Libero: 'Italian for "free man" — a sweeper freed of marking duties who steps out of defence to start attacks.',
+  'Auxiliary CB': 'A converted player filling in at centre-back, holding the line through positioning and graft.',
+  // --- Full-backs / wide defenders ---
+  Fullback: 'A wide defender who defends the flank first and picks their moments to overlap into attack.',
+  'Wing-back': 'A wide player who owns the entire flank — defending it one minute, attacking it the next.',
+  Lateral: 'The South American attacking full-back — overlapping relentlessly to double up down the wing.',
+  Fluidificante: 'The Italian attacking full-back — surging forward down the flank to add an extra attacker.',
+  Tornante: 'Italian for "returner" — a winger who tracks back the full length of the flank, covering both boxes.',
+  // --- Holding / box-to-box mids ---
+  Anchor: 'A holding midfielder who sits in front of the defence, screens the back line, and shields the side’s weakest link.',
+  Regista: 'The deep-lying playmaker — a "director" who sits in front of the defence and dictates the tempo of everything.',
+  Metodista: 'The Italian deep midfielder who plays with method — setting the team’s rhythm rather than crunching tackles.',
+  Volante: 'The Brazilian holding midfielder — wins the ball in front of the defence and keeps the team balanced.',
+  'Segundo Volante': 'A second holding midfielder who wins the ball deep, then breaks forward to join the attack.',
+  Pivote: 'Spain’s midfield pivot — the fixed point in front of the back four that possession turns around.',
+  Tuttocampista: 'Italian for "all-field player" — a box-to-box midfielder who contributes at both ends of the pitch.',
+  Relayeur: 'The French relay midfielder — links defence to attack with constant availability and clean passing.',
+  Mezzala: 'Italian for "half-winger" — a central midfielder who makes late runs into the wide channels and the box.',
+  // --- Playmakers / creators / #10 ---
+  Playmaker: 'The team’s chief creator in midfield — controls the ball, sets the rhythm, and supplies the passes chances come from.',
+  'Wide Playmaker': 'A creator who starts from the flank and drifts inside to make chances rather than racing to the byline.',
+  Trequartista: 'The classic Italian No. 10 — operating between the lines behind the strikers, hunting the moment of genius.',
+  Enganche: 'Argentina’s "hook" — the playmaker who links midfield to attack and feeds the team’s star rather than scoring themselves.',
+  Fantasista: 'The Italian flair player — unpredictable and creative, trusted to invent something from nothing.',
+  Invertido: 'A wide player who tucks inside off the flank to combine in central midfield rather than hugging the touchline.',
+  Inventor: 'A creator defined by improvisation — conjures chances out of nothing.',
+  Mediapunta: 'The Spanish No. 10 — an attacking midfielder playing just off the striker, arriving between the lines.',
+  'Half-Space Creator': 'A creator who works the half-spaces — the channels between centre and wing — to find angles defences can’t screen.',
+  // --- Wingers / wide attackers ---
+  'Inverted Winger': 'A wide attacker on the "wrong" side who cuts inside onto the stronger foot, carrying the threat into the middle.',
+  Winger: 'A wide attacker who takes on the full-back to the byline and delivers into the box.',
+  Extremo: 'The Spanish touchline winger — pure pace and width, stretching the pitch down the line.',
+  // --- Strikers / targets ---
+  'Prima Punta': 'Italian for "first striker" — the leading centre-forward who holds the ball up and brings runners into play.',
+  'Seconda Punta': 'Italian for "second striker" — drifts off the main forward, working the space between the lines.',
+  'Vertical Forward': 'A direct forward who attacks the space in behind, always running beyond the last defender.',
+  Poacher: 'A penalty-box striker who lives off half-chances — sharpest in the six-yard scramble.',
+  'Falso Nove': 'The false nine — a striker who drops into midfield, pulling defenders out of position and creating instead of leading the line.',
+};
+
+/** One-sentence explainer for a role, with a plain positional fallback for any
+ *  unmapped role string (the card may fall back to showing its archetype). */
+export function roleBlurb(role: string | undefined): string {
+  if (role && ROLE_BLURB[role]) return ROLE_BLURB[role];
+  return 'How this player interprets their position — the identity they play with on the pitch.';
+}
 
 // Tactic category → accent, matching PackReveal's existing palette.
 export const TACTIC_CAT_COLOR: Record<string, string> = {

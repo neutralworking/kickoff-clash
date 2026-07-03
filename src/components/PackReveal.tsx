@@ -139,7 +139,7 @@ function SealedPack({
               left: 8,
               right: 8,
               height: 0,
-              borderTop: '2px dashed rgba(26,17,8,0.22)',
+              borderTop: '2px dashed rgba(251,247,236,0.25)',
             }}
           />
           <div
@@ -273,7 +273,7 @@ function PlayerReveal({ players, onOpen }: { players: Card[]; onOpen: (c: Card) 
                 width: i === page ? 22 : 8,
                 height: 8,
                 borderRadius: 4,
-                background: i === page ? 'var(--gold)' : 'rgba(26,17,8,0.20)',
+                background: i === page ? 'var(--gold)' : 'rgba(251,247,236,0.22)',
                 transition: 'all 0.25s ease',
               }}
             />
@@ -297,7 +297,7 @@ function PagerBtn({ dir, disabled, onClick }: { dir: 'prev' | 'next'; disabled: 
         height: 40,
         borderRadius: 'var(--radius-sm)',
         border: '2px solid var(--ink-black)',
-        background: disabled ? 'rgba(26,17,8,0.05)' : 'var(--surface-raised)',
+        background: disabled ? 'rgba(255,255,255,0.05)' : 'var(--surface-raised)',
         color: disabled ? 'var(--ink)' : 'var(--cream)',
         fontFamily: PIXEL,
         fontSize: 14,
@@ -480,8 +480,8 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
                   background: active
                     ? STAGE_META[s].packAccent
                     : done
-                      ? 'rgba(26,17,8,0.45)'
-                      : 'rgba(26,17,8,0.16)',
+                      ? 'rgba(251,247,236,0.5)'
+                      : 'rgba(251,247,236,0.18)',
                   transition: 'all 0.3s ease',
                 }}
               />
@@ -599,8 +599,8 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
             <div
               className="chip-reveal"
               style={{
-                background: 'rgba(26,17,8,0.05)',
-                border: '1px solid rgba(26,17,8,0.14)',
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(251,247,236,0.14)',
                 borderRadius: 'var(--radius-sm)',
                 padding: '9px 12px',
                 marginBottom: 10,

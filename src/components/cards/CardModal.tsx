@@ -17,7 +17,7 @@
  *   • Investment — ladder, tier, cost, Boardroom effect, flavour.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { Card } from '../../lib/scoring';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard } from '../../lib/tactics';
@@ -39,6 +39,7 @@ import {
   nationCode,
   managerTraitStyle,
   definingTraitsFor,
+  roleBlurb,
   type ResolvedTrait,
 } from './cardTokens';
 
@@ -211,6 +212,154 @@ function StatCell({ label, value, color }: { label: string; value: string; color
   );
 }
 
+/** The little "i" affordance — same visual language as the inspect pips on the
+ *  team-select sheets / match pitch, so "this is tappable for info" reads as one
+ *  vocabulary across the app. Inverts to the accent while its tip is open. */
+function InfoPip({ active }: { active: boolean }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: 14,
+        height: 14,
+        borderRadius: '50%',
+        background: active ? 'var(--gold)' : 'var(--ink-black)',
+        border: `1.5px solid ${active ? 'var(--ink-black)' : 'var(--line-white)'}`,
+        color: active ? 'var(--ink-black)' : 'var(--line-white)',
+        fontFamily: PIXEL,
+        fontSize: 7,
+        lineHeight: 1,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}
+    >
+      i
+    </span>
+  );
+}
+
+/** The inline explainer box a tapped ROLE/DURABILITY cell expands into — same
+ *  pixel/glass language as the rest of the panel (hard dark fill, 1px tinted
+ *  border, PIXEL kicker). Inline (not floating) so it can never be clipped or
+ *  mis-anchored inside the modal's internal scroll. */
+function TipBox({ heading, body, color }: { heading: string; body: string; color: string }) {
+  return (
+    <div
+      className="chip-reveal"
+      style={{
+        background: 'rgba(0,0,0,0.45)',
+        border: `1px solid ${color}`,
+        borderRadius: 'var(--radius-sm)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+        padding: '7px 9px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        textAlign: 'left',
+      }}
+    >
+      <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.8, color, lineHeight: 1 }}>{heading}</span>
+      <span style={{ fontSize: 11, lineHeight: 1.45, color: 'var(--cream-soft)' }}>{body}</span>
+    </div>
+  );
+}
+
+/** A StatCell that taps open an inline explainer. Spans the full stat-grid row so
+ *  the value + the "i" pip + the expanded tip all have room. Tapping the cell (or
+ *  its open tip) toggles; the parent's document listener closes on any other tap. */
+function TapStatCell({
+  label,
+  value,
+  color,
+  open,
+  onToggle,
+  tipBody,
+}: {
+  label: string;
+  value: string;
+  color: string;
+  open: boolean;
+  onToggle: (e: React.MouseEvent) => void;
+  tipBody: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-label={`${label}: ${value}. Tap for explanation.`}
+      style={{
+        gridColumn: '1 / -1',
+        background: 'rgba(0,0,0,0.25)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-sm)',
+        padding: '6px 8px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 3,
+        minWidth: 0,
+        textAlign: 'left',
+        cursor: 'pointer',
+      }}
+    >
+      <span className="flex items-center justify-between" style={{ gap: 6 }}>
+        <Label>{label}</Label>
+        <InfoPip active={open} />
+      </span>
+      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 11, color, lineHeight: 1.1 }}>
+        {value}
+      </span>
+      {open && <TipBox heading={value.toUpperCase()} body={tipBody} color={color} />}
+    </button>
+  );
+}
+
+/** The DURABILITY row — seated directly under FITNESS (both are physical-condition
+ *  reads; the owner's grouping) in the same Label-plus-value row language, and
+ *  tappable for its grounded explainer. Renders whether or not fitness is tracked. */
+function DurabilityRow({
+  label,
+  color,
+  blurb,
+  open,
+  onToggle,
+}: {
+  label: string;
+  color: string;
+  blurb: string;
+  open: boolean;
+  onToggle: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-label={`Durability: ${label}. Tap for explanation.`}
+      style={{
+        background: 'none',
+        border: 'none',
+        padding: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        gap: 5,
+        textAlign: 'left',
+        cursor: 'pointer',
+      }}
+    >
+      <span className="flex items-center" style={{ gap: 8 }}>
+        <Label>DURABILITY</Label>
+        <span style={{ fontFamily: PIXEL, fontSize: 10, color, lineHeight: 1 }}>{label.toUpperCase()}</span>
+        <InfoPip active={open} />
+      </span>
+      {open && <TipBox heading={label.toUpperCase()} body={blurb} color={color} />}
+    </button>
+  );
+}
+
 function TagRow({ items, color, bg }: { items: string[]; color: string; bg: string }) {
   return (
     <div className="flex flex-wrap" style={{ gap: 5 }}>
@@ -250,6 +399,25 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
   // Defining traits — the marquee "what this card DOES" list. Signature/legend
   // loadouts surface first; otherwise the seeded rarity-count pick.
   const traits = definingTraitsFor(card);
+
+  // Tap-to-open explainers for ROLE and DURABILITY (mobile-first: no hover).
+  // Tapping the cell toggles its tip; tapping ANYWHERE else closes it via a
+  // document-level listener that never preventDefault/stopPropagation's — so a
+  // backdrop tap still closes the whole modal and Escape stays untouched. The
+  // trigger itself stopPropagation's its opening tap so the same click doesn't
+  // instantly self-close through that listener.
+  const [openTip, setOpenTip] = useState<'role' | 'durability' | null>(null);
+  useEffect(() => {
+    if (!openTip) return;
+    const close = () => setOpenTip(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [openTip]);
+  const toggleTip = (tip: 'role' | 'durability') => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setOpenTip((cur) => (cur === tip ? null : tip));
+  };
+
   return (
     <div className="flex flex-col" style={{ gap: 10 }}>
       <Panel>
@@ -263,10 +431,18 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
           <StatCell label="RATING" value={String(Math.round(card.power))} />
           <StatCell label="POSITION" value={POSITION_LABEL[card.position] ?? card.position} />
           <StatCell label="NATION" value={flag ? card.nation ?? '—' : nationCode(card.nation) || '—'} />
-          {/* ROLE is the prominent, accent-coloured identity where ARCHETYPE was —
-              archetype/secondary are no longer surfaced on the expanded card. */}
-          <StatCell label="ROLE" value={role} color={accent} />
-          <StatCell label="DURABILITY" value={dur.label} color={dur.color} />
+          {/* ROLE is the prominent, accent-coloured identity where ARCHETYPE was.
+              It spans the full row (durability moved down beside fitness), and it
+              taps open a one-line explainer — Regista/Trequartista/etc. are real
+              football identities the player shouldn't need to google. */}
+          <TapStatCell
+            label="ROLE"
+            value={role}
+            color={accent}
+            open={openTip === 'role'}
+            onToggle={toggleTip('role')}
+            tipBody={roleBlurb(role)}
+          />
         </div>
         {/* Where they can operate — eligible pitch positions as pixel chips. */}
         <div className="flex flex-col" style={{ gap: 6 }}>
@@ -277,7 +453,18 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
             ))}
           </div>
         </div>
+        {/* Physical-condition block: FITNESS (today's legs, when tracked) with
+            DURABILITY (the body's long-run risk profile) directly beneath it —
+            the owner's deliberate grouping. Durability always shows, fitness only
+            once a run tracks it. The durability row taps open its explainer. */}
         {typeof card.fitness === 'number' && <FitnessRow fitness={card.fitness} />}
+        <DurabilityRow
+          label={dur.label}
+          color={dur.color}
+          blurb={dur.blurb}
+          open={openTip === 'durability'}
+          onToggle={toggleTip('durability')}
+        />
         {card.personalityTheme && card.personalityTheme !== 'General' && (
           <div className="flex flex-wrap" style={{ gap: 5 }}>
             <Chip label="THEME" value={card.personalityTheme} />
