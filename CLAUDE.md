@@ -4,14 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Required first read
 
-The Kickoff Clash match-engine redesign is specified in `docs/`. **Read `docs/KICKOFF_CLASH_DESIGN.md` first** — it is the index, has **precedence**, and resolves cross-doc drift (notably the superseded `MATCH_ENGINE_V1 §6` and the Player/Tactical/Manager naming). It orders the four companion specs:
+The Kickoff Clash rebuild is specified in `docs/`. **Reading order:** `docs/KICKOFF_CLASH_DESIGN.md` → `docs/SYNERGY_MODEL_V1.md` → `docs/KC_REBUILD_PLAN_V1.md` → the remaining specs as referenced.
 
-- `docs/ARCHETYPES_V1.md` — verb palette + 11 emergent identities + counter-web
-- `docs/CARDS_V1.md` — player model, `TraitRecord`, chemistry, 500-card authoring
-- `docs/MATCH_ENGINE_V1.md` — increment loop, zonal field, xG→Poisson, dispatcher
-- `docs/ECONOMY_V1.md` — three card layers, revenue, run loop
+**Conflict rule: `SYNERGY_MODEL_V1.md` (SM) wins.** Where existing code or any other spec conflicts with SM, SM is right by definition; its five design laws (SM §1 — no unconditional bonuses, loose coupling, closed palettes, managers-are-TraitRecords, dual-axis compounding) are lint rules for every PR. `KC_REBUILD_PLAN_V1.md` is the phase-by-phase execution plan (P0–P7). `KICKOFF_CLASH_DESIGN.md` remains the index for the four companion specs and resolves their older cross-doc drift:
 
-Build order is in `DESIGN §8`. Step 1 (verb dispatcher + `TraitRecord` runtime) is in `src/lib/verbs.ts` + `src/lib/role-transforms.ts`, wired into `evaluateSplit`. Step 2 (zonal field + coupled lane contest, §4) is in `src/lib/field.ts`; the contest runs in `resolveIncrement`. Three §4 dials were set with the design owner: **coupled** defence (not independent lanes), convexity **k≈1.1**, and a **gentle** goal model (variance verbs are the opt-in toward Poisson, not the default). `MATCH_ENGINE_V5.md` (repo root) describes the **current** live engine that the redesign is migrating from.
+- `docs/ARCHETYPES_V1.md` — verb palette + 11 emergent identities + counter-web (archetype framing superseded by SM §4)
+- `docs/CARDS_V1.md` — player model, `TraitRecord`, chemistry, 500-card authoring (flat-bonus model superseded by SM §1/§5)
+- `docs/MATCH_ENGINE_V1.md` — increment loop, zonal field, xG→Poisson, dispatcher (inferred-state logic superseded by SM §3/§6)
+- `docs/ECONOMY_V1.md` — three card layers, revenue, run loop (extended, not replaced, by SM)
+
+**Rebuild status:** Phase 0–1 landed (NW-139). The new pure engine lives in `src/engine/` (zero React/DOM imports; event log as source of truth; all balance numbers in `src/engine/data/`); `docs/MIGRATION_NOTES.md` is the keep/adapt/delete audit of the legacy `src/lib` modules against SM. The verb dispatcher + `TraitRecord` runtime from NW-138 (`src/lib/verbs.ts` + `src/lib/role-transforms.ts`, wired into `evaluateSplit`) is the keep-baseline and still drives the **live game**; `MATCH_ENGINE_V5.md` (repo root) describes that current live engine. The live game keeps running on `src/lib` until Phase 5 flips the UI to `src/engine/`.
 
 ## Commands
 
@@ -22,7 +24,11 @@ npm run lint     # ESLint 9 flat config (eslint.config.mjs)
 npm run start    # Serve production build
 ```
 
-No test framework is installed. The match engine was validated via `scripts/match-harness.ts`, which imports engine modules directly and can be re-run with `npx tsx scripts/match-harness.ts`. (The script is ESM with extensionless imports, so `ts-node` fails to resolve them — use `tsx`.)
+```bash
+npm test         # Vitest — the canonical acceptance gate for src/engine/ (determinism + SM distribution checks)
+```
+
+The legacy match engine was validated via `scripts/match-harness.ts`, which imports `src/lib` modules directly and can be re-run with `npx tsx scripts/match-harness.ts` (byte-identical across runs — the determinism check for the live engine). The script is ESM with extensionless imports, so `ts-node` fails to resolve them — use `tsx`. `scripts/balance_sim.py` (Python 3, stdlib-only) is the balance *reference* for the rebuild's single-match model; the vitest harness is the canonical gate now that Phase 1 has landed.
 
 ## What this is
 
