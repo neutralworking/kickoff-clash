@@ -67,6 +67,11 @@ export function qualityScore(card: EngineCard): number {
   return card.baseContribution * 2 + card.traits.reduce((a, t) => a + effectiveMagnitude(t), 0);
 }
 
+/** Is a single trait lit under the manager's regime? (SM §9 lit/dim.) */
+export function traitIsLit(trait: EngineCard['traits'][number], sigs: Set<string>): boolean {
+  return sigs.has(traitSignature(trait));
+}
+
 /** How much of the card's trait value is LIT under the manager (0–1). The
  *  committed drafting discipline: skip anything mostly dormant. */
 export function litRatio(card: EngineCard, sigs: Set<string>): number {

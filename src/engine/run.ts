@@ -37,6 +37,10 @@ import {
   pointsTarget,
 } from './data/economy';
 import { getTemplate } from './data/trait-templates';
+import { TACTICAL_CARDS } from './data/tactical-cards';
+
+/** The v1 tactical hand: every card, once each per match (deck-building is v2). */
+const TACTICAL_HAND = TACTICAL_CARDS.map((c) => c.id);
 import { ENERGY_BUDGET, SUBS_BUDGET } from './data/baseline';
 
 const cardById = new Map(ENGINE_CARDS.map((c) => [c.id, c]));
@@ -183,10 +187,10 @@ export function fixturePreview(run: RunState): FixturePreview {
 }
 
 /** Build the match config for the upcoming fixture with an XI. */
-export function fixtureConfig(run: RunState, xi: EngineCard[], matchSeed?: number): MatchConfig {
+export function fixtureConfig(run: RunState, xi: EngineCard[], matchSeed?: number, formation?: string): MatchConfig {
   const manager = getManager(run.managerId)!;
   const { fixture, rule, target } = fixturePreview(run);
-  const player = sideFromSquad(manager, xi);
+  const player = sideFromSquad(manager, xi, formation ? { formation } : undefined);
   const opponent = opponentSide(fixture);
   if (rule) {
     for (const [side, trait] of rule.sideTraits) {
@@ -198,26 +202,32 @@ export function fixtureConfig(run: RunState, xi: EngineCard[], matchSeed?: numbe
     seed: matchSeed ?? ((run.seed * 31 + run.fixture) | 0),
     sides: [player, opponent],
     target,
+    tacticalHand: TACTICAL_HAND,
     attackThresholds: [fixture.windowThreshold, 6],
     ...(rule?.energyDelta ? { energyBudget: Math.max(0, ENERGY_BUDGET + rule.energyDelta) } : {}),
     ...(rule?.subsDelta ? { subsBudget: Math.max(0, SUBS_BUDGET + rule.subsDelta) } : {}),
   };
 }
 
-/** Resolve the upcoming fixture with the given XI; advances or ends the run. */
+/** Resolve the upcoming fixture headless with the given XI. */
 export function playFixture(
   run: RunState,
   xi: EngineCard[],
   policy: HeadlessPolicy
 ): { run: RunState; match: MatchState } {
+  const state = runHeadless(fixtureConfig(run, xi), policy);
+  return { run: applyMatchOutcome(run, state), match: state };
+}
+
+/** Apply a COMPLETED match (headless or UI-driven) to the run: pay rewards,
+ *  advance/end, open the between-fixture shop. */
+export function applyMatchOutcome(run: RunState, state: MatchState): RunState {
   if (!run.alive || run.completed) throw new Error('run is over');
   if (run.shop) throw new Error('close the shop before kicking off');
   const { rule, target } = fixturePreview(run);
-  const state = runHeadless(fixtureConfig(run, xi), policy);
   const result = matchResult(state);
   const ft = state.log.find((e) => e.type === 'full-time');
   const surplusCash = ft && ft.type === 'full-time' ? ft.surplusCash : 0;
-
   const next: RunState = { ...run, history: [...run.history] };
   const met = result.targetMet;
   const reward = met
@@ -234,17 +244,17 @@ export function playFixture(
   });
   if (!met) {
     next.alive = false;
-    return { run: next, match: state };
+    return next;
   }
   next.cash += reward;
   if (run.fixture === 9) {
     next.completed = true;
-    return { run: next, match: state };
+    return next;
   }
   const wasBoss = FIXTURE_SCHEDULE[run.fixture - 1].boss;
   next.fixture = run.fixture + 1;
   next.shop = stockShop(next, wasBoss);
-  return { run: next, match: state };
+  return next;
 }
 
 // ---------------------------------------------------------------------------
