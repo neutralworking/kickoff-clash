@@ -1,0 +1,560 @@
+{
+  "managers": [
+    {
+      "id": "counter-attack",
+      "name": "Marek Volný",
+      "nation": "Czech Republic",
+      "winCondition": "Win the ball, score within the window, chain counters",
+      "defaultPosture": "deep-block",
+      "preferredFormation": "4-4-2",
+      "traits": [
+        {
+          "name": "Spring the Trap",
+          "verb": "amplify",
+          "context": {
+            "kind": "window",
+            "window": "transition"
+          },
+          "magnitude": 3
+        },
+        {
+          "name": "Blood Rush",
+          "verb": "amplify",
+          "context": {
+            "kind": "streak",
+            "atLeast": 2
+          },
+          "magnitude": 1
+        }
+      ],
+      "engine": {
+        "id": "counter-attack",
+        "successes": [
+          {
+            "on": "window-goal",
+            "window": "transition"
+          }
+        ],
+        "contradictions": [
+          {
+            "on": "conceded",
+            "reason": "conceded"
+          }
+        ]
+      }
+    },
+    {
+      "id": "set-piece",
+      "name": "Gordon Blackwood",
+      "nation": "Scotland",
+      "winCondition": "Corners and free kicks are your entire offense",
+      "defaultPosture": "deep-block",
+      "preferredFormation": "5-4-1",
+      "traits": [
+        {
+          "name": "Win the Foul",
+          "verb": "relocate",
+          "context": {
+            "kind": "window",
+            "window": "set-piece"
+          },
+          "magnitude": 0.14
+        },
+        {
+          "name": "Rehearsed Routine",
+          "verb": "amplify",
+          "context": {
+            "kind": "window",
+            "window": "set-piece"
+          },
+          "magnitude": 4
+        },
+        {
+          "name": "Training-Ground Goal",
+          "verb": "generate",
+          "context": {
+            "kind": "goal-event",
+            "on": "scored"
+          },
+          "magnitude": 1
+        }
+      ],
+      "engine": {
+        "id": "set-piece",
+        "successes": [
+          {
+            "on": "window-goal",
+            "window": "set-piece"
+          }
+        ],
+        "contradictions": [
+          {
+            "on": "conceded",
+            "reason": "conceded"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fortress",
+      "name": "Vittorio Scudieri",
+      "nation": "Italy",
+      "winCondition": "Clean-sheet minutes bank points; a 0-0 can win",
+      "defaultPosture": "deep-block",
+      "preferredFormation": "5-3-2",
+      "traits": [
+        {
+          "name": "Clean Clock",
+          "verb": "generate",
+          "context": {
+            "kind": "streak",
+            "atLeast": 2
+          },
+          "magnitude": 1
+        },
+        {
+          "name": "No Way Through",
+          "verb": "deny",
+          "context": {
+            "kind": "window",
+            "window": "transition"
+          },
+          "magnitude": 1
+        }
+      ],
+      "engine": {
+        "id": "fortress",
+        "successes": [
+          {
+            "on": "clean-batch"
+          }
+        ],
+        "contradictions": [
+          {
+            "on": "conceded",
+            "reason": "conceded"
+          }
+        ]
+      }
+    },
+    {
+      "id": "tinkerman",
+      "name": "Aurelio Benti",
+      "nation": "Italy",
+      "winCondition": "Substitutions fuel the engine",
+      "defaultPosture": "possession",
+      "preferredFormation": "4-2-3-1",
+      "traits": [
+        {
+          "name": "Fresh Legs",
+          "verb": "amplify",
+          "context": {
+            "kind": "substitution"
+          },
+          "magnitude": 3
+        },
+        {
+          "name": "Final Card",
+          "verb": "amplify",
+          "context": {
+            "kind": "clock",
+            "band": "late"
+          },
+          "magnitude": 1
+        }
+      ],
+      "engine": {
+        "id": "tinkerman",
+        "successes": [
+          {
+            "on": "substitution"
+          },
+          {
+            "on": "any-goal"
+          }
+        ],
+        "contradictions": [
+          {
+            "on": "conceded",
+            "reason": "conceded"
+          }
+        ]
+      }
+    },
+    {
+      "id": "metronome",
+      "name": "Xavier Puig",
+      "nation": "Spain",
+      "winCondition": "Unbroken possession compounds",
+      "defaultPosture": "possession",
+      "preferredFormation": "4-3-3",
+      "traits": [
+        {
+          "name": "Keep the Ball",
+          "verb": "amplify",
+          "context": {
+            "kind": "posture",
+            "posture": "possession"
+          },
+          "magnitude": 2
+        },
+        {
+          "name": "Rhythm Dividend",
+          "verb": "generate",
+          "context": {
+            "kind": "streak",
+            "atLeast": 2
+          },
+          "magnitude": 1
+        }
+      ],
+      "engine": {
+        "id": "metronome",
+        "successes": [
+          {
+            "on": "any-goal"
+          },
+          {
+            "on": "clean-batch"
+          }
+        ],
+        "contradictions": [
+          {
+            "on": "turnover-conceded",
+            "reason": "turnover conceded"
+          }
+        ]
+      }
+    },
+    {
+      "id": "chaser",
+      "name": "Duncan Hart",
+      "nation": "England",
+      "winCondition": "Engine only ignites level/behind, late",
+      "defaultPosture": "possession",
+      "preferredFormation": "3-5-2",
+      "traits": [
+        {
+          "name": "Nothing to Lose",
+          "verb": "amplify",
+          "context": {
+            "kind": "scoreline",
+            "is": "chasing"
+          },
+          "magnitude": 4
+        },
+        {
+          "name": "Level Heads",
+          "verb": "amplify",
+          "context": {
+            "kind": "scoreline",
+            "is": "level"
+          },
+          "magnitude": 1
+        },
+        {
+          "name": "Final Push",
+          "verb": "amplify",
+          "context": {
+            "kind": "clock",
+            "band": "late"
+          },
+          "magnitude": 3
+        }
+      ],
+      "engine": {
+        "id": "chaser",
+        "successes": [
+          {
+            "on": "any-goal"
+          }
+        ],
+        "contradictions": [
+          {
+            "on": "conceded",
+            "reason": "conceded"
+          }
+        ]
+      }
+    },
+    {
+      "id": "gambler",
+      "name": "Sonny Callahan",
+      "nation": "Ireland",
+      "winCondition": "Everything swingy, both directions",
+      "defaultPosture": "possession",
+      "preferredFormation": "3-4-3",
+      "traits": [
+        {
+          "name": "Roll the Dice",
+          "verb": "amplify-variance",
+          "context": {
+            "kind": "posture",
+            "posture": "possession"
+          },
+          "magnitude": 1
+        },
+        {
+          "name": "Double or Quits",
+          "verb": "amplify-variance",
+          "context": {
+            "kind": "clock",
+            "band": "late"
+          },
+          "magnitude": 1
+        },
+        {
+          "name": "Chance It",
+          "verb": "amplify",
+          "context": {
+            "kind": "window",
+            "window": "transition"
+          },
+          "magnitude": 1
+        }
+      ],
+      "engine": {
+        "id": "gambler",
+        "successes": [
+          {
+            "on": "any-goal"
+          }
+        ],
+        "contradictions": [
+          {
+            "on": "conceded",
+            "reason": "conceded"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pragmatist",
+      "name": "Piet Vermeer",
+      "nation": "Netherlands",
+      "winCondition": "Narrow, grinding, reliable 1-0s",
+      "defaultPosture": "deep-block",
+      "preferredFormation": "4-1-2-1-2",
+      "traits": [
+        {
+          "name": "Kill the Chaos",
+          "verb": "dampen-variance",
+          "context": {
+            "kind": "posture",
+            "posture": "deep-block"
+          },
+          "magnitude": 1
+        },
+        {
+          "name": "Drilled Break",
+          "verb": "amplify",
+          "context": {
+            "kind": "window",
+            "window": "transition"
+          },
+          "magnitude": 4
+        },
+        {
+          "name": "Zonal Wall",
+          "verb": "deny",
+          "context": {
+            "kind": "window",
+            "window": "set-piece"
+          },
+          "magnitude": 1
+        }
+      ],
+      "engine": {
+        "id": "pragmatist",
+        "successes": [
+          {
+            "on": "any-goal"
+          },
+          {
+            "on": "clean-batch"
+          }
+        ],
+        "contradictions": [
+          {
+            "on": "conceded",
+            "reason": "conceded"
+          }
+        ]
+      }
+    },
+    {
+      "id": "taskmaster",
+      "name": "Ute Brandt",
+      "nation": "Germany",
+      "winCondition": "Output bought with player fitness",
+      "defaultPosture": "possession",
+      "preferredFormation": "4-4-2",
+      "traits": [
+        {
+          "name": "Run Them Ragged",
+          "verb": "drain-fitness",
+          "context": {
+            "kind": "posture",
+            "posture": "possession"
+          },
+          "magnitude": 0.5
+        },
+        {
+          "name": "Peak Output",
+          "verb": "amplify",
+          "context": {
+            "kind": "fitness",
+            "atLeast": 5
+          },
+          "magnitude": 3
+        }
+      ],
+      "engine": {
+        "id": "taskmaster",
+        "successes": [
+          {
+            "on": "any-goal"
+          }
+        ],
+        "contradictions": [
+          {
+            "on": "conceded",
+            "reason": "conceded"
+          }
+        ]
+      }
+    },
+    {
+      "id": "financier",
+      "name": "Bernard Grosvenor",
+      "nation": "England",
+      "winCondition": "Weak on pitch; results generate extra cash",
+      "defaultPosture": "possession",
+      "preferredFormation": "4-3-3",
+      "traits": [
+        {
+          "name": "Win Bonus Clause",
+          "verb": "generate",
+          "resource": "cash",
+          "context": {
+            "kind": "goal-event",
+            "on": "scored"
+          },
+          "magnitude": 150
+        },
+        {
+          "name": "Bare Minimum",
+          "verb": "amplify",
+          "context": {
+            "kind": "window",
+            "window": "transition"
+          },
+          "magnitude": 3
+        },
+        {
+          "name": "Corner Budget",
+          "verb": "amplify",
+          "context": {
+            "kind": "window",
+            "window": "set-piece"
+          },
+          "magnitude": 2
+        }
+      ],
+      "engine": {
+        "id": "financier",
+        "successes": [
+          {
+            "on": "any-goal"
+          }
+        ],
+        "contradictions": [
+          {
+            "on": "conceded",
+            "reason": "conceded"
+          }
+        ]
+      }
+    }
+  ],
+  "calibration": {
+    "target": 10,
+    "subBatches": [
+      3,
+      4,
+      5
+    ],
+    "seeds": 300,
+    "opponents": [
+      {
+        "id": "balanced-possession",
+        "side": {
+          "posture": "possession",
+          "traits": [],
+          "baseCharge": 2,
+          "engine": {
+            "id": "opp",
+            "successes": [
+              {
+                "on": "any-goal"
+              }
+            ],
+            "contradictions": [
+              {
+                "on": "conceded",
+                "reason": "conceded"
+              }
+            ]
+          },
+          "autoCommit": true
+        }
+      },
+      {
+        "id": "stubborn-block",
+        "side": {
+          "posture": "deep-block",
+          "traits": [],
+          "baseCharge": 2,
+          "engine": {
+            "id": "opp",
+            "successes": [
+              {
+                "on": "any-goal"
+              }
+            ],
+            "contradictions": [
+              {
+                "on": "conceded",
+                "reason": "conceded"
+              }
+            ]
+          },
+          "autoCommit": true
+        }
+      },
+      {
+        "id": "strong-possession",
+        "side": {
+          "posture": "possession",
+          "traits": [],
+          "baseCharge": 3,
+          "engine": {
+            "id": "opp",
+            "successes": [
+              {
+                "on": "any-goal"
+              }
+            ],
+            "contradictions": [
+              {
+                "on": "conceded",
+                "reason": "conceded"
+              }
+            ]
+          },
+          "autoCommit": true
+        }
+      }
+    ]
+  }
+}

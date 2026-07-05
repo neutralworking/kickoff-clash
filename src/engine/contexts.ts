@@ -37,7 +37,8 @@ export type EventContextKind = WindowKind | 'goal-event' | 'substitution';
 export type Scoreline = 'leading' | 'level' | 'chasing';
 export type ClockBand = 'early' | 'mid' | 'late';
 
-/** Streak/fitness state tests are threshold comparisons, not enums. */
+/** Streak/fitness state tests are threshold comparisons, not enums. SM §2
+ *  names both fitness directions ("above/below thresholds"). */
 export interface StreakAtLeast {
   kind: 'streak';
   atLeast: number;
@@ -45,6 +46,10 @@ export interface StreakAtLeast {
 export interface FitnessBelow {
   kind: 'fitness';
   below: number; // squad-average threshold (per-player scoping arrives with real squads)
+}
+export interface FitnessAtLeast {
+  kind: 'fitness';
+  atLeast: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,12 +59,13 @@ export interface FitnessBelow {
 export type TraitContext =
   | { kind: 'window'; window: WindowKind }        // fires when resolving that window
   | { kind: 'goal-event'; on: 'scored' | 'conceded' } // fires on the goal event
-  | { kind: 'substitution' }                       // fires on a substitution event
+  | { kind: 'substitution' }                       // active for the rest of the batch after an own substitution
   | { kind: 'posture'; posture: Posture }          // fires while own posture is X
   | { kind: 'scoreline'; is: Scoreline }
   | { kind: 'clock'; band: ClockBand }
   | StreakAtLeast
-  | FitnessBelow;
+  | FitnessBelow
+  | FitnessAtLeast;
 
 // ---------------------------------------------------------------------------
 // ContextSnapshot — the regime a trait is evaluated against, per increment.
@@ -73,12 +79,15 @@ export interface ContextSnapshot {
   streak: number;
   /** Squad-average fitness 0–10 (stub squads default 10). */
   fitness: number;
+  /** True from an own substitution until the end of that batch (fresh legs). */
+  subThisBatch: boolean;
 }
 
 /**
- * Does a *state-like* trait context hold in this snapshot? Window / goal-event /
- * substitution contexts are event-scoped — they match at their event site, not
- * here — so they return false from the per-increment state test.
+ * Does a *state-like* trait context hold in this snapshot? Window / goal-event
+ * contexts are event-scoped — they match at their event site, not here — so
+ * they return false from the per-increment state test. Substitution is
+ * batch-scoped state: active from the sub until the batch ends.
  */
 export function stateContextActive(ctx: TraitContext, snap: ContextSnapshot): boolean {
   switch (ctx.kind) {
@@ -91,7 +100,9 @@ export function stateContextActive(ctx: TraitContext, snap: ContextSnapshot): bo
     case 'streak':
       return snap.streak >= ctx.atLeast;
     case 'fitness':
-      return snap.fitness < ctx.below;
+      return 'below' in ctx ? snap.fitness < ctx.below : snap.fitness >= ctx.atLeast;
+    case 'substitution':
+      return snap.subThisBatch;
     default:
       return false;
   }

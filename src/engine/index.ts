@@ -13,3 +13,6 @@ export * from './streak';
 export * from './match';
 export { rngNext, rngSeed, mulberry32 } from './rng';
 export * from './data/baseline';
+export * from './data/adherence';
+export * from './data/tactical-cards';
+export * from './data/managers';

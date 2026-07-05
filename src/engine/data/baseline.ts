@@ -12,8 +12,12 @@ import type { Posture, WindowKind, ClockBand } from '../contexts';
 export const BATCHES = 6;
 export const INCREMENTS_PER_BATCH = 3;
 
-/** Energy budget per match (SM §6, v1). Spent by tactical plays (Phase 2); surplus → cash. */
+/** Energy budget per match (SM §6, v1). Spent by tactical plays; surplus → cash. */
 export const ENERGY_BUDGET = 5;
+
+/** Substitutions per match; a sub restores a little squad fitness (fresh legs). */
+export const SUBS_BUDGET = 3;
+export const FITNESS_RESTORE_PER_SUB = 1;
 
 /** Window resolution: charge + d(die) ≥ threshold → converted. */
 export const WINDOW_THRESHOLD = 6;

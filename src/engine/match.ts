@@ -30,16 +30,19 @@ import {
   denyContributions,
   dieShiftContributions,
   accrualContributions,
+  goalEventContributions,
+  reweightContributions,
   fitnessDrainContributions,
   sumContributions,
 } from './traits';
-import type { MatchEvent, Side, Clock } from './events';
+import type { MatchEvent, Side, Clock, AdherenceBand } from './events';
 import type { PostureState } from './posture';
 import { createPostureState, activePosture, applyPostureWindow, tickPosture } from './posture';
 import type { EngineDef } from './streak';
 import {
   extendsOnGoal,
   extendsOnCleanBatch,
+  extendsOnSubstitution,
   contradictionOnConcede,
   contradictionOnBatchConceded,
 } from './streak';
@@ -47,6 +50,8 @@ import {
   BATCHES,
   INCREMENTS_PER_BATCH,
   ENERGY_BUDGET,
+  SUBS_BUDGET,
+  FITNESS_RESTORE_PER_SUB,
   WINDOW_THRESHOLD,
   DIE_LADDER,
   DEFAULT_DIE_INDEX,
@@ -56,6 +61,8 @@ import {
   SURPLUS_CASH_PER_ENERGY,
   MATCHUP_MATRIX,
 } from './data/baseline';
+import { adherenceBand, ADHERENCE_FACTOR } from './data/adherence';
+import { getTacticalCard } from './data/tactical-cards';
 
 // ---------------------------------------------------------------------------
 // Config + state
@@ -70,6 +77,10 @@ export interface SideConfig {
   engine: EngineDef;
   /** Auto-commit every generated window (the opponent); false surfaces decisions. */
   autoCommit: boolean;
+  /** Formation played vs the manager's preference → the adherence band (SM §7).
+   *  Omit either to play native (no throttle). */
+  formation?: string;
+  preferredFormation?: string;
 }
 
 export interface MatchConfig {
@@ -77,6 +88,8 @@ export interface MatchConfig {
   sides: [SideConfig, SideConfig];
   /** Points target for side 0 (the fixture gate). */
   target: number;
+  /** Tactical card ids side 0 may play between batches (each once per match). */
+  tacticalHand?: string[];
 }
 
 interface SideState {
@@ -85,6 +98,9 @@ interface SideState {
   points: number;
   streak: number;
   fitness: number;
+  cash: number;
+  subsLeft: number;
+  subThisBatch: boolean;
   concededThisBatch: boolean;
 }
 
@@ -103,6 +119,10 @@ export interface MatchState {
   dieIndex: number; // effective ladder index for the current increment
   sides: [SideState, SideState];
   energy: number;
+  /** Tactical cards already played (each card plays once per match). */
+  playedCards: string[];
+  /** Static per-side generation throttle from the adherence band (SM §7). */
+  adherenceFactor: [number, number];
   pending: PendingWindow[];
   status: MatchStatus;
   log: MatchEvent[];
@@ -110,7 +130,9 @@ export interface MatchState {
 
 export type BatchDecision =
   | { type: 'none' }
-  | { type: 'posture-play'; posture: Posture; durationBatches: number };
+  | { type: 'posture-play'; posture: Posture; durationBatches: number }
+  | { type: 'tactic-play'; cardId: string }
+  | { type: 'substitution' };
 
 export type WindowDecision = { type: 'commit' } | { type: 'pass' };
 
@@ -127,6 +149,7 @@ export interface AdvanceResult {
 // ---------------------------------------------------------------------------
 
 export function createMatch(config: MatchConfig): AdvanceResult {
+  const bands: [AdherenceBand, AdherenceBand] = [bandOf(config.sides[0]), bandOf(config.sides[1])];
   const state: MatchState = {
     config,
     rng: rngSeed(config.seed),
@@ -135,6 +158,8 @@ export function createMatch(config: MatchConfig): AdvanceResult {
     dieIndex: DEFAULT_DIE_INDEX,
     sides: [freshSide(config.sides[0]), freshSide(config.sides[1])],
     energy: ENERGY_BUDGET,
+    playedCards: [],
+    adherenceFactor: [ADHERENCE_FACTOR[bands[0]], ADHERENCE_FACTOR[bands[1]]],
     pending: [],
     status: 'awaiting-batch-decision',
     log: [],
@@ -145,10 +170,16 @@ export function createMatch(config: MatchConfig): AdvanceResult {
       seed: config.seed,
       postures: [config.sides[0].posture, config.sides[1].posture],
       target: config.target,
+      ...(config.sides[0].formation || config.sides[1].formation ? { adherence: bands } : {}),
     },
   ];
   state.log.push(...events);
   return { state, events, awaiting: { kind: 'batch-start', batch: 1 } };
+}
+
+function bandOf(cfg: SideConfig): AdherenceBand {
+  if (!cfg.formation || !cfg.preferredFormation) return 'native';
+  return adherenceBand(cfg.formation, cfg.preferredFormation);
 }
 
 function freshSide(cfg: SideConfig): SideState {
@@ -158,6 +189,9 @@ function freshSide(cfg: SideConfig): SideState {
     points: 0,
     streak: 0,
     fitness: 10,
+    cash: 0,
+    subsLeft: SUBS_BUDGET,
+    subThisBatch: false,
     concededThisBatch: false,
   };
 }
@@ -249,18 +283,54 @@ function startBatch(state: MatchState, decision: BatchDecision, emit: (e: MatchE
     }
   }
 
-  // The player's between-batch play: a timed posture window costing 1 energy.
+  // The player's between-batch play: a raw timed posture window (1 energy)…
   if (decision.type === 'posture-play') {
     if (state.energy < 1) throw new Error('posture-play with no energy left');
     state.energy -= 1;
-    const from = activePosture(state.sides[0].posture);
-    state.sides[0].posture = applyPostureWindow(
-      state.sides[0].posture,
-      decision.posture,
-      state.batch,
-      decision.durationBatches
-    );
-    emit({ type: 'posture-shift', side: 0, from, to: decision.posture, reason: 'tactic', batch: state.batch });
+    openPostureWindow(state, decision.posture, decision.durationBatches, emit);
+  }
+  // …or a tactical CARD from the hand: duration + cost are card stats (SM §3),
+  // each card plays once per match, between batches only.
+  if (decision.type === 'tactic-play') {
+    const card = getTacticalCard(decision.cardId);
+    if (!card) throw new Error(`unknown tactical card: ${decision.cardId}`);
+    if (!(state.config.tacticalHand ?? []).includes(card.id)) {
+      throw new Error(`tactical card not in hand: ${card.id}`);
+    }
+    if (state.playedCards.includes(card.id)) throw new Error(`tactical card already played: ${card.id}`);
+    if (state.energy < card.energyCost) throw new Error(`not enough energy for ${card.id}`);
+    state.energy -= card.energyCost;
+    state.playedCards.push(card.id);
+    emit({
+      type: 'tactic-played',
+      side: 0,
+      card: card.id,
+      posture: card.posture,
+      durationBatches: card.durationBatches,
+      energyCost: card.energyCost,
+      batch: state.batch,
+    });
+    openPostureWindow(state, card.posture, card.durationBatches, emit);
+  }
+  // …or a substitution: an instantaneous event (SM §2) restoring a little
+  // fitness, feeding substitution-context traits for the rest of the batch,
+  // and extending substitution-success engines (Tinkerman fuel).
+  if (decision.type === 'substitution') {
+    if (state.sides[0].subsLeft <= 0) throw new Error('no substitutions left');
+    state.sides[0].subsLeft -= 1;
+    state.sides[0].subThisBatch = true;
+    state.sides[0].fitness = Math.min(10, state.sides[0].fitness + FITNESS_RESTORE_PER_SUB);
+    emit({ type: 'substitution', side: 0, batch: state.batch, subsLeft: state.sides[0].subsLeft });
+    const def = state.config.sides[0].engine;
+    if (extendsOnSubstitution(def)) {
+      state.sides[0].streak += 1;
+      emit({
+        type: 'streak-extended',
+        side: 0,
+        streak: state.sides[0].streak,
+        clock: { batch: state.batch, increment: 0 },
+      });
+    }
   }
 
   // Telegraph: both sides' active postures for this batch (opponent shifts are
@@ -270,6 +340,18 @@ function startBatch(state: MatchState, decision: BatchDecision, emit: (e: MatchE
     batch: state.batch,
     telegraph: [activePosture(state.sides[0].posture), activePosture(state.sides[1].posture)],
   });
+}
+
+/** Open a timed posture window for side 0 and emit the shift. */
+function openPostureWindow(
+  state: MatchState,
+  posture: Posture,
+  durationBatches: number,
+  emit: (e: MatchEvent) => void
+): void {
+  const from = activePosture(state.sides[0].posture);
+  state.sides[0].posture = applyPostureWindow(state.sides[0].posture, posture, state.batch, durationBatches);
+  emit({ type: 'posture-shift', side: 0, from, to: posture, reason: 'tactic', batch: state.batch });
 }
 
 function endBatch(state: MatchState, emit: (e: MatchEvent) => void): void {
@@ -293,6 +375,7 @@ function endBatch(state: MatchState, emit: (e: MatchEvent) => void): void {
       }
     }
     state.sides[side].concededThisBatch = false;
+    state.sides[side].subThisBatch = false;
   }
 
   emit({ type: 'batch-end', batch: state.batch, cleanFor });
@@ -322,9 +405,15 @@ function runIncrement(state: MatchState, emit: (e: MatchEvent) => void): void {
   emit({ type: 'increment-start', clock, band, die: DIE_LADDER[state.dieIndex] });
 
   for (const side of [0, 1] as const) {
-    // Accrual: active `generate` traits bank flat points goallessly (Fortress hook).
+    // Accrual: active `generate` traits bank their resource goallessly
+    // (points — the Fortress hook — or cash).
     for (const c of accrualContributions(state.config.sides[side].traits, snaps[side])) {
       emitProc(emit, side, c, clock);
+      if (c.effect === 'cash') {
+        state.sides[side].cash += c.value;
+        emit({ type: 'cash-banked', side, trait: c.trait.name, value: c.value, total: state.sides[side].cash, clock });
+        continue;
+      }
       state.sides[side].points += c.value;
       emit({
         type: 'points-banked',
@@ -346,14 +435,26 @@ function runIncrement(state: MatchState, emit: (e: MatchEvent) => void): void {
 
   // Window generation from the posture matchup matrix — fixed roll order:
   // side 0 then side 1, transition then set-piece (determinism contract).
+  // Manager relocate traits reweight the rates first (conserving total), then
+  // the adherence band throttles DEFAULT-posture generation only (SM §7 — a
+  // tactical window's override runs unthrottled).
   for (const side of [0, 1] as const) {
     const own = activePosture(state.sides[side].posture);
     const opp = activePosture(state.sides[side === 0 ? 1 : 0].posture);
-    const rates = MATCHUP_MATRIX[own][opp];
+    const base = MATCHUP_MATRIX[own][opp];
+    const onDefault = own === state.config.sides[side].posture;
+    const throttle = onDefault ? state.adherenceFactor[side] : 1;
     for (const kind of ['transition', 'set-piece'] as const) {
+      const reweights = reweightContributions(state.config.sides[side].traits, kind);
+      let rate = base[kind];
+      for (const c of reweights) rate += c.value;
+      rate = Math.max(0, rate) * throttle;
       const { value, next } = rngNext(state.rng);
       state.rng = next;
-      if (value < rates[kind]) {
+      if (value < rate) {
+        for (const c of reweights) {
+          if (c.value > 0) emitProc(emit, side, c, clock);
+        }
         emit({ type: 'window-generated', side, kind, clock });
         state.pending.push({ side, kind });
       }
@@ -370,6 +471,7 @@ function snapshotOf(state: MatchState, side: Side): ContextSnapshot {
     clock: clockBand(Math.max(1, state.batch)),
     streak: me.streak,
     fitness: me.fitness,
+    subThisBatch: me.subThisBatch,
   };
 }
 
@@ -453,6 +555,17 @@ function resolveHeadWindow(state: MatchState, decision: 'commit' | 'pass', emit:
     clock,
   });
 
+  // Goal-event generates: the scorer's 'scored' hooks (bonus points, cash) and
+  // the conceder's 'conceded' hooks (SM §2 goal-event).
+  for (const c of goalEventContributions(state.config.sides[side].traits, 'scored')) {
+    emitProc(emit, side, c, clock);
+    bankGoalEvent(state, side, c, emit, clock);
+  }
+  for (const c of goalEventContributions(state.config.sides[other].traits, 'conceded')) {
+    emitProc(emit, other, c, clock);
+    bankGoalEvent(state, other, c, emit, clock);
+  }
+
   // The conceder's engine contradiction — the reset IS the punishment (SM §6).
   const oppDef = state.config.sides[other].engine;
   const reason = contradictionOnConcede(oppDef, window.kind);
@@ -462,6 +575,31 @@ function resolveHeadWindow(state: MatchState, decision: 'commit' | 'pass', emit:
   }
 
   checkEarlyWhistle(state, emit, clock);
+}
+
+/** Bank a goal-event contribution to its resource: bonus points or cash. */
+function bankGoalEvent(
+  state: MatchState,
+  side: Side,
+  c: TraitContribution,
+  emit: (e: MatchEvent) => void,
+  clock: Clock
+): void {
+  if (c.effect === 'cash') {
+    state.sides[side].cash += c.value;
+    emit({ type: 'cash-banked', side, trait: c.trait.name, value: c.value, total: state.sides[side].cash, clock });
+  } else {
+    state.sides[side].points += c.value;
+    emit({
+      type: 'points-banked',
+      side,
+      source: 'goal-bonus',
+      mult: 1,
+      value: c.value,
+      total: state.sides[side].points,
+      clock,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -494,6 +632,7 @@ function finish(state: MatchState, emit: (e: MatchEvent) => void, earlySurplus: 
     target: state.config.target,
     result: met ? 'target-met' : 'target-missed',
     surplusCash,
+    cash: [state.sides[0].cash, state.sides[1].cash],
   });
   state.status = 'complete';
   state.pending = [];
@@ -553,5 +692,28 @@ export function matchResult(state: MatchState) {
     target: state.config.target,
     targetMet: state.sides[0].points >= state.config.target,
     energyLeft: state.energy,
+    cash: [state.sides[0].cash, state.sides[1].cash] as [number, number],
+  };
+}
+
+/** Build a player SideConfig from a manager definition (law 4: the manager IS
+ *  this data — default posture + trait bundle + engine; no manager object). */
+export function sideFromManager(
+  manager: {
+    defaultPosture: Posture;
+    preferredFormation: string;
+    traits: EngineTrait[];
+    engine: EngineDef;
+  },
+  opts?: { baseCharge?: number; formation?: string }
+): SideConfig {
+  return {
+    posture: manager.defaultPosture,
+    traits: manager.traits,
+    baseCharge: opts?.baseCharge ?? 0,
+    engine: manager.engine,
+    autoCommit: false,
+    formation: opts?.formation ?? manager.preferredFormation,
+    preferredFormation: manager.preferredFormation,
   };
 }

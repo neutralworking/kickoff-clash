@@ -32,12 +32,14 @@ export interface EngineTrait {
   verb: VerbName;
   context: TraitContext;
   magnitude: number;
+  /** What a `generate` produces: points (default) or cash (the Financier hook). */
+  resource?: 'points' | 'cash';
 }
 
 /** A trait contribution surfaced for the event log (SM §9 trait-proc toasts). */
 export interface TraitContribution {
   trait: EngineTrait;
-  effect: 'charge' | 'deny' | 'die' | 'accrual' | 'fitness' | 'energy';
+  effect: 'charge' | 'deny' | 'die' | 'accrual' | 'fitness' | 'energy' | 'cash' | 'reweight';
   value: number;
 }
 
@@ -94,7 +96,7 @@ export function dieShiftContributions(
   for (let s = 0; s < 2; s++) {
     for (const t of sideTraits[s]) {
       if (t.verb !== 'amplify-variance' && t.verb !== 'dampen-variance') continue;
-      if (t.context.kind === 'window' || t.context.kind === 'goal-event' || t.context.kind === 'substitution') continue;
+      if (t.context.kind === 'window' || t.context.kind === 'goal-event') continue;
       if (!stateContextActive(t.context, snaps[s])) continue;
       out.push({ trait: t, effect: 'die', value: t.verb === 'amplify-variance' ? 1 : -1 });
     }
@@ -104,8 +106,9 @@ export function dieShiftContributions(
 
 /**
  * Accrual contributions this increment: `generate` traits whose state context
- * is active bank points goallessly (the Fortress hook — SM §6 "clean-sheet
- * accrual banks points"). Window/event-scoped generates are Phase 2+ content.
+ * is active bank their resource goallessly (points — the Fortress hook, SM §6
+ * "clean-sheet accrual banks points" — or cash). Goal-event-scoped generates
+ * bank at the goal site instead (goalEventContributions).
  */
 export function accrualContributions(
   traits: EngineTrait[],
@@ -114,9 +117,48 @@ export function accrualContributions(
   const out: TraitContribution[] = [];
   for (const t of traits) {
     if (t.verb !== 'generate') continue;
-    if (t.context.kind === 'window' || t.context.kind === 'goal-event' || t.context.kind === 'substitution') continue;
+    if (t.context.kind === 'window' || t.context.kind === 'goal-event') continue;
     if (!stateContextActive(t.context, snap)) continue;
-    out.push({ trait: t, effect: 'accrual', value: t.magnitude });
+    out.push({ trait: t, effect: t.resource === 'cash' ? 'cash' : 'accrual', value: t.magnitude });
+  }
+  return out;
+}
+
+/**
+ * Goal-event generates: bank the trait's resource when this side scores or
+ * concedes (SM §2 goal-event — the legacy onGoal/onConceded hooks; cash on
+ * scored goals is the Financier's whole identity).
+ */
+export function goalEventContributions(
+  traits: EngineTrait[],
+  on: 'scored' | 'conceded'
+): TraitContribution[] {
+  const out: TraitContribution[] = [];
+  for (const t of traits) {
+    if (t.verb !== 'generate') continue;
+    if (t.context.kind !== 'goal-event' || t.context.on !== on) continue;
+    out.push({ trait: t, effect: t.resource === 'cash' ? 'cash' : 'accrual', value: t.magnitude });
+  }
+  return out;
+}
+
+/**
+ * Event-generation reweights: `relocate @ window:K` moves generation rate INTO
+ * window kind K from the other kind, conserving the total (the verb's legacy
+ * semantics — move emission, never create it). This is how a manager reweights
+ * contexts (SM law 2): Set-Piece turns open play into dead-ball situations.
+ * Gated on state via the snapshot like every other per-increment trait.
+ */
+export function reweightContributions(traits: EngineTrait[], kind: WindowKind): TraitContribution[] {
+  const out: TraitContribution[] = [];
+  for (const t of traits) {
+    if (t.verb !== 'relocate') continue;
+    if (t.context.kind !== 'window') continue;
+    out.push({
+      trait: t,
+      effect: 'reweight',
+      value: t.context.window === kind ? t.magnitude : -t.magnitude,
+    });
   }
   return out;
 }
@@ -129,7 +171,7 @@ export function fitnessDrainContributions(
   const out: TraitContribution[] = [];
   for (const t of traits) {
     if (t.verb !== 'drain-fitness') continue;
-    if (t.context.kind === 'window' || t.context.kind === 'goal-event' || t.context.kind === 'substitution') continue;
+    if (t.context.kind === 'window' || t.context.kind === 'goal-event') continue;
     if (!stateContextActive(t.context, snap)) continue;
     out.push({ trait: t, effect: 'fitness', value: t.magnitude });
   }

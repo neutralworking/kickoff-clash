@@ -24,6 +24,7 @@ Usage:
 
 import argparse
 import json
+import os
 
 # --- constants mirrored from src/engine/data/baseline.ts --------------------
 
@@ -202,17 +203,278 @@ def stats(n: int, target: float, opp_gambler: bool):
     }
 
 
+# =============================================================================
+# Phase 2 — generic trait evaluator + manager calibration (--calibrate)
+#
+# Mirrors src/engine/ (traits.ts + match.ts) over the manager bundles exported
+# by `npx tsx scripts/export-managers.ts` → scripts/managers_ref.json, so the
+# per-manager calibration beat rates here are the reference constants asserted
+# by src/engine/__tests__/calibration.test.ts (bit-exact, same seeds).
+# Calibration policy (fixed): native formation, no tactical cards, commit every
+# window, substitute before batches 3/4/5.
+# =============================================================================
+
+SUBS_BUDGET = 3
+FITNESS_RESTORE_PER_SUB = 1
+
+
+def state_ctx_active(ctx, snap):
+    """Mirror of contexts.ts stateContextActive (window/goal-event → False)."""
+    kind = ctx["kind"]
+    if kind == "posture":
+        return snap["posture"] == ctx["posture"]
+    if kind == "scoreline":
+        return snap["scoreline"] == ctx["is"]
+    if kind == "clock":
+        return snap["clock"] == ctx["band"]
+    if kind == "streak":
+        return snap["streak"] >= ctx["atLeast"]
+    if kind == "fitness":
+        if "below" in ctx:
+            return snap["fitness"] < ctx["below"]
+        return snap["fitness"] >= ctx["atLeast"]
+    if kind == "substitution":
+        return snap["subThisBatch"]
+    return False
+
+
+def engine_has(engine, on):
+    return any(s["on"] == on for s in engine["successes"])
+
+
+def engine_goal_extends(engine, kind):
+    return any(
+        s["on"] == "any-goal" or (s["on"] == "window-goal" and s.get("window") == kind)
+        for s in engine["successes"]
+    )
+
+
+def engine_concede_reason(engine, kind):
+    for c in engine["contradictions"]:
+        if c["on"] == "conceded":
+            return c["reason"]
+        if c["on"] == "turnover-conceded" and kind == "transition":
+            return c["reason"]
+    return None
+
+
+def run_generic_match(seed, sides, target, sub_batches):
+    """sides: [{posture, baseCharge, traits, engine, autoCommit}, ...] mirroring SideConfig."""
+    rng = seed & M
+    goals = [0, 0]
+    points = [0.0, 0.0]
+    cash = [0.0, 0.0]
+    streak = [0, 0]
+    fitness = [10.0, 10.0]
+    subs_left = SUBS_BUDGET
+    sub_this_batch = [False, False]
+    conceded_this_batch = [False, False]
+    postures = (sides[0]["posture"], sides[1]["posture"])
+    done = False
+    batch_reached = 0
+
+    def snap(s, inc_batch):
+        other = 1 - s
+        if goals[s] > goals[other]:
+            sl = "leading"
+        elif goals[s] < goals[other]:
+            sl = "chasing"
+        else:
+            sl = "level"
+        return {
+            "posture": postures[s],
+            "scoreline": sl,
+            "clock": clock_band(max(1, inc_batch)),
+            "streak": streak[s],
+            "fitness": fitness[s],
+            "subThisBatch": sub_this_batch[s],
+        }
+
+    for batch in range(1, BATCHES + 1):
+        if done:
+            break
+        batch_reached = batch
+        # calibration policy: substitution before batches in sub_batches (side 0)
+        if batch in sub_batches and subs_left > 0:
+            subs_left -= 1
+            sub_this_batch[0] = True
+            fitness[0] = min(10.0, fitness[0] + FITNESS_RESTORE_PER_SUB)
+            if engine_has(sides[0]["engine"], "substitution"):
+                streak[0] += 1
+
+        for _inc in range(1, INCREMENTS_PER_BATCH + 1):
+            if done:
+                break
+            snaps = [snap(0, batch), snap(1, batch)]
+            # die shifts (both sides' variance verbs, state-scoped)
+            idx = DEFAULT_DIE_INDEX
+            for s in (0, 1):
+                for t in sides[s]["traits"]:
+                    v = t["verb"]
+                    if v not in ("amplify-variance", "dampen-variance"):
+                        continue
+                    k = t["context"]["kind"]
+                    if k in ("window", "goal-event"):
+                        continue
+                    if not state_ctx_active(t["context"], snaps[s]):
+                        continue
+                    idx += 1 if v == "amplify-variance" else -1
+            idx = max(0, min(len(DIE_LADDER) - 1, idx))
+            die = DIE_LADDER[idx]
+
+            # accruals then drains, side 0 then side 1 (mirrors runIncrement)
+            for s in (0, 1):
+                for t in sides[s]["traits"]:
+                    if t["verb"] != "generate":
+                        continue
+                    k = t["context"]["kind"]
+                    if k in ("window", "goal-event"):
+                        continue
+                    if not state_ctx_active(t["context"], snaps[s]):
+                        continue
+                    if t.get("resource") == "cash":
+                        cash[s] += t["magnitude"]
+                    else:
+                        points[s] += t["magnitude"]
+                for t in sides[s]["traits"]:
+                    if t["verb"] != "drain-fitness":
+                        continue
+                    k = t["context"]["kind"]
+                    if k in ("window", "goal-event"):
+                        continue
+                    if not state_ctx_active(t["context"], snaps[s]):
+                        continue
+                    fitness[s] = max(0.0, fitness[s] - t["magnitude"])
+            if points[0] >= target:
+                done = True
+                break
+
+            # generation: side 0 then 1, transition then set-piece; relocate reweights
+            pending = []
+            for s in (0, 1):
+                own = postures[s]
+                opp = postures[1 - s]
+                rates = MATCHUP_MATRIX[(own, opp)]
+                for kind in ("transition", "set-piece"):
+                    rate = rates[kind]
+                    for t in sides[s]["traits"]:
+                        if t["verb"] != "relocate" or t["context"]["kind"] != "window":
+                            continue
+                        rate += t["magnitude"] if t["context"]["window"] == kind else -t["magnitude"]
+                    rate = max(0.0, rate)
+                    value, rng = rng_next(rng)
+                    if value < rate:
+                        pending.append((s, kind))
+
+            # resolution — commit-all; fresh snapshots per resolution
+            for s, kind in pending:
+                if done:
+                    break
+                other = 1 - s
+                my = snap(s, batch)
+                theirs = snap(other, batch)
+                charge = sides[s]["baseCharge"]
+                for t in sides[s]["traits"]:
+                    if t["verb"] != "amplify":
+                        continue
+                    c = t["context"]
+                    if c["kind"] == "window":
+                        if c["window"] == kind:
+                            charge += t["magnitude"]
+                    elif state_ctx_active(c, my):
+                        charge += t["magnitude"]
+                for t in sides[other]["traits"]:
+                    if t["verb"] != "deny":
+                        continue
+                    c = t["context"]
+                    if c["kind"] == "window":
+                        if c["window"] == kind:
+                            charge -= t["magnitude"]
+                    elif state_ctx_active(c, theirs):
+                        charge -= t["magnitude"]
+                value, rng = rng_next(rng)
+                roll = 1 + int(value * die)
+                if charge + roll < WINDOW_THRESHOLD:
+                    continue
+                goals[s] += 1
+                conceded_this_batch[other] = True
+                if engine_goal_extends(sides[s]["engine"], kind):
+                    streak[s] += 1
+                mult = max(1, streak[s])
+                points[s] += mult * GOAL_VALUE
+                # goal-event generates: scorer 'scored', conceder 'conceded'
+                for holder, on in ((s, "scored"), (other, "conceded")):
+                    for t in sides[holder]["traits"]:
+                        if t["verb"] != "generate" or t["context"]["kind"] != "goal-event":
+                            continue
+                        if t["context"]["on"] != on:
+                            continue
+                        if t.get("resource") == "cash":
+                            cash[holder] += t["magnitude"]
+                        else:
+                            points[holder] += t["magnitude"]
+                reason = engine_concede_reason(sides[other]["engine"], kind)
+                if reason and streak[other] > 0:
+                    streak[other] = 0
+                if points[0] >= target:
+                    done = True
+
+        # batch end: clean-batch extensions, resets
+        clean = [not conceded_this_batch[0], not conceded_this_batch[1]]
+        for s in (0, 1):
+            if clean[s] and engine_has(sides[s]["engine"], "clean-batch"):
+                streak[s] += 1
+        conceded_this_batch = [False, False]
+        sub_this_batch = [False, False]
+
+    return {"points": points[0], "goals": goals, "cash": cash[0], "target_met": points[0] >= target,
+            "batch": batch_reached}
+
+
+def calibrate(ref_path, n_override=None):
+    with open(ref_path) as f:
+        ref = json.load(f)
+    cal = ref["calibration"]
+    n = n_override or cal["seeds"]
+    target = cal["target"]
+    sub_batches = set(cal["subBatches"])
+    report = {}
+    for mgr in ref["managers"]:
+        player = {
+            "posture": mgr["defaultPosture"],
+            "baseCharge": 0,
+            "traits": mgr["traits"],
+            "engine": mgr["engine"],
+        }
+        per_opp = {}
+        for opp in cal["opponents"]:
+            met = 0
+            for seed in range(1, n + 1):
+                r = run_generic_match(seed, [player, opp["side"]], target, sub_batches)
+                met += 1 if r["target_met"] else 0
+            per_opp[opp["id"]] = met / n
+        agg = sum(per_opp.values()) / len(per_opp)
+        report[mgr["id"]] = {"perOpponent": per_opp, "aggregate": agg}
+    return {"n": n, "target": target, "managers": report}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=500)
     ap.add_argument("--target", type=float, default=10)
     ap.add_argument("--variant", choices=sorted(VARIANTS), default="baseline")
     ap.add_argument("--curve", action="store_true", help="print the SM §8 run target curve")
+    ap.add_argument("--calibrate", action="store_true", help="per-manager calibration beat rates (Phase 2)")
     args = ap.parse_args()
 
     if args.curve:
         for f in range(1, 10):
             print(f"fixture {f}: target {points_target(f):.2f}")
+        return
+
+    if args.calibrate:
+        ref_path = os.path.join(os.path.dirname(__file__), "managers_ref.json")
+        print(json.dumps(calibrate(ref_path), indent=2))
         return
 
     cfg = VARIANTS[args.variant]

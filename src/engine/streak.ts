@@ -13,7 +13,8 @@ import type { WindowKind } from './contexts';
 export type StreakSuccess =
   | { on: 'window-goal'; window: WindowKind } // a goal scored via that window kind
   | { on: 'any-goal' }
-  | { on: 'clean-batch' };                    // a batch ending goal-free against you
+  | { on: 'clean-batch' }                     // a batch ending goal-free against you
+  | { on: 'substitution' };                   // an own substitution (Tinkerman fuel)
 
 export type StreakContradiction =
   | { on: 'conceded'; reason: string }
@@ -36,6 +37,10 @@ export function extendsOnGoal(def: EngineDef, window: WindowKind): boolean {
 
 export function extendsOnCleanBatch(def: EngineDef): boolean {
   return def.successes.some((s) => s.on === 'clean-batch');
+}
+
+export function extendsOnSubstitution(def: EngineDef): boolean {
+  return def.successes.some((s) => s.on === 'substitution');
 }
 
 /** The reason string if conceding via `window` contradicts this engine, else null. */
