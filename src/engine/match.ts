@@ -557,11 +557,11 @@ function resolveHeadWindow(state: MatchState, decision: 'commit' | 'pass', emit:
 
   // Goal-event generates: the scorer's 'scored' hooks (bonus points, cash) and
   // the conceder's 'conceded' hooks (SM §2 goal-event).
-  for (const c of goalEventContributions(state.config.sides[side].traits, 'scored')) {
+  for (const c of goalEventContributions(state.config.sides[side].traits, 'scored', window.kind)) {
     emitProc(emit, side, c, clock);
     bankGoalEvent(state, side, c, emit, clock);
   }
-  for (const c of goalEventContributions(state.config.sides[other].traits, 'conceded')) {
+  for (const c of goalEventContributions(state.config.sides[other].traits, 'conceded', window.kind)) {
     emitProc(emit, other, c, clock);
     bankGoalEvent(state, other, c, emit, clock);
   }

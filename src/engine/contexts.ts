@@ -58,7 +58,7 @@ export interface FitnessAtLeast {
 
 export type TraitContext =
   | { kind: 'window'; window: WindowKind }        // fires when resolving that window
-  | { kind: 'goal-event'; on: 'scored' | 'conceded' } // fires on the goal event
+  | { kind: 'goal-event'; on: 'scored' | 'conceded'; via?: WindowKind } // fires on the goal event (optionally only via that window)
   | { kind: 'substitution' }                       // active for the rest of the batch after an own substitution
   | { kind: 'posture'; posture: Posture }          // fires while own posture is X
   | { kind: 'scoreline'; is: Scoreline }

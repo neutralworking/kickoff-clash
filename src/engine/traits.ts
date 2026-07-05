@@ -131,12 +131,14 @@ export function accrualContributions(
  */
 export function goalEventContributions(
   traits: EngineTrait[],
-  on: 'scored' | 'conceded'
+  on: 'scored' | 'conceded',
+  via?: WindowKind
 ): TraitContribution[] {
   const out: TraitContribution[] = [];
   for (const t of traits) {
     if (t.verb !== 'generate') continue;
     if (t.context.kind !== 'goal-event' || t.context.on !== on) continue;
+    if (t.context.via && t.context.via !== via) continue;
     out.push({ trait: t, effect: t.resource === 'cash' ? 'cash' : 'accrual', value: t.magnitude });
   }
   return out;

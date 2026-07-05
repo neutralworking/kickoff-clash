@@ -409,6 +409,8 @@ def run_generic_match(seed, sides, target, sub_batches):
                             continue
                         if t["context"]["on"] != on:
                             continue
+                        if t["context"].get("via") and t["context"]["via"] != kind:
+                            continue
                         if t.get("resource") == "cash":
                             cash[holder] += t["magnitude"]
                         else:
