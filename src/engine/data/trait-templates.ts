@@ -54,25 +54,25 @@ const P = (posture: Posture): TraitContext => ({ kind: 'posture', posture });
 export const TRAIT_TEMPLATES: TraitTemplate[] = [
   // --- TRANSITION ------------------------------------------------------------
   { id: 'break-runner', name: 'Break Runner', axis: 'consistency', breadth: 'broad', covers: 'transition',
-    verb: 'amplify', context: W('transition'), magnitudes: { Common: 0.25, Rare: 0.5, Epic: 0.75, Legendary: 1.25 } },
+    verb: 'amplify', context: W('transition'), magnitudes: { Common: 0.4, Rare: 0.7, Epic: 1.1, Legendary: 1.8 } },
   { id: 'last-ditch-block', name: 'Last-Ditch Block', axis: 'consistency', breadth: 'broad', covers: 'transition',
-    verb: 'deny', context: W('transition'), magnitudes: { Common: 0.15, Rare: 0.3, Epic: 0.5, Legendary: 0.75 } },
+    verb: 'deny', context: W('transition'), magnitudes: { Common: 0.25, Rare: 0.5, Epic: 0.8, Legendary: 1.25 } },
   { id: 'sucker-punch', name: 'Sucker Punch', axis: 'amplification', breadth: 'narrow', covers: 'transition',
     verb: 'generate', context: { kind: 'goal-event', on: 'scored', via: 'transition' },
-    magnitudes: { Common: 0.5, Rare: 1, Epic: 1.5, Legendary: 2.5 } },
+    magnitudes: { Common: 1, Rare: 1.5, Epic: 2.5, Legendary: 4 } },
 
   // --- SET-PIECE -------------------------------------------------------------
   { id: 'dead-ball-specialist', name: 'Dead-Ball Specialist', axis: 'consistency', breadth: 'broad', covers: 'set-piece',
-    verb: 'amplify', context: W('set-piece'), magnitudes: { Common: 0.25, Rare: 0.5, Epic: 0.75, Legendary: 1.25 } },
+    verb: 'amplify', context: W('set-piece'), magnitudes: { Common: 0.4, Rare: 0.7, Epic: 1.1, Legendary: 1.8 } },
   { id: 'zonal-marker', name: 'Zonal Marker', axis: 'consistency', breadth: 'broad', covers: 'set-piece',
-    verb: 'deny', context: W('set-piece'), magnitudes: { Common: 0.15, Rare: 0.3, Epic: 0.5, Legendary: 0.75 } },
+    verb: 'deny', context: W('set-piece'), magnitudes: { Common: 0.25, Rare: 0.5, Epic: 0.8, Legendary: 1.25 } },
   { id: 'towering-header', name: 'Towering Header', axis: 'amplification', breadth: 'narrow', covers: 'set-piece',
     verb: 'generate', context: { kind: 'goal-event', on: 'scored', via: 'set-piece' },
-    magnitudes: { Common: 0.5, Rare: 1, Epic: 1.5, Legendary: 2.5 } },
+    magnitudes: { Common: 1, Rare: 1.5, Epic: 2.5, Legendary: 4 } },
 
   // --- POSSESSION posture ----------------------------------------------------
   { id: 'tempo-dictator', name: 'Tempo Dictator', axis: 'consistency', breadth: 'broad', covers: 'possession',
-    verb: 'amplify', context: P('possession'), magnitudes: { Common: 0.15, Rare: 0.3, Epic: 0.5, Legendary: 0.75 } },
+    verb: 'amplify', context: P('possession'), magnitudes: { Common: 0.25, Rare: 0.5, Epic: 0.8, Legendary: 1.2 } },
   { id: 'passing-rhythm', name: 'Passing Rhythm', axis: 'amplification', breadth: 'broad', covers: 'possession',
     verb: 'generate', context: P('possession'), magnitudes: { Common: 0.03, Rare: 0.05, Epic: 0.08, Legendary: 0.12 } },
   { id: 'maverick', name: 'Maverick', axis: 'consistency', breadth: 'narrow', covers: 'possession',
@@ -80,7 +80,7 @@ export const TRAIT_TEMPLATES: TraitTemplate[] = [
 
   // --- DEEP-BLOCK posture ----------------------------------------------------
   { id: 'line-holder', name: 'Line Holder', axis: 'consistency', breadth: 'broad', covers: 'deep-block',
-    verb: 'amplify', context: P('deep-block'), magnitudes: { Common: 0.15, Rare: 0.3, Epic: 0.5, Legendary: 0.75 } },
+    verb: 'amplify', context: P('deep-block'), magnitudes: { Common: 0.25, Rare: 0.5, Epic: 0.8, Legendary: 1.2 } },
   { id: 'shutout-shift', name: 'Shutout Shift', axis: 'amplification', breadth: 'broad', covers: 'deep-block',
     verb: 'generate', context: P('deep-block'), magnitudes: { Common: 0.03, Rare: 0.05, Epic: 0.08, Legendary: 0.12 } },
   { id: 'professional', name: 'Professional', axis: 'consistency', breadth: 'narrow', covers: 'deep-block',
@@ -88,7 +88,7 @@ export const TRAIT_TEMPLATES: TraitTemplate[] = [
 
   // --- SCORELINE -------------------------------------------------------------
   { id: 'comeback-spark', name: 'Comeback Spark', axis: 'consistency', breadth: 'broad', covers: 'scoreline',
-    verb: 'amplify', context: { kind: 'scoreline', is: 'chasing' }, magnitudes: { Common: 0.25, Rare: 0.5, Epic: 0.75, Legendary: 1.25 } },
+    verb: 'amplify', context: { kind: 'scoreline', is: 'chasing' }, magnitudes: { Common: 0.3, Rare: 0.5, Epic: 0.8, Legendary: 1.25 } },
   { id: 'killer-instinct', name: 'Killer Instinct', axis: 'consistency', breadth: 'narrow', covers: 'scoreline',
     verb: 'amplify', context: { kind: 'scoreline', is: 'leading' }, magnitudes: { Common: 0.25, Rare: 0.5, Epic: 0.75, Legendary: 1.25 } },
   { id: 'rally-the-crowd', name: 'Rally the Crowd', axis: 'amplification', breadth: 'narrow', covers: 'scoreline',
@@ -104,9 +104,9 @@ export const TRAIT_TEMPLATES: TraitTemplate[] = [
 
   // --- STREAK ----------------------------------------------------------------
   { id: 'momentum-rider', name: 'Momentum Rider', axis: 'consistency', breadth: 'narrow', covers: 'streak',
-    verb: 'amplify', context: { kind: 'streak', atLeast: 2 }, magnitudes: { Common: 0.25, Rare: 0.5, Epic: 0.75, Legendary: 1.25 } },
+    verb: 'amplify', context: { kind: 'streak', atLeast: 2 }, magnitudes: { Common: 0.5, Rare: 0.75, Epic: 1, Legendary: 1.5 } },
   { id: 'momentum-banker', name: 'Momentum Banker', axis: 'amplification', breadth: 'narrow', covers: 'streak',
-    verb: 'generate', context: { kind: 'streak', atLeast: 3 }, magnitudes: { Common: 0.1, Rare: 0.15, Epic: 0.25, Legendary: 0.4 } },
+    verb: 'generate', context: { kind: 'streak', atLeast: 3 }, magnitudes: { Common: 0.25, Rare: 0.5, Epic: 0.75, Legendary: 1.25 } },
 
   // --- FITNESS ---------------------------------------------------------------
   { id: 'iron-lungs', name: 'Iron Lungs', axis: 'consistency', breadth: 'broad', covers: 'fitness',
@@ -124,7 +124,8 @@ export const TRAIT_TEMPLATES: TraitTemplate[] = [
 
   // --- GOAL-EVENT (payout site — amplification only) ---------------------------
   { id: 'big-game-bonus', name: 'Big-Game Bonus', axis: 'amplification', breadth: 'broad', covers: 'goal-event',
-    verb: 'generate', context: { kind: 'goal-event', on: 'scored' }, magnitudes: { Common: 0.25, Rare: 0.5, Epic: 0.75, Legendary: 1.25 } },
+    verb: 'generate', resource: 'cash', context: { kind: 'goal-event', on: 'scored' },
+    magnitudes: { Common: 50, Rare: 100, Epic: 150, Legendary: 250 } },
   { id: 'fan-favourite', name: 'Fan Favourite', axis: 'amplification', breadth: 'broad', covers: 'goal-event',
     verb: 'generate', resource: 'cash', context: { kind: 'goal-event', on: 'scored' },
     magnitudes: { Common: 25, Rare: 50, Epic: 75, Legendary: 150 } },
@@ -134,9 +135,9 @@ export const TRAIT_TEMPLATES: TraitTemplate[] = [
 
   // --- Cross-window pressure (consistency spread) -----------------------------
   { id: 'press-trigger', name: 'Press Trigger', axis: 'consistency', breadth: 'narrow', covers: 'transition',
-    verb: 'relocate', context: W('transition'), magnitudes: { Common: 0.02, Rare: 0.03, Epic: 0.04, Legendary: 0.06 } },
+    verb: 'relocate', context: W('transition'), magnitudes: { Common: 0.03, Rare: 0.05, Epic: 0.08, Legendary: 0.12 } },
   { id: 'foul-winner', name: 'Foul Winner', axis: 'consistency', breadth: 'narrow', covers: 'set-piece',
-    verb: 'relocate', context: W('set-piece'), magnitudes: { Common: 0.02, Rare: 0.03, Epic: 0.04, Legendary: 0.06 } },
+    verb: 'relocate', context: W('set-piece'), magnitudes: { Common: 0.03, Rare: 0.05, Epic: 0.08, Legendary: 0.12 } },
 ];
 
 /**

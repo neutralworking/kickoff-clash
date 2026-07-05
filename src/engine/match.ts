@@ -22,7 +22,7 @@
  */
 
 import { rngNext, rngSeed } from './rng';
-import type { Posture, WindowKind, ContextSnapshot } from './contexts';
+import type { Posture, WindowKind, ContextSnapshot, Scoreline } from './contexts';
 import { scorelineFor } from './contexts';
 import type { EngineTrait, TraitContribution } from './traits';
 import {
@@ -81,6 +81,16 @@ export interface SideConfig {
    *  Omit either to play native (no throttle). */
   formation?: string;
   preferredFormation?: string;
+  /** Posture profile shifts (opponents): change the DEFAULT posture at a
+   *  batch, optionally gated on the side's scoreline — telegraphed one batch
+   *  ahead (SM §3). Evaluated at telegraph time and locked in. */
+  shifts?: ProfileShift[];
+}
+
+export interface ProfileShift {
+  atBatch: number;
+  when?: Scoreline;
+  to: Posture;
 }
 
 export interface MatchConfig {
@@ -90,6 +100,14 @@ export interface MatchConfig {
   target: number;
   /** Tactical card ids side 0 may play between batches (each once per match). */
   tacticalHand?: string[];
+  /** Fixture overrides (challenge rules); default to the baseline budgets. */
+  energyBudget?: number;
+  subsBudget?: number;
+  /** Per-side ATTACKING window thresholds — the defender's quality. Index 0 =
+   *  what side 0's windows must clear. Defaults to the baseline threshold;
+   *  the run schedule ramps [0] so only stacked builds convert late (the
+   *  compounding separation lever). */
+  attackThresholds?: [number, number];
 }
 
 interface SideState {
@@ -123,6 +141,8 @@ export interface MatchState {
   playedCards: string[];
   /** Static per-side generation throttle from the adherence band (SM §7). */
   adherenceFactor: [number, number];
+  /** Profile shifts locked in by last batch's telegraph, applied at next batch-start. */
+  pendingShift: [Posture | null, Posture | null];
   pending: PendingWindow[];
   status: MatchStatus;
   log: MatchEvent[];
@@ -157,13 +177,18 @@ export function createMatch(config: MatchConfig): AdvanceResult {
     increment: 0,
     dieIndex: DEFAULT_DIE_INDEX,
     sides: [freshSide(config.sides[0]), freshSide(config.sides[1])],
-    energy: ENERGY_BUDGET,
+    energy: config.energyBudget ?? ENERGY_BUDGET,
     playedCards: [],
+    pendingShift: [null, null],
     adherenceFactor: [ADHERENCE_FACTOR[bands[0]], ADHERENCE_FACTOR[bands[1]]],
     pending: [],
     status: 'awaiting-batch-decision',
     log: [],
   };
+  if (config.subsBudget !== undefined) {
+    state.sides[0].subsLeft = config.subsBudget;
+    state.sides[1].subsLeft = config.subsBudget;
+  }
   const events: MatchEvent[] = [
     {
       type: 'match-start',
@@ -273,6 +298,20 @@ function startBatch(state: MatchState, decision: BatchDecision, emit: (e: MatchE
   state.batch += 1;
   state.increment = 0;
 
+  // Apply profile shifts locked in by last batch's telegraph (SM §3 — the
+  // telegraph is a promise; what was telegraphed is what happens).
+  for (const side of [0, 1] as const) {
+    const to = state.pendingShift[side];
+    if (to !== null) {
+      const from = activePosture(state.sides[side].posture);
+      state.sides[side].posture = { ...state.sides[side].posture, default: to };
+      state.pendingShift[side] = null;
+      if (activePosture(state.sides[side].posture) !== from) {
+        emit({ type: 'posture-shift', side, from, to, reason: 'profile', batch: state.batch });
+      }
+    }
+  }
+
   // Expire due posture windows — revert to the manager default (SM §3).
   for (const side of [0, 1] as const) {
     const before = activePosture(state.sides[side].posture);
@@ -333,13 +372,32 @@ function startBatch(state: MatchState, decision: BatchDecision, emit: (e: MatchE
     }
   }
 
-  // Telegraph: both sides' active postures for this batch (opponent shifts are
-  // static in P1 — profile-driven shifts arrive with Phase 2/4 opponents).
+  // Evaluate profile shifts for the NEXT batch now (locked in) and telegraph
+  // them one batch ahead alongside this batch's active postures.
+  const upcoming: [Posture, Posture] = [
+    activePosture(state.sides[0].posture),
+    activePosture(state.sides[1].posture),
+  ];
+  for (const side of [0, 1] as const) {
+    for (const shift of state.config.sides[side].shifts ?? []) {
+      if (shift.atBatch !== state.batch + 1) continue;
+      if (shift.when && scorelineOf(state, side) !== shift.when) continue;
+      state.pendingShift[side] = shift.to;
+      upcoming[side] = shift.to;
+      break;
+    }
+  }
+
   emit({
     type: 'batch-start',
     batch: state.batch,
     telegraph: [activePosture(state.sides[0].posture), activePosture(state.sides[1].posture)],
+    ...(state.batch < BATCHES ? { upcoming } : {}),
   });
+}
+
+function scorelineOf(state: MatchState, side: Side): Scoreline {
+  return scorelineFor(state.sides[side].goals, state.sides[side === 0 ? 1 : 0].goals);
 }
 
 /** Open a timed posture window for side 0 and emit the shift. */
@@ -507,11 +565,12 @@ function resolveHeadWindow(state: MatchState, decision: 'commit' | 'pass', emit:
   for (const c of denies) emitProc(emit, other, c, clock);
 
   const charge = state.config.sides[side].baseCharge + sumContributions(charges) - sumContributions(denies);
+  const threshold = state.config.attackThresholds?.[side] ?? WINDOW_THRESHOLD;
   const die = DIE_LADDER[state.dieIndex];
   const { value, next } = rngNext(state.rng);
   state.rng = next;
   const roll = 1 + Math.floor(value * die);
-  const converted = charge + roll >= WINDOW_THRESHOLD;
+  const converted = charge + roll >= threshold;
 
   emit({
     type: 'window-resolved',
@@ -520,7 +579,7 @@ function resolveHeadWindow(state: MatchState, decision: 'commit' | 'pass', emit:
     charge,
     roll,
     die,
-    threshold: WINDOW_THRESHOLD,
+    threshold,
     converted,
     clock,
   });

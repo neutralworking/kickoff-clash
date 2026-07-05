@@ -22,7 +22,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -55,7 +55,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -101,7 +101,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -124,7 +124,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "right-flank",
@@ -147,7 +147,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.25
+    "magnitude": 50,
+    "resource": "cash"
    }
   ],
   "cluster": "spine",
@@ -180,7 +181,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -236,7 +237,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "press-trigger",
@@ -246,7 +247,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "left-flank",
@@ -326,7 +327,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "left-flank",
@@ -349,7 +350,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "right-flank",
@@ -372,7 +373,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -395,7 +396,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.04
+    "magnitude": 0.08
    },
    {
     "templateId": "iron-lungs",
@@ -438,7 +439,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.04
+    "magnitude": 0.08
    }
   ],
   "cluster": "spine",
@@ -461,7 +462,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "right-flank",
@@ -507,7 +508,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -530,7 +531,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "professional",
@@ -573,7 +574,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 2
     },
-    "magnitude": 0.5
+    "magnitude": 0.75
    }
   ],
   "cluster": "spine",
@@ -596,7 +597,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "front-line",
@@ -629,7 +630,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -652,7 +653,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "passing-rhythm",
@@ -708,7 +709,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.5
+    "magnitude": 100,
+    "resource": "cash"
    },
    {
     "templateId": "shutout-shift",
@@ -741,7 +743,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "passing-rhythm",
@@ -774,7 +776,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "press-trigger",
@@ -784,7 +786,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "right-flank",
@@ -807,7 +809,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -873,7 +875,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.25
+    "magnitude": 0.75
    }
   ],
   "cluster": "front-line",
@@ -919,7 +921,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "right-flank",
@@ -942,7 +944,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "right-flank",
@@ -965,7 +967,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.25
+    "magnitude": 50,
+    "resource": "cash"
    }
   ],
   "cluster": "front-line",
@@ -988,7 +991,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "big-game-bonus",
@@ -998,7 +1001,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.5
+    "magnitude": 100,
+    "resource": "cash"
    }
   ],
   "cluster": "front-line",
@@ -1067,7 +1071,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "bench",
@@ -1090,7 +1094,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "dead-ball-specialist",
@@ -1100,7 +1104,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "spine",
@@ -1133,7 +1137,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.15
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -1156,7 +1160,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -1244,7 +1248,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "bench",
@@ -1300,7 +1304,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "rally-the-crowd",
@@ -1333,7 +1337,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -1356,7 +1360,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "break-runner",
@@ -1366,7 +1370,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "spine",
@@ -1389,7 +1393,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "warrior-spirit",
@@ -1422,7 +1426,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "right-flank",
@@ -1455,7 +1459,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "spine",
@@ -1478,7 +1482,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.5
+    "magnitude": 0.8
    },
    {
     "templateId": "professional",
@@ -1535,7 +1539,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "professional",
@@ -1568,7 +1572,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "shutout-shift",
@@ -1601,7 +1605,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "sucker-punch",
@@ -1612,7 +1616,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "left-flank",
@@ -1635,7 +1639,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.5
+    "magnitude": 100,
+    "resource": "cash"
    },
    {
     "templateId": "momentum-rider",
@@ -1645,7 +1650,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 2
     },
-    "magnitude": 0.5
+    "magnitude": 0.75
    }
   ],
   "cluster": "front-line",
@@ -1701,7 +1706,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -1724,7 +1729,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "bench",
@@ -1747,7 +1752,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "right-flank",
@@ -1770,7 +1775,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "last-ditch-block",
@@ -1780,7 +1785,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -1858,7 +1863,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "big-match-temperament",
@@ -1891,7 +1896,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "sucker-punch",
@@ -1902,7 +1907,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "right-flank",
@@ -1991,7 +1996,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -2014,7 +2019,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "shutout-shift",
@@ -2047,7 +2052,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -2127,7 +2132,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "left-flank",
@@ -2150,7 +2155,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "iron-lungs",
@@ -2183,7 +2188,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "left-flank",
@@ -2239,7 +2244,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "line-holder",
@@ -2249,7 +2254,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -2282,7 +2287,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.15
+    "magnitude": 0.5
    }
   ],
   "cluster": "front-line",
@@ -2315,7 +2320,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "right-flank",
@@ -2338,7 +2343,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -2361,7 +2366,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -2384,7 +2389,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -2407,7 +2412,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -2463,7 +2468,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -2509,7 +2514,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -2532,7 +2537,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.75
+    "magnitude": 1.1
    },
    {
     "templateId": "killer-instinct",
@@ -2565,7 +2570,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 1.25
+    "magnitude": 1.8
    },
    {
     "templateId": "iron-lungs",
@@ -2598,7 +2603,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -2621,7 +2626,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "left-flank",
@@ -2644,7 +2649,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "bench",
@@ -2667,7 +2672,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.75
+    "magnitude": 1.1
    },
    {
     "templateId": "professional",
@@ -2700,7 +2705,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "left-flank",
@@ -2723,7 +2728,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "right-flank",
@@ -2746,7 +2751,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "professional",
@@ -2779,7 +2784,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "maverick",
@@ -2812,7 +2817,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.75
+    "magnitude": 0.8
    },
    {
     "templateId": "insurance-policy",
@@ -2846,7 +2851,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "tempo-dictator",
@@ -2856,7 +2861,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "right-flank",
@@ -2889,7 +2894,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.8
    }
   ],
   "cluster": "spine",
@@ -2912,7 +2917,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "line-holder",
@@ -2922,7 +2927,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -2945,7 +2950,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "momentum-banker",
@@ -2955,7 +2960,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.15
+    "magnitude": 0.5
    }
   ],
   "cluster": "front-line",
@@ -2988,7 +2993,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.15
+    "magnitude": 0.5
    }
   ],
   "cluster": "front-line",
@@ -3011,7 +3016,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -3034,7 +3039,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "break-runner",
@@ -3044,7 +3049,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "right-flank",
@@ -3090,7 +3095,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "front-line",
@@ -3113,7 +3118,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "second-wind",
@@ -3146,7 +3151,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -3192,7 +3197,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "sucker-punch",
@@ -3203,7 +3208,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "left-flank",
@@ -3226,7 +3231,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -3249,7 +3254,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "line-holder",
@@ -3259,7 +3264,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "right-flank",
@@ -3328,7 +3333,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -3351,7 +3356,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -3374,7 +3379,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -3420,7 +3425,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "bench",
@@ -3475,7 +3480,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "press-trigger",
@@ -3485,7 +3490,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -3519,7 +3524,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "right-flank",
@@ -3542,7 +3547,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "last-ditch-block",
@@ -3552,7 +3557,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -3598,7 +3603,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "rally-the-crowd",
@@ -3631,7 +3636,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -3654,7 +3659,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "bench",
@@ -3732,7 +3737,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "maverick",
@@ -3765,7 +3770,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -3799,7 +3804,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "spine",
@@ -3869,7 +3874,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -3892,7 +3897,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "bench",
@@ -3949,7 +3954,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "set-piece"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "front-line",
@@ -4028,7 +4033,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "left-flank",
@@ -4074,7 +4079,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "fast-starter",
@@ -4130,7 +4135,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -4209,7 +4214,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "right-flank",
@@ -4232,7 +4237,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -4288,7 +4293,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -4311,7 +4316,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "break-runner",
@@ -4321,7 +4326,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "spine",
@@ -4344,7 +4349,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "passing-rhythm",
@@ -4377,7 +4382,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.75
+    "magnitude": 150,
+    "resource": "cash"
    },
    {
     "templateId": "insurance-policy",
@@ -4411,7 +4417,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -4503,7 +4509,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "foul-winner",
@@ -4513,7 +4519,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -4536,7 +4542,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -4592,7 +4598,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "press-trigger",
@@ -4602,7 +4608,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -4658,7 +4664,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "big-game-bonus",
@@ -4668,7 +4674,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.5
+    "magnitude": 100,
+    "resource": "cash"
    }
   ],
   "cluster": "front-line",
@@ -4702,7 +4709,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.75
+    "magnitude": 150,
+    "resource": "cash"
    }
   ],
   "cluster": "front-line",
@@ -4725,7 +4733,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "front-line",
@@ -4748,7 +4756,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "shutout-shift",
@@ -4791,7 +4799,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "left-flank",
@@ -4906,7 +4914,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "second-wind",
@@ -4939,7 +4947,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "front-line",
@@ -4972,7 +4980,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "right-flank",
@@ -5006,7 +5014,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "left-flank",
@@ -5029,7 +5037,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "bench",
@@ -5052,7 +5060,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "left-flank",
@@ -5075,7 +5083,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "left-flank",
@@ -5098,7 +5106,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -5121,7 +5129,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "sucker-punch",
@@ -5132,7 +5140,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "spine",
@@ -5201,7 +5209,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -5293,7 +5301,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "momentum-banker",
@@ -5303,7 +5311,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.15
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -5326,7 +5334,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "right-flank",
@@ -5429,7 +5437,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "passing-rhythm",
@@ -5462,7 +5470,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "bench",
@@ -5508,7 +5516,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "right-flank",
@@ -5531,7 +5539,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -5554,7 +5562,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.5
+    "magnitude": 0.8
    },
    {
     "templateId": "professional",
@@ -5643,7 +5651,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -5666,7 +5674,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "right-flank",
@@ -5712,7 +5720,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.5
+    "magnitude": 100,
+    "resource": "cash"
    },
    {
     "templateId": "momentum-banker",
@@ -5722,7 +5731,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.15
+    "magnitude": 0.5
    }
   ],
   "cluster": "front-line",
@@ -5745,7 +5754,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -5768,7 +5777,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.75
+    "magnitude": 150,
+    "resource": "cash"
    },
    {
     "templateId": "tempo-dictator",
@@ -5778,7 +5788,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.5
+    "magnitude": 0.8
    }
   ],
   "cluster": "right-flank",
@@ -5801,7 +5811,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "insurance-policy",
@@ -5835,7 +5845,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "momentum-rider",
@@ -5845,7 +5855,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 2
     },
-    "magnitude": 0.5
+    "magnitude": 0.75
    }
   ],
   "cluster": "spine",
@@ -5868,7 +5878,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "bench",
@@ -5891,7 +5901,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -5914,7 +5924,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -5937,7 +5947,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "press-trigger",
@@ -5947,7 +5957,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -5993,7 +6003,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "right-flank",
@@ -6050,7 +6060,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "set-piece"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "spine",
@@ -6096,7 +6106,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "press-trigger",
@@ -6106,7 +6116,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -6129,7 +6139,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "bench",
@@ -6152,7 +6162,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "right-flank",
@@ -6175,7 +6185,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "front-line",
@@ -6198,7 +6208,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -6221,7 +6231,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "front-line",
@@ -6244,7 +6254,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -6267,7 +6277,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.8
    },
    {
     "templateId": "second-wind",
@@ -6324,7 +6334,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "left-flank",
@@ -6380,7 +6390,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -6403,7 +6413,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -6426,7 +6436,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "left-flank",
@@ -6449,7 +6459,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -6472,7 +6482,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "shutout-shift",
@@ -6515,7 +6525,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -6538,7 +6548,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "maverick",
@@ -6571,7 +6581,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.5
+    "magnitude": 0.8
    },
    {
     "templateId": "foul-winner",
@@ -6581,7 +6591,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.04
+    "magnitude": 0.08
    }
   ],
   "cluster": "spine",
@@ -6604,7 +6614,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "maverick",
@@ -6648,7 +6658,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "set-piece"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "spine",
@@ -6671,7 +6681,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -6694,7 +6704,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "maverick",
@@ -6727,7 +6737,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "front-line",
@@ -6773,7 +6783,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "front-line",
@@ -6796,7 +6806,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "momentum-rider",
@@ -6806,7 +6816,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 2
     },
-    "magnitude": 0.5
+    "magnitude": 0.75
    }
   ],
   "cluster": "spine",
@@ -6829,7 +6839,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -6852,7 +6862,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "foul-winner",
@@ -6862,7 +6872,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -6896,7 +6906,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "left-flank",
@@ -6942,7 +6952,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "right-flank",
@@ -6965,7 +6975,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "towering-header",
@@ -6976,7 +6986,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "set-piece"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "spine",
@@ -6999,7 +7009,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -7022,7 +7032,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "passing-rhythm",
@@ -7055,7 +7065,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -7102,7 +7112,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "right-flank",
@@ -7125,7 +7135,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "professional",
@@ -7168,7 +7178,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -7248,7 +7258,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1.5
+    "magnitude": 2.5
    },
    {
     "templateId": "warrior-spirit",
@@ -7337,7 +7347,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "left-flank",
@@ -7360,7 +7370,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -7383,7 +7393,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -7406,7 +7416,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "maverick",
@@ -7439,7 +7449,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "second-wind",
@@ -7472,7 +7482,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "maverick",
@@ -7505,7 +7515,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -7528,7 +7538,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "foul-winner",
@@ -7538,7 +7548,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -7561,7 +7571,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "momentum-rider",
@@ -7571,7 +7581,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 2
     },
-    "magnitude": 0.5
+    "magnitude": 0.75
    }
   ],
   "cluster": "spine",
@@ -7594,7 +7604,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -7617,7 +7627,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "front-line",
@@ -7640,7 +7650,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "tempo-dictator",
@@ -7650,7 +7660,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "left-flank",
@@ -7707,7 +7717,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "professional",
@@ -7763,7 +7773,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "rally-the-crowd",
@@ -7796,7 +7806,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "bench",
@@ -7819,7 +7829,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "bench",
@@ -7875,7 +7885,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.75
+    "magnitude": 1.2
    },
    {
     "templateId": "momentum-banker",
@@ -7885,7 +7895,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.4
+    "magnitude": 1.25
    }
   ],
   "cluster": "spine",
@@ -7908,7 +7918,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "front-line",
@@ -7931,7 +7941,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -7954,7 +7964,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "left-flank",
@@ -8135,7 +8145,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "spine",
@@ -8158,7 +8168,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "left-flank",
@@ -8181,7 +8191,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.25
+    "magnitude": 50,
+    "resource": "cash"
    }
   ],
   "cluster": "left-flank",
@@ -8204,7 +8215,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "front-line",
@@ -8227,7 +8238,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "towering-header",
@@ -8238,7 +8249,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "set-piece"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "spine",
@@ -8261,7 +8272,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "front-line",
@@ -8340,7 +8351,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "tempo-dictator",
@@ -8350,7 +8361,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -8396,7 +8407,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "left-flank",
@@ -8429,7 +8440,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -8462,7 +8473,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -8485,7 +8496,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "right-flank",
@@ -8555,7 +8566,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -8612,7 +8623,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "set-piece"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "front-line",
@@ -8645,7 +8656,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.5
+    "magnitude": 0.8
    }
   ],
   "cluster": "spine",
@@ -8668,7 +8679,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -8691,7 +8702,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "front-line",
@@ -8714,7 +8725,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -8784,7 +8795,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "momentum-banker",
@@ -8794,7 +8805,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.15
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -8817,7 +8828,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "right-flank",
@@ -8840,7 +8851,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "zonal-marker",
@@ -8850,7 +8861,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -8873,7 +8884,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "left-flank",
@@ -8919,7 +8930,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.5
+    "magnitude": 0.8
    },
    {
     "templateId": "professional",
@@ -8952,7 +8963,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -8975,7 +8986,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "left-flank",
@@ -8998,7 +9009,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "warrior-spirit",
@@ -9055,7 +9066,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "sucker-punch",
@@ -9066,7 +9077,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "right-flank",
@@ -9122,7 +9133,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "front-line",
@@ -9145,7 +9156,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.8
    },
    {
     "templateId": "professional",
@@ -9178,7 +9189,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -9234,7 +9245,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "press-trigger",
@@ -9244,7 +9255,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "right-flank",
@@ -9267,7 +9278,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.8
    },
    {
     "templateId": "insurance-policy",
@@ -9301,7 +9312,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -9336,7 +9347,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "right-flank",
@@ -9359,7 +9370,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.25
+    "magnitude": 50,
+    "resource": "cash"
    }
   ],
   "cluster": "front-line",
@@ -9382,7 +9394,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.75
+    "magnitude": 150,
+    "resource": "cash"
    },
    {
     "templateId": "towering-header",
@@ -9393,7 +9406,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "set-piece"
     },
-    "magnitude": 1.5
+    "magnitude": 2.5
    }
   ],
   "cluster": "front-line",
@@ -9482,7 +9495,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -9515,7 +9528,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "spine",
@@ -9538,7 +9551,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "super-sub-payoff",
@@ -9570,7 +9583,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -9593,7 +9606,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "left-flank",
@@ -9616,7 +9629,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "last-ditch-block",
@@ -9626,7 +9639,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "left-flank",
@@ -9682,7 +9695,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "bench",
@@ -9772,7 +9785,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "shutout-shift",
@@ -9805,7 +9818,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "zonal-marker",
@@ -9815,7 +9828,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -9838,7 +9851,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -9861,7 +9874,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -9884,7 +9897,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "right-flank",
@@ -9931,7 +9944,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "left-flank",
@@ -9964,7 +9977,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -9987,7 +10000,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "big-game-bonus",
@@ -9997,7 +10010,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.5
+    "magnitude": 100,
+    "resource": "cash"
    }
   ],
   "cluster": "front-line",
@@ -10020,7 +10034,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "shutout-shift",
@@ -10053,7 +10067,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "right-flank",
@@ -10076,7 +10090,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "professional",
@@ -10142,7 +10156,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -10188,7 +10202,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "zonal-marker",
@@ -10198,7 +10212,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -10221,7 +10235,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -10290,7 +10304,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "bench",
@@ -10313,7 +10327,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "press-trigger",
@@ -10323,7 +10337,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "right-flank",
@@ -10369,7 +10383,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "professional",
@@ -10479,7 +10493,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -10568,7 +10582,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -10638,7 +10652,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "foul-winner",
@@ -10648,7 +10662,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -10671,7 +10685,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.5
+    "magnitude": 100,
+    "resource": "cash"
    },
    {
     "templateId": "fan-favourite",
@@ -10738,7 +10753,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -10784,7 +10799,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "last-ditch-block",
@@ -10794,7 +10809,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -10817,7 +10832,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "passing-rhythm",
@@ -10882,7 +10897,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "left-flank",
@@ -10938,7 +10953,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 2
     },
-    "magnitude": 0.5
+    "magnitude": 0.75
    }
   ],
   "cluster": "spine",
@@ -10961,7 +10976,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -10984,7 +10999,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "comeback-spark",
@@ -11040,7 +11055,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "last-ditch-block",
@@ -11050,7 +11065,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "right-flank",
@@ -11073,7 +11088,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -11139,7 +11154,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "right-flank",
@@ -11196,7 +11211,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -11219,7 +11234,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -11242,7 +11257,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "line-holder",
@@ -11252,7 +11267,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -11275,7 +11290,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -11298,7 +11313,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "dead-ball-specialist",
@@ -11308,7 +11323,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "spine",
@@ -11355,7 +11370,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "dead-ball-specialist",
@@ -11365,7 +11380,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "spine",
@@ -11398,7 +11413,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "front-line",
@@ -11421,7 +11436,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -11444,7 +11459,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -11467,7 +11482,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -11490,7 +11505,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "shutout-shift",
@@ -11533,7 +11548,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "spine",
@@ -11556,7 +11571,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -11635,7 +11650,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "right-flank",
@@ -11681,7 +11696,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 1.25
+    "magnitude": 1.8
    },
    {
     "templateId": "big-game-bonus",
@@ -11691,7 +11706,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 1.25
+    "magnitude": 250,
+    "resource": "cash"
    }
   ],
   "cluster": "front-line",
@@ -11714,7 +11730,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "super-sub-payoff",
@@ -11769,7 +11785,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.25
+    "magnitude": 50,
+    "resource": "cash"
    }
   ],
   "cluster": "front-line",
@@ -11825,7 +11842,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -11848,7 +11865,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "left-flank",
@@ -11917,7 +11934,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "right-flank",
@@ -11940,7 +11957,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "professional",
@@ -11973,7 +11990,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "professional",
@@ -12050,7 +12067,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "left-flank",
@@ -12242,7 +12259,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "spine",
@@ -12277,7 +12294,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "set-piece"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "spine",
@@ -12300,7 +12317,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "foul-winner",
@@ -12310,7 +12327,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -12413,7 +12430,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "bench",
@@ -12446,7 +12463,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "left-flank",
@@ -12469,7 +12486,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -12492,7 +12509,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -12515,7 +12532,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "spine",
@@ -12538,7 +12555,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -12561,7 +12578,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "momentum-rider",
@@ -12571,7 +12588,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 2
     },
-    "magnitude": 0.5
+    "magnitude": 0.75
    }
   ],
   "cluster": "spine",
@@ -12617,7 +12634,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.04
+    "magnitude": 0.08
    },
    {
     "templateId": "professional",
@@ -12650,7 +12667,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -12673,7 +12690,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "big-game-bonus",
@@ -12683,7 +12700,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.5
+    "magnitude": 100,
+    "resource": "cash"
    }
   ],
   "cluster": "front-line",
@@ -12706,7 +12724,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -12729,7 +12747,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -12752,7 +12770,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "break-runner",
@@ -12762,7 +12780,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "spine",
@@ -12852,7 +12870,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    }
   ],
   "cluster": "spine",
@@ -12875,7 +12893,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "line-holder",
@@ -12885,7 +12903,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -12908,7 +12926,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.75
+    "magnitude": 1.2
    },
    {
     "templateId": "impact-sub",
@@ -12940,7 +12958,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -12963,7 +12981,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "bench",
@@ -12996,7 +13014,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.5
+    "magnitude": 100,
+    "resource": "cash"
    }
   ],
   "cluster": "front-line",
@@ -13019,7 +13038,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -13042,7 +13061,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "sucker-punch",
@@ -13053,7 +13072,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "left-flank",
@@ -13076,7 +13095,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "insurance-policy",
@@ -13110,7 +13129,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "impact-sub",
@@ -13142,7 +13161,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -13165,7 +13184,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "professional",
@@ -13221,7 +13240,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "left-flank",
@@ -13255,7 +13274,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1.5
+    "magnitude": 2.5
    }
   ],
   "cluster": "spine",
@@ -13301,7 +13320,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "warrior-spirit",
@@ -13334,7 +13353,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "press-trigger",
@@ -13344,7 +13363,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -13367,7 +13386,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.5
+    "magnitude": 0.8
    },
    {
     "templateId": "showstopper",
@@ -13433,7 +13452,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -13466,7 +13485,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.15
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -13513,7 +13532,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -13592,7 +13611,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.25
+    "magnitude": 0.75
    },
    {
     "templateId": "impact-sub",
@@ -13624,7 +13643,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "super-sub-payoff",
@@ -13666,7 +13685,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "left-flank",
@@ -13699,7 +13718,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",
@@ -13722,7 +13741,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "line-holder",
@@ -13732,7 +13751,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "left-flank",
@@ -13790,7 +13809,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "front-line",
@@ -13823,7 +13842,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.15
+    "magnitude": 0.5
    }
   ],
   "cluster": "front-line",
@@ -13846,7 +13865,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "fan-favourite",
@@ -13880,7 +13899,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -13903,7 +13922,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -13926,7 +13945,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -13949,7 +13968,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -13972,7 +13991,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "left-flank",
@@ -13995,7 +14014,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -14018,7 +14037,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -14064,7 +14083,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "bench",
@@ -14110,7 +14129,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -14143,7 +14162,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "spine",
@@ -14166,7 +14185,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "bench",
@@ -14189,7 +14208,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "scoreline",
      "is": "chasing"
     },
-    "magnitude": 0.25
+    "magnitude": 0.3
    }
   ],
   "cluster": "left-flank",
@@ -14212,7 +14231,8 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "goal-event",
      "on": "scored"
     },
-    "magnitude": 0.25
+    "magnitude": 50,
+    "resource": "cash"
    }
   ],
   "cluster": "front-line",
@@ -14259,7 +14279,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "passing-rhythm",
@@ -14326,7 +14346,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 2
     },
-    "magnitude": 0.5
+    "magnitude": 0.75
    }
   ],
   "cluster": "front-line",
@@ -14405,7 +14425,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -14497,7 +14517,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "possession"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "sucker-punch",
@@ -14508,7 +14528,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "on": "scored",
      "via": "transition"
     },
-    "magnitude": 1
+    "magnitude": 1.5
    }
   ],
   "cluster": "spine",
@@ -14541,7 +14561,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "front-line",
@@ -14587,7 +14607,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "momentum-banker",
@@ -14597,7 +14617,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "streak",
      "atLeast": 3
     },
-    "magnitude": 0.15
+    "magnitude": 0.5
    }
   ],
   "cluster": "front-line",
@@ -14620,7 +14640,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -14690,7 +14710,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.15
+    "magnitude": 0.25
    }
   ],
   "cluster": "spine",
@@ -14736,7 +14756,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "press-trigger",
@@ -14746,7 +14766,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "right-flank",
@@ -14815,7 +14835,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.5
+    "magnitude": 0.7
    },
    {
     "templateId": "killer-instinct",
@@ -14848,7 +14868,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "set-piece"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "spine",
@@ -14871,7 +14891,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.25
+    "magnitude": 0.4
    }
   ],
   "cluster": "bench",
@@ -14904,7 +14924,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.03
+    "magnitude": 0.05
    }
   ],
   "cluster": "right-flank",
@@ -14927,7 +14947,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "posture",
      "posture": "deep-block"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    },
    {
     "templateId": "last-ditch-block",
@@ -14937,7 +14957,7 @@ export const ENGINE_CARDS: EngineCard[] = [
      "kind": "window",
      "window": "transition"
     },
-    "magnitude": 0.3
+    "magnitude": 0.5
    }
   ],
   "cluster": "spine",

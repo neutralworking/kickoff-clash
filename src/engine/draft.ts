@@ -35,22 +35,53 @@ export function managerSignatures(manager: ManagerDef): Set<string> {
 function traitSignature(c: EngineCard['traits'][number]): string {
   const ctx = c.context;
   if (ctx.kind === 'window') return `window:${ctx.window}`;
-  if (ctx.kind === 'goal-event') return 'goal-event';
+  // A via-locked goal payout belongs to its window's build (Sucker Punch IS
+  // a transition card); only the generic hooks read as plain goal-event.
+  if (ctx.kind === 'goal-event') return ctx.via ? `window:${ctx.via}` : 'goal-event';
   if (ctx.kind === 'posture') return `posture:${ctx.posture}`;
   return ctx.kind;
 }
 
-function fitScore(card: EngineCard, sigs: Set<string>): number {
+/** Cash magnitudes live on a 25–150 scale; normalise so they compare with
+ *  charge. Relocate rates look tiny but shift ~18 increments of generation —
+ *  a +0.05/inc reweight is roughly a full charge point of value. */
+function effectiveMagnitude(t: EngineCard['traits'][number]): number {
+  if (t.resource === 'cash') return t.magnitude / 100;
+  if (t.verb === 'relocate') return t.magnitude * 10;
+  return t.magnitude;
+}
+
+/** Manager-fit score: lit traits at full weight, dormant nearly dead (SM §9). */
+export function fitScore(card: EngineCard, sigs: Set<string>): number {
   let score = card.baseContribution;
   for (const t of card.traits) {
-    if (sigs.has(traitSignature(t))) score += t.magnitude * 2;
-    else score += t.magnitude * 0.2; // dormant traits are nearly dead weight
+    if (sigs.has(traitSignature(t))) score += effectiveMagnitude(t) * 2;
+    else score += effectiveMagnitude(t) * 0.2; // dormant traits are nearly dead weight
   }
   return score;
 }
 
+/** Fit-agnostic quality score — the "uncommitted-but-good" drafting lens:
+ *  good numbers, zero regard for whether the engine ever lights them up. */
+export function qualityScore(card: EngineCard): number {
+  return card.baseContribution * 2 + card.traits.reduce((a, t) => a + effectiveMagnitude(t), 0);
+}
+
+/** How much of the card's trait value is LIT under the manager (0–1). The
+ *  committed drafting discipline: skip anything mostly dormant. */
+export function litRatio(card: EngineCard, sigs: Set<string>): number {
+  let lit = 0;
+  let total = 0;
+  for (const t of card.traits) {
+    const v = effectiveMagnitude(t);
+    total += v;
+    if (sigs.has(traitSignature(t))) lit += v;
+  }
+  return total === 0 ? 0 : lit / total;
+}
+
 /** The XI legality floor the bot must draft toward (mirrors isLegalXI). */
-const NEEDS: { positions: string[]; count: number }[] = [
+export const NEEDS: { positions: string[]; count: number }[] = [
   { positions: ['GK'], count: 1 },
   { positions: ['CD', 'WD'], count: 3 },
   { positions: ['DM', 'CM', 'WM', 'AM'], count: 2 },
@@ -95,10 +126,14 @@ export function draftSquad(manager: ManagerDef, draftSeed: number): EngineCard[]
     }
   }
 
-  // XI selection: legality floor first (best-fit per slot family), then the
-  // best of the rest (never a second keeper).
+  return pickXI(roster, (c) => fitScore(c, sigs));
+}
+
+/** Best legal XI from a roster under a scoring lens: legality floor first
+ *  (best per slot family), then the best of the rest (never a second keeper). */
+export function pickXI(roster: EngineCard[], score: (c: EngineCard) => number): EngineCard[] {
   const take = (from: EngineCard[], n: number): EngineCard[] =>
-    [...from].sort((a, b) => fitScore(b, sigs) - fitScore(a, sigs)).slice(0, n);
+    [...from].sort((a, b) => score(b) - score(a)).slice(0, n);
   const used = new Set<number>();
   const pick = (cards: EngineCard[]) => {
     for (const c of cards) used.add(c.id);

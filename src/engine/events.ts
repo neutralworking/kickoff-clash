@@ -27,7 +27,13 @@ export type MatchEvent =
       /** Present when a side plays with a formation vs its manager's preference (SM §7). */
       adherence?: [AdherenceBand, AdherenceBand];
     }
-  | { type: 'batch-start'; batch: number; telegraph: [Posture, Posture] }
+  | {
+      type: 'batch-start';
+      batch: number;
+      telegraph: [Posture, Posture];
+      /** Next batch's postures — opponent profile shifts telegraphed one batch ahead (SM §3). */
+      upcoming?: [Posture, Posture];
+    }
   | { type: 'increment-start'; clock: Clock; band: ClockBand; die: number }
   | {
       type: 'trait-proc';
@@ -63,7 +69,7 @@ export type MatchEvent =
   | { type: 'cash-banked'; side: Side; trait: string; value: number; total: number; clock: Clock }
   | { type: 'streak-extended'; side: Side; streak: number; clock: Clock }
   | { type: 'streak-broken'; side: Side; reason: string; atStreak: number; clock: Clock }
-  | { type: 'posture-shift'; side: Side; from: Posture; to: Posture; reason: 'tactic' | 'revert'; batch: number }
+  | { type: 'posture-shift'; side: Side; from: Posture; to: Posture; reason: 'tactic' | 'revert' | 'profile'; batch: number }
   | { type: 'tactic-played'; side: Side; card: string; posture: Posture; durationBatches: number; energyCost: number; batch: number }
   | { type: 'substitution'; side: Side; batch: number; subsLeft: number }
   | { type: 'batch-end'; batch: number; cleanFor: [boolean, boolean] }
