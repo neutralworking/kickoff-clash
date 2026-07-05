@@ -35,13 +35,17 @@ export interface PeriodOutcome {
   opp: SidePeriod;
 }
 
-/** One side's resolved field for the period (from evaluateSplit / computeSideField). */
+/** One side's resolved field for the period (from evaluateSplit / computeSideField).
+ *  The six funnel lanes (docs/FUNNEL_MODEL_V1.md): control (possession) vs pressing
+ *  splits the possessions; lanePush (creation) vs laneCover (destruction) makes the
+ *  shots; shotQuality (finishing) vs defenceScore (defence) converts them. */
 export interface PossessionSide {
-  lanePush: Record<Lane, number>;   // attacking push per lane
-  laneCover: Record<Lane, number>;  // defensive cover per lane
-  shotQuality: number;              // finishing scalar
-  defenceScore: number;             // defensive resistance scalar
-  control: number;                  // possession-control proxy (creation + attack)
+  lanePush: Record<Lane, number>;   // creation push per pitch lane (stage 2 attack)
+  laneCover: Record<Lane, number>;  // destruction cover per pitch lane (stage 2 counter)
+  shotQuality: number;              // finishing scalar (stage 3 attack)
+  defenceScore: number;             // defence scalar (stage 3 counter)
+  control: number;                  // possession scalar (stage 1 attack)
+  pressing: number;                 // pressing scalar — cuts the OTHER side's control (stage 1 counter)
   denial: number;                   // conversion suppression applied to the OTHER side
 }
 
@@ -58,6 +62,9 @@ const XG_BASE = 0.195;       // xG scale
 const XG_MIN = 0.02;
 const XG_MAX = 0.70;
 const DEF_W = 1.2;           // weight on the defender's resistance in the xG ratio
+// --- Stage 1 counter (FUNNEL_MODEL_V1): pressing erases opponent control ---
+const PRESS_W = 0.6;         // control lost per point of opponent pressing
+const PRESS_FLOOR = 0.25;    // a side keeps at least this fraction of its control
 const XG_CONVEX = 0.9;       // Phase 3 Foundation: nearer 1 → less weak-side lift, so a
                             // quality edge converts (good builds reliably clear the blind)
                              // than strong ones, so even matchups still create chances.
@@ -122,8 +129,10 @@ function resolveSide(
 }
 
 /**
- * Simulate a period. Possessions are pooled and split by control, then each side's
- * possessions resolve against the other's cover/defence.
+ * Simulate a period. Stage 1: each side's pressing erases part of the OTHER side's
+ * control (floored so a side is never pressed to nothing), then the possession pool
+ * splits by the surviving control. Each possession then resolves against the other
+ * side's cover/defence (stages 2–3).
  */
 export function simulatePeriod(
   you: PossessionSide,
@@ -132,8 +141,12 @@ export function simulatePeriod(
   inc: number,
   drama = 1,
 ): PeriodOutcome {
-  const sum = you.control + opp.control;
-  const share = sum > 0 ? clamp(you.control / sum, SHARE_MIN, SHARE_MAX) : 0.5;
+  const pressed = (side: PossessionSide, presser: PossessionSide) =>
+    Math.max(side.control * PRESS_FLOOR, side.control - PRESS_W * (presser.pressing ?? 0));
+  const yourControl = pressed(you, opp);
+  const oppControl = pressed(opp, you);
+  const sum = yourControl + oppControl;
+  const share = sum > 0 ? clamp(yourControl / sum, SHARE_MIN, SHARE_MAX) : 0.5;
   const yourPoss = Math.round(POSS_POOL * share);
   const oppPoss = POSS_POOL - yourPoss;
 

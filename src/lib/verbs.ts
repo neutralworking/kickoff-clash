@@ -76,14 +76,23 @@ export const PHASE_ORDER: VerbPhase[] = ['relocate', 'scale', 'debuff-opponent',
 // ---------------------------------------------------------------------------
 
 /**
- * The four emission *kinds* a card contributes. Each of the 9 field cells
- * (MATCH_ENGINE §4) holds one accumulator per kind, so the field is a 9×4 grid.
- * Band intuition (§4): ATT≈finishing, MID≈creation — applied when the host
- * projects cells back onto the scalar chance model, not here.
+ * The six funnel lanes (docs/FUNNEL_MODEL_V1.md). Each of the 9 field cells
+ * holds one accumulator per lane, so the field is a 9×6 grid. A card's base
+ * emission feeds exactly ONE lane (its skillset's — see `funnel.ts`); traits
+ * target lanes by name. possession→chances→goals; pressing kills possession,
+ * destruction kills chances, defence prevents goals.
  */
-export type ZoneName = 'attack' | 'defence' | 'creation' | 'finishing';
+export type ZoneName =
+  | 'possession'
+  | 'creation'
+  | 'finishing'
+  | 'pressing'
+  | 'destruction'
+  | 'defence';
 
-export const ZONES: ZoneName[] = ['attack', 'defence', 'creation', 'finishing'];
+export const ZONES: ZoneName[] = [
+  'possession', 'creation', 'finishing', 'pressing', 'destruction', 'defence',
+];
 
 export type CriterionName =
   | 'all-teammates'
@@ -138,6 +147,9 @@ export interface TraitRecord {
   animation?: 'moment' | 'aura';
   /** Escape hatch: a higher priority runs in a later sub-pass. Default 0. */
   priority?: number;
+  /** For `deny` only: knock the amount off the OPPONENT's named lane total instead of
+   *  their conversion (the antagonist path — docs/FUNNEL_MODEL_V1.md exceptions). */
+  denyZone?: ZoneName;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,10 +179,13 @@ export interface DispatchCard {
 }
 
 export interface FieldState {
-  /** 9×4 grid: each cell holds one accumulator per emission kind (§4). */
+  /** 9×6 grid: each cell holds one accumulator per funnel lane. */
   cells: Record<Cell, Record<ZoneName, number>>;
-  /** Accumulated denial applied to the opponent (0..1-ish; capped downstream). */
+  /** Accumulated conversion denial applied to the opponent (0..1-ish; capped downstream). */
   opponentDenial: number;
+  /** Lane-targeted denial (the antagonist path): fraction knocked off the OPPONENT's
+   *  named lane total, applied downstream (capped). E.g. Antagonist → defence. */
+  opponentZoneDenial: Partial<Record<ZoneName, number>>;
   /** Outcome-spread shaping for the xG step; >0 widens, <0 narrows. Neutral at 0. */
   variance: number;
   /** StateEffect sinks (inert until energy/slots land in step 3). */
@@ -190,15 +205,16 @@ export interface TraitLogLine {
 }
 
 export interface DispatchResult {
-  /** The transformed 9×4 grid. */
+  /** The transformed 9×6 grid. */
   cells: Record<Cell, Record<ZoneName, number>>;
-  /** Aggregate over all cells, per kind (drives the scalar attack/defence scores). */
+  /** Aggregate over all cells, per lane (drives the six funnel stats). */
   zones: Record<ZoneName, number>;
-  /** Σ attack per lane (the coupled contest's push vector, §4). */
+  /** Σ creation per pitch lane (stage 2's push vector — chances are made in a channel). */
   lanePush: Record<Lane, number>;
-  /** Σ defence per lane (the coupled contest's cover vector, §4). */
+  /** Σ destruction per pitch lane (stage 2's cover vector — chances are broken up there). */
   laneCover: Record<Lane, number>;
   opponentDenial: number;
+  opponentZoneDenial: Partial<Record<ZoneName, number>>;
   variance: number;
   energy: Map<number, number>;
   fitness: Map<number, number>;
@@ -227,7 +243,7 @@ function nameSalt(name: string): number {
 // ---------------------------------------------------------------------------
 
 function zeroZones(): Record<ZoneName, number> {
-  return { attack: 0, defence: 0, creation: 0, finishing: 0 };
+  return { possession: 0, creation: 0, finishing: 0, pressing: 0, destruction: 0, defence: 0 };
 }
 
 function emptyCells(): Record<Cell, Record<ZoneName, number>> {
@@ -237,7 +253,7 @@ function emptyCells(): Record<Cell, Record<ZoneName, number>> {
 }
 
 function emptyField(cells: Record<Cell, Record<ZoneName, number>>): FieldState {
-  return { cells, opponentDenial: 0, variance: 0, energy: new Map(), fitness: new Map() };
+  return { cells, opponentDenial: 0, opponentZoneDenial: {}, variance: 0, energy: new Map(), fitness: new Map() };
 }
 
 /** Synthesize the non-emitting owner that carries a side's squad-wide records. */
@@ -267,6 +283,7 @@ function cloneField(f: FieldState): FieldState {
   return {
     cells: cloneCells(f.cells),
     opponentDenial: f.opponentDenial,
+    opponentZoneDenial: { ...f.opponentZoneDenial },
     variance: f.variance,
     energy: new Map(f.energy),
     fitness: new Map(f.fitness),
@@ -283,6 +300,9 @@ function foldDelta(field: FieldState, pool: FieldState): void {
     for (const z of ZONES) field.cells[cell][z] += pool.cells[cell][z];
   }
   field.opponentDenial += pool.opponentDenial;
+  for (const [z, v] of Object.entries(pool.opponentZoneDenial) as [ZoneName, number][]) {
+    field.opponentZoneDenial[z] = (field.opponentZoneDenial[z] ?? 0) + v;
+  }
   field.variance += pool.variance;
   for (const [id, v] of pool.energy) addToMap(field.energy, id, v);
   for (const [id, v] of pool.fitness) addToMap(field.fitness, id, v);
@@ -297,7 +317,8 @@ function aggregateZones(cells: Record<Cell, Record<ZoneName, number>>): Record<Z
   return z;
 }
 
-/** Collapse the grid into per-lane attack push and defensive cover (§4). */
+/** Collapse the grid into stage 2's per-pitch-lane contest: creation pushes the
+ *  channel the card stands in; destruction covers it. */
 function laneVectors(cells: Record<Cell, Record<ZoneName, number>>): {
   push: Record<Lane, number>;
   cover: Record<Lane, number>;
@@ -306,8 +327,8 @@ function laneVectors(cells: Record<Cell, Record<ZoneName, number>>): {
   const cover: Record<Lane, number> = { L: 0, C: 0, R: 0 };
   for (const cell of CELLS) {
     const lane = laneOf(cell);
-    push[lane] += cells[cell].attack;
-    cover[lane] += cells[cell].defence;
+    push[lane] += cells[cell].creation;
+    cover[lane] += cells[cell].destruction;
   }
   return { push, cover };
 }
@@ -434,7 +455,10 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
       pool.cells[dest][z] += amt;
       moved = true;
     }
-    if (moved) pushLog(ctx, 'attack', owner.emit.attack * fraction, `relocate ${owner.cell}→${dest}`);
+    if (moved) {
+      const total = ZONES.reduce((s, z) => s + owner.emit[z], 0);
+      pushLog(ctx, undefined, total * fraction, `relocate ${owner.cell}→${dest}`);
+    }
   },
 
   // Scale power in a cell. scope 'global' + zone → whole zone; scope 'slot'/'self' →
@@ -489,11 +513,19 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
     }
   },
 
-  // Debuff the opposing side's conversion (step 1: reduces opponent goal chance).
+  // Debuff the opponent. With `denyZone` set, the amount is knocked off the OPPONENT's
+  // named lane total (the antagonist path — e.g. reduce their defence while this card
+  // is on the pitch). Without it, the legacy path suppresses opponent conversion.
   deny(ctx) {
     const amount = ctx.record.params.amount ?? 0;
-    ctx.pool.opponentDenial += amount;
-    pushLog(ctx, undefined, amount, `deny opponent −${Math.round(amount * 100)}%`);
+    const zone = ctx.record.denyZone;
+    if (zone) {
+      ctx.pool.opponentZoneDenial[zone] = (ctx.pool.opponentZoneDenial[zone] ?? 0) + amount;
+      pushLog(ctx, zone, amount, `deny their ${zone} −${Math.round(amount * 100)}%`);
+    } else {
+      ctx.pool.opponentDenial += amount;
+      pushLog(ctx, undefined, amount, `deny opponent −${Math.round(amount * 100)}%`);
+    }
   },
 
   // Add flat value to a kind from nothing (e.g. set-piece xG, a chemistry link). Lands
@@ -627,6 +659,7 @@ export function dispatchTraits(
     lanePush: push,
     laneCover: cover,
     opponentDenial: field.opponentDenial,
+    opponentZoneDenial: field.opponentZoneDenial,
     variance: field.variance,
     energy: field.energy,
     fitness: field.fitness,

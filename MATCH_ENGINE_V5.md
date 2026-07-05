@@ -1,3 +1,10 @@
+> **SUPERSESSION NOTE (funnel model):** the card→match quantity mapping described in
+> this spec (blended attack/defence/creation/finishing emission per card) is replaced
+> by the FUNNEL model — `docs/FUNNEL_MODEL_V1.md` — where every card feeds exactly ONE
+> of six lanes (possession/creation/finishing vs pressing/destruction/defence). The
+> loop structure here (5×15' increments, called plays, possession→shot→xG resolution)
+> still describes the live engine; where the two conflict, FUNNEL_MODEL_V1 wins.
+
 Kickoff Clash — Match Engine v5: Active Card
 Play
 Status: Design Spec (Draft) Author: Luke + Claude Date: 2026-03-31 Replaces: v4

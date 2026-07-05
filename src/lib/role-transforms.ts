@@ -33,9 +33,9 @@ export const ROLE_TRANSFORMS: Record<string, TraitRecord[]> = {
     { name: 'Metronome', verb: 'amplify', params: { amount: 0.05 }, scope: 'global', target: { kind: 'zone', zone: 'creation' } },
   ],
 
-  // Volante @ MID, "Tackle & Go": −5% opponent attack (denies their push).
+  // Volante @ MID, "Tackle & Go": −5% opponent possession (wins the ball back).
   Volante: [
-    { name: 'Tackle & Go', verb: 'deny', params: { amount: 0.05 }, scope: 'zone', target: { kind: 'zone', zone: 'attack' } },
+    { name: 'Tackle & Go', verb: 'deny', params: { amount: 0.05 }, scope: 'zone', target: { kind: 'zone', zone: 'possession' }, denyZone: 'possession' },
   ],
 
   // Anchor @ DEF, "The Shield": +30% to the lowest-power card's defence.

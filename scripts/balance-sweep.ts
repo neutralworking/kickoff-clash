@@ -6,7 +6,7 @@
  * reports the metrics the Lab named:
  *   - win/draw/loss rate per (deck tier, round)         → is the curve monotonic?
  *   - personality attackMod/defMod (deck-level)         → is the stack tamed? (target ≤1.30)
- *   - TOP vs WEAK increment-1 attackScore divergence    → do builds differ? (compression)
+ *   - TOP vs WEAK increment-1 attacking-funnel divergence → do builds differ? (compression)
  *   - TOP-deck win-rate vs R1                            → does a good build clear it? (≥70%)
  *
  * Called Plays axis (the rework's instrument): every match runs under a callPolicy —
@@ -50,11 +50,41 @@ const dataPath = path.join(__dirname, '..', 'public', 'data', 'kc_cards.json');
 const cards = transformCards(JSON.parse(fs.readFileSync(dataPath, 'utf-8')) as KCCard[]);
 const sorted = [...cards].sort((a, b) => b.power - a.power);
 
-// Deck-strength tiers by power rank (each a band of 11). S5 strongest → S1 weakest.
+// Deck-strength tiers by power rank. S5 strongest → S1 weakest. Under the funnel
+// model a deck is only meaningful if it is POSITION-COHERENT (a raw top-11-by-power
+// slice fields no GK and no defence lane, which measures the drafting bug, not the
+// power curve), so each tier drafts a 4-3-3-shaped XI — best-by-power within each
+// positional pool at the tier's depth — ordered to match the formation's slots:
+// GK, FB, CB, CB, FB, DM, CM, CM, WF, CF, WF.
 const N = sorted.length;
 const tierAt = (frac: number): { xi: Card[]; bench: Card[] } => {
-  const start = Math.min(Math.max(0, Math.round(frac * (N - 18))), N - 18);
-  return { xi: sorted.slice(start, start + 11), bench: sorted.slice(start + 11, start + 18) };
+  const used = new Set<number>();
+  const pickFrom = (want: (c: Card) => boolean, k: number): Card[] => {
+    const avail = sorted.filter((c) => want(c) && !used.has(c.id));
+    const start = Math.min(Math.max(0, Math.round(frac * (avail.length - k))), Math.max(0, avail.length - k));
+    const picked = avail.slice(start, start + k);
+    picked.forEach((c) => used.add(c.id));
+    return picked;
+  };
+  // Lane-quota draft (FUNNEL_MODEL_V1): a competent squad covers all six lanes, so
+  // each tier drafts by lane at the tier's power depth — tiers then isolate POWER,
+  // not composition luck. Ordered into the 4-3-3 slots (GK FB CB CB FB DM CM CM WF CF WF).
+  const gk = pickFrom((c) => c.position === 'GK', 1);
+  const covers = pickFrom((c) => c.archetype === 'Cover', 2);                                  // defence
+  const destroyers = pickFrom((c) => ['Destroyer', 'Powerhouse'].includes(c.archetype), 2);    // destruction
+  const possession = pickFrom((c) => ['Passer', 'Controller', 'Engine'].includes(c.archetype), 2);
+  const presser = pickFrom((c) => c.archetype === 'Sprinter', 1);
+  const creators = pickFrom((c) => ['Creator', 'Dribbler'].includes(c.archetype), 2);
+  const finisher = pickFrom((c) => ['Striker', 'Target'].includes(c.archetype), 1);
+  const xi = [
+    gk[0],
+    destroyers[0], covers[0], covers[1], destroyers[1],
+    possession[0], possession[1], presser[0],
+    creators[0], finisher[0], creators[1],
+  ];
+  const startB = Math.min(Math.max(0, Math.round(frac * (N - 7))), N - 7);
+  const bench = sorted.filter((c) => !used.has(c.id)).slice(startB, startB + 7);
+  return { xi, bench };
 };
 const TIERS: { name: string; deck: { xi: Card[]; bench: Card[] } }[] = [
   { name: 'S5-top', deck: tierAt(0.0) },
@@ -171,7 +201,7 @@ function runMatch(deck: { xi: Card[]; bench: Card[] }, round: number, seed: numb
     const calledPlay = state.calledPlayId ? play : null;
     const split = evaluateSplit(state, [], calledPlay);
     const baseline = calledPlay ? evaluateSplit(state, [], null) : null;
-    if (i === 0) firstAttack = split.attackScore;
+    if (i === 0) firstAttack = split.possession + split.chanceCreation + split.shotQuality;
     const result = resolveIncrement(state, split, seed, baseline);
     if (result.calledPlayName) {
       calls++;

@@ -4,16 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Required first read
 
-The Kickoff Clash rebuild is specified in `docs/`. **Reading order:** `docs/KICKOFF_CLASH_DESIGN.md` → `docs/SYNERGY_MODEL_V1.md` → `docs/KC_REBUILD_PLAN_V1.md` → the remaining specs as referenced.
+**The live game's match model is the FUNNEL (`docs/FUNNEL_MODEL_V1.md`) — read it first.** Possession yields chances, chances yield goals; pressing kills possession, destruction kills chances, defence prevents goals. Every card feeds exactly ONE lane (its skillset's — `src/lib/funnel.ts`), with two sanctioned exceptions: Commander leadership tech cards (team-wide spread) and Antagonists (deny the opposing defence lane). **Conflict rule: FUNNEL_MODEL_V1 wins** over older docs and code for the live game.
 
-**Conflict rule: `SYNERGY_MODEL_V1.md` (SM) wins.** Where existing code or any other spec conflicts with SM, SM is right by definition; its five design laws (SM §1 — no unconditional bonuses, loose coupling, closed palettes, managers-are-TraitRecords, dual-axis compounding) are lint rules for every PR. `KC_REBUILD_PLAN_V1.md` is the phase-by-phase execution plan (P0–P7). `KICKOFF_CLASH_DESIGN.md` remains the index for the four companion specs and resolves their older cross-doc drift:
+**The `src/engine/` rebuild is ABANDONED** (owner decision after the P5 playtest — "we were closer with the old version"). The rebuild specs (`docs/SYNERGY_MODEL_V1.md`, `docs/KC_REBUILD_PLAN_V1.md`, `docs/MIGRATION_NOTES.md`), the `src/engine/` tree, its vitest suite, and the `/rebuild` UI remain on disk as a parked reference but get no further investment; the title-screen entry to `/rebuild` was removed. `npm test` still runs the parked engine's suite (it must stay green as plain CI hygiene), but it is no longer an acceptance gate for live-game work. The older `docs/ARCHETYPES_V1 / CARDS_V1 / MATCH_ENGINE_V1 / ECONOMY_V1` remain background reading where FUNNEL_MODEL_V1 doesn't speak.
 
-- `docs/ARCHETYPES_V1.md` — verb palette + 11 emergent identities + counter-web (archetype framing superseded by SM §4)
-- `docs/CARDS_V1.md` — player model, `TraitRecord`, chemistry, 500-card authoring (flat-bonus model superseded by SM §1/§5)
-- `docs/MATCH_ENGINE_V1.md` — increment loop, zonal field, xG→Poisson, dispatcher (inferred-state logic superseded by SM §3/§6)
-- `docs/ECONOMY_V1.md` — three card layers, revenue, run loop (extended, not replaced, by SM)
-
-**Rebuild status:** Phases 0–5 landed (NW-139…NW-143). The pure engine lives in `src/engine/` (zero React/DOM imports; event log as source of truth; all balance numbers in `src/engine/data/`): the P1 spine (contexts/postures/windows/streaks), P2 managers-as-data + tactical cards + adherence, P3 template-regenerated 540-card dataset (`cards.gen.ts`, coverage-gated), and P4 run loop/shop/challenge-rules/opponents/persistence. `npm test` is the canonical gate (82 tests + 4 `it.todo` documenting the OPEN SM §8 committed-beat calibration — see NW-142 for the diagnosis; `scripts/run-probe.ts` is the instrument). The **P5 rebuild UI runs at `/rebuild`** (`src/components/rebuild/`, client-only, autosaves to localStorage `kc-rebuild-run`) in parallel with the live game at `/` — the default flip is gated on playtest sign-off. `docs/MIGRATION_NOTES.md` is the keep/adapt/delete audit of the legacy `src/lib` modules against SM. The verb dispatcher + `TraitRecord` runtime from NW-138 (`src/lib/verbs.ts` + `src/lib/role-transforms.ts`, wired into `evaluateSplit`) is the keep-baseline and still drives the **live game**; `MATCH_ENGINE_V5.md` (repo root) describes that current live engine.
+The live game's spine is unchanged: the verb dispatcher + `TraitRecord` runtime (`src/lib/verbs.ts`, tables in `role-transforms.ts` / `squad-transforms.ts` / `defining-traits.ts`), wired into `evaluateSplit`. `MATCH_ENGINE_V5.md` (repo root) describes the live engine's loop; where it describes the old blended four-zone emission model, FUNNEL_MODEL_V1 supersedes it.
 
 ## Commands
 
@@ -25,10 +20,10 @@ npm run start    # Serve production build
 ```
 
 ```bash
-npm test         # Vitest — the canonical acceptance gate for src/engine/ (determinism + SM distribution checks)
+npm test         # Vitest — the PARKED src/engine/ suite (kept green as CI hygiene; not a live-game gate)
 ```
 
-The legacy match engine was validated via `scripts/match-harness.ts`, which imports `src/lib` modules directly and can be re-run with `npx tsx scripts/match-harness.ts` (byte-identical across runs — the determinism check for the live engine). The script is ESM with extensionless imports, so `ts-node` fails to resolve them — use `tsx`. `scripts/balance_sim.py` (Python 3, stdlib-only) is the balance *reference* for the rebuild's single-match model; the vitest harness is the canonical gate now that Phase 1 has landed.
+The live engine's validation battery: `npx tsx scripts/verb-dispatcher-harness.ts` (dispatcher + funnel invariants — ALL CHECKS must pass), `scripts/match-harness.ts` (runs a full match and prints the six lane stats; the scripts are ESM with extensionless imports, so `ts-node` fails to resolve them — use `tsx`), and the balance instruments below. `scripts/balance_sim.py` (Python 3, stdlib-only) belongs to the parked rebuild.
 
 ## What this is
 
@@ -50,7 +45,8 @@ The legacy match engine was validated via `scripts/match-harness.ts`, which impo
 
 | File | Purpose |
 |---|---|
-| `match-v5.ts` | Active match engine: 5 × 15-min increments, attack/defend split, goal resolution |
+| `match-v5.ts` | Active match engine: 5 × 15-min increments, funnel emission + cascade, goal resolution |
+| `funnel.ts` | The one-card-one-lane model (FUNNEL_MODEL_V1): `laneOfCard`, `LANE_BAND` band-fit weights, `LEAD_SPREAD`, `LANE_COPY` display strings (the card modal's JOB row reads it) |
 | `chemistry.ts` | 4-tier synergy: archetype pairs → role combos → personality themes → Perfect Dressing Room |
 | `scoring.ts` | Card types, archetypes, playing styles (Tiki-Taka, Gegenpressing, etc.), seeded RNG |
 | `transform.ts` | `kc_characters.json` → `Card[]` (position map + `MODEL_TO_ARCHETYPE` map) |
@@ -64,16 +60,14 @@ The legacy match engine was validated via `scripts/match-harness.ts`, which impo
 | `defining-traits.ts` | The action-trait layer (CARDS_V1 §4): `pickDefiningTraits(card)` assigns N action-traits by rarity (Common 1 / Rare 2 / Epic 3 / Legendary 4) over the verb palette; `SIGNATURE_OVERRIDES` are the bespoke showcase legends. **Player-only** — opponents opt out (`computeSideField` `includeDefiningTraits=false`). |
 | `trait-copy.ts` | Display-only single source of truth for defining-trait words/icons (`traitCopy(name)` → label/blurb/kind/glyph) — read by the card pills AND the match animations so the two surfaces never drift. |
 
-### Match scoring cascade (per increment)
+### Match resolution (per 15' increment) — the funnel
 
-1. Base power (sum of attacker or defender card powers)
-2. Dual-role contribution (Controllers contribute to attack while defending)
-3. Synergy bonuses (chemistry.ts tiers 1–4)
-4. Playing style multiplier
-5. Tactic bonuses
-6. Joker bonuses
-7. Personality theme multiplier (tier 3: +10–20%; tier 4: ×1.5 if all 5 themes present)
-8. Goal chance = `clamp(0.15 + (attack - defence) / 2000, 0.05, 0.50)`
+1. **Emission**: each card's fitness-scaled power feeds its ONE lane (`funnel.ts laneOfCard`), weighted by band fit (`LANE_BAND`); Commanders spread across all six at `LEAD_SPREAD`.
+2. **Dispatch**: role/defining/squad `TraitRecord`s transform the 9×6 grid (`verbs.ts`); `deny` with `denyZone` knocks a fraction off the OPPONENT's named lane (the Antagonist path), plain `deny` suppresses conversion.
+3. **Cascade**: synergy/style/weakness/play-pattern totals become ONE multiplier over the three attacking lanes (and one over the three counter lanes), personality on top — distributed as the cube root per stage because the stages multiply downstream.
+4. **Stage 1**: possessions split by control after each side's pressing erases part of the other's control (`possession.ts PRESS_W`, floor `PRESS_FLOOR`).
+5. **Stage 2**: per possession, P(shot) from creation lane-push vs destruction lane-cover in the pitch lane (L/C/R).
+6. **Stage 3**: per shot, xG from finishing vs defence (`XG_CONVEX`), suppressed by denial; goal = dice roll.
 
 ### Character data
 
@@ -103,14 +97,21 @@ best-XI vs rotate policies (the instrument for `CUP_FINAL_POWER`/`OPENER_DROP` a
 rotation matter?"), and `scripts/power-probe.ts` sweeps opponent base power against fixed
 squad tiers to read the raw power→win-rate curve (used to place the cup finals).
 
+**All three instruments draft LANE-QUOTA squads/XIs** (funnel model): a raw top-N-by-power
+slice fields no GK and no defence lane, so it measures the drafting bug, not the curve.
+Fixed decks still carry composition/personality roll luck of ±1 tier — the funnel makes
+identity matter as much as raw power, by design.
+
 ## Known tech debt
 
-- **Power scale — V3.1 (data port).** Power is now BRS directly (52–95) from `kc_cards.json`;
-  `levelToPower` decompression is bypassed (legacy path only). The opponent curves were
-  re-grounded to the (effectively ~13-power-weaker) new pool: `ROUND_POWER = [62,68,73,78,82]`
-  (Foundation single-match instrument), `CUP_FINAL_POWER = [48,53,58,63,67]` + `OPENER_DROP 18`
-  (the real cup difficulty — `MatchPhase` always passes `cupMatchPower`). cup-sweep: STRONG
-  rotate ~37% champions; balance-sweep win-rate monotonic in deck strength.
+- **Power scale — funnel re-anchor.** Power is BRS directly (52–95) from `kc_cards.json`.
+  The cup curve was re-placed for the funnel model (a lane-coherent XI plays well above its
+  raw average): `CUP_FINAL_POWER = [60,68,76,84,90]` + `OPENER_DROP 18` (the real cup
+  difficulty — `MatchPhase` always passes `cupMatchPower`); `ROUND_POWER = [62,68,73,78,84]`
+  is the single-match instrument fallback. cup-sweep (30 seeds): STRONG best-xi 40% /
+  rotate 83% / rotate+calls 100% champions; UPPER & MID rotate+calls ~53%; deaths
+  concentrate in cups 4–5. balance-sweep (40 seeds): win-rate monotonic S1→S5 in every
+  round and policy.
 - **Role coverage — V3.1 (data port).** The new pool's authentic `best_role` names resolve to
   trait sets via `ROLE_ALIASES` in `role-transforms.ts` (dispatcher coverage 100%), without
   overwriting the role shown on the card.
@@ -140,6 +141,11 @@ squad tiers to read the raw power→win-rate curve (used to place the cup finals
   engine change.
 - **Called Plays instrument** — `balance-sweep.ts` carries a `callPolicy` axis
   (none/random/best) + per-play swing tables; `cup-sweep.ts` a `rotate+calls` policy.
-  Current anchors: clean-counter swing ~+0.4 xG; best-vs-none +21pp; reading the
-  telegraph roughly halves goals against; STRONG rotate+calls ~80% champions.
+  Funnel anchors (40 seeds): clean-counter swing ~+0.55 xG; best-vs-none +21pp; reading
+  the telegraph cuts goals against ~3× (2.45 → 0.77); an even contest totals ~6 goals.
+  Play `generate` magnitudes were rescaled to the thinner per-lane totals.
+- **Chemistry generates are fitness-blind** (funnel pass finding): `chem.ts` amounts use
+  raw `card.power`, so a fully tired XI's possession lane can tick UP via chemistry while
+  its own emission falls (the dispatcher-harness tired-XI check asserts on the funnel SUM
+  for this reason). Scaling chemistry by live fitness is a scheduled engine change.
 - `design/` — contains fbal-era (Python/Flask prototype) docs. `design/CLAUDE.md`, `design/README.md`, `design/ROADMAP.md` describe a different codebase and should be treated as historical only.

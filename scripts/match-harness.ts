@@ -137,7 +137,7 @@ for (let i = 0; i < 5; i++) {
   if (result.playImpact) {
     console.log(`  Play impact: yourCallXG=${result.playImpact.yourCallXG.toFixed(2)} theirPlayXG=${result.playImpact.theirPlayXG.toFixed(2)}`);
   }
-  console.log(`  Your attack:   ${split.attackScore}  | Your defence:   ${split.defenceScore}`);
+  console.log(`  Possession ${split.possession} | Creation ${split.chanceCreation} | Finishing ${split.shotQuality} | Pressing ${split.pressing} | Defence ${split.defenceScore}`);
   console.log(`  Opp XI field:  atk=${result.opponentAttack} def=${result.opponentDefence}`);
   console.log(`  Goal chances:  you=${(result.yourGoalChance * 100).toFixed(1)}% them=${(result.opponentGoalChance * 100).toFixed(1)}%`);
   console.log(`  ${result.event.text}`);

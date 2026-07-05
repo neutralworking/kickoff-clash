@@ -28,10 +28,30 @@ const cards = transformCards(
   JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'data', 'kc_cards.json'), 'utf-8')) as KCCard[],
 );
 const sorted = [...cards].sort((a, b) => b.power - a.power);
-const N = sorted.length;
+// Lane-quota XI at the tier's power depth (FUNNEL_MODEL_V1) in 4-3-3 slot order —
+// a raw top-11 slice fields no coherent funnel and reads as 0% everywhere.
 const tierAt = (frac: number) => {
-  const start = Math.min(Math.max(0, Math.round(frac * (N - 18))), N - 18);
-  return sorted.slice(start, start + 11);
+  const used = new Set<number>();
+  const pickFrom = (want: (c: (typeof sorted)[number]) => boolean, k: number) => {
+    const avail = sorted.filter((c) => want(c) && !used.has(c.id));
+    const start = Math.min(Math.max(0, Math.round(frac * (avail.length - k))), Math.max(0, avail.length - k));
+    const picked = avail.slice(start, start + k);
+    picked.forEach((c) => used.add(c.id));
+    return picked;
+  };
+  const gk = pickFrom((c) => c.position === 'GK', 1);
+  const covers = pickFrom((c) => c.archetype === 'Cover', 2);
+  const destroyers = pickFrom((c) => ['Destroyer', 'Powerhouse'].includes(c.archetype), 2);
+  const possession = pickFrom((c) => ['Passer', 'Controller', 'Engine'].includes(c.archetype), 2);
+  const presser = pickFrom((c) => c.archetype === 'Sprinter', 1);
+  const creators = pickFrom((c) => ['Creator', 'Dribbler'].includes(c.archetype), 2);
+  const finisher = pickFrom((c) => ['Striker', 'Target'].includes(c.archetype), 1);
+  return [
+    gk[0],
+    destroyers[0], covers[0], covers[1], destroyers[1],
+    possession[0], possession[1], presser[0],
+    creators[0], finisher[0], creators[1],
+  ];
 };
 
 const formation = getFormation('4-3-3');
@@ -52,7 +72,7 @@ const TIERS: [string, number][] = [['STRONG(top11)', 0.0], ['UPPER(~60)', 0.13],
 const POWERS = [55, 60, 65, 70, 75, 80, 85, 90];
 
 console.log(`\n=== POWER PROBE (${SEEDS} seeds, single match, fresh fitness) ===`);
-console.log(`Pool ${sorted[N - 1].power}–${sorted[0].power}\n`);
+console.log(`Pool ${sorted[sorted.length - 1].power}–${sorted[0].power}\n`);
 for (const [label, frac] of TIERS) {
   const xi = tierAt(frac);
   const avg = Math.round(xi.reduce((s, c) => s + c.power, 0) / 11);

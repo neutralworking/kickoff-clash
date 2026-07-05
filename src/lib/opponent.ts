@@ -20,6 +20,7 @@ import { seededRandom } from './scoring';
 import type { Formation } from './formations';
 import { getFormation } from './formations';
 import type { Lane } from './field';
+import type { ZoneName } from './verbs';
 import { LANES } from './field';
 import type { TraitRecord } from './verbs';
 
@@ -88,13 +89,11 @@ const ROUND_POWER = [62, 68, 73, 78, 84];
 // Each cup escalates from soft openers to a boss FINAL. Most of the 20 sudden-death
 // matches are openers (high survival); difficulty is concentrated in the five finals,
 // and the final being a step up is what makes "rest your stars for the final" correct.
-// Tuned on the cup-sweep (scripts/cup-sweep.ts). Re-anchored for the Called Plays
-// rework: opponent plays + the SHOT_MAX dial widened the strong side's edge in
-// mismatches, so the finals rise to keep the gauntlet honest. Bands (cup-sweep):
-// STRONG rotate+calls ~80% champions (the pool's best 18 under ceiling play), STRONG
-// rotate without calls ~38% (calls are load-bearing), MID rotate+calls ~30%. Cup 5's
-// 6-tie gauntlet is the wall.
-export const CUP_FINAL_POWER = [52, 57, 63, 68, 72]; // boss power per cup (1-5)
+// Tuned on the cup-sweep (scripts/cup-sweep.ts). Re-anchored for the FUNNEL model
+// (docs/FUNNEL_MODEL_V1.md): a lane-coherent squad plays well above its raw average
+// power, so the finals rise to keep the gauntlet honest against a competently built
+// XI (power-probe places the curve; cup-sweep validates the run rates).
+export const CUP_FINAL_POWER = [60, 68, 76, 84, 90]; // boss power per cup (1-5)
 export const OPENER_DROP = 18;                       // openers this far below the final
 
 /** The opponent base power for a specific tie: ramps openerPower → final across the cup. */
@@ -218,7 +217,7 @@ export function opponentScaleTraits(xi: Card[], increment: number): TraitRecord[
   // Build-up: its points grow as it settles into the game.
   if (increment > 0) {
     const amount = 0.05 * increment;
-    recs.push({ name: 'Building', verb: 'amplify', params: { amount }, scope: 'global', target: { kind: 'zone', zone: 'attack' } });
+    recs.push({ name: 'Building', verb: 'amplify', params: { amount }, scope: 'global', target: { kind: 'zone', zone: 'possession' } });
     recs.push({ name: 'Building', verb: 'amplify', params: { amount }, scope: 'global', target: { kind: 'zone', zone: 'creation' } });
   }
 
@@ -242,25 +241,26 @@ export interface OpponentPlay {
   records: TraitRecord[];
 }
 
-/** Amplify one emission kind across the opponent's whole field. */
-function oppAmp(name: string, amount: number, zone: 'attack' | 'defence' | 'creation' | 'finishing'): TraitRecord {
+/** Amplify one funnel lane across the opponent's whole field. */
+function oppAmp(name: string, amount: number, zone: ZoneName): TraitRecord {
   return { name, verb: 'amplify', params: { amount }, scope: 'global', target: { kind: 'zone', zone } };
 }
 
 /** Suppress the player's conversion (the opponent's `deny`). */
 function oppDeny(name: string, amount: number): TraitRecord {
-  return { name, verb: 'deny', params: { amount }, scope: 'zone', target: { kind: 'zone', zone: 'attack' } };
+  return { name, verb: 'deny', params: { amount }, scope: 'zone', target: { kind: 'zone', zone: 'finishing' } };
 }
 
 /** Manufacture flat threat/cover in a specific cell (mirrors squad-transforms overloadLane). */
-function oppGen(name: string, amount: number, zone: 'attack' | 'creation' | 'finishing' | 'defence', band: 'ATT' | 'MID' | 'DEF', lane: Lane): TraitRecord {
+function oppGen(name: string, amount: number, zone: ZoneName, band: 'ATT' | 'MID' | 'DEF', lane: Lane): TraitRecord {
   return { name, verb: 'generate', params: { amount }, scope: 'global', target: { kind: 'zone', zone }, to: { band, lane } };
 }
 
 /** Flat back-line reinforcement spread across all three lanes (the parked bus —
- *  the opponent can't read your call, so its cover is never lane-aimed). */
+ *  the opponent can't read your call, so its cover is never lane-aimed). Cover is
+ *  DESTRUCTION under the funnel: it breaks up chances in the channel it holds. */
 function oppCoverSpread(name: string, total: number): TraitRecord[] {
-  return LANES.map((lane) => oppGen(name, total / LANES.length, 'defence', 'DEF', lane));
+  return LANES.map((lane) => oppGen(name, total / LANES.length, 'destruction', 'DEF', lane));
 }
 
 // Play magnitudes are sized to the magnitude contract: an UNANSWERED opponent play
@@ -275,22 +275,23 @@ export const OPPONENT_PLAYS: OpponentPlay[] = [
     telegraph: 'Keeping the ball and building slowly',
     records: [
       oppAmp('Build Patiently', 0.18, 'creation'),
-      { name: 'Build Patiently', verb: 'dampen-variance', params: { amount: 0.10 }, scope: 'global', target: { kind: 'zone', zone: 'attack' } },
+      oppAmp('Build Patiently', 0.15, 'possession'),
+      { name: 'Build Patiently', verb: 'dampen-variance', params: { amount: 0.10 }, scope: 'global', target: { kind: 'zone', zone: 'possession' } },
     ],
   },
   {
     id: 'high_press',
     name: 'High Press',
     telegraph: 'Pressing your back line high',
-    records: [oppDeny('High Press', 0.18), oppAmp('High Press', 0.45, 'attack')],
+    records: [oppDeny('High Press', 0.18), oppAmp('High Press', 0.45, 'pressing')],
   },
   {
     id: 'overload_left',
     name: 'Overload Left',
     telegraph: 'Overloading your left',
     records: [
-      oppGen('Overload Left', 235, 'attack', 'ATT', 'L'),
-      oppGen('Overload Left', 125, 'creation', 'MID', 'L'),
+      oppGen('Overload Left', 60, 'creation', 'ATT', 'L'),
+      oppGen('Overload Left', 30, 'creation', 'MID', 'L'),
     ],
   },
   {
@@ -298,8 +299,8 @@ export const OPPONENT_PLAYS: OpponentPlay[] = [
     name: 'Overload Right',
     telegraph: 'Overloading your right',
     records: [
-      oppGen('Overload Right', 235, 'attack', 'ATT', 'R'),
-      oppGen('Overload Right', 125, 'creation', 'MID', 'R'),
+      oppGen('Overload Right', 60, 'creation', 'ATT', 'R'),
+      oppGen('Overload Right', 30, 'creation', 'MID', 'R'),
     ],
   },
   {
@@ -307,8 +308,8 @@ export const OPPONENT_PLAYS: OpponentPlay[] = [
     name: 'Route One',
     telegraph: 'Playing direct to the striker',
     records: [
-      oppGen('Route One', 180, 'finishing', 'ATT', 'C'),
-      oppGen('Route One', 145, 'attack', 'ATT', 'C'),
+      oppGen('Route One', 25, 'finishing', 'ATT', 'C'),
+      oppGen('Route One', 30, 'creation', 'ATT', 'C'),
     ],
   },
   {
@@ -319,7 +320,7 @@ export const OPPONENT_PLAYS: OpponentPlay[] = [
       oppDeny('Drop Deep', 0.20),
       ...oppCoverSpread('Drop Deep', 150),
       oppAmp('Drop Deep', 0.15, 'defence'),
-      oppAmp('Drop Deep', -0.08, 'attack'),
+      oppAmp('Drop Deep', -0.08, 'possession'),
     ],
   },
   {
@@ -329,8 +330,8 @@ export const OPPONENT_PLAYS: OpponentPlay[] = [
     records: [
       oppDeny('Kill the Game', 0.15),
       ...oppCoverSpread('Kill the Game', 90),
-      oppAmp('Kill the Game', -0.08, 'attack'),
-      { name: 'Kill the Game', verb: 'dampen-variance', params: { amount: 0.20 }, scope: 'global', target: { kind: 'zone', zone: 'attack' } },
+      oppAmp('Kill the Game', -0.08, 'creation'),
+      { name: 'Kill the Game', verb: 'dampen-variance', params: { amount: 0.20 }, scope: 'global', target: { kind: 'zone', zone: 'possession' } },
     ],
   },
   {
