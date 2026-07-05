@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 interface TitleScreenProps {
   onNewRun: () => void;
   onContinue?: () => void;
@@ -90,6 +92,25 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
             Continue Run
           </button>
         )}
+
+        {/* The v2 rebuild (src/engine/, 9-fixture points-target run) lives at
+            /rebuild in parallel with this game until playtest sign-off. */}
+        <Link
+          href="/rebuild"
+          className="glass-raised sheen w-full py-4 transition-all hover:brightness-110 active:scale-[0.97] relative overflow-hidden text-center"
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 16,
+            letterSpacing: 0.6,
+            textTransform: 'uppercase',
+            borderRadius: 'var(--radius)',
+            color: 'var(--cream)',
+            boxShadow:
+              'inset 0 1px 0 0 var(--glass-highlight), 0 4px 0 0 var(--ink-black), var(--depth-2)',
+          }}
+        >
+          New Season · V2
+        </Link>
       </div>
     </div>
   );
