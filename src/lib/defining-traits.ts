@@ -59,14 +59,15 @@ const LEADERSHIP: TraitRecord = {
  *  Stopper carriers). Denial is still capped (DENIAL_CAP 0.5) and chance-gated. */
 const STOPPER: TraitRecord = {
   name: 'Stopper', verb: 'deny', params: { amount: 0.14, chance: 0.6 },
-  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  scope: 'zone', target: { kind: 'zone', zone: 'creation' }, denyZone: 'creation',
   animation: 'moment',
 };
 
-/** Offside Trap — springs only when the line is set (≥3 at the back). */
+/** Offside Trap — springs only when the line is set (≥3 at the back). Catches the
+ *  run at the moment of the finish: knocks the opponent's finishing lane. */
 const OFFSIDE_TRAP: TraitRecord = {
   name: 'Offside Trap', verb: 'deny', params: { amount: 0.15 },
-  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  scope: 'zone', target: { kind: 'zone', zone: 'finishing' }, denyZone: 'finishing',
   condition: { kind: 'backline-count', min: 3 }, animation: 'moment',
 };
 
@@ -112,7 +113,7 @@ const OVERLAP_RUN: TraitRecord = {
  *  gate just documents intent; the chance keeps it a "moment", not a flat wall. */
 const SHOT_STOPPER: TraitRecord = {
   name: 'Shot Stopper', verb: 'deny', params: { amount: 0.11, chance: 0.7 },
-  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  scope: 'zone', target: { kind: 'zone', zone: 'finishing' },
   condition: { kind: 'is-defending' }, animation: 'moment',
 };
 
@@ -121,7 +122,7 @@ const SHOT_STOPPER: TraitRecord = {
  *  Offside Trap structure gate — a keeper's sweep and an offside line are the same bet. */
 const SWEEPER_KEEPER: TraitRecord = {
   name: 'Sweeper Keeper', verb: 'deny', params: { amount: 0.12 },
-  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  scope: 'zone', target: { kind: 'zone', zone: 'finishing' },
   condition: { kind: 'backline-count', min: 3 }, animation: 'moment',
 };
 
@@ -146,7 +147,7 @@ const DISTRIBUTION: TraitRecord = {
  *  switches on from the hour mark. The keeper who wins you the tight ones at the death. */
 const BIG_GAME_KEEPER: TraitRecord = {
   name: 'Big-Game Keeper', verb: 'deny', params: { amount: 0.12 },
-  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  scope: 'zone', target: { kind: 'zone', zone: 'finishing' },
   condition: { kind: 'late-game', fromIncrement: 3 }, animation: 'moment',
 };
 
@@ -174,15 +175,15 @@ const MAZY_RUN: TraitRecord = {
  *  deny while defending). Sits just under Stopper: it's a lighter, more frequent read. */
 const INTERCEPTOR: TraitRecord = {
   name: 'Interceptor', verb: 'deny', params: { amount: 0.12, chance: 0.6 },
-  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  scope: 'zone', target: { kind: 'zone', zone: 'creation' }, denyZone: 'creation',
   condition: { kind: 'is-defending' }, animation: 'moment',
 };
 
 /** Last-Ditch — the destroyer throws himself in front of the shot: a chance-gated
- *  denial that fires wherever the ball is (a recovery tackle high or a block deep). */
+ *  block that knocks the quality off the opponent's finishing. */
 const LAST_DITCH: TraitRecord = {
   name: 'Last-Ditch', verb: 'deny', params: { amount: 0.13, chance: 0.5 },
-  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  scope: 'zone', target: { kind: 'zone', zone: 'finishing' }, denyZone: 'finishing',
   animation: 'moment',
 };
 
@@ -214,7 +215,7 @@ const DEEP_DISTRIBUTOR: TraitRecord = {
  *  (a dual-role Controller protects the line as well as builds play). */
 const SCREEN: TraitRecord = {
   name: 'Screen', verb: 'deny', params: { amount: 0.11, chance: 0.6 },
-  scope: 'zone', target: { kind: 'zone', zone: 'attack' },
+  scope: 'zone', target: { kind: 'zone', zone: 'creation' }, denyZone: 'creation',
   condition: { kind: 'is-defending' }, animation: 'moment',
 };
 
@@ -234,6 +235,15 @@ const LATE_RUN: TraitRecord = {
   condition: { kind: 'late-game', fromIncrement: 3 }, animation: 'moment',
 };
 
+/** Antagonist — the sanctioned exception (FUNNEL_MODEL_V1): winds up the opposing
+ *  back line, so their DEFENCE lane is reduced while he's on the pitch and attacking.
+ *  The only way a card touches the opponent's numbers directly. Forwards' pools only. */
+const ANTAGONIST: TraitRecord = {
+  name: 'Antagonist', verb: 'deny', params: { amount: 0.12 },
+  scope: 'zone', target: { kind: 'zone', zone: 'defence' }, denyZone: 'defence',
+  condition: { kind: 'is-attacking' }, animation: 'aura',
+};
+
 // ---------------------------------------------------------------------------
 // Library — ordered candidate list per archetype (most-identifying first)
 // ---------------------------------------------------------------------------
@@ -241,8 +251,8 @@ const LATE_RUN: TraitRecord = {
 const DEFINING_TRAITS: Record<string, TraitRecord[]> = {
   Creator: [POSTMAN, DEADEYE, SNIPER, ENGINE_ROOM],
   Passer: [POSTMAN, DEADEYE, ENGINE_ROOM],
-  Striker: [POACHERS_INSTINCT, SNIPER, DEADEYE],
-  Target: [POACHERS_INSTINCT, AERIAL_THREAT, HOLD_UP, DEADEYE],
+  Striker: [POACHERS_INSTINCT, ANTAGONIST, SNIPER, DEADEYE],
+  Target: [POACHERS_INSTINCT, AERIAL_THREAT, HOLD_UP, ANTAGONIST, DEADEYE],
   Dribbler: [TAKE_ON, MAZY_RUN, SNIPER, POSTMAN],
   Sprinter: [OVERLAP_RUN, RUNNER_IN_BEHIND, ENGINE_ROOM, STOPPER],
   Engine: [OVERLAP_RUN, ENGINE_ROOM, LATE_RUN, STOPPER],
@@ -250,7 +260,7 @@ const DEFINING_TRAITS: Record<string, TraitRecord[]> = {
   Cover: [OFFSIDE_TRAP, STOPPER, LEADERSHIP],
   Commander: [LEADERSHIP, OFFSIDE_TRAP, STOPPER],
   Controller: [ENGINE_ROOM, DEADEYE, DEEP_DISTRIBUTOR, SCREEN],
-  Powerhouse: [POACHERS_INSTINCT, AERIAL_THREAT, HOLD_UP, STOPPER],
+  Powerhouse: [AERIAL_THREAT, STOPPER, HOLD_UP, ANTAGONIST, POACHERS_INSTINCT],
   // Keeper identity over the palette (shot-stopping body stays in the role baseline);
   // 5 candidates so Rare/Epic/Legendary keepers all fill their rarity count.
   GK: [SHOT_STOPPER, SWEEPER_KEEPER, COMMANDER_OF_BOX, DISTRIBUTION, BIG_GAME_KEEPER],

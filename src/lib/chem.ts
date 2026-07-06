@@ -127,7 +127,8 @@ export function chemistryRecords(xi: Card[], formation: Formation, matrix: CoApp
       const amount = strength * avgPower * CHEM_GAIN;
       if (amount <= 0) continue;
 
-      recs.push({ name: 'Chemistry', verb: 'generate', params: { amount }, scope: 'zone', target: { kind: 'zone', zone: 'attack' }, to: { band, lane } });
+      // A settled partnership keeps the ball (possession) and opens chances (creation).
+      recs.push({ name: 'Chemistry', verb: 'generate', params: { amount }, scope: 'zone', target: { kind: 'zone', zone: 'possession' }, to: { band, lane } });
       recs.push({ name: 'Chemistry', verb: 'generate', params: { amount: amount * 0.6 }, scope: 'zone', target: { kind: 'zone', zone: 'creation' }, to: { band, lane } });
     }
   }

@@ -93,20 +93,39 @@ function chooseBestPlay(s: MatchV5State): TacticCard | null {
   return best;
 }
 
-// Pick the XI for a tie from the squad given the policy.
-//  - best-xi: the 11 highest RAW power (ignores fatigue — the stubborn manager).
-//  - rotate: the 11 highest EFFECTIVE power (fitness-adjusted) → tired stars drop out for
-//    fresh bench, and on a non-final tie the freshest are preferred to bank star fitness.
+// Pick the XI for a tie from the squad given the policy. Under the funnel model an
+// XI must COVER THE LANES (a raw top-11 fields no defence and measures the drafting
+// bug, not the run), so both policies draft by lane quota — best by the policy's
+// power metric within each lane — ordered into the 4-3-3 slots.
+//  - best-xi: RAW power within each lane (ignores fatigue — the stubborn manager).
+//  - rotate: EFFECTIVE power (fitness-adjusted) → tired stars drop out for fresh bench.
 function pickXI(squad: Card[], policy: Policy, isFinal: boolean): { xi: Card[]; benchIds: Set<number> } {
   const avail = squad.filter(c => !c.injured);
-  let chosen: Card[];
-  if (policy === 'best-xi') {
-    chosen = [...avail].sort((a, b) => b.power - a.power).slice(0, 11);
-  } else { // 'rotate' and 'rotate+calls' share the rotation policy
-    // On the final, field the best available right now (effective power). On openers, lean
-    // on effective power too but the tired stars naturally rest and recover for the final.
-    chosen = [...avail].sort((a, b) => effPower(b) - effPower(a)).slice(0, 11);
-  }
+  const metric = policy === 'best-xi' ? (c: Card) => c.power : effPower;
+  const used = new Set<number>();
+  const take = (want: (c: Card) => boolean, k: number): (Card | undefined)[] => {
+    const pool = avail.filter((c) => want(c) && !used.has(c.id)).sort((a, b) => metric(b) - metric(a));
+    const picked = pool.slice(0, k);
+    picked.forEach((c) => used.add(c.id));
+    return picked.length < k ? [...picked, ...Array(k - picked.length).fill(undefined)] : picked;
+  };
+  const gk = take((c) => c.position === 'GK', 1);
+  const covers = take((c) => c.archetype === 'Cover', 2);
+  const destroyers = take((c) => ['Destroyer', 'Powerhouse'].includes(c.archetype), 2);
+  const possession = take((c) => ['Passer', 'Controller', 'Engine'].includes(c.archetype), 2);
+  const presser = take((c) => c.archetype === 'Sprinter', 1);
+  const creators = take((c) => ['Creator', 'Dribbler'].includes(c.archetype), 2);
+  const finisher = take((c) => ['Striker', 'Target'].includes(c.archetype), 1);
+  // 4-3-3 slot order: GK FB CB CB FB DM CM CM WF CF WF.
+  const slots: (Card | undefined)[] = [
+    gk[0],
+    destroyers[0], covers[0], covers[1], destroyers[1],
+    possession[0], possession[1], presser[0],
+    creators[0], finisher[0], creators[1],
+  ];
+  // Injury gaps: fill with the best remaining by the metric (any lane).
+  const rest = avail.filter((c) => !used.has(c.id)).sort((a, b) => metric(b) - metric(a));
+  const chosen = slots.map((c) => c ?? rest.shift()).filter((c): c is Card => !!c);
   const xiIds = new Set(chosen.map(c => c.id));
   return { xi: chosen, benchIds: new Set(squad.filter(c => !xiIds.has(c.id)).map(c => c.id)) };
 }
@@ -152,10 +171,27 @@ function runOnce(squadSeed: number, policy: Policy): { cupReached: number; won: 
 }
 
 let squadCards: Card[] = [];
+// 18-man squad drafted by LANE QUOTA at the tier's power depth (FUNNEL_MODEL_V1):
+// 2 GK, 3 defence, 3 destruction, 3 possession, 2 pressing, 3 creation, 2 finishing.
+// A raw top-18 slice fields no coherent XI under the funnel.
 function tierAt(frac: number): Card[] {
-  const N = sorted.length;
-  const start = Math.min(Math.max(0, Math.round(frac * (N - 18))), N - 18);
-  return sorted.slice(start, start + 18); // 18-man squad (XI + 7 bench)
+  const used = new Set<number>();
+  const pickFrom = (want: (c: Card) => boolean, k: number): Card[] => {
+    const avail = sorted.filter((c) => want(c) && !used.has(c.id));
+    const start = Math.min(Math.max(0, Math.round(frac * (avail.length - k))), Math.max(0, avail.length - k));
+    const picked = avail.slice(start, start + k);
+    picked.forEach((c) => used.add(c.id));
+    return picked;
+  };
+  return [
+    ...pickFrom((c) => c.position === 'GK', 2),
+    ...pickFrom((c) => c.archetype === 'Cover', 3),
+    ...pickFrom((c) => ['Destroyer', 'Powerhouse'].includes(c.archetype), 3),
+    ...pickFrom((c) => ['Passer', 'Controller', 'Engine'].includes(c.archetype), 3),
+    ...pickFrom((c) => c.archetype === 'Sprinter', 2),
+    ...pickFrom((c) => ['Creator', 'Dribbler'].includes(c.archetype), 3),
+    ...pickFrom((c) => ['Striker', 'Target'].includes(c.archetype), 2),
+  ];
 }
 
 console.log(`\n=== CUP SWEEP (${SEEDS} seeds, 20-match runs) ===`);

@@ -62,14 +62,35 @@ function check(label: string, ok: boolean, detail = '') {
 // Build an XI from real data, then stamp the five v1 roles onto specific cards
 // so the dispatcher actually fires. The lowest-power card is forced to Anchor.
 function buildRoledXI(): Card[] {
+  // Lane-quota XI (FUNNEL_MODEL_V1) — a raw top-11 slice fields no defence lane, so
+  // every check downstream of this helper would measure the drafting bug instead of
+  // the dispatcher. Best-by-power per lane, 4-3-3 slot order, checked roles stamped
+  // onto lane-appropriate picks.
   const sorted = [...cards].sort((a, b) => b.power - a.power);
-  const xi = sorted.slice(0, 11).map((c) => ({ ...c, tacticalRole: undefined as string | undefined }));
-  // Roles by index (deterministic).
-  xi[0] = { ...xi[0], position: 'WF', tacticalRole: 'Inverted Winger' }; // inside-forward
-  xi[1] = { ...xi[1], position: 'CF', tacticalRole: 'Falso Nove' };      // False 9
-  xi[2] = { ...xi[2], position: 'CM', tacticalRole: 'Regista' };
-  xi[3] = { ...xi[3], position: 'DM', tacticalRole: 'Volante' };
-  xi[10] = { ...xi[10], position: 'CD', tacticalRole: 'Anchor' };        // lowest power → Anchor
+  const used = new Set<number>();
+  const take = (want: (c: Card) => boolean, k: number): Card[] => {
+    const picked = sorted.filter((c) => want(c) && !used.has(c.id)).slice(0, k);
+    picked.forEach((c) => used.add(c.id));
+    return picked.map((c) => ({ ...c, tacticalRole: undefined as string | undefined }));
+  };
+  const gk = take((c) => c.position === 'GK', 1);
+  const covers = take((c) => c.archetype === 'Cover', 2);
+  const destroyers = take((c) => ['Destroyer', 'Powerhouse'].includes(c.archetype), 2);
+  const possession = take((c) => ['Passer', 'Controller', 'Engine'].includes(c.archetype), 2);
+  const presser = take((c) => c.archetype === 'Sprinter', 1);
+  const creators = take((c) => ['Creator', 'Dribbler'].includes(c.archetype), 2);
+  const finisher = take((c) => ['Striker', 'Target'].includes(c.archetype), 1);
+  const xi = [
+    gk[0],
+    destroyers[0], covers[0], covers[1], destroyers[1],
+    possession[0], possession[1], presser[0],
+    creators[0], finisher[0], creators[1],
+  ];
+  xi[2] = { ...xi[2], position: 'CD', tacticalRole: 'Anchor' };
+  xi[5] = { ...xi[5], position: 'CM', tacticalRole: 'Regista' };
+  xi[1] = { ...xi[1], position: 'DM', tacticalRole: 'Volante' };
+  xi[8] = { ...xi[8], position: 'WF', tacticalRole: 'Inverted Winger' }; // inside-forward
+  xi[9] = { ...xi[9], position: 'CF', tacticalRole: 'Falso Nove' };      // False 9
   return xi;
 }
 
@@ -120,19 +141,20 @@ console.log('\n2. Migrated roles + inside-forward + False 9 reshape the field');
   const withRoles = evaluateSplit(mkState(roledXI), [], null);
   const without = evaluateSplit(mkState(plainXI), [], null);
 
-  console.log(`     attack    ${without.attackScore} → ${withRoles.attackScore}`);
+  console.log(`     attack    ${without.possession} → ${withRoles.possession}`);
   console.log(`     defence   ${without.defenceScore} → ${withRoles.defenceScore}`);
   console.log(`     creation  ${without.chanceCreation} → ${withRoles.chanceCreation}`);
   console.log(`     finishing ${without.shotQuality} → ${withRoles.shotQuality}`);
   console.log(`     denial    ${without.opponentDenial} → ${withRoles.opponentDenial}`);
 
   const shaped =
-    withRoles.attackScore !== without.attackScore ||
+    withRoles.possession !== without.possession ||
+    withRoles.pressing !== without.pressing ||
     withRoles.defenceScore !== without.defenceScore ||
     withRoles.chanceCreation !== without.chanceCreation ||
     withRoles.shotQuality !== without.shotQuality;
   check('field accumulators change when roles are present', shaped);
-  check('Volante deny raises opponentDenial', withRoles.opponentDenial > 0, `denial=${withRoles.opponentDenial}`);
+  check('Volante deny knocks the opponent possession lane', (withRoles.zoneDenial?.possession ?? 0) > 0, `zoneDenial.possession=${withRoles.zoneDenial?.possession}`);
   const dispatcherLines = withRoles.attackBreakdown.concat(withRoles.defenceBreakdown).filter((l) => /Cut Inside|Drop Deep|Metronome|The Shield|Vacate/.test(l.label));
   check('named transforms appear in the cascade breakdown', dispatcherLines.length > 0, dispatcherLines.map((l) => l.label).join(', '));
 }
@@ -146,7 +168,7 @@ console.log('\n3. Verb-level checks');
   // dispatcher builds it internally, so each test just declares a card's cell + emit.
   const mk = (over: Partial<DispatchCard>): DispatchCard => ({
     id: 1, power: 80, archetype: 'Creator', position: 'WF', team: 'player', side: 'attack', isWide: true,
-    cell: 'ATT_C', emit: { attack: 80, defence: 0, creation: 50, finishing: 50 }, traits: [], ...over,
+    cell: 'ATT_C', emit: { possession: 80, creation: 50, finishing: 50, pressing: 0, destruction: 0, defence: 0 }, traits: [], ...over,
   });
   // Band → chance-mix weights, mirroring match-v5's §7 dials (ATT≈finishing, MID≈creation).
   const CREATION_BAND: Record<Band, number> = { ATT: 0.7, MID: 1.0, DEF: 0.4 };
@@ -156,65 +178,65 @@ console.log('\n3. Verb-level checks');
 
   // relocate (inside-forward "Cut Inside"): a wide card carries threat into the
   // central lane (ATT_L → ATT_C). Real lane shift; every kind's total is conserved.
-  const ifCard = mk({ cell: 'ATT_L', side: 'attack', emit: { attack: 100, defence: 0, creation: 40, finishing: 40 }, traits: ROLE_TRANSFORMS['Inverted Winger'] });
+  const ifCard = mk({ cell: 'ATT_L', side: 'attack', emit: { possession: 100, creation: 40, finishing: 40, pressing: 0, destruction: 0, defence: 0 }, traits: ROLE_TRANSFORMS['Inverted Winger'] });
   const ifRes = dispatchTraits([ifCard], SEED, 0);
-  check('Cut Inside moves emission ATT_L → ATT_C', ifRes.cells.ATT_C.attack > 0 && ifRes.cells.ATT_L.attack < 100, `L=${ifRes.cells.ATT_L.attack} C=${ifRes.cells.ATT_C.attack}`);
-  check('relocate conserves total attack across cells', Math.abs(ifRes.zones.attack - 100) < 1e-9, `attack=${ifRes.zones.attack}`);
+  check('Cut Inside moves emission ATT_L → ATT_C', ifRes.cells.ATT_C.possession > 0 && ifRes.cells.ATT_L.possession < 100, `L=${ifRes.cells.ATT_L.possession} C=${ifRes.cells.ATT_C.possession}`);
+  check('relocate conserves total attack across cells', Math.abs(ifRes.zones.possession - 100) < 1e-9, `possession=${ifRes.zones.possession}`);
   check('Cut Inside loads the centre lane (push moves L → C)', ifRes.lanePush.C > 0 && ifRes.lanePush.L < 100, `push L=${ifRes.lanePush.L} C=${ifRes.lanePush.C}`);
 
   // relocate (False 9 "Drop Deep"): the striker drops a band (ATT_C → MID_C). The
   // band-weighted projection turns that into a finishing→creation trade.
-  const f9 = mk({ cell: 'ATT_C', side: 'attack', emit: { attack: 100, defence: 0, creation: 60, finishing: 60 }, traits: ROLE_TRANSFORMS['Falso Nove'] });
+  const f9 = mk({ cell: 'ATT_C', side: 'attack', emit: { possession: 100, creation: 60, finishing: 60, pressing: 0, destruction: 0, defence: 0 }, traits: ROLE_TRANSFORMS['Falso Nove'] });
   const f9base = buildBaseCells([f9]);
   const f9Res = dispatchTraits([f9], SEED, 0);
-  check('Drop Deep moves emission ATT_C → MID_C', f9Res.cells.MID_C.attack > 0 && f9Res.cells.ATT_C.attack < 100, `ATT_C=${f9Res.cells.ATT_C.attack} MID_C=${f9Res.cells.MID_C.attack}`);
-  check('Drop Deep conserves total attack across cells', Math.abs(f9Res.zones.attack - 100) < 1e-9, `attack=${f9Res.zones.attack}`);
+  check('Drop Deep moves emission ATT_C → MID_C', f9Res.cells.MID_C.possession > 0 && f9Res.cells.ATT_C.possession < 100, `ATT_C=${f9Res.cells.ATT_C.possession} MID_C=${f9Res.cells.MID_C.possession}`);
+  check('Drop Deep conserves total attack across cells', Math.abs(f9Res.zones.possession - 100) < 1e-9, `possession=${f9Res.zones.possession}`);
   check('Drop Deep trades finishing for creation (band projection)',
     proj(f9Res.cells, FINISHING_BAND, 'finishing') < proj(f9base, FINISHING_BAND, 'finishing') &&
     proj(f9Res.cells, CREATION_BAND, 'creation') > proj(f9base, CREATION_BAND, 'creation'),
     `fin ${proj(f9base, FINISHING_BAND, 'finishing').toFixed(0)}→${proj(f9Res.cells, FINISHING_BAND, 'finishing').toFixed(0)}, cre ${proj(f9base, CREATION_BAND, 'creation').toFixed(0)}→${proj(f9Res.cells, CREATION_BAND, 'creation').toFixed(0)}`);
 
   // amplify (Regista): +5% creation across all cells.
-  const reg = mk({ emit: { attack: 80, defence: 0, creation: 50, finishing: 50 }, traits: ROLE_TRANSFORMS['Regista'] });
+  const reg = mk({ emit: { possession: 80, creation: 50, finishing: 50, pressing: 0, destruction: 0, defence: 0 }, traits: ROLE_TRANSFORMS['Regista'] });
   const regRes = dispatchTraits([reg], SEED, 0);
   check('Regista amplifies creation by +5%', Math.abs(regRes.zones.creation - 50 * 1.05) < 1e-9, `50 → ${regRes.zones.creation}`);
 
   // amplify-inverse-power lifts a weak card more than a strong one (Strong Leader).
-  const leaderTrait = [{ name: 'Leader', verb: 'amplify-inverse-power' as const, params: { amount: 0.5 }, scope: 'global' as const, target: { kind: 'criterion' as const, criterion: 'all-teammates' as const, zone: 'attack' as const } }];
-  const weak = mk({ id: 1, power: 60, side: 'attack', emit: { attack: 100, defence: 0, creation: 0, finishing: 0 }, traits: leaderTrait });
-  const strong = mk({ id: 2, power: 95, side: 'attack', emit: { attack: 100, defence: 0, creation: 0, finishing: 0 }, traits: [] });
+  const leaderTrait = [{ name: 'Leader', verb: 'amplify-inverse-power' as const, params: { amount: 0.5 }, scope: 'global' as const, target: { kind: 'criterion' as const, criterion: 'all-teammates' as const, zone: 'possession' as const } }];
+  const weak = mk({ id: 1, power: 60, side: 'attack', emit: { possession: 100, creation: 0, finishing: 0, pressing: 0, destruction: 0, defence: 0 }, traits: leaderTrait });
+  const strong = mk({ id: 2, power: 95, side: 'attack', emit: { possession: 100, creation: 0, finishing: 0, pressing: 0, destruction: 0, defence: 0 }, traits: [] });
   const ldRes = dispatchTraits([weak, strong], SEED, 0);
   // Leader targets all-teammates: weak (p60) gains 0.5*(1-0.60)*100=20; strong
   // (p95) gains 0.5*(1-0.95)*100=2.5; total 200+22.5=222.5. The curve lifts the weak ~8× more.
   const weakLine = ldRes.log.find((l) => l.note.includes('(#1)'));
   const strongLine = ldRes.log.find((l) => l.note.includes('(#2)'));
   check('amplify-inverse-power lifts the weak card far more than the strong', !!weakLine && !!strongLine && weakLine.value > strongLine.value * 4, `weak=${weakLine?.value} strong=${strongLine?.value}`);
-  check('amplify-inverse-power curve = amount×(1−power/100)', Math.abs(ldRes.zones.attack - 222.5) < 1e-9, `attack=${ldRes.zones.attack}`);
+  check('amplify-inverse-power curve = amount×(1−power/100)', Math.abs(ldRes.zones.possession - 222.5) < 1e-9, `possession=${ldRes.zones.possession}`);
 
   // archetype-criterion targeting hits only matching cards (e.g. Metodista → Controllers).
   const tempo = [{ name: 'Tempo', verb: 'amplify' as const, params: { amount: 0.10 }, scope: 'global' as const, target: { kind: 'criterion' as const, criterion: 'archetype' as const, archetype: 'Controller' as const } }];
-  const ctrl = mk({ id: 1, archetype: 'Controller', cell: 'MID_C', side: 'defence', emit: { attack: 0, defence: 100, creation: 0, finishing: 0 }, traits: tempo });
-  const striker = mk({ id: 2, archetype: 'Striker', cell: 'ATT_C', side: 'attack', emit: { attack: 100, defence: 0, creation: 0, finishing: 0 }, traits: [] });
+  const ctrl = mk({ id: 1, archetype: 'Controller', cell: 'MID_C', side: 'defence', emit: { possession: 0, creation: 0, finishing: 0, pressing: 0, destruction: 0, defence: 100 }, traits: tempo });
+  const striker = mk({ id: 2, archetype: 'Striker', cell: 'ATT_C', side: 'attack', emit: { possession: 100, creation: 0, finishing: 0, pressing: 0, destruction: 0, defence: 0 }, traits: [] });
   const tempoRes = dispatchTraits([ctrl, striker], SEED, 0);
-  check('archetype criterion targets only matching archetype', Math.abs(tempoRes.zones.defence - 110) < 1e-9 && tempoRes.zones.attack === 100, `def=${tempoRes.zones.defence} atk=${tempoRes.zones.attack}`);
+  check('archetype criterion targets only matching archetype', Math.abs(tempoRes.zones.defence - 110) < 1e-9 && tempoRes.zones.possession === 100, `def=${tempoRes.zones.defence} atk=${tempoRes.zones.possession}`);
 
   // chance gate is deterministic and respects the probability band.
-  const treq = (id: number) => mk({ id, emit: { attack: 80, defence: 0, creation: 0, finishing: 0 }, traits: ROLE_TRANSFORMS['Trequartista'] });
+  const treq = (id: number) => mk({ id, emit: { possession: 80, creation: 0, finishing: 0, pressing: 0, destruction: 0, defence: 0 }, traits: ROLE_TRANSFORMS['Trequartista'] });
   const ids = Array.from({ length: 200 }, (_, i) => i + 1);
-  const fired = (inc: number) => ids.filter((id) => dispatchTraits([treq(id)], SEED, inc).zones.attack > 80).length;
+  const fired = (inc: number) => ids.filter((id) => dispatchTraits([treq(id)], SEED, inc).zones.possession > 80).length;
   const rateA = fired(0);
   const rateB = fired(0);
   check('chance gate is deterministic (identical fire-set on repeat)', rateA === rateB, `${rateA} == ${rateB}`);
   check('chance gate ~30% fire rate over 200 cards', rateA > 200 * 0.2 && rateA < 200 * 0.4, `${rateA}/200 fired`);
 
   // priority escape hatch: a p1 amplify sees a p0 generate's result.
-  const stacked = mk({ emit: { attack: 0, defence: 0, creation: 0, finishing: 0 }, traits: [
-    { name: 'gen', verb: 'generate', params: { amount: 100 }, scope: 'zone', target: { kind: 'zone', zone: 'attack' }, priority: 0 },
-    { name: 'amp', verb: 'amplify', params: { amount: 1.0 }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, priority: 1 },
+  const stacked = mk({ emit: { possession: 0, creation: 0, finishing: 0, pressing: 0, destruction: 0, defence: 0 }, traits: [
+    { name: 'gen', verb: 'generate', params: { amount: 100 }, scope: 'zone', target: { kind: 'zone', zone: 'possession' }, priority: 0 },
+    { name: 'amp', verb: 'amplify', params: { amount: 1.0 }, scope: 'global', target: { kind: 'zone', zone: 'possession' }, priority: 1 },
   ] });
   const stRes = dispatchTraits([stacked], SEED, 0);
   // p0: 0+100=100; p1 amplify +100% of snapshot(100) → +100 → 200.
-  check('priority lets a later sub-pass observe an earlier one', Math.abs(stRes.zones.attack - 200) < 1e-9, `attack=${stRes.zones.attack}`);
+  check('priority lets a later sub-pass observe an earlier one', Math.abs(stRes.zones.possession - 200) < 1e-9, `possession=${stRes.zones.possession}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,22 +304,22 @@ console.log('\n6. Tactical cards + Manager as squad records');
   const ctx = { xi: [] as Card[], increment: 0, opponentGoals: 0, yourGoals: 0, connections: [] };
   const mk6 = (over: Partial<DispatchCard>): DispatchCard => ({
     id: 1, power: 80, archetype: 'Creator', position: 'CM', team: 'player', side: 'attack',
-    isWide: false, cell: 'ATT_C', emit: { attack: 80, defence: 0, creation: 40, finishing: 40 }, traits: [], ...over,
+    isWide: false, cell: 'ATT_C', emit: { possession: 80, creation: 40, finishing: 40, pressing: 0, destruction: 0, defence: 0 }, traits: [], ...over,
   });
 
   // A defensive tactic now suppresses the opponent for real (was a 0 stub in v5).
   const lowBlock = tacticTraits(getTacticById('low_block')!, ctx);
   const lowRes = dispatchTraits([mk6({})], SEED, 0, { playerSquadTraits: lowBlock });
   check('Low Block deny raises opponentDenial', lowRes.opponentDenial > 0, `denial=${lowRes.opponentDenial}`);
-  check('Low Block debuffs your own attack (−10%)', Math.abs(lowRes.zones.attack - 72) < 1e-9, `attack 80 → ${lowRes.zones.attack}`);
+  check('Low Block sits off your possession (−8%)', Math.abs(lowRes.zones.possession - 73.6) < 1e-9, `possession 80 → ${lowRes.zones.possession}`);
 
   // An attacking tactic lifts the field +15%.
   const highLine = tacticTraits(getTacticById('high_line')!, ctx);
   const highRes = dispatchTraits([mk6({})], SEED, 0, { playerSquadTraits: highLine });
-  check('High Line lifts attack +15%', Math.abs(highRes.zones.attack - 92) < 1e-9, `attack 80 → ${highRes.zones.attack}`);
+  check('High Line lifts possession +26%', Math.abs(highRes.zones.possession - 100.8) < 1e-9, `possession 80 → ${highRes.zones.possession}`);
 
   // The Manager amplifies its target archetype (Mourinho → Destroyer +20%).
-  const destroyer = mk6({ id: 2, archetype: 'Destroyer', cell: 'DEF_C', side: 'defence', emit: { attack: 0, defence: 100, creation: 0, finishing: 0 } });
+  const destroyer = mk6({ id: 2, archetype: 'Destroyer', cell: 'DEF_C', side: 'defence', emit: { possession: 0, creation: 0, finishing: 0, pressing: 0, destruction: 0, defence: 100 } });
   const mou = managerTraits(getJokerById('the_mourinho')!, ctx);
   const mouRes = dispatchTraits([destroyer], SEED, 0, { playerSquadTraits: mou });
   check('Manager (Mourinho) amplifies Destroyers +20%', Math.abs(mouRes.zones.defence - 120) < 1e-9, `defence 100 → ${mouRes.zones.defence}`);
@@ -307,7 +329,7 @@ console.log('\n6. Tactical cards + Manager as squad records');
   // (Fortress carries only a deny — no scale records — so the Anchor's +30% is
   // the sole defence transform: 100 → 130.)
   const fortress = tacticTraits(getTacticById('fortress')!, ctx);
-  const realDef = mk6({ id: 3, power: 70, archetype: 'Cover', cell: 'DEF_C', side: 'defence', emit: { attack: 0, defence: 100, creation: 0, finishing: 0 }, traits: ROLE_TRANSFORMS['Anchor'] });
+  const realDef = mk6({ id: 3, power: 70, archetype: 'Cover', cell: 'DEF_C', side: 'defence', emit: { possession: 0, creation: 0, finishing: 0, pressing: 0, destruction: 0, defence: 100 }, traits: ROLE_TRANSFORMS['Anchor'] });
   const shieldRes = dispatchTraits([realDef], SEED, 0, { playerSquadTraits: fortress });
   check('squad source is excluded from criterion targeting (Anchor shields the real card)', Math.abs(shieldRes.zones.defence - 130) < 1e-9, `defence 100 → ${shieldRes.zones.defence}`);
 }
@@ -341,8 +363,8 @@ console.log('\n7. Opponent as a real positioned XI');
   const f1 = computeSideField(r1.xi, r1.formation, SEED + 7777, 0);
   const f5 = computeSideField(r5b.xi, r5b.formation, SEED + 7777, 0);
   check('round budget scales the opponent\'s attacking threat (R5 > R1)',
-    f5.chanceCreation > f1.chanceCreation && f5.attackScore > f1.attackScore,
-    `R1 atk=${f1.attackScore} cre=${f1.chanceCreation}; R5 atk=${f5.attackScore} cre=${f5.chanceCreation}`);
+    f5.chanceCreation > f1.chanceCreation && f5.possession > f1.possession,
+    `R1 atk=${f1.possession} cre=${f1.chanceCreation}; R5 atk=${f5.possession} cre=${f5.chanceCreation}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -377,7 +399,7 @@ console.log('\n8. Reactive opponent — scale first, counter second');
   // PRIMARY (scale): play-to-strengths + build-up that grows across increments.
   const oxi = generateOpponentXI(3, 'Balanced', SEED).xi;
   const buildAttack = (inc: number) => opponentScaleTraits(oxi, inc)
-    .filter((r) => r.name === 'Building' && r.target.kind === 'zone' && r.target.zone === 'attack')
+    .filter((r) => r.name === 'Building' && r.target.kind === 'zone' && r.target.zone === 'possession')
     .reduce((s, r) => s + (r.params.amount ?? 0), 0);
   check('opponent plays to strengths (amplifies a dominant archetype)', opponentScaleTraits(oxi, 0).some((r) => r.name === 'Play to Strengths'));
   check('opponent build-up scales across increments', buildAttack(4) > buildAttack(0), `inc0=${buildAttack(0)} inc4=${buildAttack(4).toFixed(2)}`);
@@ -430,8 +452,8 @@ console.log('\n9. Run-accumulated chemistry');
   };
   const fresh = evalWith({});
   const strong = evalWith(settled);
-  check('chemistry lifts attack via the dispatcher', strong.attackScore > fresh.attackScore, `fresh=${fresh.attackScore} settled=${strong.attackScore}`);
-  check('chemistry is deterministic', evalWith(settled).attackScore === strong.attackScore);
+  check('chemistry lifts attack via the dispatcher', strong.possession > fresh.possession, `fresh=${fresh.possession} settled=${strong.possession}`);
+  check('chemistry is deterministic', evalWith(settled).possession === strong.possession);
 }
 
 // ---------------------------------------------------------------------------
@@ -448,7 +470,9 @@ console.log('\n10. Fitness depletion');
 
   const fresh = evaluateSplit(mkState(mkXI({})), [], null);
   const tired = evaluateSplit(mkState(mkXI({ fitness: 1 })), [], null);
-  check('a tired XI emits less attack than a fresh one', tired.attackScore < fresh.attackScore, `fresh=${fresh.attackScore} tired=${tired.attackScore}`);
+  const funnelSum = (x: { possession: number; chanceCreation: number; shotQuality: number }) =>
+    x.possession + x.chanceCreation + x.shotQuality;
+  check('a tired XI emits less attacking output than a fresh one', funnelSum(tired) < funnelSum(fresh), `fresh=${funnelSum(fresh)} tired=${funnelSum(tired)}`);
 
   // One increment: an attacking-lane slot tires faster than a defensive one (same durability).
   let s = mkState(mkXI({}));
@@ -513,7 +537,7 @@ console.log('\n12. Per-possession goal model');
 {
   const lanes = (v: number): Record<Lane, number> => ({ L: v, C: v, R: v });
   const side = (push: number, cover: number, quality: number, def: number, control: number): PossessionSide => ({
-    lanePush: lanes(push), laneCover: lanes(cover), shotQuality: quality, defenceScore: def, control, denial: 0,
+    lanePush: lanes(push), laneCover: lanes(cover), shotQuality: quality, defenceScore: def, control, pressing: 0, denial: 0,
   });
 
   // Possessions are pooled (20) and split by control; the split sums to the pool.
@@ -546,13 +570,36 @@ console.log('\n12. Per-possession goal model');
   const d2 = simulatePeriod(side(700, 600, 700, 1000, 1500), side(500, 600, 600, 1100, 1200), 42, 3);
   check('identical inputs → identical period (deterministic)', JSON.stringify(d1) === JSON.stringify(d2));
 
-  // Goal volume sits in a sane band (~3/match target) for an evenly-matched full
-  // match: average total goals across a seed sweep of a power-matched deck.
-  const evenDeck = [...cards].sort((a, b) => b.power - a.power).slice(180, 198);
+  // Goal volume sits in a sane band for an evenly-matched full match: average
+  // total goals across a seed sweep of a mid-depth LANE-COHERENT deck (FUNNEL_MODEL_V1 —
+  // a raw power slice fields no defence lane and measures the drafting bug).
+  const sortedPool = [...cards].sort((a, b) => b.power - a.power);
+  const usedIds = new Set<number>();
+  const takeMid = (want: (c: Card) => boolean, k: number): Card[] => {
+    const avail = sortedPool.filter((c) => want(c) && !usedIds.has(c.id));
+    const start = Math.min(Math.max(0, Math.round(0.3 * (avail.length - k))), Math.max(0, avail.length - k));
+    const picked = avail.slice(start, start + k);
+    picked.forEach((c) => usedIds.add(c.id));
+    return picked;
+  };
+  const evenDeck = [
+    ...takeMid((c) => c.position === 'GK', 1),
+    ...takeMid((c) => ['Destroyer', 'Powerhouse'].includes(c.archetype), 1),
+    ...takeMid((c) => c.archetype === 'Cover', 2),
+    ...takeMid((c) => ['Destroyer', 'Powerhouse'].includes(c.archetype), 1),
+    ...takeMid((c) => ['Passer', 'Controller', 'Engine'].includes(c.archetype), 2),
+    ...takeMid((c) => c.archetype === 'Sprinter', 1),
+    ...takeMid((c) => ['Creator', 'Dribbler'].includes(c.archetype), 1),
+    ...takeMid((c) => ['Striker', 'Target'].includes(c.archetype), 1),
+    ...takeMid((c) => ['Creator', 'Dribbler'].includes(c.archetype), 1),
+    ...takeMid(() => true, 7),
+  ];
   let total = 0; const N = 120;
   for (let s = 0; s < N; s++) {
     const bench = evenDeck.slice(11, 18);
-    let st = initMatch(evenDeck.slice(0, 11), bench, [], formation, 'tiki-taka', [], 2000 + s * 13, 2, 'Balanced', 'Sprinter');
+    // Opponent power 85: a coherent player XI plays well above its raw average
+    // (the funnel cascade), so an even CONTEST needs the opponent up here (power-probe).
+    let st = initMatch(evenDeck.slice(0, 11), bench, [], formation, 'tiki-taka', [], 2000 + s * 13, 2, 'Balanced', 'Sprinter', {}, 'balanced', 85);
     for (let i = 0; i < 5; i++) {
       const ids = [...st.xi].filter((c) => !c.injured).sort((a, b) => b.power - a.power).slice(0, 4).map((c) => c.id);
       st = commitAttackers(st, ids);
@@ -561,7 +608,9 @@ console.log('\n12. Per-possession goal model');
     total += st.yourGoals + st.opponentGoals;
   }
   const avg = total / N;
-  check('total goals per match sit near the ~3 target (1.5–4.5)', avg >= 1.5 && avg <= 4.5, `avg total = ${avg.toFixed(2)}`);
+  // Band re-anchored for the funnel model: an even contest averages ~6 total goals
+  // across the 5 periods (the live game's arcade scale; balance-sweep agrees).
+  check('total goals per match sit in the funnel band (2.5-7.5)', avg >= 2.5 && avg <= 7.5, `avg total = ${avg.toFixed(2)}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -579,18 +628,18 @@ console.log('\n13. Pre-match intent (attacking / balanced / defensive)');
   const bal = splitFor('balanced');
   const def = splitFor('defensive');
 
-  check('attacking intent lifts attack above balanced', att.attackScore > bal.attackScore,
-    `att=${att.attackScore} bal=${bal.attackScore}`);
+  check('attacking intent lifts attack above balanced', att.possession > bal.possession,
+    `att=${att.possession} bal=${bal.possession}`);
   check('defensive intent lifts defence above balanced', def.defenceScore > bal.defenceScore,
     `def=${def.defenceScore} bal=${bal.defenceScore}`);
-  check('attacking attacks more than defensive', att.attackScore > def.attackScore,
-    `att=${att.attackScore} def=${def.attackScore}`);
+  check('attacking attacks more than defensive', att.possession > def.possession,
+    `att=${att.possession} def=${def.possession}`);
   check('defensive defends more than attacking', def.defenceScore > att.defenceScore,
     `def=${def.defenceScore} att=${att.defenceScore}`);
   // Balanced is the neutral baseline — same as passing no intent at all.
   const noIntent = evaluateSplit(initMatch(xi, bench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter'), [], null);
-  check('balanced intent == no-intent baseline', Math.abs(noIntent.attackScore - bal.attackScore) < 1e-6 && Math.abs(noIntent.defenceScore - bal.defenceScore) < 1e-6,
-    `atk ${noIntent.attackScore} vs ${bal.attackScore}`);
+  check('balanced intent == no-intent baseline', Math.abs(noIntent.possession - bal.possession) < 1e-6 && Math.abs(noIntent.defenceScore - bal.defenceScore) < 1e-6,
+    `atk ${noIntent.possession} vs ${bal.possession}`);
 }
 
 console.log(`\n=== ${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} ===\n`);

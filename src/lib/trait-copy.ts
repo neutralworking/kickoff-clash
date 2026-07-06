@@ -60,6 +60,11 @@ export const TRAIT_COPY: Record<string, TraitCopy> = {
     blurb: 'Times the big tackle — snuffs out the opposition attack.',
     kind: 'tackle', glyph: '⊘',
   },
+  Antagonist: {
+    label: 'Antagonist',
+    blurb: 'Winds the defenders up — the opposing back line defends worse while he is on the pitch.',
+    kind: 'aura', glyph: '⚡',
+  },
   'Offside Trap': {
     label: 'Offside Trap',
     blurb: 'Springs the trap when the line holds — flags them offside, chance gone.',

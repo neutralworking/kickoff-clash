@@ -20,8 +20,12 @@ import { LANES } from './field';
 
 export type CallGrade = 'answered' | 'neutral' | 'countered';
 
-/** Emission kinds that read as forward commitment. Creation alone is build-up. */
-const COMMIT_ZONES: ReadonlySet<ZoneName> = new Set(['attack', 'finishing']);
+/** Funnel lanes that read as forward commitment. Under the funnel, creation IS the
+ *  lane threat (it drives shot volume in a channel); possession alone is build-up. */
+const COMMIT_ZONES: ReadonlySet<ZoneName> = new Set(['creation', 'finishing']);
+
+/** Funnel lanes that read as a defensive surface. */
+const DEFENSIVE_ZONES: ReadonlySet<ZoneName> = new Set(['defence', 'destruction', 'pressing']);
 
 function recordZone(r: TraitRecord): ZoneName | null {
   return r.target.kind === 'zone' || r.target.kind === 'criterion' || r.target.kind === 'enemyCard'
@@ -39,9 +43,9 @@ function commitLanes(r: TraitRecord): Set<Lane> {
     return new Set([r.to?.lane ?? 'C']);
   }
   if (r.verb === 'amplify') {
-    // A named non-commit zone (defence/creation) is not an attacking commitment;
-    // an attack/finishing zone — or an un-zoned card amplify (touches everything
-    // the card emits, attack included) — commits everywhere.
+    // A named non-commit lane (defence/destruction/pressing/possession) is not an
+    // attacking commitment; a creation/finishing lane — or an un-zoned card amplify
+    // (touches everything the card emits) — commits everywhere.
     // (amplify-inverse-power is a lift-the-weak utility, never read as commitment.)
     if (zone && !COMMIT_ZONES.has(zone)) return new Set();
     return new Set(LANES);
@@ -62,7 +66,7 @@ export function hasDefensiveSurface(records: TraitRecord[]): boolean {
     const amount = r.params.amount ?? 0;
     if (r.verb === 'deny' && amount > 0) return true;
     const zone = recordZone(r);
-    if ((r.verb === 'amplify' || r.verb === 'generate') && zone === 'defence' && amount > 0) return true;
+    if ((r.verb === 'amplify' || r.verb === 'generate') && zone && DEFENSIVE_ZONES.has(zone) && amount > 0) return true;
     return false;
   });
 }
@@ -72,7 +76,7 @@ export function isAttackingPlay(records: TraitRecord[]): boolean {
   return attackLanes(records).size > 0;
 }
 
-/** Bodies-forward commitment: loads the ATTACK zone (volume into lanes). Finishing-
+/** Bodies-forward commitment: loads CREATION (shot volume into lanes). Finishing-
  *  only quality (a rehearsed set piece) is NOT a committed shape — a prepared trap
  *  has nothing to catch, so it cannot be 'countered' (it also answers nothing). */
 export function commitsBodiesForward(records: TraitRecord[]): boolean {
@@ -80,8 +84,8 @@ export function commitsBodiesForward(records: TraitRecord[]): boolean {
     const amount = r.params.amount ?? 0;
     if (amount <= 0) return false;
     const zone = recordZone(r);
-    if (r.verb === 'generate') return zone === 'attack';
-    if (r.verb === 'amplify') return zone === null || zone === 'attack';
+    if (r.verb === 'generate') return zone === 'creation';
+    if (r.verb === 'amplify') return zone === null || zone === 'creation';
     return false;
   });
 }
@@ -103,8 +107,8 @@ function answerLanes(records: TraitRecord[]): Set<Lane> {
     if (amount <= 0) continue;
     const zone = recordZone(r);
     if (r.verb === 'deny' && amount >= ANSWER_DENY_MIN) for (const l of LANES) lanes.add(l);
-    else if (r.verb === 'amplify' && zone === 'defence' && amount >= ANSWER_AMP_MIN) for (const l of LANES) lanes.add(l);
-    else if (r.verb === 'generate' && zone === 'defence') lanes.add(r.to?.lane ?? 'C');
+    else if (r.verb === 'amplify' && zone && DEFENSIVE_ZONES.has(zone) && amount >= ANSWER_AMP_MIN) for (const l of LANES) lanes.add(l);
+    else if (r.verb === 'generate' && zone && DEFENSIVE_ZONES.has(zone)) lanes.add(r.to?.lane ?? 'C');
     else if (r.verb === 'relocate') lanes.add(r.to?.lane ?? 'C');
   }
   return lanes;

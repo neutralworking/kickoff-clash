@@ -42,6 +42,7 @@ import {
   roleBlurb,
   type ResolvedTrait,
 } from './cardTokens';
+import { laneOfCard, LANE_COPY } from '../../lib/funnel';
 
 // Trait glyphs (✦ ➴ ⚑ …) sit outside the Silkscreen glyph set; render them in a
 // Unicode-complete fallback stack so a symbol never renders as a blank tofu box.
@@ -406,17 +407,21 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
   // backdrop tap still closes the whole modal and Escape stays untouched. The
   // trigger itself stopPropagation's its opening tap so the same click doesn't
   // instantly self-close through that listener.
-  const [openTip, setOpenTip] = useState<'role' | 'durability' | null>(null);
+  const [openTip, setOpenTip] = useState<'role' | 'durability' | 'job' | null>(null);
   useEffect(() => {
     if (!openTip) return;
     const close = () => setOpenTip(null);
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, [openTip]);
-  const toggleTip = (tip: 'role' | 'durability') => (e: React.MouseEvent) => {
+  const toggleTip = (tip: 'role' | 'durability' | 'job') => (e: React.MouseEvent) => {
     e.stopPropagation();
     setOpenTip((cur) => (cur === tip ? null : tip));
   };
+
+  // The card's funnel JOB (docs/FUNNEL_MODEL_V1.md): the ONE thing its power feeds.
+  const lane = laneOfCard(card);
+  const laneCopy = LANE_COPY[lane];
 
   return (
     <div className="flex flex-col" style={{ gap: 10 }}>
@@ -442,6 +447,16 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
             open={openTip === 'role'}
             onToggle={toggleTip('role')}
             tipBody={roleBlurb(role)}
+          />
+          {/* JOB — the funnel lane this card's power feeds (one per card; Commanders
+              lift the whole team). The legibility contract: read a card, know its job. */}
+          <TapStatCell
+            label="JOB"
+            value={laneCopy.label.toUpperCase()}
+            color="var(--gold)"
+            open={openTip === 'job'}
+            onToggle={toggleTip('job')}
+            tipBody={laneCopy.blurb}
           />
         </div>
         {/* Where they can operate — eligible pitch positions as pixel chips. */}

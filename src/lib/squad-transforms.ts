@@ -57,15 +57,16 @@ function ampArchetype(name: string, amount: number, archetype: string, zone?: Zo
 
 /** Suppress the opponent's conversion (capped downstream in resolveIncrement). */
 function denyOpponent(name: string, amount: number): TraitRecord {
-  return { name, verb: 'deny', params: { amount }, scope: 'zone', target: { kind: 'zone', zone: 'attack' } };
+  return { name, verb: 'deny', params: { amount }, scope: 'zone', target: { kind: 'zone', zone: 'finishing' } };
 }
 
 /** Manufacture attacking threat down ONE flank (a lane overload) — `generate` deposits
  *  into the explicit destination cell, so a squad-source record can stack a single lane.
- *  Attack lands up top in the lane; the build-up creation feeds it from midfield. */
+ *  Both deposits are CREATION (the lane-contest stat): threat up top plus build-up
+ *  behind it, in the same channel. */
 function overloadLane(name: string, lane: 'L' | 'R', attack: number, creation: number): TraitRecord[] {
   return [
-    { name, verb: 'generate', params: { amount: attack }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, to: { band: 'ATT', lane } },
+    { name, verb: 'generate', params: { amount: attack }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'ATT', lane } },
     { name, verb: 'generate', params: { amount: creation }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'MID', lane } },
   ];
 }
@@ -76,11 +77,11 @@ function drainArchetype(name: string, amount: number, archetype: string): TraitR
 }
 
 /** Reinforce the back line where the opponent's telegraphed play loads: `generate`
- *  defence into the DEF-band cell(s) of their committed lane(s). laneCover feeds the
- *  shot contest directly (possession.ts pShot = SHOT_BASE × push/cover), so this is
- *  shot-VOLUME denial — the structural counterpart to `deny`'s conversion suppression.
- *  A telegraph with no lane commitment (or none at all) falls back to an even spread,
- *  so the same play is materially stronger as a READ than as a blind call. */
+ *  DESTRUCTION into the DEF-band cell(s) of their committed lane(s). laneCover feeds
+ *  the shot contest directly (possession.ts pShot = SHOT_BASE × push/cover), so this
+ *  is shot-VOLUME denial — the structural counterpart to `deny`'s conversion
+ *  suppression. A telegraph with no lane commitment (or none at all) falls back to an
+ *  even spread, so the same play is materially stronger as a READ than as a blind call. */
 function coverLoadedLanes(name: string, ctx: SquadContext, total: number): TraitRecord[] {
   const play = ctx.opponentPlayId ? getOpponentPlayById(ctx.opponentPlayId) : undefined;
   const loaded = play ? [...attackLanes(play.records)] : [];
@@ -91,13 +92,13 @@ function coverLoadedLanes(name: string, ctx: SquadContext, total: number): Trait
   const amount = budget / lanes.length;
   return lanes.map((lane): TraitRecord => ({
     name, verb: 'generate', params: { amount }, scope: 'global',
-    target: { kind: 'zone', zone: 'defence' }, to: { band: 'DEF', lane },
+    target: { kind: 'zone', zone: 'destruction' }, to: { band: 'DEF', lane },
   }));
 }
 
-// A "power lift" touches the score and the chance mix together.
+// A "power lift" raises the whole attacking funnel (possession → creation → finishing).
 function powerLift(name: string, amount: number): TraitRecord[] {
-  return [ampZone(name, amount, 'attack'), ampZone(name, amount, 'creation'), ampZone(name, amount, 'finishing')];
+  return [ampZone(name, amount, 'possession'), ampZone(name, amount, 'creation'), ampZone(name, amount, 'finishing')];
 }
 
 /** Is the opponent's telegraphed play an attacking commitment? (Data-driven.) */
@@ -132,21 +133,22 @@ export function tacticTraits(tactic: TacticCard, ctx: SquadContext): TraitRecord
   switch (tactic.id) {
     // ---- attacking ----
     case 'high_line':
-      // Commit forward: attack + creation up, your own back line thins.
-      return [ampZone(n, 0.26, 'attack'), ampZone(n, 0.26, 'creation'), ampZone(n, -0.12, 'defence'), ...breakExposure(n, ctx)];
+      // Commit forward: possession + creation up, your own back line thins.
+      return [ampZone(n, 0.26, 'possession'), ampZone(n, 0.26, 'creation'), ampZone(n, -0.12, 'defence'), ...breakExposure(n, ctx)];
     case 'press_high':
-      // Suppress their conversion; the pressers (Engine/Destroyer) lift but tire.
+      // Turn the pressing lane up (stage 1's counter — erases their possession) and
+      // nibble their conversion; the runners (Sprinter/Engine) tire for it.
       return [
-        denyOpponent(n, 0.20),
-        ampArchetype(n, 0.20, 'Engine'), ampArchetype(n, 0.20, 'Destroyer'),
-        drainArchetype(n, 0.5, 'Engine'), drainArchetype(n, 0.5, 'Destroyer'),
+        denyOpponent(n, 0.15),
+        ampZone(n, 0.35, 'pressing'),
+        drainArchetype(n, 0.5, 'Sprinter'), drainArchetype(n, 0.5, 'Engine'),
       ];
     case 'wing_play':
       // Threat down BOTH wings (a squad source cannot relocate — it has no
       // emission of its own — so the wide shift is manufactured with generate).
       return [
-        { name: n, verb: 'generate', params: { amount: 50 }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, to: { band: 'ATT', lane: 'L' } },
-        { name: n, verb: 'generate', params: { amount: 50 }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, to: { band: 'ATT', lane: 'R' } },
+        { name: n, verb: 'generate', params: { amount: 50 }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'ATT', lane: 'L' } },
+        { name: n, verb: 'generate', params: { amount: 50 }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'ATT', lane: 'R' } },
         { name: n, verb: 'generate', params: { amount: 25 }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'MID', lane: 'L' } },
         { name: n, verb: 'generate', params: { amount: 25 }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'MID', lane: 'R' } },
         ampArchetype(n, 0.12, 'Dribbler'), ampArchetype(n, 0.12, 'Sprinter'),
@@ -155,7 +157,7 @@ export function tacticTraits(tactic: TacticCard, ctx: SquadContext): TraitRecord
     case 'narrow':
       // Threat through the middle; the central combiners lift.
       return [
-        { name: n, verb: 'generate', params: { amount: 50 }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, to: { band: 'ATT', lane: 'C' } },
+        { name: n, verb: 'generate', params: { amount: 50 }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'ATT', lane: 'C' } },
         { name: n, verb: 'generate', params: { amount: 50 }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'MID', lane: 'C' } },
         ampArchetype(n, 0.12, 'Controller'), ampArchetype(n, 0.12, 'Passer'),
         ...breakExposure(n, ctx),
@@ -169,8 +171,8 @@ export function tacticTraits(tactic: TacticCard, ctx: SquadContext): TraitRecord
     case 'route_one':
       // Bypass the midfield: a direct ball makes a central finishing chance up top.
       return [
-        { name: n, verb: 'generate', params: { amount: 70 }, scope: 'global', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' } },
-        { name: n, verb: 'generate', params: { amount: 45 }, scope: 'global', target: { kind: 'zone', zone: 'attack' }, to: { band: 'ATT', lane: 'C' } },
+        { name: n, verb: 'generate', params: { amount: 50 }, scope: 'global', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' } },
+        { name: n, verb: 'generate', params: { amount: 45 }, scope: 'global', target: { kind: 'zone', zone: 'creation' }, to: { band: 'ATT', lane: 'C' } },
         ...breakExposure(n, ctx),
       ];
 
@@ -184,28 +186,28 @@ export function tacticTraits(tactic: TacticCard, ctx: SquadContext): TraitRecord
       // springs (no attack cost, a break lift); called blind it just sits off.
       const sprung = opponentIsAttacking(ctx);
       return [
-        denyOpponent(n, 0.20), ...coverLoadedLanes(n, ctx, 190),
-        sprung ? ampZone(n, 0.26, 'attack') : ampZone(n, -0.08, 'attack'),
+        denyOpponent(n, 0.20), ...coverLoadedLanes(n, ctx, 130),
+        sprung ? ampZone(n, 0.26, 'creation') : ampZone(n, -0.08, 'possession'),
       ];
     }
     case 'sit_deep': {
       // Counter Trap: absorb, then spring the runners — doubled against an
       // attacking opponent play (the trap they walked into).
-      const amp = opponentIsAttacking(ctx) ? 0.50 : 0.18;
+      const amp = opponentIsAttacking(ctx) ? 0.38 : 0.15;
       return [
         denyOpponent(n, 0.10), ...coverLoadedLanes(n, ctx, 130),
         ampArchetype(n, amp, 'Sprinter'), ampArchetype(n, amp, 'Dribbler'),
       ];
     }
     case 'fortress':
-      return [denyOpponent(n, 0.25), ...coverLoadedLanes(n, ctx, 390)];
+      return [denyOpponent(n, 0.25), ...coverLoadedLanes(n, ctx, 260)];
     case 'man_marking':
       // Reported deviation: no per-card denial exists in the palette wiring, so
       // the star-targeted deny is a stronger flat deny + an own-back-line amp.
       // Duels won against a committed attack feed a transition lift.
       return [
-        denyOpponent(n, 0.20), ...coverLoadedLanes(n, ctx, 150), ampZone(n, 0.12, 'defence'),
-        ...(opponentIsAttacking(ctx) ? [ampZone(n, 0.18, 'attack')] : []),
+        denyOpponent(n, 0.18), ...coverLoadedLanes(n, ctx, 75), ampZone(n, 0.10, 'defence'),
+        ...(opponentIsAttacking(ctx) ? [ampZone(n, 0.18, 'creation')] : []),
       ];
 
     // ---- specialist ----
@@ -214,17 +216,18 @@ export function tacticTraits(tactic: TacticCard, ctx: SquadContext): TraitRecord
       // forward commitment the whole side drops off before breaking — a real
       // defensive surface, so it ANSWERS the commitment (soak and break).
       if (opponentIsAttacking(ctx)) {
-        return [denyOpponent(n, 0.15), ampZone(n, 0.28, 'attack'), ampZone(n, 0.28, 'finishing')];
+        return [denyOpponent(n, 0.15), ampZone(n, 0.28, 'creation'), ampZone(n, 0.28, 'finishing')];
       }
       return ctx.yourGoals < ctx.opponentGoals
-        ? [ampZone(n, 0.28, 'attack'), ampZone(n, 0.28, 'finishing')]
+        ? [ampZone(n, 0.28, 'creation'), ampZone(n, 0.28, 'finishing')]
         : [];
     }
     case 'possession':
-      // Keep the ball: more creation, a steadier spell.
+      // Keep the ball: the possession lane lifts, a steadier spell.
       return [
-        ampZone(n, 0.18, 'creation'),
-        { name: n, verb: 'dampen-variance', params: { amount: 0.12 }, scope: 'global', target: { kind: 'zone', zone: 'attack' } },
+        ampZone(n, 0.22, 'possession'),
+        ampZone(n, 0.10, 'creation'),
+        { name: n, verb: 'dampen-variance', params: { amount: 0.12 }, scope: 'global', target: { kind: 'zone', zone: 'possession' } },
       ];
     case 'set_piece': {
       // A central dead-ball chance; the aerial threats sharpen it (finishing only —
@@ -280,22 +283,23 @@ export function managerTraits(joker: JokerCard, ctx: SquadContext): TraitRecord[
     }
     case 'youth_developer': {
       const commons = ctx.xi.filter((c) => c.rarity === 'Common').length;
-      return commons > 0 ? [ampZone(n, Math.min(0.20, commons * 0.03), 'attack')] : [];
+      return commons > 0 ? powerLift(n, Math.min(0.20, commons * 0.03)) : [];
     }
     case 'hairdryer':
       // A captain in the room lifts the whole side, both ends.
       return ctx.xi.some((c) => c.personalityTheme === 'Captain')
-        ? [ampZone(n, 0.10, 'attack'), ampZone(n, 0.10, 'defence')]
+        ? [ampZone(n, 0.10, 'possession'), ampZone(n, 0.10, 'defence')]
         : [];
     case 'chemistry_set': {
-      // Rewards a densely-connected XI (capped so it can't run away).
+      // Rewards a densely-connected XI (capped so it can't run away): a connected
+      // side keeps the ball.
       const c = ctx.connections.length;
-      return c > 0 ? [ampZone(n, Math.min(0.30, c * 0.02), 'attack')] : [];
+      return c > 0 ? [ampZone(n, Math.min(0.30, c * 0.02), 'possession')] : [];
     }
     case 'scouts_eye':
       // Squad depth — a modest all-round lift (the old +1-discard bonus fed an
       // unsurfaced mechanic, so it now does something the player can actually see).
-      return [ampZone(n, 0.05, 'attack'), ampZone(n, 0.05, 'defence')];
+      return [ampZone(n, 0.05, 'possession'), ampZone(n, 0.05, 'defence')];
     default:
       return [];
   }
@@ -313,7 +317,7 @@ export function intentTraits(intent: TeamIntent | undefined, _ctx: SquadContext)
   switch (intent) {
     case 'attacking':
       return [
-        ampZone('Attacking intent', 0.12, 'attack'),
+        ampZone('Attacking intent', 0.12, 'possession'),
         ampZone('Attacking intent', 0.12, 'creation'),
         ampZone('Attacking intent', 0.12, 'finishing'),
         ampZone('Attacking intent', -0.12, 'defence'),
@@ -321,8 +325,9 @@ export function intentTraits(intent: TeamIntent | undefined, _ctx: SquadContext)
     case 'defensive':
       return [
         ampZone('Defensive intent', 0.15, 'defence'),
+        ampZone('Defensive intent', 0.10, 'destruction'),
         denyOpponent('Defensive intent', 0.10),
-        ampZone('Defensive intent', -0.10, 'attack'),
+        ampZone('Defensive intent', -0.10, 'possession'),
         ampZone('Defensive intent', -0.10, 'creation'),
       ];
     case 'balanced':

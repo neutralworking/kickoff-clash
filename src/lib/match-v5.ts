@@ -33,6 +33,7 @@ import {
 import type { MatchEvent } from './hand';
 import type { DispatchCard, ZoneName, TraitRecord, TraitLogLine } from './verbs';
 import { dispatchTraits, ZONES } from './verbs';
+import { laneOfCard, LANE_BAND, LEAD_SPREAD } from './funnel';
 import { traitsForCard } from './role-transforms';
 import type { Lane, Cell, Band } from './field';
 import { CELLS, BANDS, LANES, cellOf, bandOf } from './field';
@@ -110,9 +111,15 @@ export interface TraitEvent {
 }
 
 export interface AttackDefenceSplit {
-  attackScore: number;
+  /** Stage 1 attack: possession total — splits the period's possessions. */
+  possession: number;
+  /** Stage 1 counter: pressing total — cuts the OPPONENT's possession. */
+  pressing: number;
+  /** Stage 3 counter: defence total — suppresses the opponent's xG. */
   defenceScore: number;
+  /** Stage 2 attack: creation total (per-pitch-lane detail in lanePush). */
   chanceCreation: number;
+  /** Stage 3 attack: finishing total — the xG quality term. */
   shotQuality: number;
   playName: string;
   playSummary: string;
@@ -126,6 +133,8 @@ export interface AttackDefenceSplit {
   maxAttackers: number;
   /** Opponent goal-chance reduction produced by `deny` verbs (Volante). 0 = none. */
   opponentDenial: number;
+  /** Lane-targeted denial applied to the OPPONENT's lane totals (antagonists). */
+  zoneDenial: Partial<Record<ZoneName, number>>;
   /** Outcome-spread shaping for the xG step (dampen/amplify-variance). 0 = neutral. */
   varianceFactor: number;
   /** Per-lane attacking threat (zonal field, §4) — consumed by the coupled contest. */
@@ -285,14 +294,25 @@ const OPPONENT_BASELINES: { attack: number; defence: number }[] = [
   { attack: 1000, defence: 1050 }, // Match 5
 ];
 
-// --- Positioning-model band weights (DESIGN §1/§4; §7 dials) ---
-// Attack/defence emission split by band (a midfielder contributes to both);
-// creation/finishing chance-mix projected by band (§4: ATT≈finishing, MID≈creation).
-const BAND_ATK: Record<Band, number> = { ATT: 1.0, MID: 0.55, DEF: 0.18 };
-const BAND_DEF: Record<Band, number> = { ATT: 0.12, MID: 0.55, DEF: 1.0 };
-const CREATION_BAND: Record<Band, number> = { ATT: 0.7, MID: 1.0, DEF: 0.4 };
-const FINISHING_BAND: Record<Band, number> = { ATT: 1.0, MID: 0.5, DEF: 0.1 };
-const zeroEmit = (): Record<ZoneName, number> => ({ attack: 0, defence: 0, creation: 0, finishing: 0 });
+// --- Funnel emission (docs/FUNNEL_MODEL_V1.md) ---
+// A card's power feeds exactly ONE lane (its skillset's), weighted by how well the
+// band it stands in suits that lane (LANE_BAND). Commanders are the tech exception:
+// their power spreads across all six lanes at LEAD_SPREAD each.
+const zeroEmit = (): Record<ZoneName, number> => ({
+  possession: 0, creation: 0, finishing: 0, pressing: 0, destruction: 0, defence: 0,
+});
+
+/** The six-lane emission for one card standing in `band` at `power` (fitness-scaled). */
+function emitForCard(card: Card, band: Band, power: number): Record<ZoneName, number> {
+  const e = zeroEmit();
+  const lane = laneOfCard(card);
+  if (lane === 'leadership') {
+    for (const z of ZONES) e[z] = Math.round(power * LEAD_SPREAD);
+  } else {
+    e[lane] = Math.round(power * LANE_BAND[lane][band]);
+  }
+  return e;
+}
 
 /** Opponent attacking-output multiplier — stands in for the synergy/style/personality
  *  cascade the lean opponent side path skips, AND for the player's own inflated
@@ -300,10 +320,9 @@ const zeroEmit = (): Record<ZoneName, number> => ({ attack: 0, defence: 0, creat
  *  (DESIGN §7 difficulty dial; calibrated against the deck-strength sweep.) */
 const OPP_COHESION = 1.05;
 
-/** Weight of a side's finishing in its possession-CONTROL term (the rest is creation +
- *  attack). A finisher-heavy deck earns possession credit for its attacking quality, so
- *  possession tracks total attacking strength rather than creation alone. Symmetric. */
-const CONTROL_FIN = 0.5;
+/** Cap on lane-targeted denial (the antagonist path): the opponent's named lane total
+ *  can lose at most this fraction, however many antagonists stack. */
+const ZONE_DENIAL_CAP = 0.35;
 
 // --- Fitness (MATCH_ENGINE §3.1; §7 dials) ---
 // Dynamic 1–6 condition. fitnessFactor scales emission: fresh (6) = full, spent (1) =
@@ -466,78 +485,8 @@ function inferPlayPattern(
   };
 }
 
-function getChanceProfile(card: Card): { creation: number; finishing: number } {
-  let creation = 0.28;
-  let finishing = 0.28;
-
-  switch (card.archetype) {
-    case 'Creator':
-      creation = 0.85;
-      finishing = 0.38;
-      break;
-    case 'Controller':
-      creation = 0.78;
-      finishing = 0.22;
-      break;
-    case 'Passer':
-      creation = 0.72;
-      finishing = 0.24;
-      break;
-    case 'Dribbler':
-      creation = 0.60;
-      finishing = 0.58;
-      break;
-    case 'Sprinter':
-      creation = 0.42;
-      finishing = 0.52;
-      break;
-    case 'Striker':
-      creation = 0.34;
-      finishing = 0.86;
-      break;
-    case 'Target':
-      creation = 0.26;
-      finishing = 0.78;
-      break;
-    case 'Powerhouse':
-      creation = 0.24;
-      finishing = 0.66;
-      break;
-    case 'Engine':
-      creation = 0.48;
-      finishing = 0.30;
-      break;
-    case 'Commander':
-      creation = 0.34;
-      finishing = 0.34;
-      break;
-  }
-
-  switch (card.tacticalRole) {
-    case 'Regista':
-    case 'Enganche':
-    case 'Trequartista':
-    case 'Fantasista':
-      creation += 0.12;
-      break;
-    case 'Winger':
-    case 'Inverted Winger':
-    case 'Extremo':
-      creation += 0.08;
-      finishing += 0.08;
-      break;
-    case 'Poacher':
-    case 'Prima Punta':
-    case 'Seconda Punta':
-      finishing += 0.12;
-      break;
-  }
-
-  return {
-    creation: clamp(creation, 0.12, 1.0),
-    finishing: clamp(finishing, 0.12, 1.0),
-  };
-}
+// The per-card creation/finishing chance-profile mix is gone: a card's funnel lane
+// (funnel.ts laneOfCard) decides what its power feeds — docs/FUNNEL_MODEL_V1.md.
 
 // ---------------------------------------------------------------------------
 // Personality Bonus (calculated once at match start)
@@ -722,20 +671,22 @@ export function commitAttackers(state: MatchV5State, cardIds: number[]): MatchV5
 export interface SideField {
   lanePush: Record<Lane, number>;
   laneCover: Record<Lane, number>;
-  attackScore: number;
+  possession: number;
+  pressing: number;
   defenceScore: number;
   chanceCreation: number;
   shotQuality: number;
   denial: number;       // conversion suppression this side applies to the other
+  zoneDenial: Partial<Record<ZoneName, number>>; // lane-targeted denial (antagonists)
   variance: number;
-  /** The transformed 9×4 grid from the dispatcher (additive — read, never recomputed). */
+  /** The transformed 9×6 grid from the dispatcher (additive — read, never recomputed). */
   cells: Record<Cell, Record<ZoneName, number>>;
 }
 
 /**
  * Build a side's field-derived quantities: place each card in its formation cell,
- * emit by band, dispatch its role + squad records, project the chance mix by band,
- * and read the per-lane vectors. The same path both XIs run through (§4).
+ * emit its power into its ONE funnel lane (band-weighted), dispatch its role + squad
+ * records, and read the six lane totals. The same path both XIs run through.
  */
 export function computeSideField(
   xi: Card[],
@@ -753,14 +704,6 @@ export function computeSideField(
     const cell = cellOf(slot.x, slot.y);
     const band = bandOf(cell);
     const power = Math.round(card.power * fitnessFactor(fitnessOf(card)));
-    const profile = getChanceProfile(card);
-    const a = Math.round(power * BAND_ATK[band]);
-    const d = Math.round(power * BAND_DEF[band]);
-    const e: Record<ZoneName, number> = {
-      attack: a, defence: d,
-      creation: Math.round(power * profile.creation),
-      finishing: Math.round(power * profile.finishing),
-    };
     return {
       id: card.id,
       power: card.power,
@@ -771,7 +714,7 @@ export function computeSideField(
       side: band === 'DEF' ? 'defence' : 'attack',
       isWide: isWideCard(card),
       cell,
-      emit: e,
+      emit: emitForCard(card, band, power),
       traits: traitsForCard(card, includeDefiningTraits),
     };
   });
@@ -783,21 +726,16 @@ export function computeSideField(
     squadTraits && squadTraits.length ? { playerSquadTraits: squadTraits } : undefined,
   );
 
-  let creationProj = 0;
-  let finishingProj = 0;
-  for (const cell of CELLS) {
-    creationProj += dispatched.cells[cell].creation * CREATION_BAND[bandOf(cell)];
-    finishingProj += dispatched.cells[cell].finishing * FINISHING_BAND[bandOf(cell)];
-  }
-
   return {
     lanePush: dispatched.lanePush,
     laneCover: dispatched.laneCover,
-    attackScore: Math.max(0, Math.round(dispatched.zones.attack)),
+    possession: Math.max(0, Math.round(dispatched.zones.possession)),
+    pressing: Math.max(0, Math.round(dispatched.zones.pressing)),
     defenceScore: Math.max(0, Math.round(dispatched.zones.defence)),
-    chanceCreation: Math.max(0, Math.round(creationProj)),
-    shotQuality: Math.max(0, Math.round(finishingProj)),
+    chanceCreation: Math.max(0, Math.round(dispatched.zones.creation)),
+    shotQuality: Math.max(0, Math.round(dispatched.zones.finishing)),
     denial: dispatched.opponentDenial,
+    zoneDenial: dispatched.opponentZoneDenial,
     variance: dispatched.variance,
     cells: dispatched.cells,
   };
@@ -818,19 +756,17 @@ export function evaluateSplit(
   const attackBreakdown: CascadeLine[] = [];
   const defenceBreakdown: CascadeLine[] = [];
 
-  // --- Positioning model (DESIGN §1, MATCH_ENGINE §2/§4) ---
-  // No per-increment commit. Each player's attack/defence emission is set by the
-  // band (ATT/MID/DEF) of the formation slot they occupy (xi[i] ↔ slots[i]); the
-  // allocation decision is the shape itself. Midfielders contribute to both.
+  // --- Funnel emission (docs/FUNNEL_MODEL_V1.md) ---
+  // Each card's power feeds its ONE lane, weighted by how well the band of the
+  // formation slot it occupies (xi[i] ↔ slots[i]) suits that lane. The allocation
+  // decision is the shape itself: bands decide how much of each lane you can field.
   const emit = new Map<number, Record<ZoneName, number>>();
   const cardCell = new Map<number, Cell>();
   const cardY = new Map<number, number>();
   const attackers: Card[] = [];
   const defenders: Card[] = [];
-  let baseAttack = 0;
-  let baseDefence = 0;
-  let baseCreationProj = 0;
-  let baseFinishingProj = 0;
+  let baseAttackLanes = 0;   // possession + creation + finishing
+  let baseDefenceLanes = 0;  // pressing + destruction + defence
 
   xi.forEach((card, i) => {
     const slot = formation.slots[i] ?? formation.slots[formation.slots.length - 1];
@@ -839,16 +775,10 @@ export function evaluateSplit(
     cardCell.set(card.id, cell);
     cardY.set(card.id, slot.y);
     const power = Math.round(card.power * fitnessFactor(fitnessOf(card)));
-    const profile = getChanceProfile(card);
-    const a = Math.round(power * BAND_ATK[band]);
-    const d = Math.round(power * BAND_DEF[band]);
-    const cr = Math.round(power * profile.creation);
-    const fn = Math.round(power * profile.finishing);
-    emit.set(card.id, { attack: a, defence: d, creation: cr, finishing: fn });
-    baseAttack += a;
-    baseDefence += d;
-    baseCreationProj += cr * CREATION_BAND[band];
-    baseFinishingProj += fn * FINISHING_BAND[band];
+    const e = emitForCard(card, band, power);
+    emit.set(card.id, e);
+    baseAttackLanes += e.possession + e.creation + e.finishing;
+    baseDefenceLanes += e.pressing + e.destruction + e.defence;
     if (band === 'ATT' || band === 'MID') attackers.push(card);
     if (band === 'DEF' || band === 'MID') defenders.push(card);
   });
@@ -857,8 +787,8 @@ export function evaluateSplit(
   const orderedAttackers = [...attackers].sort((a, b) => (cardY.get(b.id) ?? 0) - (cardY.get(a.id) ?? 0));
   const playPattern = inferPlayPattern(orderedAttackers, defenders, calledPlay?.id ?? null, playingStyle);
 
-  attackBreakdown.push({ label: 'Forward shape', value: baseAttack, type: 'base' });
-  defenceBreakdown.push({ label: 'Back-line shape', value: baseDefence, type: 'base' });
+  attackBreakdown.push({ label: 'Attacking lanes', value: baseAttackLanes, type: 'base' });
+  defenceBreakdown.push({ label: 'Defensive lanes', value: baseDefenceLanes, type: 'base' });
 
   // Positional synergies are computed up front: the Manager (Chemistry Set) reads
   // the connection count, so the squad records depend on them before we dispatch.
@@ -930,54 +860,46 @@ export function evaluateSplit(
     { playerSquadTraits },
   );
 
-  // Adopt the transformed field. attack/defence are the raw aggregate; creation &
-  // finishing are a band-weighted projection of the transformed cells (§4), so a
-  // relocate that moves a card to a new band re-mixes the chance profile.
-  let finalCreationProj = 0;
-  let finalFinishingProj = 0;
-  for (const cell of CELLS) {
-    finalCreationProj += dispatched.cells[cell].creation * CREATION_BAND[bandOf(cell)];
-    finalFinishingProj += dispatched.cells[cell].finishing * FINISHING_BAND[bandOf(cell)];
-  }
+  // Adopt the transformed field: the six lane totals, straight from the dispatcher.
+  const ATTACK_LANES: ZoneName[] = ['possession', 'creation', 'finishing'];
+  const DEFENCE_LANES: ZoneName[] = ['pressing', 'destruction', 'defence'];
+  const zPossession = Math.max(0, Math.round(dispatched.zones.possession));
+  const zCreation = Math.max(0, Math.round(dispatched.zones.creation));
+  const zFinishing = Math.max(0, Math.round(dispatched.zones.finishing));
+  const zPressing = Math.max(0, Math.round(dispatched.zones.pressing));
+  const zDestruction = Math.max(0, Math.round(dispatched.zones.destruction));
+  const zDefence = Math.max(0, Math.round(dispatched.zones.defence));
+  const attackLaneBase = zPossession + zCreation + zFinishing;
+  const defenceLaneBase = zPressing + zDestruction + zDefence;
 
   // Squad-source records (deployed tactics + manager + intent) ride the synthetic
-  // owner (cardId −1). Attribute their attack/defence deltas as NAMED cascade
-  // lines — type 'manager' when the record name is the manager's, else 'tactic' —
-  // so the player's PLAN is visible in the breakdown instead of dissolving into
-  // the generic ability aggregate. Attack/defence aggregate raw in the dispatcher,
-  // so log values match the zone deltas 1:1; creation/finishing are band-weighted
-  // projections, so those stay in the aggregate (raw log values wouldn't match).
+  // owner (cardId −1). Attribute their lane deltas as NAMED cascade lines — type
+  // 'manager' when the record name is the manager's, else 'tactic' — grouped by
+  // which funnel side (attacking / defensive lanes) the record touched.
   const managerNames = new Set(jokers.map((j) => j.name));
   const squadAttack = new Map<string, number>();
   const squadDefence = new Map<string, number>();
   for (const line of dispatched.log) {
-    if (line.cardId !== -1 || !line.value) continue;
-    if (line.zone === 'attack') squadAttack.set(line.trait, (squadAttack.get(line.trait) ?? 0) + line.value);
-    if (line.zone === 'defence') squadDefence.set(line.trait, (squadDefence.get(line.trait) ?? 0) + line.value);
+    if (line.cardId !== -1 || !line.value || !line.zone) continue;
+    if (ATTACK_LANES.includes(line.zone)) squadAttack.set(line.trait, (squadAttack.get(line.trait) ?? 0) + line.value);
+    if (DEFENCE_LANES.includes(line.zone)) squadDefence.set(line.trait, (squadDefence.get(line.trait) ?? 0) + line.value);
   }
 
-  const transformLabels: Record<ZoneName, Set<string>> = {
-    attack: new Set(), defence: new Set(), creation: new Set(), finishing: new Set(),
-  };
+  const attackLabels = new Set<string>();
+  const defenceLabels = new Set<string>();
   for (const line of dispatched.log) {
     // Squad records get their own named lines; keep them out of the ability label.
-    if (line.zone && line.cardId !== -1) transformLabels[line.zone].add(line.trait);
+    if (!line.zone || line.cardId === -1) continue;
+    if (ATTACK_LANES.includes(line.zone)) attackLabels.add(line.trait);
+    if (DEFENCE_LANES.includes(line.zone)) defenceLabels.add(line.trait);
   }
 
-  const newAttack = Math.max(0, Math.round(dispatched.zones.attack));
-  const newDefence = Math.max(0, Math.round(dispatched.zones.defence));
-  const attackDelta = newAttack - baseAttack;
-  const defenceDelta = newDefence - baseDefence;
-  const creationDelta = Math.round(finalCreationProj - baseCreationProj);
-  const finishingDelta = Math.round(finalFinishingProj - baseFinishingProj);
-  baseAttack = newAttack;
-  baseDefence = newDefence;
-  const baseCreation = Math.max(0, Math.round(finalCreationProj));
-  const baseFinishing = Math.max(0, Math.round(finalFinishingProj));
+  const attackDelta = attackLaneBase - baseAttackLanes;
+  const defenceDelta = defenceLaneBase - baseDefenceLanes;
 
   // Named plan lines first (tactics / manager / intent), then the residual
   // player-trait delta as the ability aggregate. The split is display-only —
-  // the lines still sum to the same attack/defence deltas.
+  // the lines still sum to the same lane-group deltas.
   let squadAttackTotal = 0;
   for (const [name, value] of squadAttack) {
     const v = Math.round(value);
@@ -993,16 +915,10 @@ export function evaluateSplit(
     defenceBreakdown.push({ label: name, value: v, type: managerNames.has(name) ? 'manager' : 'tactic' });
   }
   if (attackDelta - squadAttackTotal !== 0) {
-    attackBreakdown.push({ label: `${[...transformLabels.attack].join(' + ') || 'Verb dispatcher'}`, value: attackDelta - squadAttackTotal, type: 'ability' });
+    attackBreakdown.push({ label: `${[...attackLabels].join(' + ') || 'Verb dispatcher'}`, value: attackDelta - squadAttackTotal, type: 'ability' });
   }
   if (defenceDelta - squadDefenceTotal !== 0) {
-    defenceBreakdown.push({ label: `${[...transformLabels.defence].join(' + ') || 'Verb dispatcher'}`, value: defenceDelta - squadDefenceTotal, type: 'ability' });
-  }
-  if (creationDelta !== 0) {
-    attackBreakdown.push({ label: `${[...transformLabels.creation].join(' + ') || 'Movement'} (creation)`, value: creationDelta, type: 'ability' });
-  }
-  if (finishingDelta !== 0) {
-    attackBreakdown.push({ label: `${[...transformLabels.finishing].join(' + ') || 'Movement'} (finishing)`, value: finishingDelta, type: 'ability' });
+    defenceBreakdown.push({ label: `${[...defenceLabels].join(' + ') || 'Verb dispatcher'}`, value: defenceDelta - squadDefenceTotal, type: 'ability' });
   }
 
   // --- Zonal field (§4): the coupled lane contest reads the transformed grid ---
@@ -1050,7 +966,7 @@ export function evaluateSplit(
     const matchingCount = isTotal
       ? attackers.length
       : attackers.filter((c) => style.bonusArchetypes.includes(c.archetype)).length;
-    styleAttack = Math.round(baseAttack * style.multiplier * matchingCount);
+    styleAttack = Math.round(attackLaneBase * style.multiplier * matchingCount);
     if (styleAttack > 0) {
       attackBreakdown.push({ label: `${style.name} pattern`, value: styleAttack, type: 'style' });
     }
@@ -1061,37 +977,10 @@ export function evaluateSplit(
   if (opponentWeakness) {
     const weaknessCount = attackers.filter((c) => c.archetype === opponentWeakness).length;
     if (weaknessCount >= 2) {
-      weaknessBonus = Math.round(baseAttack * 0.15);
+      weaknessBonus = Math.round(attackLaneBase * 0.15);
       attackBreakdown.push({ label: 'Picked on their weak side', value: weaknessBonus, type: 'ability' });
     }
   }
-
-  // Tactical cards + Manager are no longer flat bonuses here — they ran through the
-  // dispatcher (squad records) and are already folded into baseAttack / the chance
-  // mix above, attributed by name in the dispatcher cascade lines.
-
-  // --- Subtotals before personality ---
-  let attackTotal = baseAttack + dualAttack + synergyAttack + crossAttack + styleAttack + weaknessBonus;
-  let defenceTotal = baseDefence + dualDefence + synergyDefence + crossDefence + playPattern.defenceBonus;
-  const attackerPowerPool = attackers.reduce((sum, card) => sum + card.power, 0);
-  const chemistryDensity = attackerPowerPool > 0
-    ? (synergyAttack + crossAttack) / attackerPowerPool
-    : 0;
-  const compactAttackMultiplier = attackers.length > 0 && attackers.length <= 3
-    ? 1 + Math.min(0.55, chemistryDensity * 1.4 + attackSynergies.length * 0.10 + crossSynergies.length * 0.06)
-    : 1 + Math.min(0.18, chemistryDensity * 0.45);
-
-  let chanceCreation = Math.round(
-    (baseCreation + Math.round(dualAttack * 0.75) + Math.round(styleAttack * 0.45))
-      * compactAttackMultiplier,
-  );
-  let shotQuality = Math.round(
-    (baseFinishing + Math.round(synergyAttack * 0.95) + Math.round(crossAttack * 0.55) + Math.round(weaknessBonus * 0.90))
-      * compactAttackMultiplier,
-  );
-  attackTotal += playPattern.attackBonus;
-  chanceCreation += playPattern.creationBonus;
-  shotQuality += playPattern.qualityBonus;
 
   if (playPattern.attackBonus !== 0) {
     attackBreakdown.push({ label: playPattern.name, value: playPattern.attackBonus, type: 'tactic' });
@@ -1100,34 +989,66 @@ export function evaluateSplit(
     defenceBreakdown.push({ label: `${playPattern.name} rest defence`, value: playPattern.defenceBonus, type: 'tactic' });
   }
 
-  if (chanceCreation > 0) {
+  // --- The cascade under the funnel (FUNNEL_MODEL_V1 §cascade) ---
+  // Synergy/style/weakness/play-pattern bonuses no longer add to a blended score:
+  // the attack-side cascade total becomes ONE multiplier over the three attacking
+  // lanes, the defence-side total one over the three counter lanes. A chemistry
+  // combo lifts your whole attacking funnel; it never smuggles creation into
+  // possession. Personality multiplies on top, as before.
+  const attackCascade = synergyAttack + crossAttack + styleAttack + weaknessBonus
+    + playPattern.attackBonus + playPattern.creationBonus + playPattern.qualityBonus
+    + dualAttack;
+  const defenceCascade = synergyDefence + crossDefence + playPattern.defenceBonus + dualDefence;
+
+  const attackerPowerPool = attackers.reduce((sum, card) => sum + card.power, 0);
+  const chemistryDensity = attackerPowerPool > 0
+    ? (synergyAttack + crossAttack) / attackerPowerPool
+    : 0;
+  const compactAttackMultiplier = attackers.length > 0 && attackers.length <= 3
+    ? 1 + Math.min(0.55, chemistryDensity * 1.4 + attackSynergies.length * 0.10 + crossSynergies.length * 0.06)
+    : 1 + Math.min(0.18, chemistryDensity * 0.45);
+
+  // The three stages MULTIPLY downstream (possessions × shots-per-possession ×
+  // xG-per-shot), so the side-wide multiplier is distributed as its cube root per
+  // stage — the aggregate effect on goals stays ≈ the multiplier itself, instead
+  // of compounding to its cube.
+  const attackMult = Math.cbrt(
+    (1 + attackCascade / Math.max(1, attackLaneBase))
+      * compactAttackMultiplier * personalityBonus.attackMod,
+  );
+  const defenceMult = Math.cbrt(
+    (1 + defenceCascade / Math.max(1, defenceLaneBase))
+      * personalityBonus.defenceMod,
+  );
+
+  if (personalityBonus.label && personalityBonus.attackMod !== 1) {
     attackBreakdown.push({
-      label: attackers.length <= 3 && compactAttackMultiplier > 1.08 ? 'Compact move clicked' : 'Chance patterns',
-      value: chanceCreation,
-      type: 'ability',
+      label: `Dressing room edge`,
+      value: Math.round(attackLaneBase * (personalityBonus.attackMod - 1)),
+      type: 'personality',
     });
   }
-  if (shotQuality > 0) {
-    attackBreakdown.push({ label: 'Final-ball threat', value: shotQuality, type: 'ability' });
+  if (personalityBonus.label && personalityBonus.defenceMod !== 1) {
+    defenceBreakdown.push({
+      label: `Dressing room edge`,
+      value: Math.round(defenceLaneBase * (personalityBonus.defenceMod - 1)),
+      type: 'personality',
+    });
   }
 
-  // --- Personality multipliers (applied last) ---
-  const personalityAttackBonus = Math.round(attackTotal * (personalityBonus.attackMod - 1));
-  const personalityDefenceBonus = Math.round(defenceTotal * (personalityBonus.defenceMod - 1));
-  const personalityCreationBonus = Math.round(chanceCreation * (personalityBonus.attackMod - 1));
-  const personalityFinishingBonus = Math.round(shotQuality * (personalityBonus.attackMod - 1));
-
-  if (personalityAttackBonus !== 0 && personalityBonus.label) {
-    attackBreakdown.push({ label: `Dressing room edge`, value: personalityAttackBonus, type: 'personality' });
-  }
-  if (personalityDefenceBonus !== 0 && personalityBonus.label) {
-    defenceBreakdown.push({ label: `Dressing room edge`, value: personalityDefenceBonus, type: 'personality' });
-  }
-
-  attackTotal += personalityAttackBonus;
-  defenceTotal += personalityDefenceBonus;
-  chanceCreation += personalityCreationBonus;
-  shotQuality += personalityFinishingBonus;
+  const possession = Math.round(zPossession * attackMult);
+  const chanceCreation = Math.round(zCreation * attackMult);
+  const shotQuality = Math.round(zFinishing * attackMult);
+  const pressing = Math.round(zPressing * defenceMult);
+  const defenceTotal = Math.round(zDefence * defenceMult);
+  // The stage-2 pitch-lane vectors carry the same funnel multipliers, so the lane
+  // contest sees the cascade too (destruction is spatial; defence is the last line).
+  const scaledPush: Record<Lane, number> = {
+    L: lanePush.L * attackMult, C: lanePush.C * attackMult, R: lanePush.R * attackMult,
+  };
+  const scaledCover: Record<Lane, number> = {
+    L: laneCover.L * defenceMult, C: laneCover.C * defenceMult, R: laneCover.R * defenceMult,
+  };
 
   // Surface the per-card pre-dispatch emission for the read-side player rating (additive;
   // never re-enters the resolution math, so the scoreline is unaffected).
@@ -1143,7 +1064,8 @@ export function evaluateSplit(
   dispatched.fitness.forEach((v, id) => { if (v !== 0) fitnessDelta[id] = v; });
 
   return {
-    attackScore: Math.max(0, attackTotal),
+    possession: Math.max(0, possession),
+    pressing: Math.max(0, pressing),
     defenceScore: Math.max(0, defenceTotal),
     chanceCreation: Math.max(0, chanceCreation),
     shotQuality: Math.max(0, shotQuality),
@@ -1158,9 +1080,10 @@ export function evaluateSplit(
     attackerCount: attackers.length,
     maxAttackers: maxAtk,
     opponentDenial: dispatched.opponentDenial,
+    zoneDenial: dispatched.opponentZoneDenial,
     varianceFactor: dispatched.variance,
-    lanePush,
-    laneCover,
+    lanePush: scaledPush,
+    laneCover: scaledCover,
     attackingOrder: orderedAttackers.map((c) => c.id),
     cells: dispatched.cells,
     cardEmit,
@@ -1457,32 +1380,30 @@ function buildContestSides(
   const yourDenial = clamp(split.opponentDenial ?? 0, 0, 0.5);   // you → them
   const theirDenial = clamp(opp.denial ?? 0, 0, 0.5);            // them → you
 
-  // Chance quality blends finishing with creation, so a creation-heavy (build-up) side
-  // still converts rather than being punished for low raw finishing.
-  const chanceQuality = (finishing: number, creation: number) => 0.55 * finishing + 0.45 * creation;
-  // Possession control: creation + attack are the deep build-up that earns the ball, but a
-  // finisher-heavy side (Sprinter/Powerhouse/Target stacks) was getting NO possession
-  // credit for its finishing strength — so a higher-power finisher deck got out-possessed
-  // by a lower-power creative one, breaking monotonicity (balance-lab: the S3-mid dip).
-  // A light finishing term (CONTROL_FIN) credits attacking quality so a finisher-heavy
-  // side isn't judged on creation alone. Symmetric — the opponent gets the same blend
-  // under OPP_COHESION.
-  const control = (creation: number, attack: number, finishing: number) =>
-    creation + attack + CONTROL_FIN * finishing;
+  // Lane-targeted denial (antagonists): a fraction knocked off the OTHER side's named
+  // lane total, capped however many antagonists stack.
+  const dampen = (value: number, denial: number | undefined) =>
+    value * (1 - clamp(denial ?? 0, 0, ZONE_DENIAL_CAP));
+
+  // No blends (FUNNEL_MODEL_V1): control IS possession, shot quality IS finishing.
+  // Pressing is carried on each side and applied to the OTHER's control inside
+  // simulatePeriod — stage 1's counter.
   const youSide: PossessionSide = {
     lanePush: split.lanePush,
     laneCover: split.laneCover,
-    shotQuality: chanceQuality(split.shotQuality, split.chanceCreation),
-    defenceScore: split.defenceScore,
-    control: control(split.chanceCreation, split.attackScore, split.shotQuality),
+    shotQuality: dampen(split.shotQuality, opp.zoneDenial?.finishing),
+    defenceScore: dampen(split.defenceScore, opp.zoneDenial?.defence),
+    control: dampen(split.possession, opp.zoneDenial?.possession),
+    pressing: dampen(split.pressing, opp.zoneDenial?.pressing),
     denial: yourDenial,
   };
   const oppSide: PossessionSide = {
     lanePush: oppPush,
     laneCover: oppEffCover,
-    shotQuality: chanceQuality(oppFinishing, opp.chanceCreation * OPP_COHESION),
-    defenceScore: opp.defenceScore,
-    control: control(opp.chanceCreation, opp.attackScore, oppFinishing) * OPP_COHESION,
+    shotQuality: dampen(opp.shotQuality * OPP_COHESION, split.zoneDenial?.finishing),
+    defenceScore: dampen(opp.defenceScore, split.zoneDenial?.defence),
+    control: dampen(opp.possession * OPP_COHESION, split.zoneDenial?.possession),
+    pressing: dampen(opp.pressing * OPP_COHESION, split.zoneDenial?.pressing),
     denial: theirDenial,
   };
   return { youSide, oppSide, oppPush, oppEffCover };
@@ -1679,8 +1600,8 @@ export function resolveIncrement(
   return {
     minute,
     split,
-    opponentAttack: opp.attackScore,
-    opponentDefence: opp.defenceScore,
+    opponentAttack: opp.possession + opp.chanceCreation + opp.shotQuality,
+    opponentDefence: opp.pressing + Math.round(opp.laneCover.L + opp.laneCover.C + opp.laneCover.R) + opp.defenceScore,
     yourChanceVolume,
     yourChanceQuality,
     yourGoalChance,
@@ -2173,7 +2094,7 @@ export function playerMatchStats(
     for (const idStr of Object.keys(emit)) {
       const id = Number(idStr);
       const e = emit[id];
-      contrib[id] = (contrib[id] ?? 0) + e.attack + e.defence + e.creation + e.finishing;
+      contrib[id] = (contrib[id] ?? 0) + ZONES.reduce((sum, z) => sum + (e[z] ?? 0), 0);
     }
     for (const b of s.beats) {
       if (b.side !== 'you' || b.outcome !== 'goal') continue;
