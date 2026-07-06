@@ -34,6 +34,7 @@
 import { seededRandom } from './scoring';
 import type { Cell, Band, Lane } from './field';
 import { CELLS, bandOf, laneOf } from './field';
+import { laneOfCard, DEF_LANE_OF_BAND } from './funnel';
 
 // ---------------------------------------------------------------------------
 // Palette (DESIGN §2, ARCHETYPES §1)
@@ -100,13 +101,17 @@ export type CriterionName =
   | 'highest-power'
   | 'attackers'
   | 'defenders'
-  | 'archetype';
+  | 'archetype'
+  // Snap-scale stat thresholds (FUNNEL_MODEL_V1 two-stat): target teammates by their
+  // ATK/DEF numbers — the card-interaction layer ("buff everyone with DEF below 5").
+  | 'stat-below'
+  | 'stat-atLeast';
 
 export type TraitTarget =
   | { kind: 'zone'; zone: ZoneName }
   | { kind: 'self' }
-  | { kind: 'criterion'; criterion: CriterionName; archetype?: string; zone?: ZoneName }
-  | { kind: 'enemyCard'; criterion?: CriterionName; archetype?: string; zone?: ZoneName };
+  | { kind: 'criterion'; criterion: CriterionName; archetype?: string; zone?: ZoneName; stat?: 'atk' | 'def'; value?: number }
+  | { kind: 'enemyCard'; criterion?: CriterionName; archetype?: string; zone?: ZoneName; stat?: 'atk' | 'def'; value?: number };
 
 /** Conditions are data, not closures, so a record stays fully declarative. */
 export type TraitCondition =
@@ -159,6 +164,9 @@ export interface TraitRecord {
 export interface DispatchCard {
   id: number;
   power: number;
+  /** Snap-scale stats (−1..20), pre-fitness — the numbers stat-threshold criteria read. */
+  atk: number;
+  def: number;
   archetype: string;
   tacticalRole?: string;
   position: string;
@@ -191,6 +199,10 @@ export interface FieldState {
   /** StateEffect sinks (inert until energy/slots land in step 3). */
   energy: Map<number, number>;
   fitness: Map<number, number>;
+  /** DISPLAY-ONLY per-card attribution of card-touching deltas (flat buffs, %
+   *  amps, zone amplifies attributed by base emission share). Never feeds the
+   *  field math — read by the pitch UI to show live effective ATK/DEF. */
+  cardDelta: Map<number, Partial<Record<ZoneName, number>>>;
 }
 
 export interface TraitLogLine {
@@ -207,6 +219,8 @@ export interface TraitLogLine {
 export interface DispatchResult {
   /** The transformed 9×6 grid. */
   cells: Record<Cell, Record<ZoneName, number>>;
+  /** DISPLAY-ONLY per-card deltas (see FieldState.cardDelta). */
+  cardDelta: Map<number, Partial<Record<ZoneName, number>>>;
   /** Aggregate over all cells, per lane (drives the six funnel stats). */
   zones: Record<ZoneName, number>;
   /** Σ creation per pitch lane (stage 2's push vector — chances are made in a channel). */
@@ -253,13 +267,21 @@ function emptyCells(): Record<Cell, Record<ZoneName, number>> {
 }
 
 function emptyField(cells: Record<Cell, Record<ZoneName, number>>): FieldState {
-  return { cells, opponentDenial: 0, opponentZoneDenial: {}, variance: 0, energy: new Map(), fitness: new Map() };
+  return { cells, opponentDenial: 0, opponentZoneDenial: {}, variance: 0, energy: new Map(), fitness: new Map(), cardDelta: new Map() };
+}
+
+/** Record a display-only per-card delta (never feeds the field math). */
+function addCardDelta(pool: FieldState, cardId: number, zone: ZoneName, v: number): void {
+  if (v === 0) return;
+  const cur = pool.cardDelta.get(cardId) ?? {};
+  cur[zone] = (cur[zone] ?? 0) + v;
+  pool.cardDelta.set(cardId, cur);
 }
 
 /** Synthesize the non-emitting owner that carries a side's squad-wide records. */
 function makeSquadSource(id: number, team: 'player' | 'opponent', traits: TraitRecord[]): DispatchCard {
   return {
-    id, power: 0, archetype: '__squad__', position: '', team, side: 'attack',
+    id, power: 0, atk: 0, def: 0, archetype: '__squad__', position: '', team, side: 'attack',
     isWide: false, cell: 'MID_C', emit: zeroZones(), traits, source: true,
   };
 }
@@ -287,6 +309,7 @@ function cloneField(f: FieldState): FieldState {
     variance: f.variance,
     energy: new Map(f.energy),
     fitness: new Map(f.fitness),
+    cardDelta: new Map([...f.cardDelta].map(([id, d]) => [id, { ...d }])),
   };
 }
 
@@ -306,6 +329,11 @@ function foldDelta(field: FieldState, pool: FieldState): void {
   field.variance += pool.variance;
   for (const [id, v] of pool.energy) addToMap(field.energy, id, v);
   for (const [id, v] of pool.fitness) addToMap(field.fitness, id, v);
+  for (const [id, d] of pool.cardDelta) {
+    const cur = field.cardDelta.get(id) ?? {};
+    for (const [z, v] of Object.entries(d) as [ZoneName, number][]) cur[z] = (cur[z] ?? 0) + v;
+    field.cardDelta.set(id, cur);
+  }
 }
 
 /** Sum a transformed grid back into per-kind totals. */
@@ -403,7 +431,7 @@ function resolveTargetCards(ctx: VerbContext): DispatchCard[] {
 
 function pickByCriterion(
   cards: DispatchCard[],
-  target: { criterion?: CriterionName; archetype?: string },
+  target: { criterion?: CriterionName; archetype?: string; stat?: 'atk' | 'def'; value?: number },
 ): DispatchCard[] {
   if (cards.length === 0) return [];
   switch (target.criterion) {
@@ -417,6 +445,10 @@ function pickByCriterion(
       return cards.filter((c) => c.side === 'defence');
     case 'archetype':
       return cards.filter((c) => c.archetype === target.archetype);
+    case 'stat-below':
+      return cards.filter((c) => (target.stat === 'atk' ? c.atk : c.def) < (target.value ?? 0));
+    case 'stat-atLeast':
+      return cards.filter((c) => (target.stat === 'atk' ? c.atk : c.def) >= (target.value ?? 0));
     case 'all-teammates':
     case undefined:
     default:
@@ -478,11 +510,17 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
           pool.cells[cell][zone] += d;
           delta += d;
         }
+        // Display attribution: each teammate's share of the zone lift, by its own
+        // base emission (first-order honest — generates/earlier deltas stay team-level).
+        for (const mate of ctx.team) {
+          if (mate.emit[zone] !== 0) addCardDelta(pool, mate.id, zone, mate.emit[zone] * amount);
+        }
         pushLog(ctx, zone, delta, `${Math.round(amount * 100)}% zone`);
       } else {
         // Own emission into that kind, landing in the owner's own cell.
         const delta = owner.emit[zone] * amount;
         pool.cells[owner.cell][zone] += delta;
+        addCardDelta(pool, owner.id, zone, delta);
         pushLog(ctx, zone, delta, `${Math.round(amount * 100)}% own`);
       }
       return;
@@ -490,9 +528,29 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
 
     const cards = record.target.kind === 'self' ? [owner] : resolveTargetCards(ctx);
     for (const card of cards) {
+      // Snap-scale FLAT stat buffs (the card-interaction layer): +N ATK lands in the
+      // target's skillset attacking lane; +N DEF in the counter-lane of its band —
+      // exactly where the stat itself would have landed. Not fitness-scaled: +2 is +2.
+      const flatAtk = record.params.flatAtk ?? 0;
+      const flatDef = record.params.flatDef ?? 0;
+      if (flatAtk !== 0) {
+        const lane = laneOfCard(card);
+        const zone: ZoneName = lane === 'leadership' ? 'possession' : lane;
+        pool.cells[card.cell][zone] += flatAtk;
+        addCardDelta(pool, card.id, zone, flatAtk);
+        pushLog(ctx, zone, flatAtk, `+${flatAtk} ATK (#${card.id})`);
+      }
+      if (flatDef !== 0) {
+        const zone = DEF_LANE_OF_BAND[bandOf(card.cell)];
+        pool.cells[card.cell][zone] += flatDef;
+        addCardDelta(pool, card.id, zone, flatDef);
+        pushLog(ctx, zone, flatDef, `+${flatDef} DEF (#${card.id})`);
+      }
+      if (amount === 0) continue;
       for (const zone of targetZones(record.target, card)) {
         const delta = card.emit[zone] * amount;
         pool.cells[card.cell][zone] += delta;
+        addCardDelta(pool, card.id, zone, delta);
         pushLog(ctx, zone, delta, `+${Math.round(amount * 100)}% (#${card.id})`);
       }
     }
@@ -508,6 +566,7 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
       for (const zone of targetZones(record.target, card)) {
         const delta = card.emit[zone] * weight;
         pool.cells[card.cell][zone] += delta;
+        addCardDelta(pool, card.id, zone, delta);
         pushLog(ctx, zone, delta, `+${(weight * 100).toFixed(1)}% (#${card.id})`);
       }
     }
@@ -663,6 +722,7 @@ export function dispatchTraits(
     variance: field.variance,
     energy: field.energy,
     fitness: field.fitness,
+    cardDelta: field.cardDelta,
     log,
   };
 }

@@ -6,6 +6,7 @@
  */
 
 import type { Card, SlottedCard } from './scoring';
+import { deriveStats } from './funnel';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -130,8 +131,15 @@ function slugify(s: string): string {
     .replace(/^_|_$/g, "");
 }
 
+// Chemistry weights ride the Snap-scale stat totals (FUNNEL_MODEL_V1 two-stat), so
+// connection bonuses land on the same −1..20 scale the cards themselves show.
+function statPoints(card: { archetype: string; position: string; power: number; pillars?: { technical: number; tactical: number; mental: number; physical: number } }): number {
+  const { atk, def } = deriveStats(card);
+  return atk + def;
+}
+
 function lineupPower(cards: SlottedCard[]): number {
-  return cards.reduce((sum, sc) => sum + sc.card.power, 0);
+  return cards.reduce((sum, sc) => sum + statPoints(sc.card), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +159,7 @@ export function findArchetypePairs(cards: SlottedCard[]): Connection[] {
 
   for (const [archetype, group] of groups) {
     if (group.length < 2) continue;
-    const combinedPower = group.reduce((s, sc) => s + sc.card.power, 0);
+    const combinedPower = group.reduce((s, sc) => s + statPoints(sc.card), 0);
     const cardNames = group.map((sc) => sc.card.name);
 
     if (group.length >= 3) {
@@ -202,7 +210,7 @@ export function findRoleCombos(cards: SlottedCard[]): Connection[] {
     for (const sc1 of group1) {
       for (const sc2 of group2) {
         if (sc1.card.id === sc2.card.id) continue;
-        const sumPower = sc1.card.power + sc2.card.power;
+        const sumPower = statPoints(sc1.card) + statPoints(sc2.card);
         const bonus = Math.round(sumPower * (combo.multiplier - 1));
         connections.push({
           name: combo.name,

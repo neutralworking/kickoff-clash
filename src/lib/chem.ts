@@ -27,6 +27,7 @@ import type { Cell, Band, Lane } from './field';
 import { cellOf, bandOf, laneOf } from './field';
 import type { Formation } from './formations';
 import type { TraitRecord } from './verbs';
+import { deriveStats } from './funnel';
 
 /** Per-pair co-appearance counts, keyed by sorted id pair. Serialisable (RunState). */
 export type CoAppearance = Record<string, number>;
@@ -36,7 +37,13 @@ const CHEM_TAU = 18;        // co-appearances for ~63% of the earned curve (≈3
 const NATION_BASE = 0.25;   // same-nation static link
 const TRAIT_BASE = 0.15;    // trait link (shared archetype) static bonus
 const EARNED_WEIGHT = 0.7;  // how much of full chemistry is earned vs static
-const CHEM_GAIN = 0.16;     // connection-bonus magnitude per (strength × avg power)
+const CHEM_GAIN = 0.16;  // connection-bonus magnitude per (strength × avg stat total)
+
+/** Snap-scale chemistry weight of a card: its ATK+DEF total. */
+function statTotal(card: Card): number {
+  const { atk, def } = deriveStats(card);
+  return atk + def;
+}
 
 export function pairKey(a: number, b: number): string {
   return a < b ? `${a}:${b}` : `${b}:${a}`;
@@ -123,7 +130,8 @@ export function chemistryRecords(xi: Card[], formation: Formation, matrix: CoApp
       const fwd = BAND_RANK[bandOf(ca)] >= BAND_RANK[bandOf(cb)] ? ca : cb;
       const band = bandOf(fwd);
       const lane = laneOf(fwd);
-      const avgPower = (xi[i].power + xi[j].power) / 2;
+      // Snap-scale: the link's weight is the pair's average stat total (atk+def).
+      const avgPower = (statTotal(xi[i]) + statTotal(xi[j])) / 2;
       const amount = strength * avgPower * CHEM_GAIN;
       if (amount <= 0) continue;
 

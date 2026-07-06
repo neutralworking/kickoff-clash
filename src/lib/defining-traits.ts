@@ -24,7 +24,7 @@ import { seededRandom } from './scoring';
 
 /** Postman — guaranteed key-pass cross into the box when a target's up top. */
 const POSTMAN: TraitRecord = {
-  name: 'Postman', verb: 'generate', params: { amount: 22 },
+  name: 'Postman', verb: 'generate', params: { amount: 4 },
   scope: 'zone', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' },
   condition: { kind: 'box-target-present' }, animation: 'moment',
 };
@@ -38,7 +38,7 @@ const SNIPER: TraitRecord = {
 
 /** Deadeye — set-piece threat: a guaranteed finishing chance every 15'. */
 const DEADEYE: TraitRecord = {
-  name: 'Deadeye', verb: 'generate', params: { amount: 16 },
+  name: 'Deadeye', verb: 'generate', params: { amount: 3 },
   scope: 'zone', target: { kind: 'zone', zone: 'finishing' },
   condition: { kind: 'is-attacking' }, animation: 'moment',
 };
@@ -73,7 +73,7 @@ const OFFSIDE_TRAP: TraitRecord = {
 
 /** Poacher's Instinct — guaranteed tap-in chance into the box while attacking. */
 const POACHERS_INSTINCT: TraitRecord = {
-  name: "Poacher's Instinct", verb: 'generate', params: { amount: 14 },
+  name: "Poacher's Instinct", verb: 'generate', params: { amount: 3 },
   scope: 'zone', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' },
   condition: { kind: 'is-attacking' }, animation: 'moment',
 };
@@ -93,7 +93,7 @@ const ENGINE_ROOM: TraitRecord = {
  *  thin dimension restores the curve without touching the strong tiers' already-rich
  *  creation. */
 const OVERLAP_RUN: TraitRecord = {
-  name: 'Overlap Run', verb: 'generate', params: { amount: 22 },
+  name: 'Overlap Run', verb: 'generate', params: { amount: 4 },
   scope: 'zone', target: { kind: 'zone', zone: 'creation' },
   condition: { kind: 'is-attacking' }, animation: 'moment',
 };
@@ -138,7 +138,7 @@ const COMMANDER_OF_BOX: TraitRecord = {
  *  manufactures a creation chance (control = creation + attack), so the keeper's
  *  distribution actually starts moves rather than just clearing his lines. */
 const DISTRIBUTION: TraitRecord = {
-  name: 'Distribution', verb: 'generate', params: { amount: 16 },
+  name: 'Distribution', verb: 'generate', params: { amount: 3 },
   scope: 'zone', target: { kind: 'zone', zone: 'creation' },
   animation: 'moment',
 };
@@ -158,7 +158,7 @@ const BIG_GAME_KEEPER: TraitRecord = {
 /** Take-On — the dribbler beats his man and manufactures the opening: a chance
  *  into CREATION while attacking (beating a defender opens the pass, not the shot). */
 const TAKE_ON: TraitRecord = {
-  name: 'Take-On', verb: 'generate', params: { amount: 18 },
+  name: 'Take-On', verb: 'generate', params: { amount: 3 },
   scope: 'zone', target: { kind: 'zone', zone: 'creation' },
   condition: { kind: 'is-attacking' }, animation: 'moment',
 };
@@ -166,7 +166,7 @@ const TAKE_ON: TraitRecord = {
 /** Mazy Run — the dribbler carries it all the way into the box: a manufactured
  *  finishing chance central while attacking (the solo run that ends in a shot). */
 const MAZY_RUN: TraitRecord = {
-  name: 'Mazy Run', verb: 'generate', params: { amount: 15 },
+  name: 'Mazy Run', verb: 'generate', params: { amount: 3 },
   scope: 'zone', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' },
   condition: { kind: 'is-attacking' }, animation: 'moment',
 };
@@ -190,7 +190,7 @@ const LAST_DITCH: TraitRecord = {
 /** Aerial Threat — the big man wins the header in the box: a manufactured finishing
  *  chance central while attacking. Shared by Powerhouse and Target (the box aerials). */
 const AERIAL_THREAT: TraitRecord = {
-  name: 'Aerial Threat', verb: 'generate', params: { amount: 16 },
+  name: 'Aerial Threat', verb: 'generate', params: { amount: 3 },
   scope: 'zone', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' },
   condition: { kind: 'is-attacking' }, animation: 'moment',
 };
@@ -198,7 +198,7 @@ const AERIAL_THREAT: TraitRecord = {
 /** Hold-Up Play — the target man holds it up and brings runners in: a creation
  *  chance while attacking (control = creation + attack). Shared by Powerhouse/Target. */
 const HOLD_UP: TraitRecord = {
-  name: 'Hold-Up Play', verb: 'generate', params: { amount: 16 },
+  name: 'Hold-Up Play', verb: 'generate', params: { amount: 3 },
   scope: 'zone', target: { kind: 'zone', zone: 'creation' },
   condition: { kind: 'is-attacking' }, animation: 'moment',
 };
@@ -206,7 +206,7 @@ const HOLD_UP: TraitRecord = {
 /** Deep Distributor — the controller dictates from deep: a creation chance while
  *  attacking (feeds possession the same way Regista's Metronome scales it). */
 const DEEP_DISTRIBUTOR: TraitRecord = {
-  name: 'Deep Distributor', verb: 'generate', params: { amount: 15 },
+  name: 'Deep Distributor', verb: 'generate', params: { amount: 3 },
   scope: 'zone', target: { kind: 'zone', zone: 'creation' },
   condition: { kind: 'is-attacking' }, animation: 'moment',
 };
@@ -222,7 +222,7 @@ const SCREEN: TraitRecord = {
 /** Runner in Behind — the sprinter runs onto the through ball: a manufactured
  *  finishing chance central while attacking (pace in behind, not build-up). */
 const RUNNER_IN_BEHIND: TraitRecord = {
-  name: 'Runner in Behind', verb: 'generate', params: { amount: 15 },
+  name: 'Runner in Behind', verb: 'generate', params: { amount: 3 },
   scope: 'zone', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' },
   condition: { kind: 'is-attacking' }, animation: 'moment',
 };
@@ -230,9 +230,33 @@ const RUNNER_IN_BEHIND: TraitRecord = {
 /** Late Run — the box-to-box engine arrives late in the area: a manufactured
  *  finishing chance that only switches on from the hour mark (the ghosting run). */
 const LATE_RUN: TraitRecord = {
-  name: 'Late Run', verb: 'generate', params: { amount: 15 },
+  name: 'Late Run', verb: 'generate', params: { amount: 3 },
   scope: 'zone', target: { kind: 'zone', zone: 'finishing' }, to: { band: 'ATT', lane: 'C' },
   condition: { kind: 'late-game', fromIncrement: 3 }, animation: 'moment',
+};
+
+/** Marshal — the owner's canonical interaction: organises the stragglers. Every
+ *  teammate with DEF below 5 defends at +2 while he's on the pitch. Its value DECAYS
+ *  as your squad's DEF scales — upgrading your defenders obsoletes the buff. */
+const MARSHAL: TraitRecord = {
+  name: 'Marshal', verb: 'amplify', params: { flatDef: 2 },
+  scope: 'global', target: { kind: 'criterion', criterion: 'stat-below', stat: 'def', value: 5 },
+  animation: 'aura',
+};
+
+/** Mentor — coaches the passengers: teammates with ATK below 5 attack at +2. */
+const MENTOR: TraitRecord = {
+  name: 'Mentor', verb: 'amplify', params: { flatAtk: 2 },
+  scope: 'global', target: { kind: 'criterion', criterion: 'stat-below', stat: 'atk', value: 5 },
+  animation: 'aura',
+};
+
+/** Star Service — feeds the front line: teammates with ATK 12 or more get +2.
+ *  The build-around inverse of Mentor — worth more the more stars you field. */
+const STAR_SERVICE: TraitRecord = {
+  name: 'Star Service', verb: 'amplify', params: { flatAtk: 2 },
+  scope: 'global', target: { kind: 'criterion', criterion: 'stat-atLeast', stat: 'atk', value: 12 },
+  condition: { kind: 'is-attacking' }, animation: 'aura',
 };
 
 /** Antagonist — the sanctioned exception (FUNNEL_MODEL_V1): winds up the opposing
@@ -249,17 +273,17 @@ const ANTAGONIST: TraitRecord = {
 // ---------------------------------------------------------------------------
 
 const DEFINING_TRAITS: Record<string, TraitRecord[]> = {
-  Creator: [POSTMAN, DEADEYE, SNIPER, ENGINE_ROOM],
-  Passer: [POSTMAN, DEADEYE, ENGINE_ROOM],
+  Creator: [POSTMAN, DEADEYE, STAR_SERVICE, SNIPER],
+  Passer: [POSTMAN, STAR_SERVICE, DEADEYE, MENTOR],
   Striker: [POACHERS_INSTINCT, ANTAGONIST, SNIPER, DEADEYE],
   Target: [POACHERS_INSTINCT, AERIAL_THREAT, HOLD_UP, ANTAGONIST, DEADEYE],
   Dribbler: [TAKE_ON, MAZY_RUN, SNIPER, POSTMAN],
   Sprinter: [OVERLAP_RUN, RUNNER_IN_BEHIND, ENGINE_ROOM, STOPPER],
   Engine: [OVERLAP_RUN, ENGINE_ROOM, LATE_RUN, STOPPER],
   Destroyer: [STOPPER, INTERCEPTOR, OFFSIDE_TRAP, LAST_DITCH],
-  Cover: [OFFSIDE_TRAP, STOPPER, LEADERSHIP],
-  Commander: [LEADERSHIP, OFFSIDE_TRAP, STOPPER],
-  Controller: [ENGINE_ROOM, DEADEYE, DEEP_DISTRIBUTOR, SCREEN],
+  Cover: [OFFSIDE_TRAP, MARSHAL, STOPPER, LEADERSHIP],
+  Commander: [LEADERSHIP, MARSHAL, MENTOR, STOPPER],
+  Controller: [ENGINE_ROOM, DEEP_DISTRIBUTOR, MENTOR, SCREEN],
   Powerhouse: [AERIAL_THREAT, STOPPER, HOLD_UP, ANTAGONIST, POACHERS_INSTINCT],
   // Keeper identity over the palette (shot-stopping body stays in the role baseline);
   // 5 candidates so Rare/Epic/Legendary keepers all fill their rarity count.

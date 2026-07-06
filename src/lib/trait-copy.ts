@@ -65,6 +65,21 @@ export const TRAIT_COPY: Record<string, TraitCopy> = {
     blurb: 'Winds the defenders up — the opposing back line defends worse while he is on the pitch.',
     kind: 'aura', glyph: '⚡',
   },
+  Marshal: {
+    label: 'Marshal',
+    blurb: 'Organises the stragglers — teammates with DEF below 5 defend at +2 while he plays.',
+    kind: 'aura', glyph: '◈',
+  },
+  Mentor: {
+    label: 'Mentor',
+    blurb: 'Coaches the passengers — teammates with ATK below 5 attack at +2.',
+    kind: 'aura', glyph: '✎',
+  },
+  'Star Service': {
+    label: 'Star Service',
+    blurb: 'Feeds the stars — teammates with ATK 12 or more get +2 while attacking.',
+    kind: 'aura', glyph: '✦',
+  },
   'Offside Trap': {
     label: 'Offside Trap',
     blurb: 'Springs the trap when the line holds — flags them offside, chance gone.',

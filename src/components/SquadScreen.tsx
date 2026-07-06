@@ -51,6 +51,7 @@ import CardModal from './cards/CardModal';
 import SquadGallery from './SquadGallery';
 import { PIXEL, RARITY_COLOR, lastName } from './cards/cardTokens';
 import { PosTag, FitnessBar, BenchTile, BenchCover, LineupSlot, fitnessOf } from './lineup';
+import { deriveStats } from '../lib/funnel';
 
 // ---------------------------------------------------------------------------
 // Props & result
@@ -964,7 +965,14 @@ function GhostTile({ card }: { card: Card }) {
       <div style={{ padding: '4px 5px 5px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 3 }}>
           <PosTag position={card.position} />
-          <span style={{ fontFamily: PIXEL, fontSize: 12, lineHeight: 1, color: 'var(--cream)' }}>{Math.round(card.power)}</span>
+          {(() => {
+            const st = deriveStats(card);
+            return (
+              <span style={{ fontFamily: PIXEL, fontSize: 10, lineHeight: 1, color: 'var(--cream)', fontVariantNumeric: 'tabular-nums' }}>
+                {st.atk}/{st.def}
+              </span>
+            );
+          })()}
         </div>
         <div
           style={{
@@ -1153,7 +1161,14 @@ function ScoutSheet({
                 >
                   <PosTag position={p.position} />
                   <span className="truncate" style={{ fontSize: 9.5, color: 'var(--cream-soft)', flex: 1, minWidth: 0 }}>{lastName(p.name)}</span>
-                  <span style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)' }}>{Math.round(p.power)}</span>
+                  {(() => {
+                    const st = deriveStats(p);
+                    return (
+                      <span style={{ fontFamily: PIXEL, fontSize: 9.5, color: 'var(--cream)', fontVariantNumeric: 'tabular-nums' }}>
+                        {st.atk}/{st.def}
+                      </span>
+                    );
+                  })()}
                 </div>
               ))}
             </div>

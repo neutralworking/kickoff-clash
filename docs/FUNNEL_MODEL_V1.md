@@ -8,9 +8,9 @@ match quantities at once, this document wins.
 ## The law
 
 > Possession yields chances, chances yield goals. Pressing kills possession;
-> destruction kills chances; defence prevents goals. Cards affect **one** of these,
-> unless they are a tech card that boosts the whole team with leadership, or an
-> antagonist that debuffs opposing cards directly.
+> destruction kills chances; defence prevents goals. A card is **two Snap-scale
+> numbers plus its actions**: ATK (−1..20) and DEF (−1..20). Tech cards boost the
+> whole team with leadership; antagonists debuff opposing cards directly.
 
 Three attacking stages, each with exactly one defensive counter:
 
@@ -25,33 +25,45 @@ Three attacking stages, each with exactly one defensive counter:
 The old `attack` zone is gone; nothing blends across lanes any more
 (`CONTROL_FIN`, the 0.55/0.45 `chanceQuality` mix, and creation-in-control are removed).
 
-## One card, one lane: the skillset → lane table
+## The two-stat (Snap-scale) card model
 
-A card's **lane** is fixed by its skillset. Its power feeds that lane's team stat and
-nothing else. All 540 cards and the generated opponent XIs resolve through the same table.
+Every card carries **ATK and DEF, integers −1..20** (`deriveStats` in
+`src/lib/funnel.ts` — computed deterministically from BRS × a skillset split,
+shaded ±1 by the technical/physical pillars, so legacy saves and generated
+opponents get stats for free). A soft card with a bad physical pillar can defend
+at **−1** — a real liability that subtracts from the team while it's on the pitch.
 
-| Skillset (pool of 540) | Lane | Football read |
-|---|---|---|
-| Passer (21) | Possession | keeps the ball |
-| Controller (4) | Possession | dictates tempo |
-| Engine (51) | Possession | box-to-box, recycles the move |
-| Creator (65) | Creation | the key pass |
-| Dribbler (44) | Creation | beats a man to open the chance |
-| Striker (44) | Finishing | the poacher |
-| Target (24) | Finishing | the reference point in the box |
-| Sprinter (65) | Pressing | the press is running — closes down from the front |
-| Destroyer (54) | Destruction | tackles and interceptions |
-| Powerhouse (61) | Destruction | wins the physical duel, blocks the shot |
-| Cover (55) | Defence | the last line, sweeps up |
-| Shotstopper (44) | Defence | the goalkeeper |
-| Commander (8) | — tech exception (Leadership) | lifts the whole team |
+Where the two numbers land:
 
-Lane pool sizes: Possession 76 · Creation 109 · Finishing 68 · Pressing 65 ·
-Destruction 115 · Defence 99 · Leadership 8. Every lane is draftable; leadership is scarce.
+- **ATK lands by skillset** — what you are decides how you attack:
+  Striker/Target → finishing · Creator/Dribbler/Sprinter → creation · everyone
+  else (Passer/Controller/Engine and all the defensive skillsets, GK included) →
+  possession (winning it back and recycling IS their attacking contribution).
+- **DEF lands by the band the card stands in** — where you play decides how you
+  defend: ATT band → pressing · MID band → destruction · DEF band + GK → defence.
+
+So a high-DEF striker is a pressing forward, a Destroyer parked at centre-back
+feeds defence instead of destruction, and every card stacks on both sides of the
+funnel. Specialists convert their budget into one big number (a 95-BRS striker is
+~20/3); generalists split it (a 95-BRS Engine is ~10/13).
+
+## Card interactions (the Snap layer)
+
+Actions read TEAMMATES' stats — the dispatcher targets by stat threshold
+(`stat-below` / `stat-atLeast`) and buffs are FLAT integers on the Snap scale:
+
+- **Marshal** — teammates with DEF below 5 defend at +2 while he plays. Its value
+  DECAYS as your squad's DEF scales: upgrading your defenders obsoletes the buff.
+- **Mentor** — teammates with ATK below 5 attack at +2 (same decay logic).
+- **Star Service** — teammates with ATK 12+ get +2: the inverse build-around,
+  worth more the more stars you field.
+
+A flat +2 DEF lands exactly where the stat itself would (the target's band
+counter-lane); +2 ATK in the target's skillset lane. Buffs are not fitness-scaled.
 
 ## The two sanctioned exceptions
 
-1. **Leadership (tech cards).** Commander cards do not play a lane. Their power is
+1. **Leadership (tech cards).** Commander cards do not play a lane. Both their stats
    spread across all six team stats at `LEAD_SPREAD` weight each — a flat team lift —
    and their trait records keep the existing global-amplify pattern. Scarce by design
    (8 cards).
@@ -61,24 +73,23 @@ Destruction 115 · Defence 99 · Leadership 8. Every lane is draftable; leadersh
    defence stat is reduced. This is the only sanctioned way a card touches the
    opponent's numbers directly.
 
-## Position still matters: lane × band fit
+## Position still matters
 
-A card contributes 100% of its (fitness-scaled) power in its lane's home band and less
-out of band (`LANE_BAND` in `src/lib/funnel.ts` — balance-lab owns the numbers):
+ATK contributes at full value in its lane's home band and less out of band
+(`LANE_BAND`): possession 0.5/1.0/0.85 · creation 1.0/1.0/0.25 · finishing
+1.0/0.5/0.1 across ATT/MID/DEF. DEF needs no fit table — the band IS the
+assignment. Formation choice = how many slots each band offers. Creation and
+destruction are additionally placed on the **pitch lane** (L/C/R) of the card's
+cell, so wide creators load the wing they stand on — stage 2 stays a spatial
+contest.
 
-| Lane | ATT | MID | DEF |
-|---|---|---|---|
-| possession | 0.5 | 1.0 | 0.7 |
-| creation | 1.0 | 1.0 | 0.25 |
-| finishing | 1.0 | 0.5 | 0.1 |
-| pressing | 1.0 | 0.85 | 0.3 |
-| destruction | 0.3 | 1.0 | 0.9 |
-| defence | 0.1 | 0.6 | 1.0 |
+## Tactics by cards (no countering system)
 
-Formation choice = how many slots each band offers = how much of each lane you can
-field. Creation and destruction are additionally placed on the **pitch lane** (L/C/R)
-of the card's cell, so wide creators load the wing they stand on and destroyers cover
-the channel they patrol — stage 2 stays a spatial contest.
+Tactic cards are **equipped before kick-off — up to 3** — and their records run
+every increment through the squad source. Situational conditions on the records
+(trailing, leading, late-game, archetype counts) gate them during the match.
+There is no per-spell calling, no charges, no opponent telegraph and no
+answered/countered grading.
 
 ## The cascade under the funnel
 
@@ -93,4 +104,4 @@ lifts your whole attacking funnel; it never smuggles creation into possession.
 The verdict's three quality keys map 1:1 onto the stages: `control` = stage 1
 (possession vs their pressing), `chances` = stage 2 (creation vs their destruction),
 `conversion` = stage 3 (finishing vs their defence). Every match answer is one of the
-three stages, a plan factor, or a calls factor.
+three stages or a plan factor.

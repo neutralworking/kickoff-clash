@@ -42,7 +42,7 @@ import {
   roleBlurb,
   type ResolvedTrait,
 } from './cardTokens';
-import { laneOfCard, LANE_COPY } from '../../lib/funnel';
+import { laneOfCard, LANE_COPY, deriveStats } from '../../lib/funnel';
 
 // Trait glyphs (✦ ➴ ⚑ …) sit outside the Silkscreen glyph set; render them in a
 // Unicode-complete fallback stack so a symbol never renders as a blank tofu box.
@@ -419,9 +419,11 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
     setOpenTip((cur) => (cur === tip ? null : tip));
   };
 
-  // The card's funnel JOB (docs/FUNNEL_MODEL_V1.md): the ONE thing its power feeds.
+  // The card's funnel JOB (docs/FUNNEL_MODEL_V1.md): where its ATK lands. DEF lands
+  // by the band it stands in (forwards press, midfielders destroy, backs defend).
   const lane = laneOfCard(card);
   const laneCopy = LANE_COPY[lane];
+  const stats = deriveStats(card);
 
   return (
     <div className="flex flex-col" style={{ gap: 10 }}>
@@ -432,8 +434,9 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
             {card.rarity.toUpperCase()}
           </span>
         </div>
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 6 }}>
-          <StatCell label="RATING" value={String(Math.round(card.power))} />
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 6 }}>
+          <StatCell label="ATK" value={String(stats.atk)} />
+          <StatCell label="DEF" value={String(stats.def)} />
           <StatCell label="POSITION" value={POSITION_LABEL[card.position] ?? card.position} />
           <StatCell label="NATION" value={flag ? card.nation ?? '—' : nationCode(card.nation) || '—'} />
           {/* ROLE is the prominent, accent-coloured identity where ARCHETYPE was.
@@ -456,7 +459,7 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
             color="var(--gold)"
             open={openTip === 'job'}
             onToggle={toggleTip('job')}
-            tipBody={laneCopy.blurb}
+            tipBody={`${laneCopy.blurb} ATK feeds this; DEF counts where he stands — forwards press, midfielders break up play, the back line defends.`}
           />
         </div>
         {/* Where they can operate — eligible pitch positions as pixel chips. */}

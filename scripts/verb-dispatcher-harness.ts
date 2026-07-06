@@ -100,7 +100,7 @@ function runMatch(xi: Card[]): MatchV5State {
   for (let i = 0; i < 5; i++) {
     const attackerIds = [...state.xi].filter((c) => !c.injured).sort((a, b) => b.power - a.power).slice(0, 4).map((c) => c.id);
     state = commitAttackers(state, attackerIds);
-    const split = evaluateSplit(state, [], null);
+    const split = evaluateSplit(state, []);
     const result = resolveIncrement(state, split, SEED);
     state = advanceIncrement(state, result);
   }
@@ -138,8 +138,8 @@ console.log('\n2. Migrated roles + inside-forward + False 9 reshape the field');
     return s;
   };
 
-  const withRoles = evaluateSplit(mkState(roledXI), [], null);
-  const without = evaluateSplit(mkState(plainXI), [], null);
+  const withRoles = evaluateSplit(mkState(roledXI), []);
+  const without = evaluateSplit(mkState(plainXI), []);
 
   console.log(`     attack    ${without.possession} → ${withRoles.possession}`);
   console.log(`     defence   ${without.defenceScore} → ${withRoles.defenceScore}`);
@@ -167,7 +167,7 @@ console.log('\n3. Verb-level checks');
   // The base field is now the cards' own emission placed in their cells; the
   // dispatcher builds it internally, so each test just declares a card's cell + emit.
   const mk = (over: Partial<DispatchCard>): DispatchCard => ({
-    id: 1, power: 80, archetype: 'Creator', position: 'WF', team: 'player', side: 'attack', isWide: true,
+    id: 1, power: 80, atk: 12, def: 2, archetype: 'Creator', position: 'WF', team: 'player', side: 'attack', isWide: true,
     cell: 'ATT_C', emit: { possession: 80, creation: 50, finishing: 50, pressing: 0, destruction: 0, defence: 0 }, traits: [], ...over,
   });
   // Band → chance-mix weights, mirroring match-v5's §7 dials (ATT≈finishing, MID≈creation).
@@ -259,7 +259,7 @@ console.log('\n4. Real-data wiring (roles derived by transform.ts, not stamped)'
   const atkIds = xi.filter((c) => c.tacticalRole === 'Inverted Winger' || c.tacticalRole === 'Falso Nove' || c.position === 'CF' || c.position === 'WF')
     .slice(0, 4).map((c) => c.id);
   s = commitAttackers(s, atkIds);
-  const split = evaluateSplit(s, [], null);
+  const split = evaluateSplit(s, []);
   const named = split.attackBreakdown.concat(split.defenceBreakdown).filter((l) => /Cut Inside|Drop Deep|Metronome|The Shield|Vacate/.test(l.label));
   check('dispatcher fires from transform-derived roles', split.opponentDenial > 0 || named.length > 0, `denial=${split.opponentDenial}, lines=[${named.map((l) => l.label).join('; ')}]`);
 }
@@ -291,7 +291,7 @@ console.log('\n5. Zonal field & mirror lane contest');
   const bench = cards.sort((a, b) => b.power - a.power).slice(11, 18);
   let s = initMatch(xi, bench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter');
   s = commitAttackers(s, [...s.xi].sort((a, b) => b.power - a.power).slice(0, 4).map((c) => c.id));
-  const split = evaluateSplit(s, [], null);
+  const split = evaluateSplit(s, []);
   const lanes = (split.lanePush.L + split.lanePush.C + split.lanePush.R) > 0;
   check('evaluateSplit emits a per-lane push vector', lanes, `push=${JSON.stringify(Object.fromEntries(['L','C','R'].map((l) => [l, Math.round(split.lanePush[l as Lane])])))}`);
 }
@@ -303,7 +303,7 @@ console.log('\n6. Tactical cards + Manager as squad records');
 {
   const ctx = { xi: [] as Card[], increment: 0, opponentGoals: 0, yourGoals: 0, connections: [] };
   const mk6 = (over: Partial<DispatchCard>): DispatchCard => ({
-    id: 1, power: 80, archetype: 'Creator', position: 'CM', team: 'player', side: 'attack',
+    id: 1, power: 80, atk: 12, def: 2, archetype: 'Creator', position: 'CM', team: 'player', side: 'attack',
     isWide: false, cell: 'ATT_C', emit: { possession: 80, creation: 40, finishing: 40, pressing: 0, destruction: 0, defence: 0 }, traits: [], ...over,
   });
 
@@ -410,7 +410,7 @@ console.log('\n8. Reactive opponent — scale first, counter second');
   const oppGC = () => {
     let s = initMatch(playerXI, bench, [], formation, 'tiki-taka', [], SEED, 3, 'Counter', 'Sprinter');
     s = commitAttackers(s, [...s.xi].sort((a, b) => b.power - a.power).slice(0, 4).map((c) => c.id));
-    return resolveIncrement(s, evaluateSplit(s, [], null), SEED).opponentGoalChance;
+    return resolveIncrement(s, evaluateSplit(s, []), SEED).opponentGoalChance;
   };
   check('reactive-opponent resolution is deterministic', oppGC() === oppGC());
 }
@@ -448,7 +448,7 @@ console.log('\n9. Run-accumulated chemistry');
   const evalWith = (chem: Record<string, number>) => {
     let s = initMatch(xi, bench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter', chem);
     s = commitAttackers(s, ids.slice(0, 4));
-    return evaluateSplit(s, [], null);
+    return evaluateSplit(s, []);
   };
   const fresh = evalWith({});
   const strong = evalWith(settled);
@@ -468,15 +468,15 @@ console.log('\n10. Fitness depletion');
   const fbench = cards.slice(20, 27);
   const mkState = (xi: Card[]) => initMatch(xi, fbench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter');
 
-  const fresh = evaluateSplit(mkState(mkXI({})), [], null);
-  const tired = evaluateSplit(mkState(mkXI({ fitness: 1 })), [], null);
+  const fresh = evaluateSplit(mkState(mkXI({})), []);
+  const tired = evaluateSplit(mkState(mkXI({ fitness: 1 })), []);
   const funnelSum = (x: { possession: number; chanceCreation: number; shotQuality: number }) =>
     x.possession + x.chanceCreation + x.shotQuality;
   check('a tired XI emits less attacking output than a fresh one', funnelSum(tired) < funnelSum(fresh), `fresh=${funnelSum(fresh)} tired=${funnelSum(tired)}`);
 
   // One increment: an attacking-lane slot tires faster than a defensive one (same durability).
   let s = mkState(mkXI({}));
-  s = advanceIncrement(s, resolveIncrement(s, evaluateSplit(s, [], null), SEED));
+  s = advanceIncrement(s, resolveIncrement(s, evaluateSplit(s, []), SEED));
   const attFit = s.xi[9].fitness ?? 6; // 4-3-3 slot[9] = striker (ATT band)
   const defFit = s.xi[2].fitness ?? 6; // slot[2] = centre-back (DEF band)
   check('attacking-lane cards tire faster than defenders', attFit < defFit, `ATT=${attFit.toFixed(2)} DEF=${defFit.toFixed(2)}`);
@@ -484,7 +484,7 @@ console.log('\n10. Fitness depletion');
   // Durability: glass drains faster than titanium in the same slot.
   const oneInc = (dur: Card['durability']) => {
     let x = mkState(mkXI({ durability: dur }));
-    x = advanceIncrement(x, resolveIncrement(x, evaluateSplit(x, [], null), SEED));
+    x = advanceIncrement(x, resolveIncrement(x, evaluateSplit(x, []), SEED));
     return x.xi[9].fitness ?? 6;
   };
   const glass = oneInc('glass');
@@ -494,7 +494,7 @@ console.log('\n10. Fitness depletion');
   // Drain is deterministic across a full match.
   const run = () => {
     let x = mkState(mkXI({}));
-    for (let i = 0; i < 5; i++) x = advanceIncrement(x, resolveIncrement(x, evaluateSplit(x, [], null), SEED + i));
+    for (let i = 0; i < 5; i++) x = advanceIncrement(x, resolveIncrement(x, evaluateSplit(x, []), SEED + i));
     return x.xi.map((c) => (c.fitness ?? 6).toFixed(2)).join(',');
   };
   check('fitness drain is deterministic', run() === run());
@@ -603,7 +603,7 @@ console.log('\n12. Per-possession goal model');
     for (let i = 0; i < 5; i++) {
       const ids = [...st.xi].filter((c) => !c.injured).sort((a, b) => b.power - a.power).slice(0, 4).map((c) => c.id);
       st = commitAttackers(st, ids);
-      st = advanceIncrement(st, resolveIncrement(st, evaluateSplit(st, [], null), 2000 + s * 13));
+      st = advanceIncrement(st, resolveIncrement(st, evaluateSplit(st, []), 2000 + s * 13));
     }
     total += st.yourGoals + st.opponentGoals;
   }
@@ -622,7 +622,7 @@ console.log('\n13. Pre-match intent (attacking / balanced / defensive)');
   const bench = cards.sort((a, b) => b.power - a.power).slice(11, 18);
   const splitFor = (intent: 'attacking' | 'balanced' | 'defensive') => {
     const s = initMatch(xi, bench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter', {}, intent);
-    return evaluateSplit(s, [], null);
+    return evaluateSplit(s, []);
   };
   const att = splitFor('attacking');
   const bal = splitFor('balanced');
@@ -637,7 +637,7 @@ console.log('\n13. Pre-match intent (attacking / balanced / defensive)');
   check('defensive defends more than attacking', def.defenceScore > att.defenceScore,
     `def=${def.defenceScore} att=${att.defenceScore}`);
   // Balanced is the neutral baseline — same as passing no intent at all.
-  const noIntent = evaluateSplit(initMatch(xi, bench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter'), [], null);
+  const noIntent = evaluateSplit(initMatch(xi, bench, [], formation, 'tiki-taka', [], SEED, 1, 'Balanced', 'Sprinter'), []);
   check('balanced intent == no-intent baseline', Math.abs(noIntent.possession - bal.possession) < 1e-6 && Math.abs(noIntent.defenceScore - bal.defenceScore) < 1e-6,
     `atk ${noIntent.possession} vs ${bal.possession}`);
 }

@@ -14,11 +14,10 @@ import {
   resolveIncrement,
   advanceIncrement,
   makeSub,
-  callPlay,
+  equipTactics,
   getMatchResult,
   playerMatchStats,
 } from '../lib/match-v5';
-import { getTacticById } from '../lib/tactics';
 import { autoFillXI } from '../lib/team-select';
 import PitchMatchView from './match/PitchMatchView';
 
@@ -106,15 +105,19 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     });
   }, []);
 
+  // ---- LIVE plan preview: the split for the CURRENT plan (pure + deterministic).
+  // The pitch cards read cardStats off it, so every equip/sub/swap/intent change
+  // moves the shown ATK/DEF immediately — the feedback surface. Never resolves RNG.
+  const previewSplit = useMemo(
+    () => evaluateSplit(matchState, runState.jokers),
+    [matchState, runState.jokers],
+  );
+
   // ---- Kick Off: evaluate and resolve ----
   const handleKickOff = useCallback(() => {
-    const calledPlay = matchState.calledPlayId ? getTacticById(matchState.calledPlayId) ?? null : null;
-    const split = evaluateSplit(matchState, runState.jokers, calledPlay);
-    // Counterfactual baseline (this spell WITHOUT the called play) feeds the
-    // display-only playImpact readout — never the match math.
-    const baseline = calledPlay ? evaluateSplit(matchState, runState.jokers, null) : null;
+    const split = evaluateSplit(matchState, runState.jokers);
     const seed = matchSeed + matchState.currentIncrement * 113;
-    const result = resolveIncrement(matchState, split, seed, baseline);
+    const result = resolveIncrement(matchState, split, seed);
 
     setCurrentResult(result);
     setSubPhase('resolving');
@@ -171,14 +174,18 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     setMatchState((prev: MatchV5State) => ({ ...prev, intent }));
   }, []);
 
-  // ---- Call a play for THIS spell (tap the called play again to clear it).
-  // callPlay validates charges; the charge is consumed when the spell resolves.
+  // ---- Equip / unequip a tactic card for the MATCH (pre-kickoff only; up to
+  // TACTIC_SLOTS). Tapping an equipped card unequips it.
   const handleToggleTactic = useCallback((tacticId: string) => {
     const tactic = runState.tacticsDeck.find((card) => card.id === tacticId);
     if (!tactic) return;
-    setMatchState((prev: MatchV5State) =>
-      callPlay(prev, prev.calledPlayId === tacticId ? null : tacticId),
-    );
+    setMatchState((prev: MatchV5State) => {
+      const has = prev.equippedTactics.includes(tacticId);
+      const next = has
+        ? prev.equippedTactics.filter((id) => id !== tacticId)
+        : [...prev.equippedTactics, tacticId];
+      return equipTactics(prev, next);
+    });
   }, [runState.tacticsDeck]);
 
   // ---- Finished: return result to GameShell ----
@@ -245,6 +252,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
             mode={subPhase === 'resolving' ? 'resolve' : 'plan'}
             breakMoment={breakMoment}
             currentResult={currentResult}
+            cardStats={subPhase === 'resolving' && currentResult ? currentResult.split.cardStats : previewSplit.cardStats}
             playerStats={playerStats}
             onToggleTactic={handleToggleTactic}
             onSub={handleSub}

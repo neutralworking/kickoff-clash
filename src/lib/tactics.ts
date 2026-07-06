@@ -1,16 +1,14 @@
 /**
- * Kickoff Clash — Tactic cards as per-spell CALLED PLAYS.
+ * Kickoff Clash — TACTICS BY CARDS.
  *
- * The 3-slot persistent-tactic model is gone. A tactic is now a PLAY the player
- * CALLS for one 15-minute spell, against the opponent's telegraphed play
- * (opponent.ts OPPONENT_PLAYS). Each play carries a limited number of CHARGES
- * per match (most 2; cheap shaping plays 3). The mechanical effect of a call is
- * authored as TraitRecords in squad-transforms.ts `tacticTraits` and runs through
- * the verb dispatcher for THIS spell only.
+ * A tactic is a card you EQUIP before kick-off (up to TACTIC_SLOTS, match-v5).
+ * Every equipped card's TraitRecords (squad-transforms.ts `tacticTraits`) run
+ * through the verb dispatcher EVERY increment; situational conditions on the
+ * records (trailing, leading, late-game) gate them during the match. There is
+ * no per-spell calling, no charges and no counter-grading.
  *
  * `effect` strings are plain and factual — they state what the records do.
- * `contradicts` is retained as card lore (the paired opposite play) for the card
- * surfaces; it has no slot mechanics any more.
+ * `contradicts` is retained as card lore (the paired opposite) for the surfaces.
  */
 
 // ---------------------------------------------------------------------------
@@ -22,12 +20,8 @@ export interface TacticCard {
   name: string;
   effect: string;
   flavour: string;
-  contradicts?: string;      // id of the opposing play (display only — no slot rules)
+  contradicts?: string;      // id of the opposing tactic (display only — no slot rules)
   category: 'attacking' | 'defensive' | 'specialist';  // display accent (cardTokens)
-  /** What kind of call this is — used by call policies and the break screen. */
-  playClass: 'attacking' | 'defensive' | 'control';
-  /** Uses per match. Calling the play for a spell consumes one charge. */
-  charges: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -39,162 +33,130 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'high_line',
     name: 'High Line',
-    effect: 'This spell: attack and creation +26%, defence −12% — and you risk the break (a further −15% defence) against a set defensive trap.',
+    effect: 'Possession and creation +26%; your defence −12%.',
     flavour: '"We press from the front. The last line is courage."',
     contradicts: 'low_block',
     category: 'attacking',
-    playClass: 'attacking',
-    charges: 2,
   },
   {
     id: 'press_high',
     name: 'Press High',
-    effect: 'This spell: their conversion −20%; Engines & Destroyers +20% but lose 0.5 fitness.',
+    effect: 'Pressing +35% and their conversion −15%; your Sprinters and Engines lose 0.5 fitness each spell.',
     flavour: '"Every second counts. Suffocate them early."',
     contradicts: 'sit_deep',
     category: 'attacking',
-    playClass: 'control',
-    charges: 2,
   },
   {
     id: 'wing_play',
     name: 'Wing Play',
-    effect: 'This spell: heavy attacking threat down both wings; Dribblers & Sprinters +12%. Risks the break against a set trap.',
+    effect: 'Extra chance creation down both wings; Dribblers and Sprinters +12%.',
     flavour: '"Stretch them. Make the pitch as wide as possible."',
     contradicts: 'narrow',
     category: 'attacking',
-    playClass: 'attacking',
-    charges: 3,
   },
   {
     id: 'narrow',
     name: 'Narrow Shape',
-    effect: 'This spell: heavy threat through the middle; Controllers & Passers +12%. Risks the break against a set trap.',
+    effect: 'Extra chance creation through the middle; Controllers and Passers +12%.',
     flavour: '"Compact. Triangles everywhere. No space for them to breathe."',
     contradicts: 'wing_play',
     category: 'attacking',
-    playClass: 'control',
-    charges: 3,
   },
 
   // ---- DEFENSIVE -----------------------------------------------------------
   {
     id: 'low_block',
     name: 'Low Block',
-    effect: 'This spell: their conversion −20% and extra cover on the lanes their play loads. If they commit forward you spring the break (attack +26%); called blind, your attack −8%.',
+    effect: 'Their conversion −20% and extra cover across the back line. Protecting a lead you spring the break (creation +26%); otherwise your possession −8%.',
     flavour: '"Let them have the ball. We\'ll take the three points."',
     contradicts: 'high_line',
     category: 'defensive',
-    playClass: 'defensive',
-    charges: 2,
   },
   {
     id: 'sit_deep',
     name: 'Counter Trap',
-    effect: 'This spell: their conversion −10% and cover on the lanes their play loads; Sprinters & Dribblers +18% — +50% against an attacking play.',
+    effect: 'Their conversion −10% and extra back-line cover; Sprinters and Dribblers +25%.',
     flavour: '"Let them come. The space behind them is ours."',
     contradicts: 'press_high',
     category: 'defensive',
-    playClass: 'defensive',
-    charges: 2,
   },
   {
     id: 'fortress',
     name: 'Fortress',
-    effect: 'This spell: their conversion −25% and a wall of extra cover on the lanes their play loads.',
+    effect: 'Their conversion −25% and a wall of extra back-line cover.',
     flavour: '"Build the wall. Make them break themselves against it."',
     category: 'defensive',
-    playClass: 'defensive',
-    charges: 2,
   },
 
   // ---- SPECIALIST ----------------------------------------------------------
   {
     id: 'counter_attack',
     name: 'Counter Attack',
-    effect: 'This spell, against an attacking play: their conversion −15% and your attack and finishing +28%. Also fires (without the denial) when you trail.',
+    effect: 'While you trail: their conversion −10% and your creation and finishing +28%.',
     flavour: '"One touch. Three passes. Goal. They never learn."',
     contradicts: 'possession',
     category: 'specialist',
-    playClass: 'attacking',
-    charges: 2,
   },
   {
     id: 'possession',
     name: 'Possession Game',
-    effect: 'This spell: your creation +18% — keep the ball and control the possession count.',
+    effect: 'Possession +22%, creation +10% — keep the ball and steady the game.',
     flavour: '"The ball is ours. They can\'t score without it."',
     contradicts: 'counter_attack',
     category: 'specialist',
-    playClass: 'control',
-    charges: 3,
   },
   {
     id: 'set_piece',
     name: 'Set Piece Specialists',
-    effect: 'This spell: a central dead-ball chance; Targets & Commanders finish +20%. Escalates against a parked bus — a trap concedes dead balls, and cannot counter one.',
+    effect: 'A central dead-ball chance every spell; Targets and Commanders finish +20%.',
     flavour: '"Every dead ball is a chance. We\'ve rehearsed them all."',
     category: 'specialist',
-    playClass: 'attacking',
-    charges: 2,
   },
   {
     id: 'dark_arts',
     name: 'Dark Arts',
-    effect: 'This spell: their conversion −10%, and their best player loses 1.5 fitness.',
+    effect: 'Their conversion −10%, and their best player loses 1.5 fitness each spell.',
     flavour: '"They don\'t call it the beautiful game for nothing. Beautifully ugly."',
     category: 'specialist',
-    playClass: 'control',
-    charges: 2,
   },
   {
     id: 'youth_policy',
     name: 'Fresh Legs',
-    effect: 'From 60\' on, this spell: lifts your whole XI, weakest players most.',
+    effect: 'From 60\' on: lifts your whole XI, weakest players most.',
     flavour: '"Fresh legs win late games."',
     category: 'specialist',
-    playClass: 'control',
-    charges: 2,
   },
 
   // ---- LANE OVERLOADS + VARIETY --------------------------------------------
   {
     id: 'overload_left',
     name: 'Overload Left',
-    effect: 'This spell: piles attacking threat into the LEFT lane. Risks the break against a set trap.',
+    effect: 'Piles chance creation into the LEFT channel.',
     flavour: '"Everything down the left. Make that touchline ours."',
     contradicts: 'overload_right',
     category: 'attacking',
-    playClass: 'attacking',
-    charges: 2,
   },
   {
     id: 'overload_right',
     name: 'Overload Right',
-    effect: 'This spell: piles attacking threat into the RIGHT lane. Risks the break against a set trap.',
+    effect: 'Piles chance creation into the RIGHT channel.',
     flavour: '"Swing it right and keep it there. Stretch them until they snap."',
     contradicts: 'overload_left',
     category: 'attacking',
-    playClass: 'attacking',
-    charges: 2,
   },
   {
     id: 'route_one',
     name: 'Route One',
-    effect: 'This spell: a direct ball makes a central finishing chance up top. Risks the break against a set trap.',
+    effect: 'A direct central finishing chance every spell, with the knock-downs creating more.',
     flavour: '"Why pass it through them when you can go over them?"',
     category: 'attacking',
-    playClass: 'attacking',
-    charges: 2,
   },
   {
     id: 'man_marking',
     name: 'Man-to-Man Marking',
-    effect: 'This spell: their conversion −20%, your defence +12%, and cover on the lanes their play loads; duels won against a committed attack spring your attack +18%.',
+    effect: 'Their conversion −18%, your defence +10% and extra back-line cover.',
     flavour: '"Pick a man. Stay with him. Nobody runs free today."',
     category: 'defensive',
-    playClass: 'defensive',
-    charges: 2,
   },
 ];
 
@@ -204,9 +166,4 @@ export const ALL_TACTICS: TacticCard[] = [
 
 export function getTacticById(id: string): TacticCard | undefined {
   return ALL_TACTICS.find(t => t.id === id);
-}
-
-/** Charges a play has left, given the match's used-charges ledger. */
-export function chargesLeft(tactic: TacticCard, used: Record<string, number>): number {
-  return Math.max(0, tactic.charges - (used[tactic.id] ?? 0));
 }
