@@ -136,10 +136,15 @@ export interface AttackDefenceSplit {
   attackingOrder: number[];
   /** The transformed 9×4 grid from the dispatcher (additive — read, never recomputed). */
   cells: Record<Cell, Record<ZoneName, number>>;
-  /** Per-card pre-dispatch emission (attack/defence/creation/finishing) keyed by card id.
-   *  The basis for the read-side per-player rating. Additive — never fed back into the
-   *  resolution math, so scorelines are unchanged. */
+  /** Per-card pre-dispatch emission keyed by card id. The basis for the read-side
+   *  per-player rating. Additive — never fed back into the resolution math. */
   cardEmit: Record<number, Record<ZoneName, number>>;
+  /** LIVE per-card effective stats (display-only): fitness + band fit + every
+   *  card-touching trait (role %, auras, flat buffs, manager amps, tactic zone
+   *  amps by emission share) + the funnel cascade multipliers. `baseAtk/baseDef`
+   *  are the printed card numbers, so the UI can colour buffed green / drained
+   *  red. The player-facing feedback surface. */
+  cardStats: Record<number, { atk: number; def: number; baseAtk: number; baseDef: number }>;
   /** Defining traits that FIRED this increment (animation-tagged) — the match-feel hook. */
   traitEvents: TraitEvent[];
   /** Per-card fitness deltas from drain-fitness records this spell (negative values;
@@ -1044,6 +1049,22 @@ export function evaluateSplit(
   const cardEmit: Record<number, Record<ZoneName, number>> = {};
   emit.forEach((v, k) => { cardEmit[k] = v; });
 
+  // LIVE per-card effective stats (display-only): base emission + attributed trait
+  // deltas per lane, cascade multipliers on top — the number a pitch card shows.
+  const cardStats: Record<number, { atk: number; def: number; baseAtk: number; baseDef: number }> = {};
+  xi.forEach((card) => {
+    const e = emit.get(card.id) ?? zeroEmit();
+    const d = dispatched.cardDelta.get(card.id) ?? {};
+    const sum = (lanes: ZoneName[]) => lanes.reduce((s2, z) => s2 + (e[z] ?? 0) + (d[z] ?? 0), 0);
+    const base = deriveStats(card);
+    cardStats[card.id] = {
+      atk: Math.round(sum(ATTACK_LANES) * attackMult),
+      def: Math.round(sum(DEFENCE_LANES) * defenceMult),
+      baseAtk: base.atk,
+      baseDef: base.def,
+    };
+  });
+
   // Defining-trait firings this increment (animation-tagged), for the match-feel layer.
   const traitEvents = collectTraitEvents(dispatched.log);
 
@@ -1076,6 +1097,7 @@ export function evaluateSplit(
     attackingOrder: orderedAttackers.map((c) => c.id),
     cells: dispatched.cells,
     cardEmit,
+    cardStats,
     traitEvents,
     fitnessDelta,
   };
@@ -1423,6 +1445,25 @@ export function resolveIncrement(
   const { youSide, oppSide, oppPush, oppEffCover } = buildContestSides(split, opp, reactivity);
 
   const period = simulatePeriod(youSide, oppSide, seed, state.currentIncrement, drama);
+
+  // Fold the opponent's lane-targeted denial (their Antagonist) into YOUR displayed
+  // per-card stats: cards whose DEF lands in a denied lane show the reduced number.
+  // Display-only — the math already applied it at team level (buildContestSides).
+  const oppDenied = opp.zoneDenial ?? {};
+  if (Object.keys(oppDenied).length > 0) {
+    const adjusted: typeof split.cardStats = {};
+    state.xi.forEach((card, i) => {
+      const st = split.cardStats[card.id];
+      if (!st) return;
+      const slot = state.formation.slots[i] ?? state.formation.slots[state.formation.slots.length - 1];
+      const defLane = DEF_LANE_OF_BAND[bandOf(cellOf(slot.x, slot.y))];
+      const denial = Math.min(ZONE_DENIAL_CAP, oppDenied[defLane] ?? 0);
+      adjusted[card.id] = denial > 0 && st.def > 0
+        ? { ...st, def: Math.round(st.def * (1 - denial)) }
+        : st;
+    });
+    split = { ...split, cardStats: adjusted };
+  }
 
   const yourGoalCount = period.you.goals;
   const opponentGoalCount = period.opp.goals;

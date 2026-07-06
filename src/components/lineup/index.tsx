@@ -21,6 +21,7 @@ import type { PointerEventHandler } from 'react';
 import type { Card } from '../../lib/scoring';
 import type { Formation } from '../../lib/formations';
 import { PIXEL, RARITY_COLOR, POSITION_COLOR, lastName } from '../cards/cardTokens';
+import { deriveStats } from '../../lib/funnel';
 
 // ---------------------------------------------------------------------------
 // Pointer pass-through — the SquadScreen drag layer disambiguates tap (inspect/
@@ -207,16 +208,23 @@ export function LineupSlot({
                 : '0 2px 0 0 var(--ink-black), 0 3px 5px rgba(0,0,0,0.4)',
           }}
         >
-          <span
-            style={{
-              fontFamily: PIXEL,
-              fontSize: 13,
-              color: 'var(--line-white)',
-              textShadow: '0 1px 0 rgba(0,0,0,0.6)',
-            }}
-          >
-            {Math.round(card.power)}
-          </span>
+          {(() => {
+            const st = deriveStats(card);
+            return (
+              <span
+                style={{
+                  fontFamily: PIXEL,
+                  fontSize: 10,
+                  lineHeight: 1,
+                  color: 'var(--line-white)',
+                  textShadow: '0 1px 0 rgba(0,0,0,0.6)',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {st.atk}/{st.def}
+              </span>
+            );
+          })()}
           {/* injured marker */}
           {showFitness && card.injured && (
             <span
@@ -384,12 +392,17 @@ export function BenchTile({
         touchAction: touchAction ?? (onPointerDown ? 'none' : undefined),
       }}
     >
-      {/* top row: POSITION tag + rating */}
+      {/* top row: POSITION tag + printed ATK/DEF */}
       <span className="flex items-center justify-center gap-1 relative w-full px-0.5" style={{ zIndex: 2 }}>
         <PosTag position={card.position} />
-        <span style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--line-white)' }}>
-          {Math.round(card.power)}
-        </span>
+        {(() => {
+          const st = deriveStats(card);
+          return (
+            <span style={{ fontFamily: PIXEL, fontSize: 9.5, lineHeight: 1, color: 'var(--line-white)', fontVariantNumeric: 'tabular-nums' }}>
+              {st.atk}/{st.def}
+            </span>
+          );
+        })()}
       </span>
       {/* surname */}
       <span

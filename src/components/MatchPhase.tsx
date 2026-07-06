@@ -105,6 +105,14 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     });
   }, []);
 
+  // ---- LIVE plan preview: the split for the CURRENT plan (pure + deterministic).
+  // The pitch cards read cardStats off it, so every equip/sub/swap/intent change
+  // moves the shown ATK/DEF immediately — the feedback surface. Never resolves RNG.
+  const previewSplit = useMemo(
+    () => evaluateSplit(matchState, runState.jokers),
+    [matchState, runState.jokers],
+  );
+
   // ---- Kick Off: evaluate and resolve ----
   const handleKickOff = useCallback(() => {
     const split = evaluateSplit(matchState, runState.jokers);
@@ -244,6 +252,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
             mode={subPhase === 'resolving' ? 'resolve' : 'plan'}
             breakMoment={breakMoment}
             currentResult={currentResult}
+            cardStats={subPhase === 'resolving' && currentResult ? currentResult.split.cardStats : previewSplit.cardStats}
             playerStats={playerStats}
             onToggleTactic={handleToggleTactic}
             onSub={handleSub}

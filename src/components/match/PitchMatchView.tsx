@@ -9,6 +9,7 @@ import { cellOf, bandOf } from '../../lib/field';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard } from '../../lib/tactics';
 import { TACTIC_SLOTS } from '../../lib/match-v5';
+import { deriveStats } from '../../lib/funnel';
 import type { OpponentBuild, TeamIntent } from '../../lib/run';
 import type { Card } from '../../lib/scoring';
 import { subBlockReason, cumulativeStats } from '../../lib/match-v5';
@@ -39,6 +40,10 @@ interface PitchMatchViewProps {
    *  Surfaces effective power, fitness, position-fit, goals/assists and rating on the pitch
    *  cards and in the team-talk ratings panel. Computed in MatchPhase from playerMatchStats. */
   playerStats: Record<number, PlayerMatchStat>;
+  /** LIVE per-card effective ATK/DEF (split.cardStats): plan mode reads a preview of
+   *  the CURRENT plan; resolve mode reads the resolved split. Includes every trait,
+   *  manager, tactic and opposition effect — the player-facing feedback numbers. */
+  cardStats: Record<number, { atk: number; def: number; baseAtk: number; baseDef: number }>;
   onToggleTactic: (tacticId: string) => void;
   onSub: (xiCardId: number, benchCardId: number) => void;
   onReassign: (cardA: number, cardB: number) => void;
@@ -90,6 +95,11 @@ interface PitchSpot {
   // ── PER-MATCH READOUT (Wave E) — read-side stats off playerMatchStats. ──
   effPower?: number;      // fitness-adjusted power (the on-pitch level)
   tired?: boolean;        // effPower < base power → legible "down on power" tell
+  // ── LIVE two-stat readout (split.cardStats) — the feedback numbers. ──
+  atkEff?: number;        // effective ATK right now (traits/manager/tactics/cascade folded in)
+  defEff?: number;        // effective DEF right now
+  baseAtk?: number;       // the printed card ATK (colour reference)
+  baseDef?: number;       // the printed card DEF
   posFit?: boolean;       // false → playing out of position (a wrong-slot warning)
   matchRating?: number;   // 0–10 in-match rating
   goals?: number;         // goals scored this match
@@ -215,11 +225,23 @@ function PitchCard({
         <span style={{ background: misfit ? 'var(--danger)' : posColor, color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1, padding: '2px 3px', borderRadius: 2 }}>
           {spot.isGK ? 'GK' : spot.position ?? '—'}
         </span>
-        {effShown ? (
-          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 1 }}>
-            {spot.tired && <span style={{ fontFamily: PIXEL, fontSize: 8, lineHeight: 1, color: 'var(--amber)' }}>▾</span>}
-            <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, color: spot.tired ? 'var(--amber)' : 'var(--line-white)' }}>{spot.effPower}</span>
-          </span>
+        {typeof spot.atkEff === 'number' && typeof spot.defEff === 'number' ? (
+          // LIVE ATK/DEF — the feedback numbers. Colour tells the story at a glance:
+          // green = buffed above the printed stat (teammates/manager/tactics),
+          // red = below it (fitness drain, out-of-band placement, opposition),
+          // white = as printed.
+          (() => {
+            const tone = (eff: number, base?: number) =>
+              typeof base !== 'number' || eff === base ? 'var(--line-white)'
+                : eff > base ? 'var(--success)' : 'var(--danger)';
+            return (
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 1, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: tone(spot.atkEff!, spot.baseAtk), fontVariantNumeric: 'tabular-nums' }}>{spot.atkEff}</span>
+                <span style={{ fontFamily: PIXEL, fontSize: 6, lineHeight: 1, color: 'var(--dust)' }}>/</span>
+                <span style={{ fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: tone(spot.defEff!, spot.baseDef), fontVariantNumeric: 'tabular-nums' }}>{spot.defEff}</span>
+              </span>
+            );
+          })()
         ) : spot.rating !== undefined ? (
           <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, color: 'var(--line-white)' }}>{spot.rating}</span>
         ) : null}
@@ -285,10 +307,19 @@ function SubCard({ card, dim }: { card: Card; dim?: boolean }) {
       {/* Rarity rail */}
       <div style={{ height: 3, background: accent }} />
       <div style={{ padding: '4px 5px 5px', display: 'flex', flexDirection: 'column', gap: 3 }}>
-        {/* Position tab · level */}
+        {/* Position tab · printed ATK/DEF */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
           <span style={{ background: posColor, color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 7, lineHeight: 1, padding: '2px 3px', borderRadius: 2 }}>{card.position}</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, color: 'var(--cream)' }}>{Math.round(card.power)}</span>
+          {(() => {
+            const st = deriveStats(card);
+            return (
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 2 }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--cream)' }}>{st.atk}</span>
+                <span style={{ fontFamily: PIXEL, fontSize: 7, lineHeight: 1, color: 'var(--dust)' }}>/</span>
+                <span style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--cream-soft)' }}>{st.def}</span>
+              </span>
+            );
+          })()}
         </div>
         {/* Surname */}
         <div style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--cream)', lineHeight: 1.05, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lastName(card.name)}</div>
@@ -694,6 +725,7 @@ function yourPitch(
   matchState: MatchV5State,
   formation: Formation,
   playerStats: Record<number, PlayerMatchStat>,
+  cardStats: Record<number, { atk: number; def: number; baseAtk: number; baseDef: number }>,
 ): PitchSpot[] {
   const nums = numberSlots(formation.slots);
   return formation.slots.map((slot, i) => {
@@ -704,6 +736,7 @@ function yourPitch(
     // Per-match stats (read-side; effective power, rating, G/A, position-fit).
     const st = card ? playerStats[card.id] : undefined;
     const effPower = st?.effectivePower;
+    const live = card ? cardStats[card.id] : undefined;
     return {
       slot, band, number: nums.get(i) ?? i + 1,
       name: card ? lastName(card.name) : null, isGK, cardId: card?.id,
@@ -717,6 +750,10 @@ function yourPitch(
       lowFitness: typeof fitness === 'number' && fitness <= LOW_FITNESS,
       effPower,
       tired: typeof effPower === 'number' && card ? effPower < Math.round(card.power) : false,
+      atkEff: live?.atk,
+      defEff: live?.def,
+      baseAtk: live?.baseAtk,
+      baseDef: live?.baseDef,
       // posFit defaults true when no stat row (e.g. mid-drag transient); only false flags a misfit.
       posFit: st ? st.posFit : true,
       matchRating: st?.rating,
@@ -740,6 +777,7 @@ function rivalPitch(matchState: MatchV5State): PitchSpot[] {
   return opponentFormation.slots.map((slot, i) => {
     const card = opponentXI[i] ?? null;
     const isGK = slot.type === 'GK' || card?.position === 'GK';
+    const stats = card ? deriveStats(card) : undefined;
     return {
       slot, band: bandOf(cellOf(slot.x, slot.y)),
       number: nums.get(i) ?? i + 1,
@@ -747,6 +785,10 @@ function rivalPitch(matchState: MatchV5State): PitchSpot[] {
       card: card ?? undefined,
       isStar: !!card && card.id === starId && !isGK,
       rating: card ? Math.round(card.power) : undefined,
+      atkEff: stats?.atk,
+      defEff: stats?.def,
+      baseAtk: stats?.atk,
+      baseDef: stats?.def,
       position: card?.position,
       rarity: card?.rarity,
       archetype: card?.archetype,
@@ -953,7 +995,7 @@ function GoalsFeed({ goals, surnameOf, delay = 0 }: { goals: GoalLine[]; surname
 // read at a glance who to hook. Glass shell, pixel content. Internal scroll only —
 // the page never scrolls. Pure presentational; the host owns playerStats + close.
 // ---------------------------------------------------------------------------
-function RatingRow({ st, rank }: { st: PlayerMatchStat; rank: number }) {
+function RatingRow({ st, rank, live }: { st: PlayerMatchStat; rank: number; live?: { atk: number; def: number } }) {
   const band = ratingBand(st.rating);
   return (
     <div
@@ -979,7 +1021,10 @@ function RatingRow({ st, rank }: { st: PlayerMatchStat; rank: number }) {
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)' }}>PWR <b style={{ color: 'var(--cream-soft)' }}>{st.effectivePower}</b></span>
+          <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)' }}>
+            A <b style={{ color: 'var(--cream-soft)' }}>{live?.atk ?? '—'}</b>{' '}
+            D <b style={{ color: 'var(--cream-soft)' }}>{live?.def ?? '—'}</b>
+          </span>
           {(st.goals > 0 || st.assists > 0) && (
             <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--gold)' }}>
               {st.goals > 0 ? `⚽${st.goals}` : ''}{st.goals > 0 && st.assists > 0 ? ' ' : ''}{st.assists > 0 ? `A${st.assists}` : ''}
@@ -996,7 +1041,7 @@ function RatingRow({ st, rank }: { st: PlayerMatchStat; rank: number }) {
   );
 }
 
-function RatingsSheet({ stats, goals, surnameOf, onClose }: { stats: PlayerMatchStat[]; goals: GoalLine[]; surnameOf: (n: string) => string; onClose: () => void }) {
+function RatingsSheet({ stats, goals, surnameOf, onClose, cardStats }: { stats: PlayerMatchStat[]; goals: GoalLine[]; surnameOf: (n: string) => string; onClose: () => void; cardStats: Record<number, { atk: number; def: number }> }) {
   const sorted = [...stats].sort((a, b) => b.rating - a.rating);
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 23, background: 'rgba(2,9,5,0.62)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }} className="scrim-fade">
@@ -1026,7 +1071,7 @@ function RatingsSheet({ stats, goals, surnameOf, onClose }: { stats: PlayerMatch
             <span style={{ fontSize: 9, color: 'var(--dust)' }}>tap a player on the pitch to sub</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-            {sorted.map((st, i) => <RatingRow key={st.cardId} st={st} rank={i} />)}
+            {sorted.map((st, i) => <RatingRow key={st.cardId} st={st} rank={i} live={cardStats[st.cardId]} />)}
           </div>
         </div>
       </div>
@@ -1324,7 +1369,7 @@ function CoachPanel({ notes }: { notes: CoachNote[] }) {
 
 export default function PitchMatchView({
   matchState, formation, jokers, availableTactics, ownedFormations,
-  opponentBuild, nextMinute, mode, breakMoment, currentResult, playerStats,
+  opponentBuild, nextMinute, mode, breakMoment, currentResult, playerStats, cardStats,
   onToggleTactic, onSub, onReassign, onFormationChange, onAutoSelect, onIntentChange, onContinue,
 }: PitchMatchViewProps) {
   const [trayOpen, setTrayOpen] = useState(false);
@@ -1376,7 +1421,7 @@ export default function PitchMatchView({
   // Team identity prefers the live engine style, falling back to the build's label.
   const oppStyleLabel = matchState.opponentStyle || opponentBuild.style;
 
-  const youSpots = useMemo(() => yourPitch(matchState, formation, playerStats), [matchState, formation, playerStats]);
+  const youSpots = useMemo(() => yourPitch(matchState, formation, playerStats, cardStats), [matchState, formation, playerStats, cardStats]);
   const rivalSpots = useMemo(() => rivalPitch(matchState), [matchState]);
   const spots = oppView ? rivalSpots : youSpots;
 
@@ -2488,6 +2533,7 @@ export default function PitchMatchView({
           goals={goalsLedger}
           surnameOf={lastName}
           onClose={() => setRatingsOpen(false)}
+          cardStats={cardStats}
         />
       )}
 

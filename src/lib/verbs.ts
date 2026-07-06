@@ -199,6 +199,10 @@ export interface FieldState {
   /** StateEffect sinks (inert until energy/slots land in step 3). */
   energy: Map<number, number>;
   fitness: Map<number, number>;
+  /** DISPLAY-ONLY per-card attribution of card-touching deltas (flat buffs, %
+   *  amps, zone amplifies attributed by base emission share). Never feeds the
+   *  field math — read by the pitch UI to show live effective ATK/DEF. */
+  cardDelta: Map<number, Partial<Record<ZoneName, number>>>;
 }
 
 export interface TraitLogLine {
@@ -215,6 +219,8 @@ export interface TraitLogLine {
 export interface DispatchResult {
   /** The transformed 9×6 grid. */
   cells: Record<Cell, Record<ZoneName, number>>;
+  /** DISPLAY-ONLY per-card deltas (see FieldState.cardDelta). */
+  cardDelta: Map<number, Partial<Record<ZoneName, number>>>;
   /** Aggregate over all cells, per lane (drives the six funnel stats). */
   zones: Record<ZoneName, number>;
   /** Σ creation per pitch lane (stage 2's push vector — chances are made in a channel). */
@@ -261,7 +267,15 @@ function emptyCells(): Record<Cell, Record<ZoneName, number>> {
 }
 
 function emptyField(cells: Record<Cell, Record<ZoneName, number>>): FieldState {
-  return { cells, opponentDenial: 0, opponentZoneDenial: {}, variance: 0, energy: new Map(), fitness: new Map() };
+  return { cells, opponentDenial: 0, opponentZoneDenial: {}, variance: 0, energy: new Map(), fitness: new Map(), cardDelta: new Map() };
+}
+
+/** Record a display-only per-card delta (never feeds the field math). */
+function addCardDelta(pool: FieldState, cardId: number, zone: ZoneName, v: number): void {
+  if (v === 0) return;
+  const cur = pool.cardDelta.get(cardId) ?? {};
+  cur[zone] = (cur[zone] ?? 0) + v;
+  pool.cardDelta.set(cardId, cur);
 }
 
 /** Synthesize the non-emitting owner that carries a side's squad-wide records. */
@@ -295,6 +309,7 @@ function cloneField(f: FieldState): FieldState {
     variance: f.variance,
     energy: new Map(f.energy),
     fitness: new Map(f.fitness),
+    cardDelta: new Map([...f.cardDelta].map(([id, d]) => [id, { ...d }])),
   };
 }
 
@@ -314,6 +329,11 @@ function foldDelta(field: FieldState, pool: FieldState): void {
   field.variance += pool.variance;
   for (const [id, v] of pool.energy) addToMap(field.energy, id, v);
   for (const [id, v] of pool.fitness) addToMap(field.fitness, id, v);
+  for (const [id, d] of pool.cardDelta) {
+    const cur = field.cardDelta.get(id) ?? {};
+    for (const [z, v] of Object.entries(d) as [ZoneName, number][]) cur[z] = (cur[z] ?? 0) + v;
+    field.cardDelta.set(id, cur);
+  }
 }
 
 /** Sum a transformed grid back into per-kind totals. */
@@ -490,11 +510,17 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
           pool.cells[cell][zone] += d;
           delta += d;
         }
+        // Display attribution: each teammate's share of the zone lift, by its own
+        // base emission (first-order honest — generates/earlier deltas stay team-level).
+        for (const mate of ctx.team) {
+          if (mate.emit[zone] !== 0) addCardDelta(pool, mate.id, zone, mate.emit[zone] * amount);
+        }
         pushLog(ctx, zone, delta, `${Math.round(amount * 100)}% zone`);
       } else {
         // Own emission into that kind, landing in the owner's own cell.
         const delta = owner.emit[zone] * amount;
         pool.cells[owner.cell][zone] += delta;
+        addCardDelta(pool, owner.id, zone, delta);
         pushLog(ctx, zone, delta, `${Math.round(amount * 100)}% own`);
       }
       return;
@@ -511,17 +537,20 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
         const lane = laneOfCard(card);
         const zone: ZoneName = lane === 'leadership' ? 'possession' : lane;
         pool.cells[card.cell][zone] += flatAtk;
+        addCardDelta(pool, card.id, zone, flatAtk);
         pushLog(ctx, zone, flatAtk, `+${flatAtk} ATK (#${card.id})`);
       }
       if (flatDef !== 0) {
         const zone = DEF_LANE_OF_BAND[bandOf(card.cell)];
         pool.cells[card.cell][zone] += flatDef;
+        addCardDelta(pool, card.id, zone, flatDef);
         pushLog(ctx, zone, flatDef, `+${flatDef} DEF (#${card.id})`);
       }
       if (amount === 0) continue;
       for (const zone of targetZones(record.target, card)) {
         const delta = card.emit[zone] * amount;
         pool.cells[card.cell][zone] += delta;
+        addCardDelta(pool, card.id, zone, delta);
         pushLog(ctx, zone, delta, `+${Math.round(amount * 100)}% (#${card.id})`);
       }
     }
@@ -537,6 +566,7 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
       for (const zone of targetZones(record.target, card)) {
         const delta = card.emit[zone] * weight;
         pool.cells[card.cell][zone] += delta;
+        addCardDelta(pool, card.id, zone, delta);
         pushLog(ctx, zone, delta, `+${(weight * 100).toFixed(1)}% (#${card.id})`);
       }
     }
@@ -692,6 +722,7 @@ export function dispatchTraits(
     variance: field.variance,
     energy: field.energy,
     fitness: field.fitness,
+    cardDelta: field.cardDelta,
     log,
   };
 }
