@@ -64,7 +64,7 @@ function playTie(xi: Card[], cup: number, m: number, seed: number): 'win' | 'dra
   let state = initMatch(xi, [], [], formation, 'tiki-taka', [], seed, cup, 'Balanced', 'Creator', {}, 'balanced', power);
   for (let i = 0; i < 5; i++) {
     state = commitAttackers(state, pickAttackers(state));
-    state = advanceIncrement(state, resolveIncrement(state, evaluateSplit(state, [], null), seed));
+    state = advanceIncrement(state, resolveIncrement(state, evaluateSplit(state, []), seed));
   }
   for (const played of state.xi) {
     const src = xi.find((c) => c.id === played.id);

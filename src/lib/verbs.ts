@@ -34,6 +34,7 @@
 import { seededRandom } from './scoring';
 import type { Cell, Band, Lane } from './field';
 import { CELLS, bandOf, laneOf } from './field';
+import { laneOfCard, DEF_LANE_OF_BAND } from './funnel';
 
 // ---------------------------------------------------------------------------
 // Palette (DESIGN §2, ARCHETYPES §1)
@@ -100,13 +101,17 @@ export type CriterionName =
   | 'highest-power'
   | 'attackers'
   | 'defenders'
-  | 'archetype';
+  | 'archetype'
+  // Snap-scale stat thresholds (FUNNEL_MODEL_V1 two-stat): target teammates by their
+  // ATK/DEF numbers — the card-interaction layer ("buff everyone with DEF below 5").
+  | 'stat-below'
+  | 'stat-atLeast';
 
 export type TraitTarget =
   | { kind: 'zone'; zone: ZoneName }
   | { kind: 'self' }
-  | { kind: 'criterion'; criterion: CriterionName; archetype?: string; zone?: ZoneName }
-  | { kind: 'enemyCard'; criterion?: CriterionName; archetype?: string; zone?: ZoneName };
+  | { kind: 'criterion'; criterion: CriterionName; archetype?: string; zone?: ZoneName; stat?: 'atk' | 'def'; value?: number }
+  | { kind: 'enemyCard'; criterion?: CriterionName; archetype?: string; zone?: ZoneName; stat?: 'atk' | 'def'; value?: number };
 
 /** Conditions are data, not closures, so a record stays fully declarative. */
 export type TraitCondition =
@@ -159,6 +164,9 @@ export interface TraitRecord {
 export interface DispatchCard {
   id: number;
   power: number;
+  /** Snap-scale stats (−1..20), pre-fitness — the numbers stat-threshold criteria read. */
+  atk: number;
+  def: number;
   archetype: string;
   tacticalRole?: string;
   position: string;
@@ -259,7 +267,7 @@ function emptyField(cells: Record<Cell, Record<ZoneName, number>>): FieldState {
 /** Synthesize the non-emitting owner that carries a side's squad-wide records. */
 function makeSquadSource(id: number, team: 'player' | 'opponent', traits: TraitRecord[]): DispatchCard {
   return {
-    id, power: 0, archetype: '__squad__', position: '', team, side: 'attack',
+    id, power: 0, atk: 0, def: 0, archetype: '__squad__', position: '', team, side: 'attack',
     isWide: false, cell: 'MID_C', emit: zeroZones(), traits, source: true,
   };
 }
@@ -403,7 +411,7 @@ function resolveTargetCards(ctx: VerbContext): DispatchCard[] {
 
 function pickByCriterion(
   cards: DispatchCard[],
-  target: { criterion?: CriterionName; archetype?: string },
+  target: { criterion?: CriterionName; archetype?: string; stat?: 'atk' | 'def'; value?: number },
 ): DispatchCard[] {
   if (cards.length === 0) return [];
   switch (target.criterion) {
@@ -417,6 +425,10 @@ function pickByCriterion(
       return cards.filter((c) => c.side === 'defence');
     case 'archetype':
       return cards.filter((c) => c.archetype === target.archetype);
+    case 'stat-below':
+      return cards.filter((c) => (target.stat === 'atk' ? c.atk : c.def) < (target.value ?? 0));
+    case 'stat-atLeast':
+      return cards.filter((c) => (target.stat === 'atk' ? c.atk : c.def) >= (target.value ?? 0));
     case 'all-teammates':
     case undefined:
     default:
@@ -490,6 +502,23 @@ const VERBS: Record<VerbName, (ctx: VerbContext) => void> = {
 
     const cards = record.target.kind === 'self' ? [owner] : resolveTargetCards(ctx);
     for (const card of cards) {
+      // Snap-scale FLAT stat buffs (the card-interaction layer): +N ATK lands in the
+      // target's skillset attacking lane; +N DEF in the counter-lane of its band —
+      // exactly where the stat itself would have landed. Not fitness-scaled: +2 is +2.
+      const flatAtk = record.params.flatAtk ?? 0;
+      const flatDef = record.params.flatDef ?? 0;
+      if (flatAtk !== 0) {
+        const lane = laneOfCard(card);
+        const zone: ZoneName = lane === 'leadership' ? 'possession' : lane;
+        pool.cells[card.cell][zone] += flatAtk;
+        pushLog(ctx, zone, flatAtk, `+${flatAtk} ATK (#${card.id})`);
+      }
+      if (flatDef !== 0) {
+        const zone = DEF_LANE_OF_BAND[bandOf(card.cell)];
+        pool.cells[card.cell][zone] += flatDef;
+        pushLog(ctx, zone, flatDef, `+${flatDef} DEF (#${card.id})`);
+      }
+      if (amount === 0) continue;
       for (const zone of targetZones(record.target, card)) {
         const delta = card.emit[zone] * amount;
         pool.cells[card.cell][zone] += delta;

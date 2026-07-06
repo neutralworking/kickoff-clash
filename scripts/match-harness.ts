@@ -17,14 +17,9 @@ import { fileURLToPath } from 'node:url';
 
 import { transformCards, type KCCard } from '../src/lib/transform';
 import { getFormation } from '../src/lib/formations';
-import { ALL_TACTICS, chargesLeft, type TacticCard } from '../src/lib/tactics';
-import { getOpponentPlayById } from '../src/lib/opponent';
-import { tacticTraits, type SquadContext } from '../src/lib/squad-transforms';
-import { gradeCall } from '../src/lib/plays';
 import {
   initMatch,
   commitAttackers,
-  callPlay,
   evaluateSplit,
   resolveIncrement,
   advanceIncrement,
@@ -90,53 +85,16 @@ function pickAttackers(state: MatchV5State): number[] {
     .map(c => c.id);
 }
 
-// Simple deterministic call policy: answer the telegraphed play — the first
-// charged play (in ALL_TACTICS order) that grades best via gradeCall.
-function chooseAnsweringPlay(state: MatchV5State): TacticCard | null {
-  const oppRecords = state.opponentPlay
-    ? getOpponentPlayById(state.opponentPlay.id)?.records ?? []
-    : [];
-  const ctx: SquadContext = {
-    xi: state.xi,
-    increment: state.currentIncrement,
-    opponentGoals: state.opponentGoals,
-    yourGoals: state.yourGoals,
-    connections: [],
-    intent: state.intent,
-    opponentPlayId: state.opponentPlay?.id,
-  };
-  let best: TacticCard | null = null;
-  let bestScore = 0;
-  for (const t of ALL_TACTICS) {
-    if (chargesLeft(t, state.playChargesUsed) <= 0) continue;
-    const records = tacticTraits(t, ctx);
-    const grade = gradeCall(t, oppRecords, records);
-    const score = grade === 'answered' ? 2 : grade === 'neutral' && records.length > 0 ? 1 : -1;
-    if (score > bestScore) { best = t; bestScore = score; }
-  }
-  return best;
-}
 
 for (let i = 0; i < 5; i++) {
   const attackerIds = pickAttackers(state);
   state = commitAttackers(state, attackerIds);
 
-  // Called Plays: read the telegraph, call the answering play.
-  const play = chooseAnsweringPlay(state);
-  state = callPlay(state, play?.id ?? null);
-  const calledPlay = state.calledPlayId ? play : null;
-
-  const split = evaluateSplit(state, [], calledPlay);
-  const baseline = calledPlay ? evaluateSplit(state, [], null) : null;
-  const result = resolveIncrement(state, split, SEED, baseline);
+  const split = evaluateSplit(state, []);
+  const result = resolveIncrement(state, split, SEED);
 
   console.log(`\n--- Increment ${i + 1} (${result.minute}') ---`);
   console.log(`  Committed ${attackerIds.length} attackers; XI injured=${state.xi.filter(c => c.injured).length}`);
-  console.log(`  Their play: ${result.opponentPlayName ?? 'none'} ("${state.opponentPlay?.telegraph ?? ''}")`);
-  console.log(`  Your call:  ${result.calledPlayName ?? 'none'} → ${result.callGrade ?? 'n/a'}`);
-  if (result.playImpact) {
-    console.log(`  Play impact: yourCallXG=${result.playImpact.yourCallXG.toFixed(2)} theirPlayXG=${result.playImpact.theirPlayXG.toFixed(2)}`);
-  }
   console.log(`  Possession ${split.possession} | Creation ${split.chanceCreation} | Finishing ${split.shotQuality} | Pressing ${split.pressing} | Defence ${split.defenceScore}`);
   console.log(`  Opp XI field:  atk=${result.opponentAttack} def=${result.opponentDefence}`);
   console.log(`  Goal chances:  you=${(result.yourGoalChance * 100).toFixed(1)}% them=${(result.opponentGoalChance * 100).toFixed(1)}%`);

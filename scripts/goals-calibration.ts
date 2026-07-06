@@ -46,7 +46,7 @@ function runMatch(xi: Card[], bench: Card[], round: number, seed: number) {
   let state = initMatch(xi, bench, [], formation, 'tiki-taka', [], seed, round, 'Balanced', 'Sprinter');
   for (let i = 0; i < 5; i++) {
     state = commitAttackers(state, pickAttackers(state));
-    const split = evaluateSplit(state, [], null);
+    const split = evaluateSplit(state, []);
     state = advanceIncrement(state, resolveIncrement(state, split, seed));
   }
   return { yg: state.yourGoals, og: state.opponentGoals };

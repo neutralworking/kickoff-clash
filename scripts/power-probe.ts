@@ -63,7 +63,7 @@ function runMatch(xi: Card[], power: number, seed: number): 'win' | 'draw' | 'lo
   let state = initMatch(xi, [], [], formation, 'tiki-taka', [], seed, 2, 'Balanced', 'Creator', {}, 'balanced', power);
   for (let i = 0; i < 5; i++) {
     state = commitAttackers(state, pickAttackers(state));
-    state = advanceIncrement(state, resolveIncrement(state, evaluateSplit(state, [], null), seed));
+    state = advanceIncrement(state, resolveIncrement(state, evaluateSplit(state, []), seed));
   }
   return getMatchResult(state).result;
 }

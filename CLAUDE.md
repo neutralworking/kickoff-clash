@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Required first read
 
-**The live game's match model is the FUNNEL (`docs/FUNNEL_MODEL_V1.md`) — read it first.** Possession yields chances, chances yield goals; pressing kills possession, destruction kills chances, defence prevents goals. Every card feeds exactly ONE lane (its skillset's — `src/lib/funnel.ts`), with two sanctioned exceptions: Commander leadership tech cards (team-wide spread) and Antagonists (deny the opposing defence lane). **Conflict rule: FUNNEL_MODEL_V1 wins** over older docs and code for the live game.
+**The live game's match model is the FUNNEL with SNAP-SCALE two-stat cards (`docs/FUNNEL_MODEL_V1.md`) — read it first.** Possession yields chances, chances yield goals; pressing kills possession, destruction kills chances, defence prevents goals. Every card is ATK + DEF (integers −1..20, `deriveStats` in `src/lib/funnel.ts`) plus its action traits: ATK lands by skillset (finishing/creation/possession), DEF by the band it stands in (forwards press, midfielders destroy, backs defend). Traits interact across cards by stat threshold (flat buffs like "+2 DEF to teammates under 5"). Exceptions: Commander leadership tech cards (team-wide spread) and Antagonists (deny the opposing defence lane). **Tactic cards are EQUIPPED (up to 3, pre-kick-off, always-on)** — the per-spell called-plays/telegraph/counter system is gone. **Conflict rule: FUNNEL_MODEL_V1 wins** over older docs and code for the live game.
 
 **The `src/engine/` rebuild is ABANDONED** (owner decision after the P5 playtest — "we were closer with the old version"). The rebuild specs (`docs/SYNERGY_MODEL_V1.md`, `docs/KC_REBUILD_PLAN_V1.md`, `docs/MIGRATION_NOTES.md`), the `src/engine/` tree, its vitest suite, and the `/rebuild` UI remain on disk as a parked reference but get no further investment; the title-screen entry to `/rebuild` was removed. `npm test` still runs the parked engine's suite (it must stay green as plain CI hygiene), but it is no longer an acceptance gate for live-game work. The older `docs/ARCHETYPES_V1 / CARDS_V1 / MATCH_ENGINE_V1 / ECONOMY_V1` remain background reading where FUNNEL_MODEL_V1 doesn't speak.
 
@@ -46,13 +46,13 @@ The live engine's validation battery: `npx tsx scripts/verb-dispatcher-harness.t
 | File | Purpose |
 |---|---|
 | `match-v5.ts` | Active match engine: 5 × 15-min increments, funnel emission + cascade, goal resolution |
-| `funnel.ts` | The one-card-one-lane model (FUNNEL_MODEL_V1): `laneOfCard`, `LANE_BAND` band-fit weights, `LEAD_SPREAD`, `LANE_COPY` display strings (the card modal's JOB row reads it) |
+| `funnel.ts` | The two-stat funnel model (FUNNEL_MODEL_V1): `deriveStats` (ATK/DEF −1..20), `laneOfCard` (ATK lane), `DEF_LANE_OF_BAND`, `LANE_BAND`, `LEAD_SPREAD`, `LANE_COPY` (the card JOB row) |
 | `chemistry.ts` | 4-tier synergy: archetype pairs → role combos → personality themes → Perfect Dressing Room |
 | `scoring.ts` | Card types, archetypes, playing styles (Tiki-Taka, Gegenpressing, etc.), seeded RNG |
 | `transform.ts` | `kc_characters.json` → `Card[]` (position map + `MODEL_TO_ARCHETYPE` map) |
 | `formations.ts` | 8 formations, 11 slots each, pitch x/y geometry, max-attacker caps |
 | `jokers.ts` | Manager cards (passive modifiers); `ALL_JOKERS` registry used for rehydration |
-| `tactics.ts` | 16 tactic cards as per-spell CALLED PLAYS (charges, playClass) — the 3-slot model and the legacy `compute()` path are gone; effects live in `squad-transforms.ts tacticTraits`, opponent plays + telegraphs in `opponent.ts OPPONENT_PLAYS`, call grading in `plays.ts` |
+| `tactics.ts` | 16 tactic cards, EQUIPPED up to 3 pre-kick-off (`equipTactics`/`TACTIC_SLOTS` in match-v5) — always-on records in `squad-transforms.ts tacticTraits`; the called-plays/telegraph/grading system was removed |
 | `run.ts` | Roguelike `RunState`: deck, shop, economy, round progression |
 | `economy.ts` | Attendance, revenue, shop item generation |
 | `packs.ts` | Seeded, weighted card pack draws |
@@ -62,7 +62,7 @@ The live engine's validation battery: `npx tsx scripts/verb-dispatcher-harness.t
 
 ### Match resolution (per 15' increment) — the funnel
 
-1. **Emission**: each card's fitness-scaled power feeds its ONE lane (`funnel.ts laneOfCard`), weighted by band fit (`LANE_BAND`); Commanders spread across all six at `LEAD_SPREAD`.
+1. **Emission**: each card's fitness-scaled ATK feeds its skillset lane (`funnel.ts laneOfCard`, band-fit weighted) and its DEF feeds the band's counter-lane (`DEF_LANE_OF_BAND`); Commanders spread across all six at `LEAD_SPREAD`. Negative stats subtract.
 2. **Dispatch**: role/defining/squad `TraitRecord`s transform the 9×6 grid (`verbs.ts`); `deny` with `denyZone` knocks a fraction off the OPPONENT's named lane (the Antagonist path), plain `deny` suppresses conversion.
 3. **Cascade**: synergy/style/weakness/play-pattern totals become ONE multiplier over the three attacking lanes (and one over the three counter lanes), personality on top — distributed as the cube root per stage because the stages multiply downstream.
 4. **Stage 1**: possessions split by control after each side's pressing erases part of the other's control (`possession.ts PRESS_W`, floor `PRESS_FLOOR`).
@@ -104,14 +104,12 @@ identity matter as much as raw power, by design.
 
 ## Known tech debt
 
-- **Power scale — funnel re-anchor.** Power is BRS directly (52–95) from `kc_cards.json`.
-  The cup curve was re-placed for the funnel model (a lane-coherent XI plays well above its
-  raw average): `CUP_FINAL_POWER = [60,68,76,84,90]` + `OPENER_DROP 18` (the real cup
-  difficulty — `MatchPhase` always passes `cupMatchPower`); `ROUND_POWER = [62,68,73,78,84]`
-  is the single-match instrument fallback. cup-sweep (30 seeds): STRONG best-xi 40% /
-  rotate 83% / rotate+calls 100% champions; UPPER & MID rotate+calls ~53%; deaths
-  concentrate in cups 4–5. balance-sweep (40 seeds): win-rate monotonic S1→S5 in every
-  round and policy.
+- **Power scale — Snap two-stat.** BRS (52–95) remains on cards as the shop/rating scale,
+  but the ENGINE plays the derived ATK/DEF (−1..20). Note `deriveStats` saturates at
+  power 95 (s clamps to 1), so opponent base power above ~95 adds nothing — the top-end
+  difficulty lever is the opponent's cascade compensation (`OPP_COHESION`), not power.
+  `CUP_FINAL_POWER = [60,68,76,84,90]` + `OPENER_DROP 18`; `ROUND_POWER = [62,68,73,78,84]`.
+  balance-sweep: win-rate monotonic S1→S5 in every round and policy.
 - **Role coverage — V3.1 (data port).** The new pool's authentic `best_role` names resolve to
   trait sets via `ROLE_ALIASES` in `role-transforms.ts` (dispatcher coverage 100%), without
   overwriting the role shown on the card.
@@ -139,11 +137,12 @@ identity matter as much as raw power, by design.
   never reads the dispatcher's `variance` accumulator, so `dampen/amplify-variance`
   records do nothing. No card text claims them any more; wiring it is a scheduled
   engine change.
-- **Called Plays instrument** — `balance-sweep.ts` carries a `callPolicy` axis
-  (none/random/best) + per-play swing tables; `cup-sweep.ts` a `rotate+calls` policy.
-  Funnel anchors (40 seeds): clean-counter swing ~+0.55 xG; best-vs-none +21pp; reading
-  the telegraph cuts goals against ~3× (2.45 → 0.77); an even contest totals ~6 goals.
-  Play `generate` magnitudes were rescaled to the thinner per-lane totals.
+- **Tactics-by-cards instrument** — `balance-sweep.ts` carries an equip-policy axis
+  (none / random3 / curated3); `cup-sweep.ts` a `rotate+tactics` policy (curated trio).
+  Two-stat anchors (15/30 seeds): curated-vs-none +21pp; cup runs STRONG 87/100/100,
+  UPPER 7/33/97, MID 0/17/70 champions across best-xi/rotate/rotate+tactics — equipped
+  tactics are load-bearing; deaths concentrate in cups 4–5. Top-tier ceiling play is
+  soft (STRONG ~100%) — the owner's playtest calibrates before any further tightening.
 - **Chemistry generates are fitness-blind** (funnel pass finding): `chem.ts` amounts use
   raw `card.power`, so a fully tired XI's possession lane can tick UP via chemistry while
   its own emission falls (the dispatcher-harness tired-XI check asserts on the funnel SUM

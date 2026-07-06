@@ -24,6 +24,7 @@
  */
 
 import type { Card } from '../../lib/scoring';
+import { deriveStats } from '../../lib/funnel';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard } from '../../lib/tactics';
 import type { InvestmentCard } from '../../lib/economy';
@@ -422,19 +423,28 @@ function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent:
             </div>
           )}
         </div>
-        <div className="flex flex-col items-end" style={{ flexShrink: 0 }}>
-          <span data-kc="rating" style={{ fontFamily: PIXEL, fontSize: full ? 28 : 16, lineHeight: 0.9, color: 'var(--cream)', textShadow: '0 2px 0 var(--ink-black)' }}>
-            {Math.round(card.power)}
-          </span>
-          {/* A quiet OVR caption at `full` only — durability moved to the expanded
-              view (CardModal, below FITNESS), per the owner. At `grid` the rating
-              stands alone so the header stays maximally uncrowded. */}
-          {full && (
-            <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.6, color: 'var(--dust)', lineHeight: 1, marginTop: 2 }}>
-              OVR
+        {/* The Snap-scale two-stat block (FUNNEL_MODEL_V1): ATK red, DEF blue —
+            the numbers the engine actually plays with (−1..20). */}
+        {(() => {
+          const stats = deriveStats(card);
+          const num = (v: number, colour: string) => (
+            <span style={{ fontFamily: PIXEL, fontSize: full ? 24 : 14, lineHeight: 0.9, color: colour, textShadow: '0 2px 0 var(--ink-black)' }}>
+              {v}
             </span>
-          )}
-        </div>
+          );
+          return (
+            <div className="flex items-start" style={{ flexShrink: 0, gap: full ? 8 : 5 }}>
+              <div className="flex flex-col items-center" style={{ gap: 2 }}>
+                {num(stats.atk, 'var(--cream)')}
+                <span data-kc="rating" style={{ fontFamily: PIXEL, fontSize: full ? 8 : 6, letterSpacing: 0.5, color: 'var(--kit-red)', lineHeight: 1 }}>ATK</span>
+              </div>
+              <div className="flex flex-col items-center" style={{ gap: 2 }}>
+                {num(stats.def, 'var(--cream-soft)')}
+                <span style={{ fontFamily: PIXEL, fontSize: full ? 8 : 6, letterSpacing: 0.5, color: 'var(--kit-blue)', lineHeight: 1 }}>DEF</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Attributes row (NEW) — the space the sprite used to hog centre-stage is
