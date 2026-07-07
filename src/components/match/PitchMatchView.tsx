@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { MatchV5State, IncrementResult, MatchBeat, MatchStats, PlayerMatchStat } from '../../lib/match-v5';
+import type { MatchV5State, IncrementResult, MatchBeat, MatchStats, PlayerMatchStat, MatchForecast } from '../../lib/match-v5';
+import type { PointMod } from '../../lib/points';
 import type { Formation, FormationSlot } from '../../lib/formations';
 import { getFormation } from '../../lib/formations';
 import type { Band, Lane, Cell } from '../../lib/field';
@@ -44,6 +45,11 @@ interface PitchMatchViewProps {
    *  the CURRENT plan; resolve mode reads the resolved split. Includes every trait,
    *  manager, tactic and opposition effect — the player-facing feedback numbers. */
   cardStats: Record<number, { atk: number; def: number; baseAtk: number; baseDef: number }>;
+  /** The receipt behind each card's live numbers (split.cardMods): every flat
+   *  modifier by source. Tap a card's ATK/DEF pair to read it. */
+  cardMods: Record<number, PointMod[]>;
+  /** The forecast header (split.forecast): ATTACK v DEFENCE sums, +/- and NET. */
+  forecast: MatchForecast;
   onToggleTactic: (tacticId: string) => void;
   onSub: (xiCardId: number, benchCardId: number) => void;
   onReassign: (cardA: number, cardB: number) => void;
@@ -104,6 +110,8 @@ interface PitchSpot {
   matchRating?: number;   // 0–10 in-match rating
   goals?: number;         // goals scored this match
   assists?: number;       // assists this match
+  booked?: boolean;       // carries a yellow card this match
+  sentOff?: boolean;      // red-carded — off the pitch, points out of every contest
 }
 
 // Compact archetype code for the token (keeps a 390-wide pitch legible).
@@ -180,13 +188,15 @@ function FitnessMeter({ fitness }: { fitness: number }) {
 }
 
 function PitchCard({
-  spot, side, accent, dim, glow,
+  spot, side, accent, dim, glow, onStatTap,
 }: {
   spot: PitchSpot;
   side: 'you' | 'opp';
   accent: string;        // rarity ring / top rail colour
   dim?: boolean;         // dragged-from card fades
   glow?: boolean;        // carrier glow during resolve
+  /** Tap the ATK/DEF pair → open this card's modifier receipt. */
+  onStatTap?: () => void;
 }) {
   const posColor = spot.position ? POSITION_COLOR[spot.position] ?? 'var(--dust)' : 'var(--dust)';
   const youKit = side === 'you';
@@ -234,8 +244,16 @@ function PitchCard({
             const tone = (eff: number, base?: number) =>
               typeof base !== 'number' || eff === base ? 'var(--line-white)'
                 : eff > base ? 'var(--success)' : 'var(--danger)';
+            const changed = spot.atkEff !== spot.baseAtk || spot.defEff !== spot.baseDef;
             return (
-              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 1, flexShrink: 0, whiteSpace: 'nowrap' }}>
+              <span
+                role={onStatTap ? 'button' : undefined}
+                aria-label={onStatTap ? 'Show stat modifiers' : undefined}
+                onPointerDown={onStatTap ? (e) => { e.stopPropagation(); } : undefined}
+                onClick={onStatTap ? (e) => { e.stopPropagation(); onStatTap(); } : undefined}
+                title={onStatTap && changed ? 'Tap for the modifier receipt' : undefined}
+                style={{ display: 'inline-flex', alignItems: 'baseline', gap: 1, flexShrink: 0, whiteSpace: 'nowrap', cursor: onStatTap ? 'pointer' : undefined, padding: onStatTap ? '2px 2px' : undefined, margin: onStatTap ? '-2px -2px' : undefined }}
+              >
                 <span style={{ fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: tone(spot.atkEff!, spot.baseAtk), fontVariantNumeric: 'tabular-nums' }}>{spot.atkEff}</span>
                 <span style={{ fontFamily: PIXEL, fontSize: 6, lineHeight: 1, color: 'var(--dust)' }}>/</span>
                 <span style={{ fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: tone(spot.defEff!, spot.baseDef), fontVariantNumeric: 'tabular-nums' }}>{spot.defEff}</span>
@@ -249,6 +267,16 @@ function PitchCard({
       {/* Mini sprite — a flat pixel kit block, tinted by side. */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
         <MiniSprite side={side} isGK={spot.isGK} accent={accent} />
+        {/* Sent off: the card is on the pitch display but OUT of every contest. */}
+        {spot.sentOff && (
+          <span aria-label="Sent off" style={{ position: 'absolute', inset: 0, background: 'rgba(20,4,4,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+            <span style={{ width: 10, height: 14, background: 'var(--danger)', border: '1px solid var(--ink-black)', borderRadius: 1.5, transform: 'rotate(8deg)', boxShadow: '0 1px 0 0 var(--ink-black)' }} />
+          </span>
+        )}
+        {/* A yellow in the book — the pip warns a second means red + suspension. */}
+        {spot.booked && !spot.sentOff && (
+          <span aria-label="Booked" style={{ position: 'absolute', top: 0, right: 2, width: 6, height: 9, background: 'var(--gold)', border: '1px solid var(--ink-black)', borderRadius: 1, transform: 'rotate(8deg)', zIndex: 2 }} />
+        )}
         {/* Rating badge (req 5) — colour-coded 0–10, bottom-left over the sprite. */}
         {showStats && typeof spot.matchRating === 'number' && (() => {
           const band = ratingBand(spot.matchRating);
@@ -759,6 +787,8 @@ function yourPitch(
       matchRating: st?.rating,
       goals: st?.goals ?? 0,
       assists: st?.assists ?? 0,
+      booked: card ? (matchState.bookings?.[card.id] ?? 0) > 0 : false,
+      sentOff: card ? matchState.sentOffIds?.includes(card.id) : false,
     };
   });
 }
@@ -808,73 +838,93 @@ function rivalPitch(matchState: MatchV5State): PitchSpot[] {
 // Pure + deterministic (no RNG), so a given increment always animates the same.
 // ---------------------------------------------------------------------------
 
-type BeatKind = 'goal' | 'save' | 'miss' | 'idle';
+type BeatKind = 'goal' | 'save' | 'miss' | 'idle' | 'card';
 interface Beat {
   side: 'you' | 'opp';
   kind: BeatKind;
   lane: Lane;
   xg: number;
   label: string;
-  // ISSUE 3 — the engine commentary line for THIS exact shot (null for idle build-up),
-  // so the animated zone and the surfaced text always describe the same event.
+  /** 'card' beats: red or yellow. */
+  red?: boolean;
+  /** The named player for card/idle callouts (fouler, corner winner). */
+  name?: string | null;
+  // The engine beat behind this animation frame — text, scorer, d100 receipt.
   source: MatchBeat | null;
 }
 
-const SAVE_XG = 0.22; // a missed shot above this read as a goalkeeper's save, else off target
-
-// The engine emits one MatchBeat per shot in the SAME order buildTimeline walks the
-// shots (your shots, then the opponent's, in shot order, classified by the same 0.22
-// threshold). So we can hand each animated shot beat its source commentary line by
-// position before any reordering — keeping text, zone and animation 1:1.
+/**
+ * SCORING_V2 — the playout comes 1:1 off the engine's round beats (already in
+ * clock order): possessions, chances with their d100 receipts, corners, trait
+ * stops, bookings and reds. Each engine beat maps to one animation beat:
+ *   goal/save/miss → the shot run;  stop → a save-flash credited to the stopper
+ *   (side flipped so the ball runs AT the stopping side's goal);  booking/red →
+ *   a card flash;  turnover/corner/foul → a labelled build-up fizzle.
+ * Goals and reds are never dropped by the length cap.
+ */
 function buildTimeline(result: IncrementResult): Beat[] {
   const beats: Beat[] = [];
-  const sourceBeats = result.beats ?? [];
-  let srcIdx = 0;
-  const make = (side: 'you' | 'opp', shots: typeof result.yourShots) => {
-    for (const s of shots) {
-      const source = sourceBeats[srcIdx] ?? null;
-      srcIdx += 1;
-      if (s.goal) beats.push({ side, kind: 'goal', lane: s.lane, xg: s.xg, label: 'GOAL!', source });
-      else if (s.xg >= SAVE_XG) beats.push({ side, kind: 'save', lane: s.lane, xg: s.xg, label: side === 'you' ? 'SAVED' : 'SAVED!', source });
-      else beats.push({ side, kind: 'miss', lane: s.lane, xg: s.xg, label: 'OFF TARGET', source });
+  for (const b of result.beats ?? []) {
+    switch (b.outcome) {
+      case 'goal':
+        beats.push({ side: b.side, kind: 'goal', lane: b.lane, xg: b.xg, label: 'GOAL!', source: b });
+        break;
+      case 'save':
+        beats.push({ side: b.side, kind: 'save', lane: b.lane, xg: b.xg, label: b.side === 'you' ? 'SAVED' : 'SAVED!', source: b });
+        break;
+      case 'miss':
+        beats.push({ side: b.side, kind: 'miss', lane: b.lane, xg: b.xg, label: 'OFF TARGET', source: b });
+        break;
+      case 'stop':
+        // The stop belongs to the DEFENDING side; the animation runs the attack
+        // at their goal and flashes the stopper's trait at the moment of denial.
+        beats.push({ side: b.side === 'you' ? 'opp' : 'you', kind: 'save', lane: b.lane, xg: 0, label: (b.traitName ?? 'STOPPED').toUpperCase() + '!', source: b });
+        break;
+      case 'booking':
+        beats.push({ side: b.side, kind: 'card', lane: b.lane, xg: 0, label: 'YELLOW CARD', name: b.scorerName, source: b });
+        break;
+      case 'red':
+        beats.push({ side: b.side, kind: 'card', lane: b.lane, xg: 0, label: 'RED CARD!', red: true, name: b.scorerName, source: b });
+        break;
+      case 'foul':
+        beats.push({ side: b.side === 'you' ? 'opp' : 'you', kind: 'idle', lane: b.lane, xg: 0, label: 'FREE KICK', source: b });
+        break;
+      case 'corner':
+        beats.push({ side: b.side, kind: 'idle', lane: b.lane, xg: 0, label: b.side === 'you' ? 'CORNER WON' : 'THEIR CORNER', source: b });
+        break;
+      case 'turnover':
+        beats.push({ side: b.side, kind: 'idle', lane: 'C', xg: 0, label: b.side === 'you' ? 'MOVE BREAKS DOWN' : 'YOU WIN IT BACK', source: b });
+        break;
+      case 'spell':
+      default:
+        break; // the possession summary lives in the ticker, not the pitch
     }
-  };
-  make('you', result.yourShots);
-  make('opp', result.opponentShots);
+  }
 
-  // A couple of "nothing" possessions so wasted control reads as muted, not absent.
-  // Capped so the period stays snappy; goals/shots are never dropped.
-  const yourIdle = Math.max(0, result.yourPossessions - result.yourShots.length);
-  const oppIdle = Math.max(0, result.opponentPossessions - result.opponentShots.length);
-  const idleBeats: Beat[] = [];
-  if (yourIdle > 0) idleBeats.push({ side: 'you', kind: 'idle', lane: 'C', xg: 0, label: '', source: null });
-  if (oppIdle > 0) idleBeats.push({ side: 'opp', kind: 'idle', lane: 'C', xg: 0, label: '', source: null });
-
-  // Order: lead with a beat of build-up (idle) for tempo, then the meaningful
-  // shots in the engine's order, ending on the decisive ones. Deterministic.
-  // Goals are the headline — they are NEVER dropped by the length cap; only the
-  // surrounding non-goal beats are trimmed so the period stays snappy. (A bug fix:
-  // a flat slice used to truncate the goals when a side had many saved/missed
-  // shots, so the goal that decided the score never animated.)
-  const nonGoal = beats.filter((b) => b.kind !== 'goal');
-  const goals = beats.filter((b) => b.kind === 'goal');
-  const MAX_BEATS = 6;
-  // Reserve room for the lead idle + all goals; whatever's left goes to non-goal shots.
-  const leadIdle = idleBeats[0] ? 1 : 0;
-  const nonGoalBudget = Math.max(0, MAX_BEATS - leadIdle - goals.length);
-  const ordered: Beat[] = [];
-  if (idleBeats[0]) ordered.push(idleBeats[0]);
-  ordered.push(...nonGoal.slice(0, nonGoalBudget));
-  ordered.push(...goals); // goals last, always kept
+  // Trim to a snappy sequence: goals and reds are the record — never dropped.
+  const MAX_BEATS = 8;
+  const keep = (b: Beat) => b.kind === 'goal' || (b.kind === 'card' && b.red);
+  const must = beats.filter(keep);
+  if (beats.length > MAX_BEATS) {
+    const optional = beats.filter((b) => !keep(b));
+    const budget = Math.max(0, MAX_BEATS - must.length);
+    // Keep the most consequential optional beats (shots over fizzles), in order.
+    const rank = (b: Beat) => (b.kind === 'save' || b.kind === 'miss' ? 0 : b.kind === 'card' ? 1 : 2);
+    const chosen = new Set(
+      [...optional].sort((a, b2) => rank(a) - rank(b2)).slice(0, budget),
+    );
+    const trimmed = beats.filter((b) => keep(b) || chosen.has(b));
+    if (trimmed.length > 0) return trimmed;
+  }
 
   // If literally nothing happened, still show one quiet possession so the period
   // never feels frozen.
-  if (ordered.length === 0) ordered.push({ side: 'you', kind: 'idle', lane: 'C', xg: 0, label: '', source: null });
-  return ordered;
+  if (beats.length === 0) beats.push({ side: 'you', kind: 'idle', lane: 'C', xg: 0, label: '', source: null });
+  return beats;
 }
 
 // Beat pacing (ms): travel for shots, a touch quicker for idle build-up.
-const BEAT_MS: Record<BeatKind, number> = { goal: 1500, save: 900, miss: 850, idle: 650 };
+const BEAT_MS: Record<BeatKind, number> = { goal: 1500, save: 900, miss: 850, idle: 650, card: 1100 };
 
 // Optional slow-motion multiplier — only ever set by the headless verification
 // harness so each beat is long enough to screenshot. Never set in product.
@@ -1369,7 +1419,7 @@ function CoachPanel({ notes }: { notes: CoachNote[] }) {
 
 export default function PitchMatchView({
   matchState, formation, jokers, availableTactics, ownedFormations,
-  opponentBuild, nextMinute, mode, breakMoment, currentResult, playerStats, cardStats,
+  opponentBuild, nextMinute, mode, breakMoment, currentResult, playerStats, cardStats, cardMods, forecast,
   onToggleTactic, onSub, onReassign, onFormationChange, onAutoSelect, onIntentChange, onContinue,
 }: PitchMatchViewProps) {
   const [trayOpen, setTrayOpen] = useState(false);
@@ -1409,14 +1459,9 @@ export default function PitchMatchView({
 
   const { bench, yourGoals, opponentGoals, xi, subsRemaining } = matchState;
 
-  // ISSUE 1 — average opposition strength is the mean POWER of the REAL opponent XI
-  // (matchState.opponentXI, 60–99 scale), not the hand-authored 5-player build. This
-  // fixes the scale bug (was reading ~30–40) so it sits comparable to your ratings.
-  const oppStrength = useMemo(() => {
-    const xs = matchState.opponentXI;
-    if (!xs.length) return 0;
-    return Math.round(xs.reduce((s, c) => s + c.power, 0) / xs.length);
-  }, [matchState.opponentXI]);
+  // SCORING_V2 — the modifier receipt sheet: which card's ledger is open (tap the
+  // ATK/DEF pair on one of your pitch cards). Null = closed.
+  const [receiptId, setReceiptId] = useState<number | null>(null);
 
   // Team identity prefers the live engine style, falling back to the build's label.
   const oppStyleLabel = matchState.opponentStyle || opponentBuild.style;
@@ -1862,10 +1907,31 @@ export default function PitchMatchView({
                 <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--cream)', background: 'rgba(0,0,0,0.35)', padding: '2px 4px', lineHeight: 1, whiteSpace: 'nowrap' }}>{oppStyleLabel.toUpperCase()}</span>
               </span>
             </div>
-            {/* ISSUE 1 — clear average opposition strength badge (real XI mean power) */}
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1 }}>AVG</span>
-              <span style={{ fontSize: 11, color: 'var(--dust)' }}>OPP STRENGTH <b style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--cream)' }}>{oppStrength}</b></span>
+            {/* SCORING_V2 FORECAST — the header IS the sums: your ATTACK v their
+                DEFENCE (+edge), their ATTACK v your DEFENCE (+edge), and the NET.
+                Every number is Σ of effective card points — tap any card's stats
+                for the receipt. The single best read on who wins. */}
+            <div style={{ display: 'grid', gap: 1, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
+              {([
+                { tag: 'ATK', yours: forecast.yourAttack, theirs: forecast.oppDefence, edge: forecast.attackEdge },
+                { tag: 'DEF', yours: forecast.yourDefence, theirs: forecast.oppAttack, edge: forecast.defendEdge },
+              ] as const).map((row) => (
+                <div key={row.tag} style={{ display: 'flex', alignItems: 'baseline', gap: 4, whiteSpace: 'nowrap' }}>
+                  <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.4, color: 'var(--ink-black)', background: row.tag === 'ATK' ? 'var(--kit-red)' : 'var(--kit-blue)', borderRadius: 2, padding: '1.5px 3px', lineHeight: 1, width: 22, textAlign: 'center' }}>{row.tag}</span>
+                  <span style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)', lineHeight: 1 }}>{row.yours}</span>
+                  <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)', lineHeight: 1 }}>v</span>
+                  <span style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream-soft)', lineHeight: 1 }}>{row.theirs}</span>
+                  <span style={{ fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: row.edge > 0 ? 'var(--success)' : row.edge < 0 ? 'var(--danger)' : 'var(--dust)' }}>
+                    {row.edge > 0 ? `+${row.edge}` : row.edge}
+                  </span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, whiteSpace: 'nowrap' }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 2, padding: '1.5px 3px', lineHeight: 1, width: 22, textAlign: 'center' }}>NET</span>
+                <span style={{ fontFamily: PIXEL, fontSize: 10, lineHeight: 1, color: forecast.net > 0 ? 'var(--success)' : forecast.net < 0 ? 'var(--danger)' : 'var(--dust)' }}>
+                  {forecast.net > 0 ? `+${forecast.net}` : forecast.net} {forecast.net > 0 ? '▲ YOU' : forecast.net < 0 ? '▼ THEM' : '· LEVEL'}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -2130,7 +2196,14 @@ export default function PitchMatchView({
                   boxShadow: ringColor ? `0 0 0 2px ${ringColor}` : undefined,
                   borderRadius: 'var(--radius-sm)',
                 }}>
-                <PitchCard spot={spot} side={oppView ? 'opp' : 'you'} accent={rarityAccent} dim={isDragging} glow={carrier} />
+                <PitchCard
+                  spot={spot}
+                  side={oppView ? 'opp' : 'you'}
+                  accent={rarityAccent}
+                  dim={isDragging}
+                  glow={carrier}
+                  onStatTap={!oppView && spot.cardId !== undefined ? () => setReceiptId(spot.cardId!) : undefined}
+                />
                 {/* Goal/assist badges (req 4) — a ⚽ ball on a scorer, a 👟 boot on an
                     assister, sitting OUTSIDE the card frame (bottom-right). Persist all
                     match. Yours only (rivals carry no per-match record). */}
@@ -2165,7 +2238,7 @@ export default function PitchMatchView({
         })}
 
         {/* ---- Possession ball / shot / fizzle (event-driven) ---- */}
-        {resolving && beat && beat.kind !== 'idle' && (
+        {resolving && beat && beat.kind !== 'idle' && beat.kind !== 'card' && (
           <>
             {/* Lane glow showing where the move is going */}
             <div key={`lane-${beatIdx}`} className="lane-sweep" style={{ position: 'absolute', left: `${LANE_X[beat.lane] - 11}%`, width: '22%', top: beat.side === 'you' ? '6%' : '46%', height: '48%', background: `linear-gradient(${beat.side === 'you' ? '0deg' : '180deg'}, ${beat.side === 'you' ? 'var(--kit-blue)' : 'var(--kit-red)'}, transparent)`, opacity: 0.18, pointerEvents: 'none', zIndex: 2, animationDuration: dur(600) }} />
@@ -2181,11 +2254,28 @@ export default function PitchMatchView({
           </>
         )}
 
-        {/* A wasted possession: muted grey fizzle in midfield */}
+        {/* A build-up possession event: muted fizzle + what happened (turnover /
+            corner / free kick — straight off the engine beat's label). */}
         {resolving && beat && beat.kind === 'idle' && (
           <div key={`idle-${beatIdx}`} className="possession-fizzle" style={{ position: 'absolute', left: `${MIDFIELD.x}%`, top: `${MIDFIELD.y + (beat.side === 'you' ? -6 : 6)}%`, transform: 'translate(-50%,-50%)', display: 'grid', justifyItems: 'center', gap: 3, zIndex: 6, pointerEvents: 'none', animationDuration: dur(500) }}>
             <div style={{ width: 11, height: 11, borderRadius: '50%', background: 'rgba(136,160,140,0.6)', boxShadow: '0 0 6px rgba(136,160,140,0.4)' }} />
-            <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)' }}>{beat.side === 'you' ? 'BUILD-UP' : 'THEY PROBE'}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)' }}>{beat.label || (beat.side === 'you' ? 'BUILD-UP' : 'THEY PROBE')}</span>
+          </div>
+        )}
+
+        {/* A card — the referee's moment: a raised yellow/red with the player named.
+            A red also means the player is OFF and suspended for the next fixture. */}
+        {resolving && beat && beat.kind === 'card' && (
+          <div key={`card-${beatIdx}`} className="possession-fizzle" style={{ position: 'absolute', left: '50%', top: '46%', transform: 'translate(-50%,-50%)', display: 'grid', justifyItems: 'center', gap: 5, zIndex: 10, pointerEvents: 'none', animationDuration: dur(BEAT_MS.card) }}>
+            <span style={{ width: 22, height: 30, background: beat.red ? 'var(--danger)' : 'var(--gold)', border: '2px solid var(--ink-black)', borderRadius: 3, transform: 'rotate(8deg)', boxShadow: '0 2px 0 0 var(--ink-black)' }} />
+            <span style={{ fontFamily: PIXEL, fontSize: beat.red ? 13 : 10, lineHeight: 1, color: beat.red ? 'var(--danger)' : 'var(--gold)', textShadow: '0 2px 0 var(--ink-black)', background: 'rgba(7,16,11,0.85)', border: '1px solid var(--border)', borderRadius: 3, padding: '3px 6px' }}>
+              {beat.label}
+            </span>
+            {beat.name && (
+              <span style={{ fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: 'var(--cream)', background: 'rgba(7,16,11,0.85)', border: '1px solid var(--border)', borderRadius: 3, padding: '3px 6px' }}>
+                {lastName(beat.name).toUpperCase()}{beat.red ? ' — OFF' : ''}
+              </span>
+            )}
           </div>
         )}
 
@@ -2536,6 +2626,54 @@ export default function PitchMatchView({
           cardStats={cardStats}
         />
       )}
+
+      {/* SCORING_V2 — the modifier RECEIPT: how this card's live ATK/DEF got here.
+          Printed numbers first, then every flat modifier by source, then the totals.
+          One currency — the sheet is literally the sum the engine plays. */}
+      {receiptId !== null && (() => {
+        const card = xi.find((c) => c.id === receiptId);
+        const live = cardStats[receiptId];
+        const mods = cardMods[receiptId] ?? [];
+        if (!card || !live) return null;
+        const sum = (f: (m: PointMod) => number) => mods.reduce((s, m) => s + f(m), 0);
+        return (
+          <div role="dialog" aria-label="Stat modifiers" onClick={() => setReceiptId(null)}
+            style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(7,16,11,0.62)', display: 'flex', alignItems: 'flex-end' }}>
+            <div onClick={(e) => e.stopPropagation()}
+              style={{ width: '100%', maxHeight: '70%', overflowY: 'auto', background: 'var(--surface)', borderTop: '2px solid var(--ink-black)', borderRadius: '14px 14px 0 0', padding: '14px 16px 18px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--cream)' }}>{lastName(card.name).toUpperCase()}</span>
+                <button onClick={() => setReceiptId(null)} style={{ fontFamily: PIXEL, fontSize: 9, color: 'var(--dust)', background: 'none', border: 'none', cursor: 'pointer' }}>CLOSE ✕</button>
+              </div>
+              <div style={{ marginTop: 10, display: 'grid', gap: 4, fontVariantNumeric: 'tabular-nums' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 44px 44px', gap: 6, fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)', letterSpacing: 0.4 }}>
+                  <span>SOURCE</span><span style={{ textAlign: 'right' }}>ATK</span><span style={{ textAlign: 'right' }}>DEF</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 44px 44px', gap: 6, fontSize: 11.5, color: 'var(--cream-soft)', borderBottom: '1px solid var(--border)', paddingBottom: 5 }}>
+                  <span>Printed card</span>
+                  <span style={{ textAlign: 'right', fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)' }}>{live.baseAtk}</span>
+                  <span style={{ textAlign: 'right', fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)' }}>{live.baseDef}</span>
+                </div>
+                {mods.length === 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--dust)', padding: '4px 0' }}>No modifiers — playing exactly as printed.</div>
+                )}
+                {mods.map((m, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 44px 44px', gap: 6, fontSize: 11.5, color: 'var(--cream-soft)' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.source}</span>
+                    <span style={{ textAlign: 'right', fontFamily: PIXEL, fontSize: 10, color: m.atk > 0 ? 'var(--success)' : m.atk < 0 ? 'var(--danger)' : 'var(--dust)' }}>{m.atk > 0 ? `+${m.atk}` : m.atk !== 0 ? m.atk : '·'}</span>
+                    <span style={{ textAlign: 'right', fontFamily: PIXEL, fontSize: 10, color: m.def > 0 ? 'var(--success)' : m.def < 0 ? 'var(--danger)' : 'var(--dust)' }}>{m.def > 0 ? `+${m.def}` : m.def !== 0 ? m.def : '·'}</span>
+                  </div>
+                ))}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 44px 44px', gap: 6, fontSize: 11.5, borderTop: '1px solid var(--border)', paddingTop: 5, color: 'var(--cream)' }}>
+                  <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.4, alignSelf: 'center' }}>ON THE PITCH</span>
+                  <span style={{ textAlign: 'right', fontFamily: PIXEL, fontSize: 11, color: sum((m) => m.atk) > 0 ? 'var(--success)' : sum((m) => m.atk) < 0 ? 'var(--danger)' : 'var(--cream)' }}>{live.atk}</span>
+                  <span style={{ textAlign: 'right', fontFamily: PIXEL, fontSize: 11, color: sum((m) => m.def) > 0 ? 'var(--success)' : sum((m) => m.def) < 0 ? 'var(--danger)' : 'var(--cream)' }}>{live.def}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Full-card overlay — tap any player (yours, GK included) to inspect. */}
       <CardModal model={modal} onClose={() => setModal(null)} />

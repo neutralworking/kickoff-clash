@@ -129,7 +129,7 @@ function equipFor(policy: CallPolicy, seed: number): string[] {
 interface MatchOut {
   result: 'win' | 'draw' | 'loss';
   gf: number; ga: number;
-  attackMod: number; firstAttack: number;
+  net: number; firstAttack: number;
 }
 
 function runMatch(deck: { xi: Card[]; bench: Card[] }, round: number, seed: number, policy: CallPolicy): MatchOut {
@@ -138,17 +138,20 @@ function runMatch(deck: { xi: Card[]; bench: Card[] }, round: number, seed: numb
     deck.xi, deck.bench, [], formation, 'tiki-taka', [], seed, round, style, weakness,
     {}, 'balanced', undefined, equipFor(policy, seed),
   );
-  const attackMod = state.personalityBonus.attackMod;
   let firstAttack = 0;
+  let net = 0;
   for (let i = 0; i < 5; i++) {
     state = commitAttackers(state, pickAttackers(state));
     const split = evaluateSplit(state, []);
-    if (i === 0) firstAttack = split.possession + split.chanceCreation + split.shotQuality;
+    if (i === 0) {
+      firstAttack = split.forecast.yourAttack;
+      net = split.forecast.net;
+    }
     const result = resolveIncrement(state, split, seed);
     state = advanceIncrement(state, result);
   }
   const final = getMatchResult(state);
-  return { result: final.result, gf: state.yourGoals, ga: state.opponentGoals, attackMod, firstAttack };
+  return { result: final.result, gf: state.yourGoals, ga: state.opponentGoals, net, firstAttack };
 }
 
 // --- Sweep ---
@@ -163,10 +166,10 @@ const policyGoals: Record<CallPolicy, { gf: number; ga: number; d: number }> = {
 
 for (const round of [1, 3, 5]) {
   console.log(`── vs Round ${round} (${ROUNDS[round].style}, soft-spot ${ROUNDS[round].weakness}) ──`);
-  console.log(`  tier      | win% none | win% rand3 | win% cur3 | gf/ga (cur3)  attackMod  atk@1`);
+  console.log(`  tier      | win% none | win% rand3 | win% cur3 | gf/ga (cur3)  net@1  atk@1`);
   for (const { name, deck } of TIERS) {
     const winPct: Record<CallPolicy, number> = { none: 0, random: 0, best: 0 };
-    let gf = 0, ga = 0, am = 0, fa = 0;
+    let gf = 0, ga = 0, nt = 0, fa = 0;
     for (const policy of POLICIES) {
       let w = 0;
       for (let s = 0; s < SEEDS; s++) {
@@ -177,14 +180,14 @@ for (const round of [1, 3, 5]) {
         policyGoals[policy].gf += o.gf; policyGoals[policy].ga += o.ga;
         if (o.result === 'draw') policyGoals[policy].d++;
         if (policy === 'best') {
-          gf += o.gf; ga += o.ga; am += o.attackMod;
+          gf += o.gf; ga += o.ga; nt += o.net;
         }
         if (policy === 'none') fa += o.firstAttack;
       }
       winPct[policy] = (w / SEEDS) * 100;
     }
     const pct = (x: number) => x.toFixed(0).padStart(3);
-    console.log(`  ${name.padEnd(8)} |   ${pct(winPct.none)}%    |    ${pct(winPct.random)}%     |   ${pct(winPct.best)}%    | ${(gf / SEEDS).toFixed(1)}/${(ga / SEEDS).toFixed(1)}       ${(am / SEEDS).toFixed(2)}      ${Math.round(fa / SEEDS)}`);
+    console.log(`  ${name.padEnd(8)} |   ${pct(winPct.none)}%    |    ${pct(winPct.random)}%     |   ${pct(winPct.best)}%    | ${(gf / SEEDS).toFixed(1)}/${(ga / SEEDS).toFixed(1)}       ${Math.round(nt / SEEDS).toString().padStart(4)}   ${Math.round(fa / SEEDS)}`);
     if (round === 1) divergence[name] = fa / SEEDS;
   }
   console.log('');

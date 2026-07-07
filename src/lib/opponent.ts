@@ -19,9 +19,6 @@ import type { Card, Durability } from './scoring';
 import { seededRandom } from './scoring';
 import type { Formation } from './formations';
 import { getFormation } from './formations';
-import type { Lane } from './field';
-import { LANES } from './field';
-import type { TraitRecord } from './verbs';
 
 interface SlotProfile {
   position: string;   // a valid Card position for the slot
@@ -167,82 +164,6 @@ export function generateOpponentXI(
   return { xi, formation };
 }
 
-// ---------------------------------------------------------------------------
-// Opponent policy: scale first (play to strengths + build), counter second (§8)
-// ---------------------------------------------------------------------------
-
-/** How hard a style reads-and-counters your shape. Low by default — most sides just
- *  play their own game; reactive styles / AI managers raise it. DESIGN §7 dial. */
-const OPP_REACTIVITY: Record<string, number> = {
-  Passive: 0.15,
-  Balanced: 0.25,
-  Attacking: 0.10,
-  Counter: 0.50,
-  Adaptive: 0.60, // was 0.70 — at 0.70 the boss's within-spell dodge nullified an
-                  // aimed lane cover, flattening the call layer exactly where the
-                  // magnitude contract needs it to decide matches.
-};
-
-export function reactivityFor(style: string): number {
-  return OPP_REACTIVITY[style] ?? 0.25;
-}
-
-/**
- * PRIMARY behaviour — scale the opponent's own points. It leans into its composition's
- * dominant archetype (play to strengths) and builds its attacking output across the
- * increments. Expressed as squad records so it runs through the same dispatcher.
- */
-export function opponentScaleTraits(xi: Card[], increment: number): TraitRecord[] {
-  const recs: TraitRecord[] = [];
-
-  // Play to strengths: amplify the most common archetype (deterministic tiebreak).
-  const counts = new Map<string, number>();
-  for (const c of xi) counts.set(c.archetype, (counts.get(c.archetype) ?? 0) + 1);
-  let dominant = '';
-  let best = 0;
-  for (const [arch, n] of counts) {
-    if (n > best || (n === best && (dominant === '' || arch < dominant))) {
-      best = n;
-      dominant = arch;
-    }
-  }
-  if (dominant) {
-    recs.push({
-      name: 'Play to Strengths', verb: 'amplify', params: { amount: 0.15 }, scope: 'global',
-      target: { kind: 'criterion', criterion: 'archetype', archetype: dominant },
-    });
-  }
-
-  // Build-up: its points grow as it settles into the game.
-  if (increment > 0) {
-    const amount = 0.05 * increment;
-    recs.push({ name: 'Building', verb: 'amplify', params: { amount }, scope: 'global', target: { kind: 'zone', zone: 'possession' } });
-    recs.push({ name: 'Building', verb: 'amplify', params: { amount }, scope: 'global', target: { kind: 'zone', zone: 'creation' } });
-  }
-
-  return recs;
-}
-
-
-/**
- * SECONDARY behaviour — counter only if it can. Bias a `reactivity`-weighted share of
- * the opponent's push toward your thinnest cover lane: opportunistic, and only as
- * strong as this opponent's reactivity (a scale-focused side barely moves). Reads your
- * committed cover; deterministic.
- */
-export function counterPush(
-  oppPush: Record<Lane, number>,
-  yourCover: Record<Lane, number>,
-  reactivity: number,
-): Record<Lane, number> {
-  const out: Record<Lane, number> = { L: oppPush.L, C: oppPush.C, R: oppPush.R };
-  const total = oppPush.L + oppPush.C + oppPush.R;
-  if (total <= 0 || reactivity <= 0) return out;
-  // Your thinnest cover lane = where they can hurt you (deterministic tiebreak L<C<R).
-  let weak: Lane = 'L';
-  for (const lane of LANES) if (yourCover[lane] < yourCover[weak]) weak = lane;
-  const shift = total * reactivity * 0.5; // up to half the push for a max-reactive side
-  for (const lane of LANES) out[lane] -= shift * (oppPush[lane] / total);
-  out[weak] += shift;
-  return out;
-}
+// The old opponent POLICY layer (reactivity/counterPush/opponentScaleTraits) is
+// gone with SCORING_V2: the opponent's difficulty is its power budget plus the
+// flat cohesion points (match-v5 OPP_COHESION_PTS) — one currency, no multipliers.

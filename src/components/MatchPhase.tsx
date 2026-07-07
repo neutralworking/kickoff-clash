@@ -34,6 +34,8 @@ interface MatchPhaseProps {
     handState: HandState;
     /** Why the match went the way it did (engine computeMatchVerdict). */
     verdict: MatchVerdict;
+    /** Red-carded this match (your card ids) — suspended for the next fixture. */
+    sentOffIds: number[];
   }) => void;
 }
 
@@ -51,10 +53,14 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
 
   // Core state
   const [matchState, setMatchState] = useState<MatchV5State>(() => {
+    // Suspended cards (red-carded last match) sit this fixture out entirely —
+    // excluded from the selection AND the auto-roll (SCORING_V2 suspensions).
+    const suspended = new Set(runState.suspendedIds ?? []);
+    const eligibleDeck = runState.deck.filter((c) => !suspended.has(c.id));
     // Honour the player's pre-match selection; fall back to an auto-roll.
     const hand =
-      handFromSelection(runState.deck, runState.startingXI ?? [], runState.benchIds ?? [], formation) ??
-      rollXI(runState.deck, formation, matchSeed);
+      handFromSelection(eligibleDeck, (runState.startingXI ?? []).filter((id) => !suspended.has(id)), (runState.benchIds ?? []).filter((id) => !suspended.has(id)), formation) ??
+      rollXI(eligibleDeck, formation, matchSeed);
     return initMatch(
       hand.xi,
       hand.bench,
@@ -191,11 +197,13 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
   // ---- Finished: return result to GameShell ----
   const handleMatchFinished = useCallback(() => {
     const result = getMatchResult(matchState);
+    const yourIds = new Set([...matchState.xi, ...matchState.bench].map((c) => c.id));
     onMatchComplete({
       yourGoals: result.yourGoals,
       opponentGoals: result.opponentGoals,
       result: result.result,
       verdict: result.verdict,
+      sentOffIds: matchState.sentOffIds.filter((id) => yourIds.has(id)),
       // Bridge to HandState shape for backward compatibility
       handState: {
         xi: matchState.xi,
@@ -253,6 +261,8 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
             breakMoment={breakMoment}
             currentResult={currentResult}
             cardStats={subPhase === 'resolving' && currentResult ? currentResult.split.cardStats : previewSplit.cardStats}
+            cardMods={subPhase === 'resolving' && currentResult ? currentResult.split.cardMods : previewSplit.cardMods}
+            forecast={subPhase === 'resolving' && currentResult ? currentResult.split.forecast : previewSplit.forecast}
             playerStats={playerStats}
             onToggleTactic={handleToggleTactic}
             onSub={handleSub}

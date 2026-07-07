@@ -33,7 +33,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'high_line',
     name: 'High Line',
-    effect: 'Possession and creation +26%; your defence −12%.',
+    effect: 'Midfield and attack +1 ATK each; your back line −1 DEF.',
     flavour: '"We press from the front. The last line is courage."',
     contradicts: 'low_block',
     category: 'attacking',
@@ -41,7 +41,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'press_high',
     name: 'Press High',
-    effect: 'Pressing +35% and their conversion −15%; your Sprinters and Engines lose 0.5 fitness each spell.',
+    effect: 'Your front line presses at +2 DEF; your Sprinters and Engines lose 0.5 fitness each round.',
     flavour: '"Every second counts. Suffocate them early."',
     contradicts: 'sit_deep',
     category: 'attacking',
@@ -49,7 +49,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'wing_play',
     name: 'Wing Play',
-    effect: 'Extra chance creation down both wings; Dribblers and Sprinters +12%.',
+    effect: 'Wide players (WD/WM/WF) +2 ATK.',
     flavour: '"Stretch them. Make the pitch as wide as possible."',
     contradicts: 'narrow',
     category: 'attacking',
@@ -57,7 +57,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'narrow',
     name: 'Narrow Shape',
-    effect: 'Extra chance creation through the middle; Controllers and Passers +12%.',
+    effect: 'Controllers and Passers +2 ATK.',
     flavour: '"Compact. Triangles everywhere. No space for them to breathe."',
     contradicts: 'wing_play',
     category: 'attacking',
@@ -67,7 +67,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'low_block',
     name: 'Low Block',
-    effect: 'Their conversion −20% and extra cover across the back line. Protecting a lead you spring the break (creation +26%); otherwise your possession −8%.',
+    effect: 'Back line +2 DEF; protecting a lead, Sprinters and Dribblers +2 ATK.',
     flavour: '"Let them have the ball. We\'ll take the three points."',
     contradicts: 'high_line',
     category: 'defensive',
@@ -75,7 +75,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'sit_deep',
     name: 'Counter Trap',
-    effect: 'Their conversion −10% and extra back-line cover; Sprinters and Dribblers +25%.',
+    effect: 'Back line +1 DEF; Sprinters and Dribblers +2 ATK.',
     flavour: '"Let them come. The space behind them is ours."',
     contradicts: 'press_high',
     category: 'defensive',
@@ -83,7 +83,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'fortress',
     name: 'Fortress',
-    effect: 'Their conversion −25% and a wall of extra back-line cover.',
+    effect: 'Back line +3 DEF.',
     flavour: '"Build the wall. Make them break themselves against it."',
     category: 'defensive',
   },
@@ -92,7 +92,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'counter_attack',
     name: 'Counter Attack',
-    effect: 'While you trail: their conversion −10% and your creation and finishing +28%.',
+    effect: 'While you trail: your front line +3 ATK.',
     flavour: '"One touch. Three passes. Goal. They never learn."',
     contradicts: 'possession',
     category: 'specialist',
@@ -100,7 +100,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'possession',
     name: 'Possession Game',
-    effect: 'Possession +22%, creation +10% — keep the ball and steady the game.',
+    effect: 'Controllers, Passers and Engines +2 ATK — wins the ball contest.',
     flavour: '"The ball is ours. They can\'t score without it."',
     contradicts: 'counter_attack',
     category: 'specialist',
@@ -108,21 +108,21 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'set_piece',
     name: 'Set Piece Specialists',
-    effect: 'A central dead-ball chance every spell; Targets and Commanders finish +20%.',
+    effect: 'A chance of an extra dead-ball beat each round; Targets and Commanders +1 ATK.',
     flavour: '"Every dead ball is a chance. We\'ve rehearsed them all."',
     category: 'specialist',
   },
   {
     id: 'dark_arts',
     name: 'Dark Arts',
-    effect: 'Their conversion −10%, and their best player loses 1.5 fitness each spell.',
+    effect: 'Their best player −1 ATK/−1 DEF and loses 1.5 fitness each round.',
     flavour: '"They don\'t call it the beautiful game for nothing. Beautifully ugly."',
     category: 'specialist',
   },
   {
     id: 'youth_policy',
     name: 'Fresh Legs',
-    effect: 'From 60\' on: lifts your whole XI, weakest players most.',
+    effect: 'From 60\' on: the whole XI +1 ATK/+1 DEF.',
     flavour: '"Fresh legs win late games."',
     category: 'specialist',
   },
@@ -131,7 +131,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'overload_left',
     name: 'Overload Left',
-    effect: 'Piles chance creation into the LEFT channel.',
+    effect: 'Everyone stationed in the LEFT lane +2 ATK.',
     flavour: '"Everything down the left. Make that touchline ours."',
     contradicts: 'overload_right',
     category: 'attacking',
@@ -139,7 +139,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'overload_right',
     name: 'Overload Right',
-    effect: 'Piles chance creation into the RIGHT channel.',
+    effect: 'Everyone stationed in the RIGHT lane +2 ATK.',
     flavour: '"Swing it right and keep it there. Stretch them until they snap."',
     contradicts: 'overload_left',
     category: 'attacking',
@@ -147,14 +147,14 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'route_one',
     name: 'Route One',
-    effect: 'A direct central finishing chance every spell, with the knock-downs creating more.',
+    effect: 'A chance of an extra direct-ball beat each round; Targets +1 ATK.',
     flavour: '"Why pass it through them when you can go over them?"',
     category: 'attacking',
   },
   {
     id: 'man_marking',
     name: 'Man-to-Man Marking',
-    effect: 'Their conversion −18%, your defence +10% and extra back-line cover.',
+    effect: 'Your midfield +2 DEF.',
     flavour: '"Pick a man. Stay with him. Nobody runs free today."',
     category: 'defensive',
   },

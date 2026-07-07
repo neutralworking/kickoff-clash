@@ -218,7 +218,7 @@ export default function GameShell() {
   }, [pendingSeed]);
 
   // --- Match Complete ---
-  const handleMatchComplete = useCallback((result: { yourGoals: number; opponentGoals: number; result: 'win' | 'draw' | 'loss'; handState: HandState; verdict: MatchVerdict }) => {
+  const handleMatchComplete = useCallback((result: { yourGoals: number; opponentGoals: number; result: 'win' | 'draw' | 'loss'; handState: HandState; verdict: MatchVerdict; sentOffIds: number[] }) => {
     if (!runState) return;
 
     // Calculate attendance from hand's final XI
@@ -302,6 +302,9 @@ export default function GameShell() {
       round: runState.round,
       matchHistory: [...runState.matchHistory, matchResult],
       chemistry,
+      // SCORING_V2 suspensions: red-carded players sit out the NEXT fixture.
+      // Overwritten every match — last match's suspensions have been served.
+      suspendedIds: result.sentOffIds.filter((id) => runState.deck.some((c) => c.id === id)),
     };
 
     setLastMatchResult(matchResult);
@@ -599,7 +602,8 @@ export default function GameShell() {
         return (
           <SquadScreen
             mode="talk"
-            pool={runState.deck}
+            pool={runState.deck.filter((c) => !(runState.suspendedIds ?? []).includes(c.id))}
+            suspendedCards={runState.deck.filter((c) => (runState.suspendedIds ?? []).includes(c.id))}
             formations={formationIds.map(getFormation)}
             initialFormationId={runState.activeFormation}
             initialIntent={runState.intent ?? 'balanced'}
