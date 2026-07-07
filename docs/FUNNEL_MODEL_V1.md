@@ -1,9 +1,11 @@
 # FUNNEL_MODEL_V1 — the six-lane match model
 
-**Status: authoritative for the live game (`src/lib/`).** This supersedes the blended
-four-zone emission model and the abandoned `src/engine/` rebuild direction. Where older
-docs (MATCH_ENGINE_V5, CARDS_V1, ARCHETYPES_V1) describe cards contributing to several
-match quantities at once, this document wins.
+**Status: SUPERSEDED by `docs/SCORING_V2.md` (one currency, three contests, two dice).**
+The funnel SHAPE described here survives (possession yields chances, chances yield goals;
+pressing/destruction/defence are the killers), but the six-lane grid accounting, the
+emission weights and the cascade multipliers are gone — SCORING_V2 scores everything as
+flat card points. This document remains background reading for the shape's rationale.
+Where the two disagree, SCORING_V2 wins.
 
 ## The law
 

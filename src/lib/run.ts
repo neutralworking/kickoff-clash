@@ -69,6 +69,10 @@ export interface RunState {
   matchHistory: MatchResult[];
   modifiers: unknown[];
   chemistry: CoAppearance;   // run-accumulated pairwise co-appearances (CARDS §5)
+  /** Red-carded last match (SCORING_V2): these cards sit out the NEXT fixture,
+   *  then return. Overwritten each post-match (a suspension lasts one tie).
+   *  Optional so pre-suspension saves rehydrate cleanly. */
+  suspendedIds?: number[];
   seed: number;
 }
 
@@ -813,6 +817,7 @@ export function createRun(sel: TeamSelection, seed?: number): RunState {
     matchHistory: [],
     modifiers: [],
     chemistry: {},
+    suspendedIds: [],
     seed: runSeed,
   };
 }

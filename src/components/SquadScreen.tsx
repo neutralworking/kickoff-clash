@@ -85,6 +85,9 @@ interface SquadScreenProps {
   scoutUnlocked: boolean;
   onUnlockScout?: () => void;
   onConfirm: (result: SquadScreenResult) => void;
+  /** Red-carded last match (SCORING_V2): unavailable this fixture. The caller
+   *  filters them out of `pool`; these are surfaced as a status chip. */
+  suspendedCards?: Card[];
 }
 
 const INTENTS: { id: TeamIntent; label: string; accent: string }[] = [
@@ -229,6 +232,7 @@ export default function SquadScreen({
   scoutUnlocked,
   onUnlockScout,
   onConfirm,
+  suspendedCards = [],
 }: SquadScreenProps) {
   const byId = useMemo(() => new Map(pool.map((c) => [c.id, c])), [pool]);
 
@@ -648,8 +652,14 @@ export default function SquadScreen({
       </div>
 
       {/* ── Squad status chips (only when something needs attention) ──────── */}
-      {(injuredCount > 0 || tiredCount > 0 || misfitCount > 0) && (
+      {(injuredCount > 0 || tiredCount > 0 || misfitCount > 0 || suspendedCards.length > 0) && (
         <div className="shrink-0 px-3 mt-1 flex items-center gap-1.5">
+          {suspendedCards.length > 0 && (
+            <StatusChip
+              label={`${suspendedCards.map((c) => lastName(c.name).toUpperCase()).join(', ')} SUSPENDED`}
+              color="var(--danger)"
+            />
+          )}
           {injuredCount > 0 && <StatusChip label={`${injuredCount} INJ`} color="var(--danger)" />}
           {tiredCount > 0 && <StatusChip label={`${tiredCount} TIRED`} color="var(--gold)" />}
           {misfitCount > 0 && <StatusChip label={`${misfitCount} MISFIT`} color="var(--gold)" />}

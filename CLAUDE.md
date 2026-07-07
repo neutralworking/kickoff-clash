@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Required first read
 
-**The live game's match model is the FUNNEL with SNAP-SCALE two-stat cards (`docs/FUNNEL_MODEL_V1.md`) — read it first.** Possession yields chances, chances yield goals; pressing kills possession, destruction kills chances, defence prevents goals. Every card is ATK + DEF (integers −1..20, `deriveStats` in `src/lib/funnel.ts`) plus its action traits: ATK lands by skillset (finishing/creation/possession), DEF by the band it stands in (forwards press, midfielders destroy, backs defend). Traits interact across cards by stat threshold (flat buffs like "+2 DEF to teammates under 5"). Exceptions: Commander leadership tech cards (team-wide spread) and Antagonists (deny the opposing defence lane). **Tactic cards are EQUIPPED (up to 3, pre-kick-off, always-on)** — the per-spell called-plays/telegraph/counter system is gone. **Conflict rule: FUNNEL_MODEL_V1 wins** over older docs and code for the live game.
+**The live game's match model is SCORING_V2 — one currency, three contests, two dice (`docs/SCORING_V2.md`) — read it first.** Every effect in the game is a FLAT ±N in card points (ATK/DEF, `deriveStats` in `src/lib/funnel.ts`): traits, managers, tactics, chemistry, personality, fitness and positional penalties all land as ledgered `PointMod`s (`src/lib/points.ts`) — no percentages, no multipliers, no hidden scales. Each 15' round runs three contests (`src/lib/contests.ts`): THE BALL (controllers/passers/engines' ATK v the front line + engines' DEF splits 6 possessions, clamp 2–4, no dice), THE OUTCOME (d100 per possession: turnover/half/big/corner/foul, slid by CREATE−BREAK), THE SHOT (d100 roll-under: GOAL if `d100 ≤ BASE + 3×(shooter ATK − STOP)`, bases half 20 / big 40 / corner 15, clamp 5..80). Fouls feed bookings; a second yellow is a red (≤1/side/match) and the suspension carries to the next fixture (`RunState.suspendedIds`). Position is geometry: wide cards have a preferred flank (wrong side −2/−2) and abilities can target pitch neighbours (Overlap feeds the man ahead in the lane; Screen shields the band behind). The funnel SHAPE survives (possession→chances→goals; the killers press/destroy/defend) but the six-lane grid accounting is gone. **Tactic cards are EQUIPPED (up to 3, pre-kick-off, always-on, flat + situational).** **Conflict rule: SCORING_V2 wins** over FUNNEL_MODEL_V1 and everything older.
 
 **The `src/engine/` rebuild is ABANDONED** (owner decision after the P5 playtest — "we were closer with the old version"). The rebuild specs (`docs/SYNERGY_MODEL_V1.md`, `docs/KC_REBUILD_PLAN_V1.md`, `docs/MIGRATION_NOTES.md`), the `src/engine/` tree, its vitest suite, and the `/rebuild` UI remain on disk as a parked reference but get no further investment; the title-screen entry to `/rebuild` was removed. `npm test` still runs the parked engine's suite (it must stay green as plain CI hygiene), but it is no longer an acceptance gate for live-game work. The older `docs/ARCHETYPES_V1 / CARDS_V1 / MATCH_ENGINE_V1 / ECONOMY_V1` remain background reading where FUNNEL_MODEL_V1 doesn't speak.
 
-The live game's spine is unchanged: the verb dispatcher + `TraitRecord` runtime (`src/lib/verbs.ts`, tables in `role-transforms.ts` / `squad-transforms.ts` / `defining-traits.ts`), wired into `evaluateSplit`. `MATCH_ENGINE_V5.md` (repo root) describes the live engine's loop; where it describes the old blended four-zone emission model, FUNNEL_MODEL_V1 supersedes it.
+**The verb dispatcher is RETIRED from the live path** (SCORING_V2): `role-transforms.ts`, `squad-transforms.ts` and `possession.ts` were deleted; `verbs.ts` stays on disk ONLY because the parked `src/engine/` imports its `VerbName` type. The live spine is now `points.ts` (effective cards + the mod ledger) + `contests.ts` (the round) wired into `evaluateSplit`/`resolveIncrement` in `match-v5.ts`. `MATCH_ENGINE_V5.md` (repo root) describes the outer loop; where it describes emission/cascade scoring, SCORING_V2 supersedes it.
 
 ## Commands
 
@@ -23,7 +23,7 @@ npm run start    # Serve production build
 npm test         # Vitest — the PARKED src/engine/ suite (kept green as CI hygiene; not a live-game gate)
 ```
 
-The live engine's validation battery: `npx tsx scripts/verb-dispatcher-harness.ts` (dispatcher + funnel invariants — ALL CHECKS must pass), `scripts/match-harness.ts` (runs a full match and prints the six lane stats; the scripts are ESM with extensionless imports, so `ts-node` fails to resolve them — use `tsx`), and the balance instruments below. `scripts/balance_sim.py` (Python 3, stdlib-only) belongs to the parked rebuild.
+The live engine's validation battery: `npx tsx scripts/verb-dispatcher-harness.ts` (the SCORING_V2 invariant harness — determinism, the receipt law, interactions, the ball contest, the d100 shot law, discipline, sanity band; ALL CHECKS must pass), `scripts/match-harness.ts` (runs a full match and prints the contests + forecast; the scripts are ESM with extensionless imports, so `ts-node` fails to resolve them — use `tsx`), and the balance instruments below. `scripts/balance_sim.py` (Python 3, stdlib-only) belongs to the parked rebuild.
 
 ## What this is
 
@@ -45,29 +45,32 @@ The live engine's validation battery: `npx tsx scripts/verb-dispatcher-harness.t
 
 | File | Purpose |
 |---|---|
-| `match-v5.ts` | Active match engine: 5 × 15-min increments, funnel emission + cascade, goal resolution |
-| `funnel.ts` | The two-stat funnel model (FUNNEL_MODEL_V1): `deriveStats` (ATK/DEF −1..20), `laneOfCard` (ATK lane), `DEF_LANE_OF_BAND`, `LANE_BAND`, `LEAD_SPREAD`, `LANE_COPY` (the card JOB row) |
-| `chemistry.ts` | 4-tier synergy: archetype pairs → role combos → personality themes → Perfect Dressing Room |
-| `scoring.ts` | Card types, archetypes, playing styles (Tiki-Taka, Gegenpressing, etc.), seeded RNG |
-| `transform.ts` | `kc_characters.json` → `Card[]` (position map + `MODEL_TO_ARCHETYPE` map) |
+| `match-v5.ts` | Match orchestrator: `evaluateSplit` builds both effective sides + the forecast; `resolveIncrement` plays the round; discipline ledger (bookings/`sentOffIds`), verdict, subs, fitness drain |
+| `points.ts` | THE one-currency core (SCORING_V2): `buildSide` → `EffCard[]` (printed stats + every flat `PointMod`, with source receipts), manager/tactic/intent/chemistry/personality tables, `preferredSide` (flank), `applyEnemyEffects` (Antagonist/Dark Arts) |
+| `contests.ts` | The round: `contestTotals` (KEEP/PRESS/CREATE/BREAK/STOP/ATTACK/DEFENCE), `resolveRound` (6 possessions, outcome table, d100 shots, corners, fouls/bookings/reds, trait beats) |
+| `funnel.ts` | `deriveStats` (printed ATK/DEF −1..20 from BRS + skillset split + pillar shade), `laneOfCard` (shooter/assister weighting + the card JOB row), `LANE_COPY` |
+| `chemistry.ts` | Synergy display layer (archetype pairs / role combos / cross) + `PERSONALITY_THEMES`; match effects are flat mods in points.ts |
+| `chem.ts` | Run-accumulated pairwise chemistry (`accrueMatch`/`pruneCard`) + `chemistryLinks` (connecting pairs + strength → flat +1 links in points.ts) |
+| `scoring.ts` | Card types, archetypes, playing styles, seeded RNG |
+| `transform.ts` | `kc_cards.json` → `Card[]` (position map + `MODEL_TO_ARCHETYPE` map) |
 | `formations.ts` | 8 formations, 11 slots each, pitch x/y geometry, max-attacker caps |
-| `jokers.ts` | Manager cards (passive modifiers); `ALL_JOKERS` registry used for rehydration |
-| `tactics.ts` | 16 tactic cards, EQUIPPED up to 3 pre-kick-off (`equipTactics`/`TACTIC_SLOTS` in match-v5) — always-on records in `squad-transforms.ts tacticTraits`; the called-plays/telegraph/grading system was removed |
-| `run.ts` | Roguelike `RunState`: deck, shop, economy, round progression |
+| `jokers.ts` | Manager cards; effects are flat mods (points.ts `managerMods`); `ALL_JOKERS` registry used for rehydration |
+| `tactics.ts` | 16 tactic cards, EQUIPPED up to 3 pre-kick-off (`equipTactics`/`TACTIC_SLOTS` in match-v5) — flat, situational effects in points.ts `tacticMods` |
+| `run.ts` | Roguelike `RunState`: deck, shop, economy, round progression, `suspendedIds` |
 | `economy.ts` | Attendance, revenue, shop item generation |
 | `packs.ts` | Seeded, weighted card pack draws |
-| `hand.ts` | Intermediate hand-evaluation layer (status uncertain — verify before editing) |
-| `defining-traits.ts` | The action-trait layer (CARDS_V1 §4): `pickDefiningTraits(card)` assigns N action-traits by rarity (Common 1 / Rare 2 / Epic 3 / Legendary 4) over the verb palette; `SIGNATURE_OVERRIDES` are the bespoke showcase legends. **Player-only** — opponents opt out (`computeSideField` `includeDefiningTraits=false`). |
+| `hand.ts` | XI roll/selection + `INCREMENT_MINUTES` + event text pools |
+| `defining-traits.ts` | The action-trait layer, point-native: `PointTrait` = flat `buff`/`debuff` (thresholds, backline, lane-ahead, band-behind, self) or beat `chance`/`stop`; N by rarity (Common 1 → Legendary 4); `SIGNATURE_OVERRIDES` are the bespoke legends. **Player-only** — the faceless opponent opts out. |
 | `trait-copy.ts` | Display-only single source of truth for defining-trait words/icons (`traitCopy(name)` → label/blurb/kind/glyph) — read by the card pills AND the match animations so the two surfaces never drift. |
 
-### Match resolution (per 15' increment) — the funnel
+### Match resolution (per 15' increment) — SCORING_V2
 
-1. **Emission**: each card's fitness-scaled ATK feeds its skillset lane (`funnel.ts laneOfCard`, band-fit weighted) and its DEF feeds the band's counter-lane (`DEF_LANE_OF_BAND`); Commanders spread across all six at `LEAD_SPREAD`. Negative stats subtract.
-2. **Dispatch**: role/defining/squad `TraitRecord`s transform the 9×6 grid (`verbs.ts`); `deny` with `denyZone` knocks a fraction off the OPPONENT's named lane (the Antagonist path), plain `deny` suppresses conversion.
-3. **Cascade**: synergy/style/weakness/play-pattern totals become ONE multiplier over the three attacking lanes (and one over the three counter lanes), personality on top — distributed as the cube root per stage because the stages multiply downstream.
-4. **Stage 1**: possessions split by control after each side's pressing erases part of the other's control (`possession.ts PRESS_W`, floor `PRESS_FLOOR`).
-5. **Stage 2**: per possession, P(shot) from creation lane-push vs destruction lane-cover in the pitch lane (L/C/R).
-6. **Stage 3**: per shot, xG from finishing vs defence (`XG_CONVEX`), suppressed by denial; goal = dice roll.
+1. **Build** (`points.ts buildSide`, both sides): printed ATK/DEF + flat mods — fitness bands (0/−1/−2/−3), wrong flank / out of position (−2/−2), defining-trait buffs (thresholds read the pass-A snapshot, so order can't matter), manager/tactic/intent/chemistry/personality, opponent cohesion (`OPP_COHESION_PTS` by cup); then cross-side effects (Antagonist −2 DEF on their back line, Dark Arts). Every mod is a named receipt (`split.cardMods`) behind the green/red numbers on the pitch.
+2. **Forecast**: the header is the sums — `ATK Σyours v ΣtheirDEF (+edge) / DEF v theirATK (+edge) / NET` (`split.forecast`).
+3. **THE BALL**: `max(1, KEEP − their PRESS)` each way splits 6 possessions (clamp 2–4). Deterministic.
+4. **THE OUTCOME** (die #1): d100 per possession on turnover/half/big/corner/foul, slid ±10 by `(CREATE − BREAK)/4`. Corners cap at 3/side/round; trait `chance`s inject up to 2 bonus beats; armed `stop`s cancel opposing chances (keeper saves included).
+5. **THE SHOT** (die #2): named shooter (weighted by eff ATK + finishing lane); GOAL if `d100 ≤ clamp(BASE + 3×(shooter ATK − STOP), 5, 80)`; the roll and the need print on the beat.
+6. **Discipline**: fouls draw a fouler (destroyers likeliest); booking d100 ≤ 30; second yellow = red (≤1/side/match) — his points leave every contest at once and he's suspended next fixture.
 
 ### Character data
 
@@ -88,9 +91,10 @@ No Redux, Zustand, or Context. Pure React hooks. `GameShell.tsx` is the single s
 Match-engine balance changes MOVE the meta by design, so byte-identical determinism is
 the wrong test for them. `scripts/balance-sweep.ts` (`npx tsx scripts/balance-sweep.ts [seeds]`)
 sweeps deck-strength tiers × opponent rounds × N seeds and reports win/draw/loss rate,
-personality `attackMod`, and TOP-vs-WEAK attack divergence — the instrument for "do builds
+first-increment forecast NET, and TOP-vs-WEAK attack divergence — the instrument for "do builds
 matter, and is the win-rate monotonic in deck strength?" Use it (not the determinism harness)
-when tuning `ROUND_POWER`, `OPP_COHESION`, `XG_CONVEX`, the personality cap, or the power scale.
+when tuning `ROUND_POWER`, `OPP_COHESION_PTS`, the shot bases/caps in `contests.ts`, or the
+stat budget in `deriveStats`.
 
 Two companion instruments: `scripts/cup-sweep.ts` simulates full 20-match cup runs under
 best-XI vs rotate policies (the instrument for `CUP_FINAL_POWER`/`OPENER_DROP` and "does
@@ -104,47 +108,34 @@ identity matter as much as raw power, by design.
 
 ## Known tech debt
 
-- **Power scale — Snap two-stat.** BRS (52–95) remains on cards as the shop/rating scale,
-  but the ENGINE plays the derived ATK/DEF (−1..20). Note `deriveStats` saturates at
-  power 95 (s clamps to 1), so opponent base power above ~95 adds nothing — the top-end
-  difficulty lever is the opponent's cascade compensation (`OPP_COHESION`), not power.
+- **Power scale — one currency.** BRS (52–95) remains on cards as the shop/rating scale,
+  but the ENGINE plays only the derived ATK/DEF (−1..20) + flat mods. `deriveStats`
+  budget is `(5 + 15s)×1.15` (floor 5.75 / ceiling 23): the floor was lifted from 3.45
+  because generated cup-opener opponents sit on the power-50 saturation point and were
+  fielding near-stat-less XIs. The top-end difficulty lever is `OPP_COHESION_PTS`
+  (`[0,0,1,1,2]` flat points per opponent card by cup), not power.
   `CUP_FINAL_POWER = [60,68,76,84,90]` + `OPENER_DROP 18`; `ROUND_POWER = [62,68,73,78,84]`.
-  balance-sweep: win-rate monotonic S1→S5 in every round and policy.
-- **Role coverage — V3.1 (data port).** The new pool's authentic `best_role` names resolve to
-  trait sets via `ROLE_ALIASES` in `role-transforms.ts` (dispatcher coverage 100%), without
-  overwriting the role shown on the card.
-- **Personality stacking — FIXED (Phase 3A).** Perfect Dressing Room is additive (+0.15, was
-  ×1.5) and the combined personality uplift is clamped at 1.30 in `calculatePersonalityBonus`
-  (balance-sweep confirms `attackMod` peaks ~1.29 on the new pool).
-- **Variance floor — lowered (Phase 3A).** `XG_CONVEX 0.9`, possession share `0.30–0.70` so a
-  good build reliably clears the blind; the 90' drama multiplier stays as flavour.
+- **Role %-baselines are DEAD (SCORING_V2).** A card's identity in play is its printed
+  stats + position + defining action-traits — nothing invisible. `tacticalRole` remains
+  display copy on the card. `role-transforms.ts`/`squad-transforms.ts`/`possession.ts`
+  deleted; `verbs.ts` kept ONLY for the parked engine's `VerbName` import.
+- **SCORING_V2 dials (owner playtest calibrates).** Shot need clamp 5..80 and outcome
+  slide ±10 cap the blowout, but a maxed mismatch still lands ~9–12 goals (chance-volume
+  driven: 4 possessions + 2 injections × a hot table). 15-seed sweep: monotonic S1→S5 in
+  every round/policy; curated-vs-none +9.8pp; even-strength ~3.4 total goals, draws
+  ~8–12%; S4 vs R5 ~40% (deaths concentrate late, as before). Cup-sweep (6 seeds):
+  STRONG 100% / UPPER 67% with rotation (0% without — rotation is load-bearing) / MID 0%
+  champions reaching cup 4+.
 - **Archetype distribution skew — FIXED (data port).** The flat skillset mix in `kc_cards.json`
-  (Dribbler 8.1%, Creator 12%) replaces the old Creator-16.8%/Dribbler-1.4% skew, so the
-  counter-web is now evenly grounded.
-- **Defining-trait library coverage — CLOSED (full trait library).** The library now fills
-  **0/540** under-filled (was 30/540): a bespoke **GK pool** (`Shot Stopper`/`Sweeper Keeper`/
-  `Commander of the Box`/`Distribution`/`Big-Game Keeper` — 5 candidates, all `deny`/`generate`/
-  `amplify-inverse-power` gated on `is-defending`/`backline-count`/`late-game`, no new verb) plus
-  thin-outfield fillers (`Take-On`/`Mazy Run` for Dribbler, `Interceptor`/`Last-Ditch` for
-  Destroyer, `Aerial Threat`/`Hold-Up Play` for Powerhouse+Target, `Deep Distributor`/`Screen`
-  for Controller, `Runner in Behind` for Sprinter, `Late Run` for Engine) take every pool to ≥4.
-  Copy lives in `trait-copy.ts` (one new `TraitKind` — `save` — for keeper shot-stops, animated
-  via the existing `trait-tackle` keyframe). GK traits are **player-only** (opponent opts out), so
-  they only make your own keeper concede less (~0.05 fewer ga for an Epic vs Common keeper — a
-  deliberate low-band `deny` of 0.11–0.12). balance-sweep (40 seeds) unchanged in-band: S5-top vs
-  R1 100%, vs R5 68%, TOP/WEAK divergence 75%, ga sane. `SIGNATURE_OVERRIDES` legends still show 4.
-- **Variance verbs are inert** (found in the Called Plays balance pass): `possession.ts`
-  never reads the dispatcher's `variance` accumulator, so `dampen/amplify-variance`
-  records do nothing. No card text claims them any more; wiring it is a scheduled
-  engine change.
-- **Tactics-by-cards instrument** — `balance-sweep.ts` carries an equip-policy axis
-  (none / random3 / curated3); `cup-sweep.ts` a `rotate+tactics` policy (curated trio).
-  Two-stat anchors (15/30 seeds): curated-vs-none +21pp; cup runs STRONG 87/100/100,
-  UPPER 7/33/97, MID 0/17/70 champions across best-xi/rotate/rotate+tactics — equipped
-  tactics are load-bearing; deaths concentrate in cups 4–5. Top-tier ceiling play is
-  soft (STRONG ~100%) — the owner's playtest calibrates before any further tightening.
-- **Chemistry generates are fitness-blind** (funnel pass finding): `chem.ts` amounts use
-  raw `card.power`, so a fully tired XI's possession lane can tick UP via chemistry while
-  its own emission falls (the dispatcher-harness tired-XI check asserts on the funnel SUM
-  for this reason). Scaling chemistry by live fitness is a scheduled engine change.
+  (Dribbler 8.1%, Creator 12%) replaces the old Creator-16.8%/Dribbler-1.4% skew.
+- **Defining-trait library — point-native (SCORING_V2).** Every archetype pool ≥4 candidates
+  incl. the GK pool; traits are flat buffs/debuffs (Marshal/Mentor/Star Service thresholds,
+  Overlap lane-ahead, Screen band-behind, Leadership backline, Antagonist enemy backline)
+  or beat actions (`chance` injections, `stop` cancels incl. keeper saves). Player-only —
+  the faceless opponent opts out. Copy still lives in `trait-copy.ts` by exact name.
+- **Suspensions** carry exactly one fixture (`RunState.suspendedIds`, overwritten each
+  post-match); enforcement is belt-and-braces (MatchPhase filters the deck; SquadScreen
+  gets a filtered pool + a SUSPENDED chip).
+- **Chemistry links are fitness-blind by design now**: a link is a flat +1 (+1/+1 when
+  settled ≥0.8), capped 2 links per card, and shows on the receipt like everything else.
 - `design/` — contains fbal-era (Python/Flask prototype) docs. `design/CLAUDE.md`, `design/README.md`, `design/ROADMAP.md` describe a different codebase and should be treated as historical only.

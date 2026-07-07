@@ -131,7 +131,10 @@ export function deriveStats(
   const share = DEF_SHARE[card.archetype]
     ?? (['GK', 'CD', 'WD', 'DM'].includes(card.position) ? 0.8 : 0.25);
   const s = Math.max(0, Math.min(1, (card.power - 50) / 45)); // BRS 52–95 → 0..1
-  const budget = (3 + 17 * s) * 1.15;                          // total stat points
+  // Budget floor 5.75 (was 3.45): the scale saturates at power ≤50, and generated
+  // cup-opener opponents sit right on that floor — at 3.45 an opener XI was nearly
+  // stat-less (Σ ATK ~15). Ceiling unchanged (23 at power 95).
+  const budget = (5 + 15 * s) * 1.15;                          // total stat points
   const shade = (pillar: number | undefined) =>
     pillar === undefined ? 0 : pillar >= 58 ? 1 : pillar < 46 ? -1 : 0;
   const atk = clampStat(Math.round(budget * (1 - share)) + shade(card.pillars?.technical));

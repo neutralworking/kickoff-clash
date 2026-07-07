@@ -37,7 +37,7 @@ export interface TraitCopy {
 export const TRAIT_COPY: Record<string, TraitCopy> = {
   Postman: {
     label: 'Postman',
-    blurb: "Always delivers — whips a guaranteed cross into the box when a target's up top.",
+    blurb: "Always delivers — each round he can whip in the cross that makes an extra opening.",
     kind: 'cross', glyph: '✦',
   },
   Sniper: {
@@ -47,12 +47,12 @@ export const TRAIT_COPY: Record<string, TraitCopy> = {
   },
   Deadeye: {
     label: 'Deadeye',
-    blurb: 'Dead-ball threat — manufactures a set-piece chance every spell.',
+    blurb: 'Dead-ball threat — each round he can conjure a set-piece strike of his own.',
     kind: 'setpiece', glyph: '⚑',
   },
   Leadership: {
     label: 'Leadership',
-    blurb: 'Marshals the back line — lifts every defender, the weakest most.',
+    blurb: 'Marshals the back line — every defender behind him defends at +1.',
     kind: 'aura', glyph: '◎',
   },
   Stopper: {
@@ -62,7 +62,7 @@ export const TRAIT_COPY: Record<string, TraitCopy> = {
   },
   Antagonist: {
     label: 'Antagonist',
-    blurb: 'Winds the defenders up — the opposing back line defends worse while he is on the pitch.',
+    blurb: 'Winds the defenders up — the opposing back line defends at −2 while he is on the pitch.',
     kind: 'aura', glyph: '⚡',
   },
   Marshal: {
@@ -87,17 +87,17 @@ export const TRAIT_COPY: Record<string, TraitCopy> = {
   },
   "Poacher's Instinct": {
     label: "Poacher's Instinct",
-    blurb: 'Lurks in the six-yard box — a guaranteed poacher chance while attacking.',
+    blurb: 'Lurks in the six-yard box — each round he can fashion a big chance and take it himself.',
     kind: 'poach', glyph: '◣',
   },
   'Engine Room': {
     label: 'Engine Room',
-    blurb: 'Engine that never quits — grows stronger from the hour mark.',
+    blurb: 'Engine that never quits — +2 ATK and +2 DEF from the hour mark.',
     kind: 'engine', glyph: '⛭',
   },
   'Overlap Run': {
     label: 'Overlap Run',
-    blurb: 'Bombs on overlap — stretches the pitch and lays a chance on a plate.',
+    blurb: 'Bombs on the overlap — the teammate ahead in his lane attacks at +2.',
     kind: 'cross', glyph: '➤',
   },
   // --- GK action-traits (keeper identity) ---
@@ -113,7 +113,7 @@ export const TRAIT_COPY: Record<string, TraitCopy> = {
   },
   'Commander of the Box': {
     label: 'Commander of the Box',
-    blurb: 'Owns his area — organises the defence and lifts the weakest most.',
+    blurb: 'Owns his area — every defender in front of him defends at +1.',
     kind: 'aura', glyph: '◎',
   },
   Distribution: {
@@ -164,7 +164,7 @@ export const TRAIT_COPY: Record<string, TraitCopy> = {
   },
   Screen: {
     label: 'Screen',
-    blurb: 'Shields the back four — steps across and breaks up the attack.',
+    blurb: 'Shields the line behind him — they defend at +2 while he screens.',
     kind: 'tackle', glyph: '⊘',
   },
   'Runner in Behind': {
@@ -180,7 +180,7 @@ export const TRAIT_COPY: Record<string, TraitCopy> = {
   // --- signature-override traits (showcase legends) ---
   'Right Flank': {
     label: 'Right Flank',
-    blurb: 'Owns the right touchline — a bigger threat from a wide berth.',
+    blurb: 'Owns the right touchline — attacks at +2.',
     kind: 'aura', glyph: '◎',
   },
   'Box Presence': {
@@ -190,12 +190,12 @@ export const TRAIT_COPY: Record<string, TraitCopy> = {
   },
   'Big Game': {
     label: 'Big Game',
-    blurb: 'Turns up when it matters — deadlier as the clock runs down.',
+    blurb: 'Turns up when it matters — +3 ATK from the hour mark.',
     kind: 'engine', glyph: '⛭',
   },
   Organiser: {
     label: 'Organiser',
-    blurb: 'Organises the unit — steadies the whole defence while it defends.',
+    blurb: 'Organises the unit — the back line defends at +1.',
     kind: 'aura', glyph: '◎',
   },
 };

@@ -26,8 +26,6 @@ import type { Card } from './scoring';
 import type { Cell, Band, Lane } from './field';
 import { cellOf, bandOf, laneOf } from './field';
 import type { Formation } from './formations';
-import type { TraitRecord } from './verbs';
-import { deriveStats } from './funnel';
 
 /** Per-pair co-appearance counts, keyed by sorted id pair. Serialisable (RunState). */
 export type CoAppearance = Record<string, number>;
@@ -37,13 +35,6 @@ const CHEM_TAU = 18;        // co-appearances for ~63% of the earned curve (≈3
 const NATION_BASE = 0.25;   // same-nation static link
 const TRAIT_BASE = 0.15;    // trait link (shared archetype) static bonus
 const EARNED_WEIGHT = 0.7;  // how much of full chemistry is earned vs static
-const CHEM_GAIN = 0.16;  // connection-bonus magnitude per (strength × avg stat total)
-
-/** Snap-scale chemistry weight of a card: its ATK+DEF total. */
-function statTotal(card: Card): number {
-  const { atk, def } = deriveStats(card);
-  return atk + def;
-}
 
 export function pairKey(a: number, b: number): string {
   return a < b ? `${a}:${b}` : `${b}:${a}`;
@@ -103,42 +94,38 @@ function cellsConnect(a: Cell, b: Cell): boolean {
   return (la === lb && bandAdj) || (ba === bb && laneAdj);
 }
 
+/** One live chemistry link between two placed cards (SCORING_V2: flat points). */
+export interface ChemLink {
+  aId: number;
+  bId: number;
+  aName: string;
+  bName: string;
+  /** 0..1 — the earned + static link strength. points.ts converts to flat mods. */
+  strength: number;
+}
+
 /**
- * Chemistry connection bonuses for the XI: each connecting pair emits a bonus
- * (attack + creation) into the forward cell of the link, scaling with the pair's
- * chemistry and combined power. Returns squad TraitRecords for the dispatcher.
+ * The XI's live chemistry links: each CONNECTING pair (adjacent lane or band — a
+ * real passing link on the pitch) with its accumulated strength. SCORING_V2: the
+ * payoff is flat points (points.ts `chemistry` mods), never a multiplier — this
+ * just reports the links.
  */
-export function chemistryRecords(xi: Card[], formation: Formation, matrix: CoAppearance): TraitRecord[] {
+export function chemistryLinks(xi: Card[], formation: Formation, matrix: CoAppearance): ChemLink[] {
   const cells: Cell[] = xi.map((_, i) => {
     const slot = formation.slots[i] ?? formation.slots[formation.slots.length - 1];
     return cellOf(slot.x, slot.y);
   });
 
-  const recs: TraitRecord[] = [];
+  const links: ChemLink[] = [];
   for (let i = 0; i < xi.length; i++) {
     for (let j = i + 1; j < xi.length; j++) {
-      const ca = cells[i];
-      const cb = cells[j];
-      if (!cellsConnect(ca, cb)) continue;
-
+      if (!cellsConnect(cells[i], cells[j])) continue;
       const sameNation = !!xi[i].nation && xi[i].nation === xi[j].nation;
       const traitLink = xi[i].archetype === xi[j].archetype;
       const strength = chemistryStrength(coApp(matrix, xi[i].id, xi[j].id), sameNation, traitLink);
       if (strength <= 0) continue;
-
-      // Deposit into the more advanced cell — the link's end product.
-      const fwd = BAND_RANK[bandOf(ca)] >= BAND_RANK[bandOf(cb)] ? ca : cb;
-      const band = bandOf(fwd);
-      const lane = laneOf(fwd);
-      // Snap-scale: the link's weight is the pair's average stat total (atk+def).
-      const avgPower = (statTotal(xi[i]) + statTotal(xi[j])) / 2;
-      const amount = strength * avgPower * CHEM_GAIN;
-      if (amount <= 0) continue;
-
-      // A settled partnership keeps the ball (possession) and opens chances (creation).
-      recs.push({ name: 'Chemistry', verb: 'generate', params: { amount }, scope: 'zone', target: { kind: 'zone', zone: 'possession' }, to: { band, lane } });
-      recs.push({ name: 'Chemistry', verb: 'generate', params: { amount: amount * 0.6 }, scope: 'zone', target: { kind: 'zone', zone: 'creation' }, to: { band, lane } });
+      links.push({ aId: xi[i].id, bId: xi[j].id, aName: xi[i].name, bName: xi[j].name, strength });
     }
   }
-  return recs;
+  return links;
 }

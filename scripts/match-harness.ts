@@ -73,7 +73,7 @@ let state = initMatch(
 );
 
 console.log(`\nInitial state: currentIncrement=${state.currentIncrement}, subs=${state.subsRemaining}, discards=${state.discardsRemaining}`);
-console.log(`Personality bonus: attackMod=${state.personalityBonus.attackMod.toFixed(2)} defMod=${state.personalityBonus.defenceMod.toFixed(2)} label=${state.personalityBonus.label ?? 'none'} perfect=${state.personalityBonus.perfectDressingRoom}`);
+console.log(`Personality: label=${state.personalityBonus.label ?? 'none'} perfect=${state.personalityBonus.perfectDressingRoom}`);
 
 // Simulate 5 increments. Deterministic attacker choice:
 // top 4 power in XI each increment (4-3-3 maxAttackers=5, we use 4).
@@ -95,8 +95,9 @@ for (let i = 0; i < 5; i++) {
 
   console.log(`\n--- Increment ${i + 1} (${result.minute}') ---`);
   console.log(`  Committed ${attackerIds.length} attackers; XI injured=${state.xi.filter(c => c.injured).length}`);
-  console.log(`  Possession ${split.possession} | Creation ${split.chanceCreation} | Finishing ${split.shotQuality} | Pressing ${split.pressing} | Defence ${split.defenceScore}`);
-  console.log(`  Opp XI field:  atk=${result.opponentAttack} def=${result.opponentDefence}`);
+  console.log(`  KEEP ${split.contest.keep} | CREATE ${split.contest.create} | FINISH ${split.contest.finish} | PRESS ${split.contest.press} | BREAK ${split.contest.brk} | STOP ${split.contest.stop}`);
+  console.log(`  Forecast: ATK ${split.forecast.yourAttack} v ${split.forecast.oppDefence} (${split.forecast.attackEdge >= 0 ? '+' : ''}${split.forecast.attackEdge}) / DEF ${split.forecast.yourDefence} v ${split.forecast.oppAttack} (${split.forecast.defendEdge >= 0 ? '+' : ''}${split.forecast.defendEdge}) / NET ${split.forecast.net >= 0 ? '+' : ''}${split.forecast.net}`);
+  console.log(`  Possessions: you=${result.yourPossessions} them=${result.opponentPossessions}; beats=${result.beats.length}; bookings=${result.bookings.length}`);
   console.log(`  Goal chances:  you=${(result.yourGoalChance * 100).toFixed(1)}% them=${(result.opponentGoalChance * 100).toFixed(1)}%`);
   console.log(`  ${result.event.text}`);
   console.log(`  Synergies: atk=${split.attackSynergies.length} def=${split.defenceSynergies.length} cross=${split.crossSynergies.length}`);
