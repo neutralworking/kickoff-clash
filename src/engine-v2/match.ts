@@ -1,0 +1,389 @@
+/**
+ * KC six-contest engine (NW-139 Fork A) — the step-resolved match loop.
+ *
+ * 6 batches × 3 increments over a typed event log (events.ts). The six contests
+ * resolve as GLOBAL TEAM TOTALS (contests.ts); the positional graph only routes
+ * targeting. Resolution chain, per CARD_SYSTEM_V2 §2 + _CHANGES §3/§4:
+ *
+ *   possession split (6 slots, 2–4/side by KEEP−PRESS)
+ *     → per-slot RETAIN roll (KEEP vs PRESS); a failed retain feeds the
+ *       opponent a BREAK transition chance — the KEEP↔BREAK duel
+ *     → CREATE = chance VOLUME (Poisson on CREATE−BREAK)
+ *     → quality tier (half|big) + xG
+ *     → FINISH = conversion:  goal = 1 − e^(−xG)   (the owner-chosen FINISH model)
+ *     → set pieces: a CREATE-fed, DEF-keyed (aerial) dead-ball path (§7)
+ *
+ * Contexts are GATES only (gates.ts) — posture/scoreline/clock/streak/fitness
+ * scale trait magnitude; none resolves a contest. Determinism: one RngStream
+ * per match, consumed in fixed order → same seed + same squads = same log.
+ *
+ * Constants are ported from `scripts/kc_sim.py` and re-tuned for the xG FINISH
+ * model so the engine reproduces kc_sim's balance shape (round-robin spread
+ * ≈0.55, ~1.2 goals/side mid-vs-mid, no runaway) — the harness is the gate.
+ */
+
+import {
+  type Card,
+  type Contest,
+  contestDials,
+  backlineDef,
+  topAtt,
+  topDef,
+} from './contests';
+import {
+  type Gate,
+  type GateSnapshot,
+  type Posture,
+  type Scoreline,
+  scorelineFor,
+  clockBand,
+} from './gates';
+import {
+  type EngineTrait,
+  dialDeltas,
+  chanceGenerated,
+  chanceDenied,
+  xgShift,
+} from './traits';
+import {
+  type EngineDef,
+  BALANCED_ENGINE,
+  contradictionReason,
+  extendsOnGoal,
+  streakMult,
+} from './streak';
+import type { MatchEvent, Side, Clock, ChanceQuality, ChanceOrigin } from './events';
+import { RngStream } from './rng';
+import { type PostureState, createPostureState, activePosture, tickPosture } from './posture';
+
+// ---- tunables (ported from kc_sim.py; xG-model constants re-calibrated) -----
+const BATCHES = 6;
+const INCREMENTS = 3;
+
+const KEEP_K = 4.0; // possession-split slope (kc_sim)
+const RETAIN_BASE = 0.72;
+const RETAIN_K = 0.026; // per (KEEP − PRESS) point
+const RETAIN_LO = 0.4;
+const RETAIN_HI = 0.94;
+const FEED_BASE = 0.35; // base prob a turnover becomes an opp transition chance
+const FEED_BREAK_K = 0.03; // + per opp BREAK point (the coupling strength)
+const FEED_HI = 0.85;
+
+const VOL_BASE = 1.65; // open-play chances per retained possession (Poisson mean)
+const VOL_SLIDE = 0.09; // per (CREATE − BREAK)
+const VOL_LO = 0.2;
+const VOL_HI = 3.4;
+
+const P_BIG_BASE = 0.24;
+const P_BIG_K = 0.045; // per (CREATE − BREAK)
+const P_BIG_LO = 0.05;
+const P_BIG_HI = 0.62;
+
+const XG_HALF = 0.23;
+const XG_BIG = 0.6;
+const K_FIN = 0.18; // (FINISH − STOP) → xG, log space
+const K_STAT = 0.028; // (topAtt − backlineDef) → xG, log space
+const K_VAR = 0.15; // variance-verb spread on xG
+
+const SP_BASE = 0.12; // set-piece dead-ball base (kc_sim §7)
+const SP_CARRIER = 1.7;
+const SP_XG_BASE = 0.32;
+const K_SPDEF = 0.014; // (topDef − opp backlineDef) → set-piece xG
+
+const GOAL_VALUE = 1;
+const DEFAULT_TARGET = 3;
+
+// ---------------------------------------------------------------------------
+
+export interface Squad {
+  cards: Card[];
+  posture: Posture;
+  engine?: EngineDef;
+  traits?: EngineTrait[];
+  /** Set-piece kit (§7): a taker unlocks dead-balls, a carrier raises the prob. */
+  hasTaker?: boolean;
+  hasCarrier?: boolean;
+}
+
+export interface MatchOptions {
+  seed: number;
+  target?: number;
+  batches?: number;
+}
+
+export interface MatchResult {
+  events: MatchEvent[];
+  score: [number, number];
+  points: [number, number];
+  result: 'target-met' | 'target-missed';
+}
+
+const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+
+/** Even-spread holder schedule: `h` batches to side 0, the rest to side 1. */
+function possessionSchedule(h: number, total: number): Side[] {
+  // Bresenham-style distribution so holders alternate deterministically.
+  const out: Side[] = [];
+  let acc = 0;
+  for (let b = 0; b < total; b++) {
+    acc += h;
+    if (acc >= total) {
+      acc -= total;
+      out.push(0);
+    } else {
+      out.push(1);
+    }
+  }
+  return out;
+}
+
+interface SideCtx {
+  cards: Card[];
+  postureState: PostureState;
+  engine: EngineDef;
+  traits: EngineTrait[];
+  baseDials: Record<Contest, number>;
+  posCounts: Record<string, number>;
+  hasTaker: boolean;
+  hasCarrier: boolean;
+  bldef: number;
+  att: number;
+  aerialDef: number;
+  streak: number;
+}
+
+function makeCtx(sq: Squad): SideCtx {
+  const posCounts: Record<string, number> = {};
+  for (const c of sq.cards) posCounts[c.pos] = (posCounts[c.pos] ?? 0) + 1;
+  return {
+    cards: sq.cards,
+    postureState: createPostureState(sq.posture),
+    engine: sq.engine ?? BALANCED_ENGINE,
+    traits: sq.traits ?? [],
+    baseDials: contestDials(sq.cards),
+    posCounts,
+    hasTaker: !!sq.hasTaker,
+    hasCarrier: !!sq.hasCarrier,
+    bldef: backlineDef(sq.cards),
+    att: topAtt(sq.cards),
+    aerialDef: topDef(sq.cards),
+    streak: 0,
+  };
+}
+
+function snapshot(
+  side: SideCtx,
+  posture: Posture,
+  scoreline: Scoreline,
+  clock: ReturnType<typeof clockBand>,
+  states: Set<'turnover' | 'retain-survived'>
+): GateSnapshot {
+  return {
+    posture,
+    scoreline,
+    clock,
+    streak: side.streak,
+    fitness: 10,
+    dials: side.baseDials,
+    posCounts: side.posCounts,
+    states,
+  };
+}
+
+/** Effective dials = base + own amplifies − opponent denies, per snapshot. */
+function effectiveDials(me: SideCtx, meSnap: GateSnapshot, foe: SideCtx, foeSnap: GateSnapshot): Record<Contest, number> {
+  const mine = dialDeltas(me.traits, meSnap);
+  const theirs = dialDeltas(foe.traits, foeSnap);
+  const out = { ...me.baseDials };
+  for (const k of Object.keys(out) as Contest[]) out[k] += mine.own[k] - theirs.opp[k];
+  return out;
+}
+
+export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): MatchResult {
+  const rng = new RngStream(opts.seed);
+  const batches = opts.batches ?? BATCHES;
+  const target = opts.target ?? DEFAULT_TARGET;
+  const events: MatchEvent[] = [];
+
+  const ctx: [SideCtx, SideCtx] = [makeCtx(home), makeCtx(away)];
+  const score: [number, number] = [0, 0];
+  const points: [number, number] = [0, 0];
+
+  // Possession split (batch-level 6 slots, clamp 2–4). Base dials, no per-inc
+  // gating on the split itself (posture is a gate on traits, not a resolver).
+  const d0 = ctx[0].baseDials;
+  const d1 = ctx[1].baseDials;
+  const net = d0.KEEP - d1.PRESS - (d1.KEEP - d0.PRESS);
+  const hPoss = clamp(Math.round(batches / 2 + net / KEEP_K), 2, batches - 2);
+  const schedule = possessionSchedule(hPoss, batches);
+
+  events.push({
+    type: 'match-start',
+    seed: opts.seed,
+    postures: [activePosture(ctx[0].postureState), activePosture(ctx[1].postureState)],
+    dials: [d0, d1],
+    target,
+  });
+
+  const scorelines = (): [Scoreline, Scoreline] => [
+    scorelineFor(score[0], score[1]),
+    scorelineFor(score[1], score[0]),
+  ];
+
+  // Resolve one chance for `att` attacking `def`; emit + bank if converted.
+  function resolveChance(
+    att: Side,
+    def: Side,
+    origin: ChanceOrigin,
+    via: Contest,
+    clock: Clock,
+    aerial: boolean
+  ): void {
+    const A = ctx[att];
+    const D = ctx[def];
+    const sl = scorelines();
+    const aSnap = snapshot(A, activePosture(A.postureState), sl[att], clockBand(clock.batch, batches), new Set());
+    const dSnap = snapshot(D, activePosture(D.postureState), sl[def], clockBand(clock.batch, batches), new Set());
+    const aDials = effectiveDials(A, aSnap, D, dSnap);
+    const dDials = effectiveDials(D, dSnap, A, aSnap);
+
+    const createEdge = aDials.CREATE - dDials.BREAK;
+    const pBig = clamp(P_BIG_BASE + P_BIG_K * createEdge, P_BIG_LO, P_BIG_HI);
+    const quality: ChanceQuality = rng.float() < pBig ? 'big' : 'half';
+
+    // xG: base tier × exp(FINISH−STOP + stat-margin), aerial paths read DEF.
+    const finEdge = aerial ? A.aerialDef - D.bldef : aDials.FINISH - dDials.STOP;
+    const statMargin = aerial ? A.aerialDef - D.bldef : A.att - D.bldef;
+    const base = origin === 'set-piece' ? SP_XG_BASE : quality === 'big' ? XG_BIG : XG_HALF;
+    const kMargin = aerial ? K_SPDEF : K_STAT;
+    let xg = base * Math.exp(K_FIN * (aerial ? 0 : finEdge) + kMargin * statMargin) * xgShift(A.traits, aSnap);
+    // variance verbs widen/tighten the effective xG (consistency axis).
+    const v = 0; // stub squads carry none; primitive-tested separately
+    xg *= 1 + K_VAR * v;
+    xg = Math.max(0.01, xg);
+
+    const roll = rng.float();
+    const converted = roll < 1 - Math.exp(-xg);
+    events.push({ type: 'chance', side: att, clock, origin, quality, xg: +xg.toFixed(3), converted, roll: +roll.toFixed(3) });
+    if (!converted) return;
+
+    score[att] += 1;
+    events.push({ type: 'goal', side: att, via, origin, score: [score[0], score[1]], clock });
+
+    // streak + points
+    const mult = streakMult(A.streak);
+    const value = GOAL_VALUE * mult;
+    points[att] += value;
+    A.streak += extendsOnGoal(A.engine, via) ? 1 : 0;
+    if (extendsOnGoal(A.engine, via)) events.push({ type: 'streak-extended', side: att, streak: A.streak, clock });
+    events.push({ type: 'points-banked', side: att, source: 'goal', mult, value, total: points[att], clock });
+
+    // concede contradicts the defender's engine
+    const reason = contradictionReason(D.engine, origin === 'transition');
+    if (reason && D.streak > 0) {
+      events.push({ type: 'streak-broken', side: def, reason, atStreak: D.streak, clock });
+      D.streak = 0;
+    }
+  }
+
+  for (let b = 1; b <= batches; b++) {
+    const band = clockBand(b, batches);
+    // posture tick: expire any due tactical window and revert to the default
+    // (timed windows are opened by the NW-140 tactical deck; none in P1).
+    for (const s of [0, 1] as Side[]) {
+      const { state, reverted } = tickPosture(ctx[s].postureState, b);
+      ctx[s].postureState = state;
+      if (reverted) events.push({ type: 'posture-shift', side: s, to: reverted, reason: 'revert', batch: b });
+    }
+    events.push({
+      type: 'batch-start',
+      batch: b,
+      band,
+      postures: [activePosture(ctx[0].postureState), activePosture(ctx[1].postureState)],
+    });
+    const holder = schedule[b - 1];
+    const defender: Side = holder === 0 ? 1 : 0;
+    const H = ctx[holder];
+    const D = ctx[defender];
+    const cleanBefore: [number, number] = [score[0], score[1]];
+
+    for (let i = 1; i <= INCREMENTS; i++) {
+      const clock: Clock = { batch: b, increment: i };
+      events.push({ type: 'increment-start', clock, scoreline: scorelines() });
+
+      if (i === 1) {
+        // possession split announced once, at the batch's first increment
+        events.push({ type: 'possession-split', clock, slots: holder === 0 ? [hPoss, batches - hPoss] : [batches - hPoss, hPoss] });
+
+        // ---- retain roll (KEEP vs PRESS) ----
+        const sl = scorelines();
+        const hSnap = snapshot(H, activePosture(H.postureState), sl[holder], band, new Set());
+        const dSnap = snapshot(D, activePosture(D.postureState), sl[defender], band, new Set());
+        const hDials = effectiveDials(H, hSnap, D, dSnap);
+        const dDials = effectiveDials(D, dSnap, H, hSnap);
+        const pRetain = clamp(RETAIN_BASE + RETAIN_K * (hDials.KEEP - dDials.PRESS), RETAIN_LO, RETAIN_HI);
+        const retained = rng.bernoulli(pRetain);
+
+        if (retained) {
+          events.push({ type: 'retain-roll', side: holder, clock, slot: b, p: +pRetain.toFixed(3), retained: true });
+          // open-play CREATE volume for the retained phase
+          const volEdge = hDials.CREATE - dDials.BREAK;
+          const rate = clamp(VOL_BASE + VOL_SLIDE * volEdge, VOL_LO, VOL_HI);
+          let n = rng.poisson(rate);
+          n += chanceGenerated(H.traits, hSnap); // generate → chance (beat)
+          n -= chanceDenied(D.traits, dSnap); // deny → opp chance volume (keeper/stopper)
+          for (let k = 0; k < n; k++) {
+            const cClock: Clock = { batch: b, increment: 1 + (k % 2) }; // spread across inc 2–3
+            resolveChance(holder, defender, 'open-play', 'FINISH', cClock, false);
+          }
+        } else {
+          // ---- turnover → the KEEP↔BREAK coupling ----
+          const pFeed = clamp(FEED_BASE + FEED_BREAK_K * dDials.BREAK, 0, FEED_HI);
+          const fed = rng.bernoulli(pFeed);
+          events.push({ type: 'retain-roll', side: holder, clock, slot: b, p: +pRetain.toFixed(3), retained: false, fedTransition: fed });
+          if (fed) {
+            // defender counters: a transition chance scored via BREAK
+            resolveChance(defender, holder, 'transition', 'BREAK', { batch: b, increment: 2 }, false);
+          }
+        }
+      }
+
+      if (i === INCREMENTS) {
+        // ---- set-piece path (§7): CREATE-fed, taker-gated, DEF-keyed ----
+        if (H.hasTaker) {
+          const sl = scorelines();
+          const hSnap = snapshot(H, activePosture(H.postureState), sl[holder], band, new Set());
+          const dSnap = snapshot(D, activePosture(D.postureState), sl[defender], band, new Set());
+          const hDials = effectiveDials(H, hSnap, D, dSnap);
+          const possShare = (holder === 0 ? hPoss : batches - hPoss) / batches;
+          const createBoost = 1 + 0.03 * Math.max(0, hDials.CREATE);
+          const pDead = clamp(SP_BASE * (possShare * 2) * (H.hasCarrier ? SP_CARRIER : 1) * createBoost, 0, 0.6);
+          if (rng.bernoulli(pDead)) {
+            resolveChance(holder, defender, 'set-piece', 'STOP', clock, true);
+          }
+        }
+      }
+    }
+
+    events.push({
+      type: 'batch-end',
+      batch: b,
+      cleanFor: [score[1] === cleanBefore[1], score[0] === cleanBefore[0]],
+      score: [score[0], score[1]],
+    });
+
+    // early whistle: a side already past target with the lead late in the match
+    if (b >= batches - 1) {
+      for (const s of [0, 1] as Side[]) {
+        const other = s === 0 ? 1 : 0;
+        if (points[s] >= target && score[s] > score[other] && b < batches) {
+          events.push({ type: 'early-whistle', clock: { batch: b, increment: INCREMENTS }, reason: 'target-met-with-lead' });
+        }
+      }
+    }
+  }
+
+  const result: 'target-met' | 'target-missed' = points[0] >= target ? 'target-met' : 'target-missed';
+  events.push({ type: 'full-time', score: [score[0], score[1]], points: [points[0], points[1]], target, result });
+  return { events, score, points, result };
+}

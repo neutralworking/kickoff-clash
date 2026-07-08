@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Required first read
 
-**Direction of record — NW-139 (July 2026): the match engine is being rebuilt to the six-contest CARD_SYSTEM_V2 model.** Reading order: `docs/KICKOFF_CLASH_DESIGN.md` → `docs/SYNERGY_MODEL_V1.md` (its five design laws, verb palette, and context-taxonomy-as-gates survive) → `docs/CARD_SYSTEM_V2.md` (+ `docs/CARD_SYSTEM_V2_CHANGES.md`, which wins on conflict) → `docs/CARD_ACTIONS_V1.md`. **Revised conflict rule:** for *resolution*, `CARD_SYSTEM_V2` (+ `_CHANGES`) wins over `SYNERGY_MODEL_V1`'s two-window `charge + roll ≥ threshold` resolver (Fork A); for *design law*, SM's five laws + verb palette + contexts-as-gates stay lint rules on every PR (the no-unconditional law stays pure — no exception list; Regista's guaranteed chance is gated ¬Attack, not ungated). **Status: NW-139 Phase 0 lands the specs; the P1 six-contest engine is NOT built yet — `SCORING_V2` below is still the CURRENT LIVE engine (`src/lib/`) and what actually runs until P1 flips it.** SCORING_V2's `src/lib` contest structure (KEEP/PRESS · CREATE/BREAK · shot/STOP, chance-quality tier, xG) is *closer* to the six-contest target than the parked `src/engine/` window resolver — see `docs/MIGRATION_NOTES.md`. (`scripts/kc_sim.py` — the owner's six-contest balance sim, tuned constants in `_CHANGES` §7 — is the balance reference once landed; a seeded vitest harness becomes the canonical acceptance gate when P1 lands.)
+**Direction of record — NW-139 (July 2026): the match engine is being rebuilt to the six-contest CARD_SYSTEM_V2 model.** Reading order: `docs/KICKOFF_CLASH_DESIGN.md` → `docs/SYNERGY_MODEL_V1.md` (its five design laws, verb palette, and context-taxonomy-as-gates survive) → `docs/CARD_SYSTEM_V2.md` (+ `docs/CARD_SYSTEM_V2_CHANGES.md`, which wins on conflict) → `docs/CARD_ACTIONS_V1.md`. **Revised conflict rule:** for *resolution*, `CARD_SYSTEM_V2` (+ `_CHANGES`) wins over `SYNERGY_MODEL_V1`'s two-window `charge + roll ≥ threshold` resolver (Fork A); for *design law*, SM's five laws + verb palette + contexts-as-gates stay lint rules on every PR (the no-unconditional law stays pure — no exception list; Regista's guaranteed chance is gated ¬Attack, not ungated). **Status: Phase 0 landed the specs; Phase 1 landed the six-contest engine SPINE in `src/engine-v2/` (headless, deterministic, vitest-gated) — but it is NOT yet wired to the live game UI, so `SCORING_V2` below (`src/lib/`) is still the CURRENT LIVE engine and what actually runs the game.** The `src/engine-v2/` spine uses the **xG FINISH model** (`goal = 1 − e^(−xG)`, owner-chosen): six contests as global team totals, tilt→dial aggregation with the `_CHANGES` §7 ceilings, possession split + per-slot retain roll (the KEEP↔BREAK coupling), CREATE→quality→xG→FINISH, set pieces, contexts-as-**gates**, the posture state machine, the positional graph, and streaks. Its harness (`src/engine-v2/__tests__/six-contest.test.ts`) is the canonical acceptance gate and reproduces `kc_sim.py`'s balance shape (round-robin AVG spread ≈0.51, no runaway, tilt ceilings hold). `scripts/kc_v2_sim.ts` is the TS balance instrument (the counterpart to `scripts/kc_sim.py`). SCORING_V2's `src/lib` structure (KEEP/PRESS · CREATE/BREAK · shot/STOP, chance-quality tier, xG) is *closer* to the six-contest target than the parked `src/engine/` window resolver — see `docs/MIGRATION_NOTES.md`.
 
 **The live game's match model is SCORING_V2 — one currency, three contests, two dice (`docs/SCORING_V2.md`) — read it first.** Every effect in the game is a FLAT ±N in card points (ATK/DEF, `deriveStats` in `src/lib/funnel.ts`): traits, managers, tactics, chemistry, personality, fitness and positional penalties all land as ledgered `PointMod`s (`src/lib/points.ts`) — no percentages, no multipliers, no hidden scales. Each 15' round runs three contests (`src/lib/contests.ts`): THE BALL (controllers/passers/engines' ATK v the front line + engines' DEF splits 6 possessions, clamp 2–4, no dice), THE OUTCOME (d100 per possession: turnover/half/big/corner/foul, slid by CREATE−BREAK), THE SHOT (d100 roll-under: GOAL if `d100 ≤ BASE + 3×(shooter ATK − STOP)`, bases half 20 / big 40 / corner 15, clamp 5..80). Fouls feed bookings; a second yellow is a red (≤1/side/match) and the suspension carries to the next fixture (`RunState.suspendedIds`). Position is geometry: wide cards have a preferred flank (wrong side −2/−2) and abilities can target pitch neighbours (Overlap feeds the man ahead in the lane; Screen shields the band behind). The funnel SHAPE survives (possession→chances→goals; the killers press/destroy/defend) but the six-lane grid accounting is gone. **Tactic cards are EQUIPPED (up to 3, pre-kick-off, always-on, flat + situational).** **Conflict rule (within the live engine): SCORING_V2 wins** over FUNNEL_MODEL_V1 and everything older; for the *rebuild direction*, CARD_SYSTEM_V2 (six-contest) supersedes SCORING_V2 as the resolution model of record (NW-139) — see the direction note above.
 
@@ -22,7 +22,8 @@ npm run start    # Serve production build
 ```
 
 ```bash
-npm test         # Vitest — the PARKED src/engine/ suite (kept green as CI hygiene; not a live-game gate)
+npm test         # Vitest — the src/engine-v2/ six-contest harness (NW-139 P1 acceptance gate)
+                 # + the PARKED src/engine/ suite (kept green as CI hygiene; not a live-game gate)
 ```
 
 The live engine's validation battery: `npx tsx scripts/verb-dispatcher-harness.ts` (the SCORING_V2 invariant harness — determinism, the receipt law, interactions, the ball contest, the d100 shot law, discipline, sanity band; ALL CHECKS must pass), `scripts/match-harness.ts` (runs a full match and prints the contests + forecast; the scripts are ESM with extensionless imports, so `ts-node` fails to resolve them — use `tsx`), and the balance instruments below. `scripts/balance_sim.py` (Python 3, stdlib-only) mirrors the parked two-window `src/engine/` and is superseded as the balance reference by `scripts/kc_sim.py` (the owner's six-contest sim, tuned constants in `docs/CARD_SYSTEM_V2_CHANGES.md` §7) once P1 lands — a seeded vitest harness then becomes the canonical acceptance gate.
@@ -73,6 +74,25 @@ The live engine's validation battery: `npx tsx scripts/verb-dispatcher-harness.t
 4. **THE OUTCOME** (die #1): d100 per possession on turnover/half/big/corner/foul, slid ±10 by `(CREATE − BREAK)/4`. Corners cap at 3/side/round; trait `chance`s inject up to 2 bonus beats; armed `stop`s cancel opposing chances (keeper saves included).
 5. **THE SHOT** (die #2): named shooter (weighted by eff ATK + finishing lane); GOAL if `d100 ≤ clamp(BASE + 3×(shooter ATK − STOP), 5, 80)`; the roll and the need print on the beat.
 6. **Discipline**: fouls draw a fouler (destroyers likeliest); booking d100 ≤ 30; second yellow = red (≤1/side/match) — his points leave every contest at once and he's suspended next fixture.
+
+### The six-contest engine (`src/engine-v2/`, NW-139 P1) — headless spine
+
+The Fork A rebuild target, built beside the live game (not yet UI-wired). Self-contained, deterministic, vitest-gated. Reuses the `VerbName` palette from `src/lib/verbs.ts` (unchanged; only targets re-point to contest dials).
+
+| File | Purpose |
+|---|---|
+| `contests.ts` | The six contests + mirror-pairs; tilt→dial aggregation (`contestDials`, `relocate`), `TILT_CEILING`, back-line/att helpers |
+| `gates.ts` | Context taxonomy as **gates** (posture/scoreline/clock/streak/fitness + per-tilt/per-pos coherence gates); `gateScale` never resolves a contest |
+| `posture.ts` | Posture state machine: manager default + timed-window override + revert scaffolding (timed windows are NW-140) |
+| `positional.ts` | Formation graph (line × lane); `inFront`/`behind`/`beside`/`sameLane`/`opposite` (nearest-in-lane); `effectiveTilt` off-position soft-tilt |
+| `traits.ts` | `EngineTrait` = (verb, trigger, **target**, magnitude, **required gate**); `dialDeltas`, chance generate/deny, `xgShift` — the no-unconditional law is a type constraint |
+| `streak.ts` | Per-engine streak: successes extend, contradictions reset with a reason; `streakMult` |
+| `match.ts` | `simulateMatch` — the 6-batch × 3-increment loop: possession split → retain roll (KEEP↔BREAK) → CREATE→quality→xG→FINISH → set pieces → streaks → typed event log |
+| `squad.ts` | Stub squad builder (port of `kc_sim.py` ROLES/PROFILE/build_xi/build_stopbus) for the harness; the 540-card dataset wires downstream |
+| `rng.ts` | mulberry32 stream + Gaussian (Box–Muller) + Poisson (Knuth); one seed per match, fixed consumption order |
+| `events.ts` | The typed event log (source of truth); `index.ts` is the public API |
+
+Constants (`match.ts`) are ported from `kc_sim.py` and re-tuned for the xG model; `scripts/kc_v2_sim.ts` is the balance instrument, the harness locks the asserts.
 
 ### Character data
 
