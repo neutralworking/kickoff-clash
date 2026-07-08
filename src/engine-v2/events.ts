@@ -31,9 +31,15 @@ export type MatchEvent =
       postures: [Posture, Posture];
       dials: [Record<Contest, number>, Record<Contest, number>];
       target: number;
+      managers?: [string | null, string | null];
+      adherence?: ['native' | 'adjacent' | 'foreign', 'native' | 'adjacent' | 'foreign'];
     }
   | { type: 'batch-start'; batch: number; band: ClockBand; postures: [Posture, Posture] }
   | { type: 'posture-shift'; side: Side; to: Posture; reason: 'revert' | 'tactic'; batch: number }
+  | { type: 'tactic-played'; side: Side; card: string; posture: Posture; durationBatches: number; energyCost: number; energyLeft: number; batch: number }
+  | { type: 'substitution'; side: Side; batch: number; subsLeft: number }
+  | { type: 'fitness-drained'; side: Side; amount: number; fitness: number; batch: number }
+  | { type: 'cash-banked'; side: Side; value: number; total: number; clock: Clock }
   | { type: 'increment-start'; clock: Clock; scoreline: [Scoreline, Scoreline] }
   | { type: 'possession-split'; clock: Clock; slots: [number, number] }
   | {

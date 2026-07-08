@@ -43,7 +43,12 @@ export type Gate =
   // coherence gates — scale magnitude by a count (Balatro "the more you commit")
   | { kind: 'per-tilt'; contest: Contest }
   | { kind: 'per-pos-count'; anyOf: readonly string[] }
-  | { kind: 'match-state'; on: MatchState };
+  | { kind: 'match-state'; on: MatchState }
+  // commitment gate — BINARY: open iff the squad commits to a contest. This is
+  // the no-unconditional law applied to MANAGERS (NW-140): an additive reweight
+  // pays a FLAT bonus, but only to a squad that has actually committed tilts to
+  // the manager's contest. No commitment → gate closed → no reweight.
+  | { kind: 'committed'; contest: Contest; atLeast: number };
 
 /** The regime a gate is evaluated against, per increment (own side's view). */
 export interface GateSnapshot {
@@ -89,6 +94,8 @@ export function gateScale(gate: Gate, snap: GateSnapshot): number {
       return gate.anyOf.reduce((n, p) => n + (snap.posCounts[p] ?? 0), 0);
     case 'match-state':
       return snap.states.has(gate.on) ? 1 : 0;
+    case 'committed':
+      return snap.dials[gate.contest] >= gate.atLeast ? 1 : 0;
   }
 }
 

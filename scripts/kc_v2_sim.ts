@@ -15,6 +15,10 @@ import {
   buildStopbus,
   simulateMatch,
   RngStream,
+  MANAGERS,
+  MANAGERS_BY_ID,
+  type Manager,
+  type Contest,
   type Strategy,
   type Squad,
   type Card,
@@ -92,4 +96,57 @@ function mk(strat: Strategy | 'stopbus', q = 0): Squad {
   const spread = Math.max(...avgs) - Math.min(...avgs);
   const maxCell = Math.max(...rows.flatMap((r) => r.row));
   console.log(`\nAVG spread ${spread.toFixed(2)}  (target ≈0.55)   max cell ${maxCell.toFixed(2)}   maxAVG/minAVG ${(Math.max(...avgs) / Math.min(...avgs)).toFixed(2)}`);
+}
+
+// ---- E. manager reweight (NW-140) ----
+{
+  const M = 1500;
+  const balanced = (): Squad => ({ cards: buildXI(builder, 'random'), posture: 'balanced' });
+  const matched = (m: Manager): Squad => ({
+    cards: buildXI(builder, `mono:${m.favoured}` as Strategy),
+    manager: m,
+    formation: m.formation,
+    hasTaker: m.favoured === 'STOP',
+    hasCarrier: m.favoured === 'STOP',
+  });
+  const uncommitted = (m: Manager): Squad => ({
+    cards: buildXI(builder, 'random'),
+    manager: m,
+    formation: m.formation,
+  });
+
+  const ptsG = (mkA: () => Squad, mkB: () => Squad, M2 = M) => {
+    let w = 0, d = 0;
+    for (let i = 0; i < M2; i++) {
+      const r = simulateMatch(mkA(), mkB(), { seed: matchSeed++ });
+      if (r.score[0] > r.score[1]) w++;
+      else if (r.score[0] === r.score[1]) d++;
+    }
+    return (3 * w + d) / M2;
+  };
+
+  const base = ptsG(balanced, balanced);
+  console.log('\n=== E. manager reweight (matched build+manager vs balanced) ===');
+  console.log(`baseline balanced-vs-balanced pts/g ${base.toFixed(2)}`);
+  console.log(`${'manager'.padEnd(15)}${'favoured'.padStart(9)}${'matched'.padStart(9)}${'uncommit'.padStart(9)}${'×base'.padStart(7)}`);
+  for (const m of MANAGERS) {
+    const mt = ptsG(() => matched(m), balanced);
+    const un = ptsG(() => uncommitted(m), balanced);
+    console.log(`${m.name.padEnd(15)}${m.favoured.padStart(9)}${mt.toFixed(2).padStart(9)}${un.toFixed(2).padStart(9)}${(mt / base).toFixed(2).padStart(7)}`);
+  }
+
+  // swing: a fixed mono build under each manager vs a balanced field
+  console.log('\n=== E2. build swing across managers (mono:CREATE, vs balanced) ===');
+  const build: Contest = 'CREATE';
+  const rowVals: { name: string; v: number }[] = [];
+  for (const m of MANAGERS) {
+    const v = ptsG(
+      () => ({ cards: buildXI(builder, `mono:${build}` as Strategy), manager: m, formation: m.formation }),
+      balanced
+    );
+    rowVals.push({ name: m.name, v });
+  }
+  rowVals.sort((a, b) => b.v - a.v);
+  for (const { name, v } of rowVals) console.log(`  ${name.padEnd(15)} ${v.toFixed(2)}`);
+  console.log(`  swing best↔worst: ${rowVals[0].v.toFixed(2)} (${rowVals[0].name}) ↔ ${rowVals.at(-1)!.v.toFixed(2)} (${rowVals.at(-1)!.name})`);
 }

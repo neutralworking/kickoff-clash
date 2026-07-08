@@ -136,3 +136,14 @@ export function varianceShift(traits: EngineTrait[], snap: GateSnapshot): number
   }
   return v;
 }
+
+/** drain-fitness → total fitness drained from the OPPONENT this batch (Taskmaster). */
+export function fitnessDrain(traits: EngineTrait[], snap: GateSnapshot): number {
+  let d = 0;
+  for (const t of traits) {
+    if (t.verb !== 'drain-fitness' || t.target.kind !== 'fitness') continue;
+    const scale = gateScale(t.gate, snap);
+    if (scale > 0) d += t.magnitude;
+  }
+  return d;
+}

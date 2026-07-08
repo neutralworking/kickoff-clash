@@ -75,9 +75,9 @@ The live engine's validation battery: `npx tsx scripts/verb-dispatcher-harness.t
 5. **THE SHOT** (die #2): named shooter (weighted by eff ATK + finishing lane); GOAL if `d100 ≤ clamp(BASE + 3×(shooter ATK − STOP), 5, 80)`; the roll and the need print on the beat.
 6. **Discipline**: fouls draw a fouler (destroyers likeliest); booking d100 ≤ 30; second yellow = red (≤1/side/match) — his points leave every contest at once and he's suspended next fixture.
 
-### The six-contest engine (`src/engine-v2/`, NW-139 P1) — headless spine
+### The six-contest engine (`src/engine-v2/`, NW-139 P1 + NW-140 P2) — headless spine
 
-The Fork A rebuild target, built beside the live game (not yet UI-wired). Self-contained, deterministic, vitest-gated. Reuses the `VerbName` palette from `src/lib/verbs.ts` (unchanged; only targets re-point to contest dials).
+The Fork A rebuild target, built beside the live game (not yet UI-wired). Self-contained, deterministic, vitest-gated. Reuses the `VerbName` palette from `src/lib/verbs.ts` (unchanged; only targets re-point to contest dials). **P1 (NW-139)** landed the resolution spine; **P2 (NW-140)** landed the manager layer (data-only reweight + tactical deck + adherence). Two harnesses gate it: `__tests__/six-contest.test.ts` (resolution/balance shape) and `__tests__/managers.test.ts` (reweight ≈2×, the swing, the no-unconditional law, tactics, adherence). `scripts/kc_v2_sim.ts` is the balance instrument (sections A/C + E manager reweight).
 
 | File | Purpose |
 |---|---|
@@ -85,9 +85,12 @@ The Fork A rebuild target, built beside the live game (not yet UI-wired). Self-c
 | `gates.ts` | Context taxonomy as **gates** (posture/scoreline/clock/streak/fitness + per-tilt/per-pos coherence gates); `gateScale` never resolves a contest |
 | `posture.ts` | Posture state machine: manager default + timed-window override + revert scaffolding (timed windows are NW-140) |
 | `positional.ts` | Formation graph (line × lane); `inFront`/`behind`/`beside`/`sameLane`/`opposite` (nearest-in-lane); `effectiveTilt` off-position soft-tilt |
-| `traits.ts` | `EngineTrait` = (verb, trigger, **target**, magnitude, **required gate**); `dialDeltas`, chance generate/deny, `xgShift` — the no-unconditional law is a type constraint |
-| `streak.ts` | Per-engine streak: successes extend, contradictions reset with a reason; `streakMult` |
-| `match.ts` | `simulateMatch` — the 6-batch × 3-increment loop: possession split → retain roll (KEEP↔BREAK) → CREATE→quality→xG→FINISH → set pieces → streaks → typed event log |
+| `traits.ts` | `EngineTrait` = (verb, trigger, **target**, magnitude, **required gate**); `dialDeltas`, chance generate/deny, `xgShift`, `varianceShift`, `fitnessDrain` — the no-unconditional law is a type constraint |
+| `streak.ts` | Per-engine streak: successes (goal/clean-batch/**substitution**) extend, contradictions reset with a reason; `streakMult` |
+| `managers.ts` (NW-140) | The 11-manager roster as DATA (no class): each is a committed-gated additive **reweight** package (`managerTraits`) + posture + formation + engine/variance/fitness/cash mechanics; `COMMIT_MIN` per contest; seeded `managerOffer` choice-of-three |
+| `adherence.ts` (NW-140) | 5 formations + adjacency data; `adherenceBand` (native/adjacent/foreign) → `throttleDials` on tilt contribution (the formation-level generalisation of off-position soft-tilt) |
+| `tactics.ts` (NW-140) | Tactical cards = timed posture windows (duration + energy cost), played between batches; consumes the posture state machine + revert |
+| `match.ts` | `simulateMatch` — the 6-batch × 3-increment loop: manager reweight + adherence throttle + fitness → possession split → retain roll (KEEP↔BREAK) → CREATE→quality→xG→FINISH → set pieces → tactical windows → subs → streaks → typed event log |
 | `squad.ts` | Stub squad builder (port of `kc_sim.py` ROLES/PROFILE/build_xi/build_stopbus) for the harness; the 540-card dataset wires downstream |
 | `rng.ts` | mulberry32 stream + Gaussian (Box–Muller) + Poisson (Knuth); one seed per match, fixed consumption order |
 | `events.ts` | The typed event log (source of truth); `index.ts` is the public API |

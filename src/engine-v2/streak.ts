@@ -16,7 +16,8 @@ import type { Contest } from './contests';
 export type StreakSuccess =
   | { on: 'any-goal' }
   | { on: 'contest-goal'; via: Contest } // a goal scored through that contest lane
-  | { on: 'clean-batch' };
+  | { on: 'clean-batch' }
+  | { on: 'substitution' }; // an own substitution (Tinkerman fuel)
 
 export type StreakContradiction =
   | { on: 'conceded'; reason: string }
@@ -43,6 +44,10 @@ export function extendsOnGoal(def: EngineDef, via: Contest): boolean {
 
 export function extendsOnCleanBatch(def: EngineDef): boolean {
   return def.successes.some((s) => s.on === 'clean-batch');
+}
+
+export function extendsOnSubstitution(def: EngineDef): boolean {
+  return def.successes.some((s) => s.on === 'substitution');
 }
 
 /** Reason string if conceding (optionally via a BREAK transition) contradicts. */

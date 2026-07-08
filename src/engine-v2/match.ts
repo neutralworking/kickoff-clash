@@ -44,17 +44,29 @@ import {
   chanceGenerated,
   chanceDenied,
   xgShift,
+  varianceShift,
+  fitnessDrain,
 } from './traits';
 import {
   type EngineDef,
   BALANCED_ENGINE,
   contradictionReason,
   extendsOnGoal,
+  extendsOnSubstitution,
   streakMult,
 } from './streak';
 import type { MatchEvent, Side, Clock, ChanceQuality, ChanceOrigin } from './events';
 import { RngStream } from './rng';
-import { type PostureState, createPostureState, activePosture, tickPosture } from './posture';
+import {
+  type PostureState,
+  createPostureState,
+  activePosture,
+  tickPosture,
+  applyPostureWindow,
+} from './posture';
+import { type Manager, managerTraits } from './managers';
+import { type FormationId, type AdherenceBand, adherenceBand, throttleDials } from './adherence';
+import type { TacticalPlay } from './tactics';
 
 // ---- tunables (ported from kc_sim.py; xG-model constants re-calibrated) -----
 const BATCHES = 6;
@@ -92,17 +104,32 @@ const K_SPDEF = 0.014; // (topDef − opp backlineDef) → set-piece xG
 
 const GOAL_VALUE = 1;
 const DEFAULT_TARGET = 3;
+const DAMPEN_FLOOR = 0.12; // dampen-variance lifts poor chances (consistency axis)
+const DEFAULT_ENERGY = 5;
+
+/** Tired legs create/finish less — a mild throttle on a side's own dials. */
+const fitnessFactor = (f: number) => clamp(0.85 + 0.015 * f, 0.85, 1);
 
 // ---------------------------------------------------------------------------
 
 export interface Squad {
   cards: Card[];
-  posture: Posture;
+  /** Manager default posture; falls back to the manager's, else 'balanced'. */
+  posture?: Posture;
   engine?: EngineDef;
   traits?: EngineTrait[];
   /** Set-piece kit (§7): a taker unlocks dead-balls, a carrier raises the prob. */
   hasTaker?: boolean;
   hasCarrier?: boolean;
+  /** NW-140: the manager (reweight + posture + formation + mechanics). */
+  manager?: Manager;
+  /** Fielded formation; adherence is measured against the manager's preferred. */
+  formation?: FormationId;
+  /** Tactical plays (timed posture windows), played between batches. */
+  tacticalPlays?: TacticalPlay[];
+  energy?: number;
+  /** Batches at which this side makes a substitution (Tinkerman fuel). */
+  subsAtBatch?: number[];
 }
 
 export interface MatchOptions {
@@ -115,6 +142,7 @@ export interface MatchResult {
   events: MatchEvent[];
   score: [number, number];
   points: [number, number];
+  cash: [number, number];
   result: 'target-met' | 'target-missed';
 }
 
@@ -150,17 +178,31 @@ interface SideCtx {
   att: number;
   aerialDef: number;
   streak: number;
+  band: AdherenceBand;
+  energy: number;
+  fitness: number;
+  cashOnGoal: number;
+  managerId: string | null;
+  tacticalPlays: TacticalPlay[];
+  subsAtBatch: number[];
+  subsLeft: number;
 }
 
 function makeCtx(sq: Squad): SideCtx {
   const posCounts: Record<string, number> = {};
   for (const c of sq.cards) posCounts[c.pos] = (posCounts[c.pos] ?? 0) + 1;
+  const mgr = sq.manager;
+  const posture = sq.posture ?? mgr?.posture ?? 'balanced';
+  const formation = sq.formation ?? mgr?.formation ?? '4-3-3';
+  const band: AdherenceBand = mgr ? adherenceBand(formation, mgr.formation) : 'native';
   return {
     cards: sq.cards,
-    postureState: createPostureState(sq.posture),
-    engine: sq.engine ?? BALANCED_ENGINE,
-    traits: sq.traits ?? [],
-    baseDials: contestDials(sq.cards),
+    postureState: createPostureState(posture),
+    engine: mgr?.engine ?? sq.engine ?? BALANCED_ENGINE,
+    traits: [...(sq.traits ?? []), ...(mgr ? managerTraits(mgr) : [])],
+    // adherence throttles CARD tilt contribution (the manager reweight, a trait,
+    // is added on top in effectiveDials and is NOT throttled).
+    baseDials: throttleDials(contestDials(sq.cards), band),
     posCounts,
     hasTaker: !!sq.hasTaker,
     hasCarrier: !!sq.hasCarrier,
@@ -168,6 +210,14 @@ function makeCtx(sq: Squad): SideCtx {
     att: topAtt(sq.cards),
     aerialDef: topDef(sq.cards),
     streak: 0,
+    band,
+    energy: sq.energy ?? DEFAULT_ENERGY,
+    fitness: 10,
+    cashOnGoal: mgr?.cashOnGoal ?? 0,
+    managerId: mgr?.id ?? null,
+    tacticalPlays: sq.tacticalPlays ?? [],
+    subsAtBatch: sq.subsAtBatch ?? [],
+    subsLeft: 3,
   };
 }
 
@@ -183,19 +233,24 @@ function snapshot(
     scoreline,
     clock,
     streak: side.streak,
-    fitness: 10,
+    fitness: side.fitness,
     dials: side.baseDials,
     posCounts: side.posCounts,
     states,
   };
 }
 
-/** Effective dials = base + own amplifies − opponent denies, per snapshot. */
+/**
+ * Effective dials = fitness-throttled base tilts + own manager/trait amplifies
+ * − opponent denies, per snapshot. The manager reweight rides on the trait
+ * amplifies (not fitness/adherence-throttled — it is the manager's own points).
+ */
 function effectiveDials(me: SideCtx, meSnap: GateSnapshot, foe: SideCtx, foeSnap: GateSnapshot): Record<Contest, number> {
   const mine = dialDeltas(me.traits, meSnap);
   const theirs = dialDeltas(foe.traits, foeSnap);
+  const ff = fitnessFactor(me.fitness);
   const out = { ...me.baseDials };
-  for (const k of Object.keys(out) as Contest[]) out[k] += mine.own[k] - theirs.opp[k];
+  for (const k of Object.keys(out) as Contest[]) out[k] = out[k] * ff + mine.own[k] - theirs.opp[k];
   return out;
 }
 
@@ -208,6 +263,7 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
   const ctx: [SideCtx, SideCtx] = [makeCtx(home), makeCtx(away)];
   const score: [number, number] = [0, 0];
   const points: [number, number] = [0, 0];
+  const cash: [number, number] = [0, 0];
 
   // Possession split (batch-level 6 slots, clamp 2–4). Base dials, no per-inc
   // gating on the split itself (posture is a gate on traits, not a resolver).
@@ -223,6 +279,8 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
     postures: [activePosture(ctx[0].postureState), activePosture(ctx[1].postureState)],
     dials: [d0, d1],
     target,
+    managers: [ctx[0].managerId, ctx[1].managerId],
+    adherence: [ctx[0].band, ctx[1].band],
   });
 
   const scorelines = (): [Scoreline, Scoreline] => [
@@ -257,9 +315,11 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
     const base = origin === 'set-piece' ? SP_XG_BASE : quality === 'big' ? XG_BIG : XG_HALF;
     const kMargin = aerial ? K_SPDEF : K_STAT;
     let xg = base * Math.exp(K_FIN * (aerial ? 0 : finEdge) + kMargin * statMargin) * xgShift(A.traits, aSnap);
-    // variance verbs widen/tighten the effective xG (consistency axis).
-    const v = 0; // stub squads carry none; primitive-tested separately
-    xg *= 1 + K_VAR * v;
+    // variance verbs (Gambler/Pragmatist): amplify → mean-preserving spread
+    // (boom or bust); dampen → lift poor chances toward a floor (consistency).
+    const v = varianceShift(A.traits, aSnap);
+    if (v > 0) xg *= rng.float() < 0.5 ? 1 + K_VAR : 1 - K_VAR;
+    else if (v < 0) xg = Math.max(xg, DAMPEN_FLOOR);
     xg = Math.max(0.01, xg);
 
     const roll = rng.float();
@@ -278,6 +338,12 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
     if (extendsOnGoal(A.engine, via)) events.push({ type: 'streak-extended', side: att, streak: A.streak, clock });
     events.push({ type: 'points-banked', side: att, source: 'goal', mult, value, total: points[att], clock });
 
+    // cash on goal (Financier economy hook)
+    if (A.cashOnGoal > 0) {
+      cash[att] += A.cashOnGoal;
+      events.push({ type: 'cash-banked', side: att, value: A.cashOnGoal, total: cash[att], clock });
+    }
+
     // concede contradicts the defender's engine
     const reason = contradictionReason(D.engine, origin === 'transition');
     if (reason && D.streak > 0) {
@@ -288,12 +354,52 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
 
   for (let b = 1; b <= batches; b++) {
     const band = clockBand(b, batches);
-    // posture tick: expire any due tactical window and revert to the default
-    // (timed windows are opened by the NW-140 tactical deck; none in P1).
+    // posture tick: expire any due tactical window and revert to the default.
     for (const s of [0, 1] as Side[]) {
       const { state, reverted } = tickPosture(ctx[s].postureState, b);
       ctx[s].postureState = state;
       if (reverted) events.push({ type: 'posture-shift', side: s, to: reverted, reason: 'revert', batch: b });
+    }
+    // tactical plays (between-batch): open a timed posture window if affordable.
+    for (const s of [0, 1] as Side[]) {
+      for (const play of ctx[s].tacticalPlays) {
+        if (play.atBatch !== b) continue;
+        if (ctx[s].energy < play.tactic.energyCost) continue;
+        ctx[s].energy -= play.tactic.energyCost;
+        ctx[s].postureState = applyPostureWindow(ctx[s].postureState, play.tactic.posture, b, play.tactic.durationBatches);
+        events.push({
+          type: 'tactic-played',
+          side: s,
+          card: play.tactic.name,
+          posture: play.tactic.posture,
+          durationBatches: play.tactic.durationBatches,
+          energyCost: play.tactic.energyCost,
+          energyLeft: ctx[s].energy,
+          batch: b,
+        });
+        events.push({ type: 'posture-shift', side: s, to: play.tactic.posture, reason: 'tactic', batch: b });
+      }
+    }
+    // substitutions (fresh legs / Tinkerman fuel): extends the streak if the
+    // side's engine feeds on rotation.
+    for (const s of [0, 1] as Side[]) {
+      if (!ctx[s].subsAtBatch.includes(b) || ctx[s].subsLeft <= 0) continue;
+      ctx[s].subsLeft -= 1;
+      events.push({ type: 'substitution', side: s, batch: b, subsLeft: ctx[s].subsLeft });
+      if (extendsOnSubstitution(ctx[s].engine)) {
+        ctx[s].streak += 1;
+        events.push({ type: 'streak-extended', side: s, streak: ctx[s].streak, clock: { batch: b, increment: 1 } });
+      }
+    }
+    // fitness drain (Taskmaster): a committed press chips the opponent's legs.
+    for (const s of [0, 1] as Side[]) {
+      const other: Side = s === 0 ? 1 : 0;
+      const drainSnap = snapshot(ctx[s], activePosture(ctx[s].postureState), scorelines()[s], band, new Set());
+      const amount = fitnessDrain(ctx[s].traits, drainSnap);
+      if (amount > 0) {
+        ctx[other].fitness = Math.max(0, ctx[other].fitness - amount);
+        events.push({ type: 'fitness-drained', side: other, amount, fitness: ctx[other].fitness, batch: b });
+      }
     }
     events.push({
       type: 'batch-start',
@@ -385,5 +491,5 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
 
   const result: 'target-met' | 'target-missed' = points[0] >= target ? 'target-met' : 'target-missed';
   events.push({ type: 'full-time', score: [score[0], score[1]], points: [points[0], points[1]], target, result });
-  return { events, score, points, result };
+  return { events, score, points, cash, result };
 }
