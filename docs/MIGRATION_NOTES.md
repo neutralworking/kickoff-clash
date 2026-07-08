@@ -1,5 +1,24 @@
 # MIGRATION_NOTES — legacy `src/lib` vs `SYNERGY_MODEL_V1`
 
+> **REVISITED — NW-139 Fork A (July 2026).** This audit was written against
+> `SYNERGY_MODEL_V1`'s two-window `charge + roll ≥ threshold` resolver as the keep-baseline.
+> **That resolver is no longer the target.** Per `CARD_SYSTEM_V2_CHANGES.md` §1 the engine
+> is rebuilt to the **six-contest mirror model** (KEEP/PRESS · CREATE/BREAK · FINISH/STOP),
+> which flips two things below:
+>
+> * **`src/engine/` two-window resolver → REPLACE** (not keep). Its window resolution, charge
+>   accumulators, and threshold rolls are superseded by six-contest resolution; only the verb
+>   *palette* (`src/lib/verbs.ts`, law 3) and the TraitRecord runtime survive, with verb
+>   **targets** re-pointed from window-kind to contest dial.
+> * **Legacy `src/lib` create/finish/lanes/xG → several ADAPT→KEEP.** The possession-share →
+>   chance → xG → goal cascade and the `quality: 'half'|'big'` + `goal = 1 − e^(−xG)` chance
+>   model in `src/lib`/`SCORING_V2` are now *closer to target* than the window engine — they
+>   are the seed of the six-contest CREATE→FINISH pipeline, not a DELETE. The `match-v5.ts`
+>   verdict below flips from DELETE to KEEP/ADAPT accordingly.
+>
+> SM's five design laws, verb palette, and context-taxonomy (**demoted from resolver to
+> gate**) still survive as PR lint rules. Verdicts below are read through this banner.
+
 **Phase 0 audit (KC_REBUILD_PLAN_V1 §P0.4).** Verdict per module: **KEEP** (survives into the
 rebuild as-is or near-as-is), **ADAPT** (the concept survives; the implementation moves/changes),
 **DELETE** (violates an SM design law or is superseded outright). The audit is against the five
@@ -39,9 +58,15 @@ window resolution (`charge + d(die) ≥ threshold`) and goals+points scoring.
   play-tactics-between-batches; `callPlay`/charges anticipate the tactical deck.
 - **ADAPT:** `computeMatchVerdict` (why won/lost) re-derives from the typed event log in the
   rebuild — the event log makes it a pure aggregation (SM §9 dashboard), not bespoke plumbing.
-- **DELETE (Phase 5):** possession-share math, xG convexity dials, the zonal lane contest as
+- **DELETE (Phase 5):** ~~possession-share math, xG convexity dials,~~ the zonal lane contest as
   the goal model, cascade-line bonus stacking (flat multiplier stacking violates law 1 where
   unconditional). The honest-scoreline idea survives; the mechanism does not.
+  - **Fork A (NW-139) flips part of this to KEEP/ADAPT:** under six-contest resolution the
+    possession-share → chance → xG cascade and the `quality: 'half'|'big'` + `1 − e^(−xG)`
+    goal model are the seed of the CREATE→FINISH pipeline (`CARD_SYSTEM_V2_CHANGES.md` §4),
+    not a delete. Still DELETE: the **zonal lane contest** as the goal model and
+    **cascade-line bonus stacking** (six contests resolve as global team tilt totals, and
+    unconditional flat stacking still violates law 1).
 
 ## `scoring.ts` — ADAPT (card model), DELETE (styles)
 
