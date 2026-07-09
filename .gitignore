@@ -8,3 +8,6 @@ out/
 .env.local
 .DS_Store
 .vercel
+
+# Local design reference (handoff files, not part of the app)
+.design-ref/

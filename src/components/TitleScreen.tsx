@@ -91,6 +91,22 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
           </button>
         )}
 
+        {/* Six-contest rebuild (NW-143, P5) — the engine-v2 run loop. */}
+        <a
+          href="/play"
+          className="w-full text-center transition-all hover:brightness-125 active:scale-[0.97]"
+          style={{
+            fontFamily: 'var(--font-pixel)',
+            fontSize: 9,
+            letterSpacing: 1,
+            textTransform: 'uppercase',
+            color: 'var(--dust)',
+            padding: '8px 0',
+            marginTop: 2,
+          }}
+        >
+          ▸ Six-Contest Rebuild <span style={{ color: 'var(--gold)' }}>(v2 beta)</span>
+        </a>
       </div>
     </div>
   );
