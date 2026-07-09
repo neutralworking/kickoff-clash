@@ -52,6 +52,7 @@ interface PostMatchProps {
     shattered: Card[];
     injured: Card[];
     promoted: Card[];
+    worn: Card[];
     commentary: string[];
   };
   // --- Run context (one-life arc) — passed from GameShell ----------------------
@@ -77,8 +78,9 @@ const RESULT_META: Record<
 // `badgeFg` is the foreground over the solid `color` fill (contrast law: white on
 // the red/amber fates, ink on the bright gold one).
 type GroupTone = { key: string; title: string; color: string; bg: string; marker: string; badgeFg: string };
-const GROUP_META: Record<'shattered' | 'injured' | 'promoted', GroupTone> = {
+const GROUP_META: Record<'shattered' | 'worn' | 'injured' | 'promoted', GroupTone> = {
   shattered: { key: 'shattered', title: 'Shattered', color: 'var(--danger)', bg: 'rgba(232,54,47,0.12)', marker: '✕', badgeFg: 'var(--line-white)' },
+  worn: { key: 'worn', title: 'Worn Out', color: 'var(--danger)', bg: 'rgba(232,54,47,0.12)', marker: '◤', badgeFg: 'var(--line-white)' },
   injured: { key: 'injured', title: 'Injured', color: 'var(--amber)', bg: 'rgba(255,122,31,0.12)', marker: '+', badgeFg: 'var(--line-white)' },
   promoted: { key: 'promoted', title: 'Promoted', color: 'var(--gold)', bg: 'rgba(245,197,66,0.12)', marker: '★', badgeFg: 'var(--ink-black)' },
 };
@@ -99,10 +101,11 @@ export default function PostMatch({
   const [modal, setModal] = useState<GameCardModel | null>(null);
 
   const meta = RESULT_META[matchResult.result];
-  const { shattered, injured, promoted, commentary } = durabilityResult;
+  const { shattered, injured, promoted, worn, commentary } = durabilityResult;
 
   const groups: { tone: GroupTone; cards: Card[] }[] = [
     { tone: GROUP_META.shattered, cards: shattered },
+    { tone: GROUP_META.worn, cards: worn },
     { tone: GROUP_META.injured, cards: injured },
     { tone: GROUP_META.promoted, cards: promoted },
   ].filter((g) => g.cards.length > 0);
@@ -112,6 +115,7 @@ export default function PostMatch({
   // Find which group a commentary line refers to (for its accent tint).
   const lineTone = (line: string): GroupTone | null => {
     if (shattered.some((c) => line.includes(c.name))) return GROUP_META.shattered;
+    if (worn.some((c) => line.includes(c.name))) return GROUP_META.worn;
     if (injured.some((c) => line.includes(c.name))) return GROUP_META.injured;
     if (promoted.some((c) => line.includes(c.name))) return GROUP_META.promoted;
     return null;
