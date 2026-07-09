@@ -74,6 +74,21 @@ const TINKERMAN_ENGINE: EngineDef = {
   contradictions: [{ on: 'conceded', reason: 'conceded' }],
 };
 
+/**
+ * The defensive win-con: the streak (the Balatro mult) ramps on CLEAN SHEETS, so
+ * a wall banks defensive points toward the run's blind (match.ts clean-batch
+ * points). A concede breaks it. Assigned to STOP/BREAK/PRESS managers so their
+ * archetype scores its own way, not by chasing goals it can't produce.
+ */
+const DEFENSIVE_ENGINE: EngineDef = {
+  id: 'defensive',
+  successes: [{ on: 'clean-batch' }, { on: 'any-goal' }],
+  contradictions: [{ on: 'conceded', reason: 'conceded — the wall cracked' }],
+};
+
+/** Attacking win-cons ramp on goals (the default); defensive ones on clean sheets. */
+const DEFENSIVE_CONTESTS = new Set<Contest>(['STOP', 'BREAK', 'PRESS']);
+
 /** The 11-manager roster (SM §4 + Heavy Metal, the PRESS/Gegenpress manager). */
 export const MANAGERS: Manager[] = [
   {
@@ -182,6 +197,10 @@ export const MANAGERS: Manager[] = [
     reweight: { PRESS: 4, BREAK: 4, FINISH: 1 },
   },
 ];
+
+// Backfill the defensive win-con engine onto STOP/BREAK/PRESS managers that
+// don't already define one (Fortress keeps its own clean-batch engine).
+for (const m of MANAGERS) if (!m.engine && DEFENSIVE_CONTESTS.has(m.favoured)) m.engine = DEFENSIVE_ENGINE;
 
 export const MANAGERS_BY_ID: Record<string, Manager> = Object.fromEntries(
   MANAGERS.map((m) => [m.id, m])

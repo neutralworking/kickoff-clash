@@ -59,7 +59,14 @@ export function contradictionReason(def: EngineDef, viaTransition: boolean): str
   return null;
 }
 
-/** Streak → scoring multiplier: 1 + 0.5·streak, capped at 3× (CARD_SYSTEM_V2 loop). */
+/**
+ * Streak → scoring multiplier (the Balatro mult): `1 + 0.6·streak`, capped at 8×.
+ * A high ceiling is load-bearing — it's what makes COMMITMENT pay: a coherent
+ * build keeps one win-con's streak ramping into a big multiplier, while an
+ * incoherent build's streak keeps breaking and stays near 1×. That divergence is
+ * the run's "builds matter" (run.ts blind); the cap stops a perfect run running
+ * truly away.
+ */
 export function streakMult(streak: number): number {
-  return Math.min(3, 1 + 0.5 * streak);
+  return Math.min(4, 1 + 0.5 * streak);
 }

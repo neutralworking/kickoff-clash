@@ -28,16 +28,15 @@ import { type ChallengeRule, challengeForFixture } from './data/challenges';
 export const RUN_FIXTURES = 9;
 
 // ---- tunables (calibrated to the engine-v2 points scale) -------------------
-const TARGET_BASE = 0.5; // the blind's base; grows 1.42^f (SM §8 growth)
+const TARGET_BASE = 0.32; // the blind base; grows 1.42^f (SM §8 growth, re-based)
 const TARGET_GROWTH = 1.42;
-const OPP_BASE = 3; // opponent squad quality at fixture 0
-const OPP_GROWTH = 4.2; // + per fixture (overtakes the player mid/late)
-const BOSS_BONUS = 5; // extra opponent quality on a boss fixture (every 3rd)
-const PLAYER_BASE_Q = 11; // starting deck quality (ATT/DEF boost) — ahead early
-const CASH_WIN = 2;
-const CASH_DRAW = 0.4; // a draw advances but pays little (§4.2 soft economic drag)
-const CASH_PER_POINT = 0.38; // win margin compounds — committed wins bigger, grows faster
-const K_QUALITY = 0.55; // cash → deck-quality growth
+const OPP_BASE = 0; // opponent squad quality at fixture 0
+const OPP_GROWTH = 1.8; // opponent quality + per fixture (overtakes the player late)
+const BOSS_BONUS = 2; // extra opponent quality on a boss fixture (every 3rd)
+const PLAYER_BASE_Q = 15; // starting deck quality (ATT/DEF boost) — ahead early
+const CASH_WIN = 3; // flat cash for clearing a fixture
+const CASH_PER_POINT = 0.45; // over-the-bar margin compounds into deck quality
+const K_QUALITY = 0.85; // cash → deck-quality growth
 
 export const fixtureTarget = (f: number): number => round1(TARGET_BASE * Math.pow(TARGET_GROWTH, f));
 const oppQuality = (f: number): number => OPP_BASE + OPP_GROWTH * f + (f % 3 === 0 ? BOSS_BONUS : 0);
@@ -199,9 +198,12 @@ function opponentSquad(pool: KCCard[], f: number, seed: number, challenge: Chall
   return {
     cards,
     posture: boss ? 'attack' : 'balanced',
-    manager: mgr, // a boss keeps its manager reweight...
+    manager: mgr, // a boss also commits under its manager (reweight)
     formation: form,
-    traits: [], // ...but card ACTIONS are player-only (the modelled opponent opts out)
+    // the opponent is MODELLED with its card actions too (CARD_SYSTEM_V2 §8) —
+    // deny-chance actions are bounded saves in the engine, so they defend without
+    // erasing the player's game.
+    traits: xi ? squadTraits(xi) : [],
     dialBonus: qualityBonus(q),
   };
 }
@@ -230,13 +232,13 @@ function applyFixture(run: RunState, pool: KCCard[], f: number, manager: Manager
   }
   const res = simulateMatch(ps, os, { seed: run.seed + f, target });
   const points = round1(res.points[0]);
-  // v1 permadeath: a match LOSS ends the run; a WIN or DRAW advances (a draw pays
-  // less). This keeps every archetype viable — attackers win, walls draw — where
-  // a pure points-blind would lock out defensive builds.
-  const won = res.score[0] > res.score[1];
-  const drew = res.score[0] === res.score[1];
-  const beaten = won || drew;
-  const cashEarned = won ? round1(CASH_WIN + points * CASH_PER_POINT) : drew ? round1(CASH_DRAW + points * CASH_PER_POINT) : 0;
+  // The blind (Balatro): BANK ≥ the fixture's points target or the run ends (v1
+  // permadeath). Points come from the build's win-con — goals for attackers,
+  // clean sheets for walls (match.ts) — both streak-multiplied, so a committed
+  // build maxes one channel and clears the rising bar while an incoherent one
+  // maxes none and falls short late. Beating the bar by more pays more cash.
+  const beaten = points >= target;
+  const cashEarned = beaten ? round1(CASH_WIN + points * CASH_PER_POINT) : 0;
   const fr: FixtureResult = {
     fixture: f,
     boss: isBoss(f),

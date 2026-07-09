@@ -52,6 +52,7 @@ import {
   BALANCED_ENGINE,
   contradictionReason,
   extendsOnGoal,
+  extendsOnCleanBatch,
   extendsOnSubstitution,
   streakMult,
 } from './streak';
@@ -103,8 +104,10 @@ const SP_XG_BASE = 0.32;
 const K_SPDEF = 0.014; // (topDef − opp backlineDef) → set-piece xG
 
 const GOAL_VALUE = 1;
+const CLEAN_BATCH_VALUE = 0.4; // defensive "chips" per clean batch (× streak-mult)
 const DEFAULT_TARGET = 3;
 const DAMPEN_FLOOR = 0.12; // dampen-variance lifts poor chances (consistency axis)
+const SAVE_P = 0.5; // a firing keeper/stopper deny cancels one chance with this prob
 const DEFAULT_ENERGY = 5;
 
 /** Tired legs create/finish less — a mild throttle on a side's own dials. */
@@ -441,9 +444,13 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
           // open-play CREATE volume for the retained phase
           const volEdge = hDials.CREATE - dDials.BREAK;
           const rate = clamp(VOL_BASE + VOL_SLIDE * volEdge, VOL_LO, VOL_HI);
-          let n = rng.poisson(rate);
-          n += chanceGenerated(H.traits, hSnap); // generate → chance (beat)
-          n -= chanceDenied(D.traits, dSnap); // deny → opp chance volume (keeper/stopper)
+          let n = Math.max(0, rng.poisson(rate) + chanceGenerated(H.traits, hSnap)); // generate → chance
+          // deny → opp chance volume is a bounded SAVE, not a flat subtraction:
+          // each firing keeper/stopper action ATTEMPTS to cancel one chance. It
+          // can't drive volume negative or erase a build — the opponent defends,
+          // it does not delete the game (so opponents carry their actions safely).
+          const saves = chanceDenied(D.traits, dSnap);
+          for (let s = 0; s < saves && n > 0; s++) if (rng.bernoulli(SAVE_P)) n--;
           for (let k = 0; k < n; k++) {
             const cClock: Clock = { batch: b, increment: 1 + (k % 2) }; // spread across inc 2–3
             resolveChance(holder, defender, 'open-play', 'FINISH', cClock, false);
@@ -477,12 +484,26 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
       }
     }
 
-    events.push({
-      type: 'batch-end',
-      batch: b,
-      cleanFor: [score[1] === cleanBefore[1], score[0] === cleanBefore[0]],
-      score: [score[0], score[1]],
-    });
+    // ---- clean-batch (defensive) points — the wall's scoring channel ----
+    // A build's chips come from its win-con: goals for attackers (banked at the
+    // goal site), CLEAN SHEETS for defenders (banked here). The streak-mult ramps
+    // whichever channel the manager's engine feeds on, so committing to one
+    // win-con keeps the multiplier high; an incoherent build maxes neither and
+    // falls short of the late blind (the run's points-target, run.ts).
+    const cleanFor: [boolean, boolean] = [score[1] === cleanBefore[1], score[0] === cleanBefore[0]];
+    for (const s of [0, 1] as Side[]) {
+      if (!cleanFor[s]) continue;
+      const mult = streakMult(ctx[s].streak);
+      const value = CLEAN_BATCH_VALUE * mult;
+      points[s] += value;
+      events.push({ type: 'points-banked', side: s, source: 'clean-batch', mult, value, total: points[s], clock: { batch: b, increment: INCREMENTS } });
+      if (extendsOnCleanBatch(ctx[s].engine)) {
+        ctx[s].streak += 1;
+        events.push({ type: 'streak-extended', side: s, streak: ctx[s].streak, clock: { batch: b, increment: INCREMENTS } });
+      }
+    }
+
+    events.push({ type: 'batch-end', batch: b, cleanFor, score: [score[0], score[1]] });
 
     // early whistle: a side already past target with the lead late in the match
     if (b >= batches - 1) {

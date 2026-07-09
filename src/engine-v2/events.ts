@@ -67,7 +67,7 @@ export type MatchEvent =
   | {
       type: 'points-banked';
       side: Side;
-      source: 'goal';
+      source: 'goal' | 'clean-batch';
       mult: number;
       value: number;
       total: number;
