@@ -23,6 +23,7 @@ import {
   MAX_CUPS,
   interestOn,
   applyMatchFitness,
+  applyMatchWear,
 } from '../lib/run';
 import { getShopItem, SCOUT_COST } from '../lib/economy';
 import type { InvestmentCard } from '../lib/economy';
@@ -272,11 +273,20 @@ export default function GameShell() {
     // Apply durability to deck, then fold in cross-match fitness (Phase 3B.2): the XI
     // that played carries its drained fitness into the next cup tie (extra-time hit on a
     // draw); rested players recover. Fitness resets to fresh between cups (handleShopNext).
-    const updatedDeck = applyMatchFitness(
+    const fitDeck = applyMatchFitness(
       applyDurabilityResults(runState.deck, durResult),
       result.handState.xi,
       result.result,
     );
+    // Card WEAR (Pixel Hero): every card that featured wears a grade; a TORN card
+    // retires from the deck. Unlike fitness, wear is permanent and shows on the card
+    // face, so a heavily-rotated squad ages visibly and over-used stars eventually go.
+    const wear = applyMatchWear(fitDeck, result.handState.xi);
+    const updatedDeck = wear.deck;
+    for (const c of wear.torn) {
+      durResult.worn.push(c);
+      durResult.commentary.push(`${c.name} is worn out after ${c.matchesPlayed} matches — retires from the squad.`);
+    }
 
     // Update wins/losses
     const wins = runState.wins + (result.result === 'win' ? 1 : 0);

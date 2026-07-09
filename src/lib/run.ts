@@ -191,7 +191,50 @@ export interface DurabilityResult {
   shattered: Card[];
   injured: Card[];
   promoted: Card[];
+  /** Cards that reached TORN this fixture and retired from the deck (wear system). */
+  worn: Card[];
   commentary: string[];
+}
+
+// --- Card wear / condition (Pixel Hero) -------------------------------------
+// A card's CONDITION degrades with the fixtures it actually features in — the
+// PERMANENT, visible axis (the card face draws the wear), complementing the
+// recoverable fitness axis. Wear never heals; a card that hits TORN retires from
+// the deck. Over a 20-fixture run an ever-present starter wears out, so rotation
+// preserves both fitness AND the squad. Thresholds are matches-played → grade.
+type ConditionGrade = NonNullable<Card['condition']>;
+export const CONDITION_STEPS: { at: number; grade: ConditionGrade }[] = [
+  { at: 14, grade: 'TORN' },
+  { at: 10, grade: 'CREASED' },
+  { at: 6, grade: 'WORN' },
+  { at: 2, grade: 'PLAYED' },
+  { at: 0, grade: 'MINT' },
+];
+
+/** The wear grade for a card that has featured in `n` fixtures. */
+export function conditionForMatches(n: number): ConditionGrade {
+  for (const step of CONDITION_STEPS) if (n >= step.at) return step.grade;
+  return 'MINT';
+}
+
+/**
+ * Fold a fixture's WEAR onto the deck: every card that featured gains a match on
+ * its odometer and its `condition` is recomputed; a card that reaches TORN retires
+ * (removed from the deck for good). Benched cards are untouched — rotation spreads
+ * the wear. Returns the surviving deck + the cards that retired this fixture.
+ */
+export function applyMatchWear(deck: Card[], playedXi: Card[]): { deck: Card[]; torn: Card[] } {
+  const playedIds = new Set(playedXi.map((c) => c.id));
+  const torn: Card[] = [];
+  const next = deck.map((c) => {
+    if (!playedIds.has(c.id)) return c;
+    const matchesPlayed = (c.matchesPlayed ?? 0) + 1;
+    const worn: Card = { ...c, matchesPlayed, condition: conditionForMatches(matchesPlayed) };
+    if (worn.condition === 'TORN') torn.push(worn);
+    return worn;
+  });
+  const tornIds = new Set(torn.map((c) => c.id));
+  return { deck: next.filter((c) => !tornIds.has(c.id)), torn };
 }
 
 // ---------------------------------------------------------------------------
@@ -606,6 +649,7 @@ export function postMatchDurabilityCheck(
   const shattered: Card[] = [];
   const injured: Card[] = [];
   const promoted: Card[] = [];
+  const worn: Card[] = []; // filled by applyMatchWear at the call site (GameShell)
   const commentary: string[] = [];
 
   for (let i = 0; i < xi.length; i++) {
@@ -640,7 +684,7 @@ export function postMatchDurabilityCheck(
     }
   }
 
-  return { shattered, injured, promoted, commentary };
+  return { shattered, injured, promoted, worn, commentary };
 }
 
 /**
