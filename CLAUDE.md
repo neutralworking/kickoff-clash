@@ -75,9 +75,9 @@ The live engine's validation battery: `npx tsx scripts/verb-dispatcher-harness.t
 5. **THE SHOT** (die #2): named shooter (weighted by eff ATK + finishing lane); GOAL if `d100 ≤ clamp(BASE + 3×(shooter ATK − STOP), 5, 80)`; the roll and the need print on the beat.
 6. **Discipline**: fouls draw a fouler (destroyers likeliest); booking d100 ≤ 30; second yellow = red (≤1/side/match) — his points leave every contest at once and he's suspended next fixture.
 
-### The six-contest engine (`src/engine-v2/`, NW-139 P1 + NW-140 P2 + NW-141 P3) — headless spine
+### The six-contest engine (`src/engine-v2/`, NW-139 P1 → NW-142 P4) — headless spine
 
-The Fork A rebuild target, built beside the live game (not yet UI-wired). Self-contained, deterministic, vitest-gated. Reuses the `VerbName` palette from `src/lib/verbs.ts` (unchanged; only targets re-point to contest dials). **P1 (NW-139)** landed the resolution spine; **P2 (NW-140)** landed the manager layer (data-only reweight + tactical deck + adherence); **P3 (NW-141)** landed the card dataset + action catalogue + coverage + shop-bot. Three harnesses gate it: `__tests__/six-contest.test.ts` (resolution/balance shape), `__tests__/managers.test.ts` (reweight ≈2×, the swing, the no-unconditional law, tactics, adherence), and `__tests__/cards.test.ts` (catalogue completeness, coverage, all-11-managers draftability). `scripts/kc_v2_sim.ts` is the balance instrument; `scripts/kc_v2_regenerate.ts` regenerates the dataset + `docs/coverage_report_v2.md`.
+The Fork A rebuild target, built beside the live game (not yet UI-wired). Self-contained, deterministic, vitest-gated. Reuses the `VerbName` palette from `src/lib/verbs.ts` (unchanged; only targets re-point to contest dials). **P1 (NW-139)** landed the resolution spine; **P2 (NW-140)** the manager layer (reweight + tactical deck + adherence); **P3 (NW-141)** the card dataset + action catalogue + coverage + shop-bot; **P4 (NW-142)** the 9-fixture run loop + economy + modelled opponents + challenge rules. Four harnesses gate it: `six-contest.test.ts` (resolution/balance), `managers.test.ts` (reweight/swing/law/tactics/adherence), `cards.test.ts` (catalogue/coverage/draftability), and `run.test.ts` (the permadeath run-distribution — the "game works" gate). Balance instruments: `scripts/kc_v2_sim.ts` (match/manager), `scripts/kc_v2_runsim.ts` (run survival curve); `scripts/kc_v2_regenerate.ts` rebuilds the dataset + `docs/coverage_report_v2.md`. Two design rules carried from the live game: **card actions are player-only** (the modelled opponent opts out — only its roles/tilts/stats resolve), and **v1 permadeath** (a match loss ends the run; a draw advances for less).
 
 | File | Purpose |
 |---|---|
@@ -96,6 +96,8 @@ The Fork A rebuild target, built beside the live game (not yet UI-wired). Self-c
 | `data/actions.ts` (NW-141) | The 45-role action catalogue (`CARD_ACTIONS_V1`): (verb → target, gate) per role, dual-axis tag (law 5), tier-scaled `actionFor`; `LEGENDARIES` merge hook (empty until NW-146) |
 | `cards.ts` (NW-141) | `KCCard` (engine `Card` + name/rarity/nickname); `cardTraits` (a card's action) + JSON loader for `kc_v2_cards.json` |
 | `draft.ts` (NW-141) | The headless shop-bot: `draftForManager` fields a legal, committed XI in the manager's formation from a card stream |
+| `data/challenges.ts` (NW-142) | The challenge-rule starter set (8) as data (target/opponent modifiers) + authored merge hook (empty until NW-147); `challengeForFixture` (seeded, from fixture 2) |
+| `run.ts` (NW-142) | The 9-fixture run: `simulateRun`/`playFixture`, `fixtureTarget` (1.42^f), scaled modelled opponents (bosses every 3rd), economy (cash → deck quality via `dialBonus`), permadeath, serialize/resume |
 | `rng.ts` | mulberry32 stream + Gaussian (Box–Muller) + Poisson (Knuth); one seed per match, fixed consumption order |
 | `events.ts` | The typed event log (source of truth); `index.ts` is the public API |
 

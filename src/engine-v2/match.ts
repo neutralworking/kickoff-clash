@@ -130,6 +130,9 @@ export interface Squad {
   energy?: number;
   /** Batches at which this side makes a substitution (Tinkerman fuel). */
   subsAtBatch?: number[];
+  /** Flat team-strength bonus folded into the contest dials (run.ts deck
+   *  quality / opponent scaling — the six-contest analogue of OPP_COHESION_PTS). */
+  dialBonus?: Partial<Record<Contest, number>>;
 }
 
 export interface MatchOptions {
@@ -195,14 +198,17 @@ function makeCtx(sq: Squad): SideCtx {
   const posture = sq.posture ?? mgr?.posture ?? 'balanced';
   const formation = sq.formation ?? mgr?.formation ?? '4-3-3';
   const band: AdherenceBand = mgr ? adherenceBand(formation, mgr.formation) : 'native';
+  // adherence throttles CARD tilt contribution; the flat team-strength dialBonus
+  // (deck quality) rides on top, un-throttled (the manager reweight, a trait, is
+  // added later in effectiveDials).
+  const baseDials = throttleDials(contestDials(sq.cards), band);
+  if (sq.dialBonus) for (const k of Object.keys(baseDials) as Contest[]) baseDials[k] += sq.dialBonus[k] ?? 0;
   return {
     cards: sq.cards,
     postureState: createPostureState(posture),
     engine: mgr?.engine ?? sq.engine ?? BALANCED_ENGINE,
     traits: [...(sq.traits ?? []), ...(mgr ? managerTraits(mgr) : [])],
-    // adherence throttles CARD tilt contribution (the manager reweight, a trait,
-    // is added on top in effectiveDials and is NOT throttled).
-    baseDials: throttleDials(contestDials(sq.cards), band),
+    baseDials,
     posCounts,
     hasTaker: !!sq.hasTaker,
     hasCarrier: !!sq.hasCarrier,
