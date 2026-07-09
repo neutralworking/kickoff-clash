@@ -3,8 +3,8 @@
  *
  * The headless six-contest spine: build squads, simulate a match, read the
  * typed event log. P1 exposes the PRIMITIVES (contest dials, retain roll +
- * KEEP↔BREAK coupling, CREATE→xG→FINISH, contexts-as-gates, positional graph,
- * streaks); the 45-card catalogue and the UI wiring land downstream (NW-140+).
+ * KEEP↔BREAK coupling, CREATE→xG→FINISH, contexts-as-gates, positional graph);
+ * the 45-card catalogue and the UI wiring land downstream (NW-140+).
  */
 
 export * from './contests';
@@ -13,7 +13,6 @@ export * from './posture';
 export * from './positional';
 export * from './adherence';
 export * from './traits';
-export * from './streak';
 export * from './managers';
 export * from './tactics';
 export * from './events';

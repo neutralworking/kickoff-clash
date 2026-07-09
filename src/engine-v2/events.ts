@@ -67,14 +67,11 @@ export type MatchEvent =
   | {
       type: 'points-banked';
       side: Side;
-      source: 'goal' | 'clean-batch';
-      mult: number;
+      source: 'goal' | 'clean-batch' | 'pressure-batch';
       value: number;
       total: number;
       clock: Clock;
     }
-  | { type: 'streak-extended'; side: Side; streak: number; clock: Clock }
-  | { type: 'streak-broken'; side: Side; reason: string; atStreak: number; clock: Clock }
   | { type: 'batch-end'; batch: number; cleanFor: [boolean, boolean]; score: [number, number] }
   | { type: 'early-whistle'; clock: Clock; reason: string }
   | {

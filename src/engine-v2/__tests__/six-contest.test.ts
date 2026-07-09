@@ -61,7 +61,6 @@ const emptySnap = (dials: Record<Contest, number>): GateSnapshot => ({
   posture: 'balanced',
   scoreline: 'level',
   clock: 'mid',
-  streak: 0,
   fitness: 10,
   dials,
   posCounts: {},
@@ -192,7 +191,7 @@ describe('contexts are GATES, never resolvers (law check)', () => {
       trigger: 'continuous',
       target: { kind: 'own-dial', contest: 'FINISH' },
       magnitude: 3,
-      gate: { kind: 'streak', atLeast: 5 }, // snap streak is 0 → closed
+      gate: { kind: 'posture', is: 'attack' }, // snap posture is 'balanced' → closed
     };
     const deltas = dialDeltas([trait], snap);
     expect(deltas.own.FINISH).toBe(0);
@@ -341,5 +340,44 @@ describe('balance shape matches kc_sim (round-robin spread, no runaway)', () => 
     expect(perSide).toBeGreaterThan(0.6);
     expect(perSide).toBeLessThan(1.8);
     expect(draws / N).toBeGreaterThan(0.1);
+  });
+});
+
+describe('the two commitment-gated scoring floors (goals + pressure | clean batches)', () => {
+  const builder = new RngStream(20260709);
+  // collect points-banked events by source over a run of matches for a given pairing
+  function banked(home: Parameters<typeof buildXI>[1], away: Parameters<typeof buildXI>[1], seeds: number): Record<string, number> {
+    const acc: Record<string, number> = { goal: 0, 'clean-batch': 0, 'pressure-batch': 0 };
+    for (let s = 0; s < seeds; s++) {
+      const h: Squad = { cards: buildXI(builder, home), posture: 'balanced' };
+      const a: Squad = { cards: buildXI(builder, away), posture: 'balanced' };
+      for (const e of simulateMatch(h, a, { seed: 100 + s }).events) {
+        if (e.type === 'points-banked' && e.side === 0) acc[e.source] += 1;
+      }
+    }
+    return acc;
+  }
+
+  it('an ATTACK-committed build (mono:FINISH) is floored by pressure, not clean sheets', () => {
+    const a = banked('mono:FINISH', 'mono:STOP', 60);
+    // the attacker's floor exists — pressure is banked on dominant-but-barren batches
+    expect(a['pressure-batch']).toBeGreaterThan(0);
+    // and it is the DOMINANT floor: an attacker wins via goals + pressure, not clean
+    // sheets (incidental cross-commitment can leak a few, but the channel is attacking)
+    expect(a['pressure-batch']).toBeGreaterThan(a['clean-batch']);
+  });
+
+  it('a DEFENSE-committed build (mono:STOP) is floored by clean batches, not pressure', () => {
+    const d = banked('mono:STOP', 'mono:FINISH', 60);
+    expect(d['clean-batch']).toBeGreaterThan(0);
+    expect(d['clean-batch']).toBeGreaterThan(d['pressure-batch']); // defensive floor dominates
+  });
+
+  it('an UNCOMMITTED build (random) is floored by neither channel', () => {
+    // a random squad rarely clears any commitment gate, so it lives on goals alone —
+    // the no-unconditional law applied to the scoring floors (this is why an
+    // incoherent build dies early under the run's blind).
+    const r = banked('random', 'random', 60);
+    expect(r['clean-batch'] + r['pressure-batch']).toBeLessThan(r['goal'] + 1);
   });
 });

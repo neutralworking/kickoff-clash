@@ -13,7 +13,7 @@
  *     → FINISH = conversion:  goal = 1 − e^(−xG)   (the owner-chosen FINISH model)
  *     → set pieces: a CREATE-fed, DEF-keyed (aerial) dead-ball path (§7)
  *
- * Contexts are GATES only (gates.ts) — posture/scoreline/clock/streak/fitness
+ * Contexts are GATES only (gates.ts) — posture/scoreline/clock/fitness
  * scale trait magnitude; none resolves a contest. Determinism: one RngStream
  * per match, consumed in fixed order → same seed + same squads = same log.
  *
@@ -47,15 +47,6 @@ import {
   varianceShift,
   fitnessDrain,
 } from './traits';
-import {
-  type EngineDef,
-  BALANCED_ENGINE,
-  contradictionReason,
-  extendsOnGoal,
-  extendsOnCleanBatch,
-  extendsOnSubstitution,
-  streakMult,
-} from './streak';
 import type { MatchEvent, Side, Clock, ChanceQuality, ChanceOrigin } from './events';
 import { RngStream } from './rng';
 import {
@@ -65,7 +56,7 @@ import {
   tickPosture,
   applyPostureWindow,
 } from './posture';
-import { type Manager, managerTraits } from './managers';
+import { type Manager, managerTraits, COMMIT_MIN } from './managers';
 import { type FormationId, type AdherenceBand, adherenceBand, throttleDials } from './adherence';
 import type { TacticalPlay } from './tactics';
 
@@ -103,8 +94,21 @@ const SP_CARRIER = 1.7;
 const SP_XG_BASE = 0.32;
 const K_SPDEF = 0.014; // (topDef − opp backlineDef) → set-piece xG
 
-const GOAL_VALUE = 1;
-const CLEAN_BATCH_VALUE = 0.4; // defensive "chips" per clean batch (× streak-mult)
+const GOAL_VALUE = 1.9; // flat points per goal (attacking scoring channel). Goals are
+// HIGHER-VARIANCE than clean batches, so under a permadeath blind the goal channel needs a
+// larger per-event value to give attacking builds the same left-tail margin a wall gets.
+const CLEAN_BATCH_VALUE = 0.85; // flat points per clean batch — the DEFENSIVE scoring
+// channel, banked only by a defensively-committed build (a wall's clean sheets are its
+// goals). Clean batches are common, so this must be gated on commitment or every build
+// would floor on it; an attacker keeps clean batches but scores via goals, not these.
+const PRESSURE_BATCH_VALUE = 0.7; // flat points per PRESSURE batch — the attacking
+// mirror of the clean batch. An attack-committed side that dominates a batch's chances
+// but doesn't convert still banks territory. This is the attacker's FLOOR: without it a
+// pure attacker banks ZERO on any shutout match and dies at F1 as easily as F9 (a
+// defender never scores zero — clean batches are its floor). Small, so a goal (banked
+// separately) is always worth far more than the pressure it converts from.
+const DEFENSIVE_COMMIT: readonly Contest[] = ['STOP', 'BREAK', 'PRESS', 'KEEP'];
+const ATTACK_COMMIT: readonly Contest[] = ['FINISH', 'CREATE'];
 const DEFAULT_TARGET = 3;
 const DAMPEN_FLOOR = 0.12; // dampen-variance lifts poor chances (consistency axis)
 const SAVE_P = 0.5; // a firing keeper/stopper deny cancels one chance with this prob
@@ -119,7 +123,6 @@ export interface Squad {
   cards: Card[];
   /** Manager default posture; falls back to the manager's, else 'balanced'. */
   posture?: Posture;
-  engine?: EngineDef;
   traits?: EngineTrait[];
   /** Set-piece kit (§7): a taker unlocks dead-balls, a carrier raises the prob. */
   hasTaker?: boolean;
@@ -174,16 +177,22 @@ function possessionSchedule(h: number, total: number): Side[] {
 interface SideCtx {
   cards: Card[];
   postureState: PostureState;
-  engine: EngineDef;
   traits: EngineTrait[];
   baseDials: Record<Contest, number>;
+  /** baseDials + the manager's committed reweight (un-throttled). The possession
+   *  split reads THIS, so a possession manager (KEEP/PRESS reweight) actually
+   *  controls the ball — the reweight isn't confined to per-increment contests. */
+  planDials: Record<Contest, number>;
   posCounts: Record<string, number>;
   hasTaker: boolean;
   hasCarrier: boolean;
   bldef: number;
   att: number;
   aerialDef: number;
-  streak: number;
+  /** True if the build commits to a defensive contest — unlocks clean-sheet points. */
+  defensiveCommit: boolean;
+  /** True if the build commits to an attacking contest — unlocks pressure-batch points. */
+  attackCommit: boolean;
   band: AdherenceBand;
   energy: number;
   fitness: number;
@@ -204,21 +213,31 @@ function makeCtx(sq: Squad): SideCtx {
   // adherence throttles CARD tilt contribution; the flat team-strength dialBonus
   // (deck quality) rides on top, un-throttled (the manager reweight, a trait, is
   // added later in effectiveDials).
-  const baseDials = throttleDials(contestDials(sq.cards), band);
+  const rawDials = contestDials(sq.cards); // card tilts only (the build's commitment)
+  const defensiveCommit = DEFENSIVE_COMMIT.some((c) => rawDials[c] >= COMMIT_MIN[c]);
+  const attackCommit = ATTACK_COMMIT.some((c) => rawDials[c] >= COMMIT_MIN[c]);
+  const baseDials = throttleDials({ ...rawDials }, band);
   if (sq.dialBonus) for (const k of Object.keys(baseDials) as Contest[]) baseDials[k] += sq.dialBonus[k] ?? 0;
+  // planning dials fold in the manager's reweight, but only if the build actually
+  // clears the manager's commitment gate (the no-unconditional law — an uncommitted
+  // squad's split gets no free possession from a manager it doesn't earn).
+  const favOpen = mgr ? rawDials[mgr.favoured] >= COMMIT_MIN[mgr.favoured] : false;
+  const planDials = { ...baseDials };
+  if (favOpen && mgr) for (const [c, pts] of Object.entries(mgr.reweight) as [Contest, number][]) planDials[c] += pts;
   return {
     cards: sq.cards,
     postureState: createPostureState(posture),
-    engine: mgr?.engine ?? sq.engine ?? BALANCED_ENGINE,
     traits: [...(sq.traits ?? []), ...(mgr ? managerTraits(mgr) : [])],
     baseDials,
+    planDials,
     posCounts,
     hasTaker: !!sq.hasTaker,
     hasCarrier: !!sq.hasCarrier,
     bldef: backlineDef(sq.cards),
     att: topAtt(sq.cards),
     aerialDef: topDef(sq.cards),
-    streak: 0,
+    defensiveCommit,
+    attackCommit,
     band,
     energy: sq.energy ?? DEFAULT_ENERGY,
     fitness: 10,
@@ -241,7 +260,6 @@ function snapshot(
     posture,
     scoreline,
     clock,
-    streak: side.streak,
     fitness: side.fitness,
     dials: side.baseDials,
     posCounts: side.posCounts,
@@ -273,12 +291,13 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
   const score: [number, number] = [0, 0];
   const points: [number, number] = [0, 0];
   const cash: [number, number] = [0, 0];
+  const chancesInBatch: [number, number] = [0, 0]; // reset each batch (pressure floor)
 
   // Possession split (batch-level 6 slots, clamp 2–4). Base dials, no per-inc
   // gating on the split itself (posture is a gate on traits, not a resolver).
-  const d0 = ctx[0].baseDials;
-  const d1 = ctx[1].baseDials;
-  const net = d0.KEEP - d1.PRESS - (d1.KEEP - d0.PRESS);
+  const p0 = ctx[0].planDials;
+  const p1 = ctx[1].planDials;
+  const net = p0.KEEP - p1.PRESS - (p1.KEEP - p0.PRESS);
   const hPoss = clamp(Math.round(batches / 2 + net / KEEP_K), 2, batches - 2);
   const schedule = possessionSchedule(hPoss, batches);
 
@@ -286,7 +305,7 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
     type: 'match-start',
     seed: opts.seed,
     postures: [activePosture(ctx[0].postureState), activePosture(ctx[1].postureState)],
-    dials: [d0, d1],
+    dials: [ctx[0].baseDials, ctx[1].baseDials],
     target,
     managers: [ctx[0].managerId, ctx[1].managerId],
     adherence: [ctx[0].band, ctx[1].band],
@@ -333,36 +352,27 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
 
     const roll = rng.float();
     const converted = roll < 1 - Math.exp(-xg);
+    chancesInBatch[att] += 1; // territory this batch (feeds the pressure floor)
     events.push({ type: 'chance', side: att, clock, origin, quality, xg: +xg.toFixed(3), converted, roll: +roll.toFixed(3) });
     if (!converted) return;
 
     score[att] += 1;
     events.push({ type: 'goal', side: att, via, origin, score: [score[0], score[1]], clock });
 
-    // streak + points
-    const mult = streakMult(A.streak);
-    const value = GOAL_VALUE * mult;
-    points[att] += value;
-    A.streak += extendsOnGoal(A.engine, via) ? 1 : 0;
-    if (extendsOnGoal(A.engine, via)) events.push({ type: 'streak-extended', side: att, streak: A.streak, clock });
-    events.push({ type: 'points-banked', side: att, source: 'goal', mult, value, total: points[att], clock });
+    // goal points — flat (the attacking scoring channel toward the run's blind).
+    points[att] += GOAL_VALUE;
+    events.push({ type: 'points-banked', side: att, source: 'goal', value: GOAL_VALUE, total: points[att], clock });
 
     // cash on goal (Financier economy hook)
     if (A.cashOnGoal > 0) {
       cash[att] += A.cashOnGoal;
       events.push({ type: 'cash-banked', side: att, value: A.cashOnGoal, total: cash[att], clock });
     }
-
-    // concede contradicts the defender's engine
-    const reason = contradictionReason(D.engine, origin === 'transition');
-    if (reason && D.streak > 0) {
-      events.push({ type: 'streak-broken', side: def, reason, atStreak: D.streak, clock });
-      D.streak = 0;
-    }
   }
 
   for (let b = 1; b <= batches; b++) {
     const band = clockBand(b, batches);
+    chancesInBatch[0] = chancesInBatch[1] = 0; // territory resets each batch
     // posture tick: expire any due tactical window and revert to the default.
     for (const s of [0, 1] as Side[]) {
       const { state, reverted } = tickPosture(ctx[s].postureState, b);
@@ -389,16 +399,11 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
         events.push({ type: 'posture-shift', side: s, to: play.tactic.posture, reason: 'tactic', batch: b });
       }
     }
-    // substitutions (fresh legs / Tinkerman fuel): extends the streak if the
-    // side's engine feeds on rotation.
+    // substitutions (fresh legs): emit the event for the log / UI (rotation depth).
     for (const s of [0, 1] as Side[]) {
       if (!ctx[s].subsAtBatch.includes(b) || ctx[s].subsLeft <= 0) continue;
       ctx[s].subsLeft -= 1;
       events.push({ type: 'substitution', side: s, batch: b, subsLeft: ctx[s].subsLeft });
-      if (extendsOnSubstitution(ctx[s].engine)) {
-        ctx[s].streak += 1;
-        events.push({ type: 'streak-extended', side: s, streak: ctx[s].streak, clock: { batch: b, increment: 1 } });
-      }
     }
     // fitness drain (Taskmaster): a committed press chips the opponent's legs.
     for (const s of [0, 1] as Side[]) {
@@ -484,23 +489,30 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
       }
     }
 
-    // ---- clean-batch (defensive) points — the wall's scoring channel ----
-    // A build's chips come from its win-con: goals for attackers (banked at the
-    // goal site), CLEAN SHEETS for defenders (banked here). The streak-mult ramps
-    // whichever channel the manager's engine feeds on, so committing to one
-    // win-con keeps the multiplier high; an incoherent build maxes neither and
-    // falls short of the late blind (the run's points-target, run.ts).
+    // ---- batch-end: clean-sheet (defensive) points ----
+    // A build scores through its win-con: goals for attackers (banked at the goal
+    // site), CLEAN SHEETS for defenders (banked here, flat per clean batch). A
+    // wall keeps more clean batches than a leaky attacker, so this is the
+    // defensive scoring channel toward the run's blind — no multiplier, no streak.
     const cleanFor: [boolean, boolean] = [score[1] === cleanBefore[1], score[0] === cleanBefore[0]];
+    const bClock: Clock = { batch: b, increment: INCREMENTS };
     for (const s of [0, 1] as Side[]) {
-      if (!cleanFor[s]) continue;
-      const mult = streakMult(ctx[s].streak);
-      const value = CLEAN_BATCH_VALUE * mult;
-      points[s] += value;
-      events.push({ type: 'points-banked', side: s, source: 'clean-batch', mult, value, total: points[s], clock: { batch: b, increment: INCREMENTS } });
-      if (extendsOnCleanBatch(ctx[s].engine)) {
-        ctx[s].streak += 1;
-        events.push({ type: 'streak-extended', side: s, streak: ctx[s].streak, clock: { batch: b, increment: INCREMENTS } });
-      }
+      if (!cleanFor[s] || !ctx[s].defensiveCommit) continue;
+      points[s] += CLEAN_BATCH_VALUE;
+      events.push({ type: 'points-banked', side: s, source: 'clean-batch', value: CLEAN_BATCH_VALUE, total: points[s], clock: bClock });
+    }
+
+    // ---- batch-end: pressure (attacking) points — the attacker's FLOOR ----
+    // The mirror of the clean batch. An attack-committed side that created chances
+    // this batch but did NOT score still banks territory, so a pure attacker never
+    // banks zero on a barren match (which would kill it at F1). Scoring supersedes:
+    // a batch that produced a goal already banked GOAL_VALUE (worth far more), so it
+    // pays no pressure — pressure is strictly the consolation for dominance unconverted.
+    for (const s of [0, 1] as Side[]) {
+      const scored = score[s] > cleanBefore[s];
+      if (scored || !ctx[s].attackCommit || chancesInBatch[s] === 0) continue;
+      points[s] += PRESSURE_BATCH_VALUE;
+      events.push({ type: 'points-banked', side: s, source: 'pressure-batch', value: PRESSURE_BATCH_VALUE, total: points[s], clock: bClock });
     }
 
     events.push({ type: 'batch-end', batch: b, cleanFor, score: [score[0], score[1]] });

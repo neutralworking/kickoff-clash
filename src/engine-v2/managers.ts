@@ -21,7 +21,6 @@
 import type { Contest } from './contests';
 import type { Posture } from './gates';
 import type { EngineTrait } from './traits';
-import type { EngineDef } from './streak';
 import type { FormationId } from './adherence';
 
 /**
@@ -31,7 +30,12 @@ import type { FormationId } from './adherence';
  * reweight (the law check).
  */
 export const COMMIT_MIN: Record<Contest, number> = {
-  KEEP: 9,
+  // KEEP tilt is SCARCE in the card pool (a random XI averages ~0.7 KEEP, p99 = 4,
+  // never above 6), so a committed KEEP draft tops out ≈ 7.7 — a 9 threshold was
+  // literally unreachable and shut KEEP builds out of their own gate. 7 sits above
+  // the uncommitted ceiling (6) so the no-unconditional law still holds, while a
+  // deliberate KEEP stack now clears it.
+  KEEP: 7,
   CREATE: 8,
   BREAK: 8,
   PRESS: 7,
@@ -52,8 +56,6 @@ export interface Manager {
   favoured: Contest;
   /** Additive reweight package (favoured is the gate; entries pay when open). */
   reweight: Partial<Record<Contest, number>>;
-  /** Streak engine override (Fortress clean-batch, Tinkerman substitution). */
-  engine?: EngineDef;
   /** Variance win-con: Gambler amplifies, Pragmatist dampens (consistency). */
   variance?: 'amplify' | 'dampen';
   /** Taskmaster: per-batch opponent fitness drain. */
@@ -61,33 +63,6 @@ export interface Manager {
   /** Financier: cash banked per goal (economy hook). */
   cashOnGoal?: number;
 }
-
-const FORTRESS_ENGINE: EngineDef = {
-  id: 'fortress',
-  successes: [{ on: 'clean-batch' }, { on: 'any-goal' }],
-  contradictions: [{ on: 'batch-conceded', reason: 'conceded — the wall cracked' }],
-};
-
-const TINKERMAN_ENGINE: EngineDef = {
-  id: 'tinkerman',
-  successes: [{ on: 'any-goal' }, { on: 'substitution' }], // rotation is fuel
-  contradictions: [{ on: 'conceded', reason: 'conceded' }],
-};
-
-/**
- * The defensive win-con: the streak (the Balatro mult) ramps on CLEAN SHEETS, so
- * a wall banks defensive points toward the run's blind (match.ts clean-batch
- * points). A concede breaks it. Assigned to STOP/BREAK/PRESS managers so their
- * archetype scores its own way, not by chasing goals it can't produce.
- */
-const DEFENSIVE_ENGINE: EngineDef = {
-  id: 'defensive',
-  successes: [{ on: 'clean-batch' }, { on: 'any-goal' }],
-  contradictions: [{ on: 'conceded', reason: 'conceded — the wall cracked' }],
-};
-
-/** Attacking win-cons ramp on goals (the default); defensive ones on clean sheets. */
-const DEFENSIVE_CONTESTS = new Set<Contest>(['STOP', 'BREAK', 'PRESS']);
 
 /** The 11-manager roster (SM §4 + Heavy Metal, the PRESS/Gegenpress manager). */
 export const MANAGERS: Manager[] = [
@@ -98,7 +73,7 @@ export const MANAGERS: Manager[] = [
     posture: 'defend',
     formation: '4-4-2',
     favoured: 'BREAK',
-    reweight: { BREAK: 4, FINISH: 3 },
+    reweight: { BREAK: 3, FINISH: 3 },
   },
   {
     id: 'set-piece',
@@ -117,7 +92,6 @@ export const MANAGERS: Manager[] = [
     formation: '5-3-2',
     favoured: 'STOP',
     reweight: { STOP: 5 },
-    engine: FORTRESS_ENGINE,
   },
   {
     id: 'tinkerman',
@@ -127,7 +101,6 @@ export const MANAGERS: Manager[] = [
     formation: '4-3-3',
     favoured: 'CREATE',
     reweight: { CREATE: 4, FINISH: 3 },
-    engine: TINKERMAN_ENGINE,
   },
   {
     id: 'metronome',
@@ -136,7 +109,7 @@ export const MANAGERS: Manager[] = [
     posture: 'balanced',
     formation: '4-3-3',
     favoured: 'KEEP',
-    reweight: { KEEP: 5, CREATE: 3, FINISH: 2 },
+    reweight: { KEEP: 5, CREATE: 5, FINISH: 4 },
   },
   {
     id: 'chaser',
@@ -145,7 +118,7 @@ export const MANAGERS: Manager[] = [
     posture: 'attack',
     formation: '4-2-3-1',
     favoured: 'FINISH',
-    reweight: { FINISH: 5 },
+    reweight: { FINISH: 6, CREATE: 10, KEEP: 4 },
   },
   {
     id: 'gambler',
@@ -154,7 +127,7 @@ export const MANAGERS: Manager[] = [
     posture: 'attack',
     formation: '4-3-3',
     favoured: 'FINISH',
-    reweight: { FINISH: 4 },
+    reweight: { FINISH: 7, CREATE: 10, KEEP: 3 },
     variance: 'amplify',
   },
   {
@@ -174,7 +147,7 @@ export const MANAGERS: Manager[] = [
     posture: 'attack',
     formation: '4-3-3',
     favoured: 'PRESS',
-    reweight: { PRESS: 4, BREAK: 3, FINISH: 1 },
+    reweight: { PRESS: 3, BREAK: 3, FINISH: 2 },
     fitnessDrain: 1,
   },
   {
@@ -184,7 +157,7 @@ export const MANAGERS: Manager[] = [
     posture: 'balanced',
     formation: '4-3-3',
     favoured: 'KEEP',
-    reweight: { KEEP: 4, CREATE: 3, FINISH: 2 },
+    reweight: { KEEP: 5, CREATE: 5, FINISH: 4 },
     cashOnGoal: 2,
   },
   {
@@ -194,13 +167,9 @@ export const MANAGERS: Manager[] = [
     posture: 'attack',
     formation: '4-3-3',
     favoured: 'PRESS',
-    reweight: { PRESS: 4, BREAK: 4, FINISH: 1 },
+    reweight: { PRESS: 3, BREAK: 4, FINISH: 2 },
   },
 ];
-
-// Backfill the defensive win-con engine onto STOP/BREAK/PRESS managers that
-// don't already define one (Fortress keeps its own clean-batch engine).
-for (const m of MANAGERS) if (!m.engine && DEFENSIVE_CONTESTS.has(m.favoured)) m.engine = DEFENSIVE_ENGINE;
 
 export const MANAGERS_BY_ID: Record<string, Manager> = Object.fromEntries(
   MANAGERS.map((m) => [m.id, m])

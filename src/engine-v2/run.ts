@@ -28,7 +28,7 @@ import { type ChallengeRule, challengeForFixture } from './data/challenges';
 export const RUN_FIXTURES = 9;
 
 // ---- tunables (calibrated to the engine-v2 points scale) -------------------
-const TARGET_BASE = 0.32; // the blind base; grows 1.42^f (SM §8 growth, re-based)
+const TARGET_BASE = 0.29; // the blind base; grows 1.42^f (SM §8 growth, re-based)
 const TARGET_GROWTH = 1.42;
 const OPP_BASE = 0; // opponent squad quality at fixture 0
 const OPP_GROWTH = 1.8; // opponent quality + per fixture (overtakes the player late)
@@ -233,10 +233,11 @@ function applyFixture(run: RunState, pool: KCCard[], f: number, manager: Manager
   const res = simulateMatch(ps, os, { seed: run.seed + f, target });
   const points = round1(res.points[0]);
   // The blind (Balatro): BANK ≥ the fixture's points target or the run ends (v1
-  // permadeath). Points come from the build's win-con — goals for attackers,
-  // clean sheets for walls (match.ts) — both streak-multiplied, so a committed
-  // build maxes one channel and clears the rising bar while an incoherent one
-  // maxes none and falls short late. Beating the bar by more pays more cash.
+  // permadeath). Points come from the build's win-con — goals + a pressure floor
+  // for attackers, clean batches for walls (match.ts) — each channel gated on the
+  // matching commitment, so a committed build maxes one channel and clears the
+  // rising bar while an incoherent one maxes none and falls short late. Beating the
+  // bar by more pays more cash.
   const beaten = points >= target;
   const cashEarned = beaten ? round1(CASH_WIN + points * CASH_PER_POINT) : 0;
   const fr: FixtureResult = {

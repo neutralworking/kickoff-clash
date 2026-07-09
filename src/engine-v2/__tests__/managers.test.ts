@@ -79,7 +79,6 @@ const snap = (dials: Record<Contest, number>): GateSnapshot => ({
   posture: 'balanced',
   scoreline: 'level',
   clock: 'mid',
-  streak: 0,
   fitness: 10,
   dials,
   posCounts: {},
@@ -236,8 +235,8 @@ describe('tactical deck — timed posture windows apply between batches and reve
   });
 });
 
-describe('substitution as Tinkerman fuel (rotation extends the streak)', () => {
-  it('a sub under the Tinkerman engine emits substitution + streak-extended', () => {
+describe('substitutions (rotation depth)', () => {
+  it('a scheduled substitution emits a substitution event at that batch', () => {
     const home: Squad = {
       cards: buildXI(new RngStream(7), 'mono:CREATE'),
       manager: MANAGERS_BY_ID['tinkerman'],
@@ -248,9 +247,6 @@ describe('substitution as Tinkerman fuel (rotation extends the streak)', () => {
     const sub = res.events.find((e) => e.type === 'substitution');
     expect(sub).toBeDefined();
     if (sub && sub.type === 'substitution') expect(sub.batch).toBe(3);
-    // Tinkerman's engine feeds on substitutions → a streak-extend at that batch
-    const ext = res.events.find((e) => e.type === 'streak-extended' && e.clock.batch === 3);
-    expect(ext).toBeDefined();
   });
 });
 

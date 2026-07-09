@@ -7,7 +7,7 @@
  * gates only decide how much of a trait's magnitude is paid this increment.
  *
  * Two gate families, one closed union:
- *   • state gates   — posture · scoreline · clock · streak · fitness (binary)
+ *   • state gates   — posture · scoreline · clock · fitness (binary)
  *   • coherence gates — per-tilt · per-role-count · match-state (scaling)
  *
  * The no-unconditional law (SM law 1) is enforced at the type level: every
@@ -37,7 +37,6 @@ export type Gate =
   | { kind: 'not-posture'; is: Posture } // ¬posture (the no-unconditional escape)
   | { kind: 'scoreline'; is: Scoreline }
   | { kind: 'clock'; band: ClockBand }
-  | { kind: 'streak'; atLeast: number }
   | { kind: 'fitness'; below: number }
   | { kind: 'fitness-at-least'; atLeast: number }
   // coherence gates — scale magnitude by a count (Balatro "the more you commit")
@@ -55,7 +54,6 @@ export interface GateSnapshot {
   posture: Posture;
   scoreline: Scoreline;
   clock: ClockBand;
-  streak: number;
   /** Squad-average fitness 0–10 (stub squads default 10). */
   fitness: number;
   /** This side's contest dials this increment (per-tilt gates read these). */
@@ -82,8 +80,6 @@ export function gateScale(gate: Gate, snap: GateSnapshot): number {
       return snap.scoreline === gate.is ? 1 : 0;
     case 'clock':
       return snap.clock === gate.band ? 1 : 0;
-    case 'streak':
-      return snap.streak >= gate.atLeast ? 1 : 0;
     case 'fitness':
       return snap.fitness < gate.below ? 1 : 0;
     case 'fitness-at-least':

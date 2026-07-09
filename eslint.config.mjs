@@ -3,7 +3,7 @@ import nextConfig from 'eslint-config-next';
 const config = [
   ...nextConfig,
   {
-    ignores: ['.claude/**'],
+    ignores: ['.claude/**', '.design-ref/**'],
   },
 ];
 
