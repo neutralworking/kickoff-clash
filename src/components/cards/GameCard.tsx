@@ -439,7 +439,7 @@ function PlayerFace({
         style={{
           position: 'relative',
           flex: 1,
-          minHeight: full ? 96 : 52,
+          minHeight: full ? 76 : 52,
           marginTop: 2,
           display: 'flex',
           alignItems: 'flex-end',
@@ -502,7 +502,21 @@ function PlayerFace({
           </div>
           {actionName && <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 9, color: HERO.gold, marginTop: 5 }}>{actionName}</span>}
           {actionText && (
-            <span style={{ display: 'block', fontFamily: 'var(--font-body, sans-serif)', fontSize: 10.5, lineHeight: 1.45, color: HERO.creamBody, marginTop: 4 }}>
+            // The card is a fixed-aspect frame, so the rules text is clamped to a
+            // graceful preview (the modal's detail panel below shows it in full).
+            <span
+              style={{
+                display: '-webkit-box',
+                WebkitBoxOrient: 'vertical',
+                WebkitLineClamp: 2,
+                overflow: 'hidden',
+                fontFamily: 'var(--font-body, sans-serif)',
+                fontSize: 10.5,
+                lineHeight: 1.4,
+                color: HERO.creamBody,
+                marginTop: 4,
+              }}
+            >
               {actionText}
             </span>
           )}

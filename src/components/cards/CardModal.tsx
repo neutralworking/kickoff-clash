@@ -28,7 +28,6 @@ import {
   PIXEL,
   RARITY_COLOR,
   POSITION_LABEL,
-  DURABILITY_META,
   TACTIC_CAT_COLOR,
   INVESTMENT_META,
   eligiblePositions,
@@ -42,7 +41,7 @@ import {
   roleBlurb,
   type ResolvedTrait,
 } from './cardTokens';
-import { laneOfCard, LANE_COPY, deriveStats } from '../../lib/funnel';
+import { deriveStats } from '../../lib/funnel';
 
 // Trait glyphs (✦ ➴ ⚑ …) sit outside the Silkscreen glyph set; render them in a
 // Unicode-complete fallback stack so a symbol never renders as a blank tofu box.
@@ -206,7 +205,7 @@ function StatCell({ label, value, color }: { label: string; value: string; color
       }}
     >
       <Label>{label}</Label>
-      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 11, color: color ?? 'var(--cream)', lineHeight: 1.1 }}>
+      <span style={{ fontFamily: PIXEL, fontSize: 10.5, color: color ?? 'var(--cream)', lineHeight: 1.15, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
         {value}
       </span>
     </div>
@@ -317,50 +316,6 @@ function TapStatCell({
   );
 }
 
-/** The DURABILITY row — seated directly under FITNESS (both are physical-condition
- *  reads; the owner's grouping) in the same Label-plus-value row language, and
- *  tappable for its grounded explainer. Renders whether or not fitness is tracked. */
-function DurabilityRow({
-  label,
-  color,
-  blurb,
-  open,
-  onToggle,
-}: {
-  label: string;
-  color: string;
-  blurb: string;
-  open: boolean;
-  onToggle: (e: React.MouseEvent) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      aria-label={`Durability: ${label}. Tap for explanation.`}
-      style={{
-        background: 'none',
-        border: 'none',
-        padding: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'stretch',
-        gap: 5,
-        textAlign: 'left',
-        cursor: 'pointer',
-      }}
-    >
-      <span className="flex items-center" style={{ gap: 8 }}>
-        <Label>DURABILITY</Label>
-        <span style={{ fontFamily: PIXEL, fontSize: 10, color, lineHeight: 1 }}>{label.toUpperCase()}</span>
-        <InfoPip active={open} />
-      </span>
-      {open && <TipBox heading={label.toUpperCase()} body={blurb} color={color} />}
-    </button>
-  );
-}
-
 function TagRow({ items, color, bg }: { items: string[]; color: string; bg: string }) {
   return (
     <div className="flex flex-wrap" style={{ gap: 5 }}>
@@ -391,8 +346,6 @@ function TagRow({ items, color, bg }: { items: string[]; color: string; bg: stri
 // ---------------------------------------------------------------------------
 
 function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
-  const flag = nationFlag(card.nation);
-  const dur = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
   // The ROLE (a real, evocative on-pitch identity — Inverted Winger, Regista) is
   // what the player reads; the scoring-internal `archetype`/`secondaryArchetype`
   // are engine plumbing and no longer surfaced on the expanded card.
@@ -401,28 +354,23 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
   // loadouts surface first; otherwise the seeded rarity-count pick.
   const traits = definingTraitsFor(card);
 
-  // Tap-to-open explainers for ROLE and DURABILITY (mobile-first: no hover).
-  // Tapping the cell toggles its tip; tapping ANYWHERE else closes it via a
-  // document-level listener that never preventDefault/stopPropagation's — so a
-  // backdrop tap still closes the whole modal and Escape stays untouched. The
-  // trigger itself stopPropagation's its opening tap so the same click doesn't
-  // instantly self-close through that listener.
-  const [openTip, setOpenTip] = useState<'role' | 'durability' | 'job' | null>(null);
+  // Tap-to-open explainer for ROLE (mobile-first: no hover). Tapping the cell
+  // toggles its tip; tapping ANYWHERE else closes it via a document-level listener
+  // that never preventDefault/stopPropagation's — so a backdrop tap still closes
+  // the whole modal and Escape stays untouched. The trigger itself stopPropagation's
+  // its opening tap so the same click doesn't instantly self-close.
+  const [openTip, setOpenTip] = useState<'role' | null>(null);
   useEffect(() => {
     if (!openTip) return;
     const close = () => setOpenTip(null);
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, [openTip]);
-  const toggleTip = (tip: 'role' | 'durability' | 'job') => (e: React.MouseEvent) => {
+  const toggleTip = (tip: 'role') => (e: React.MouseEvent) => {
     e.stopPropagation();
     setOpenTip((cur) => (cur === tip ? null : tip));
   };
 
-  // The card's funnel JOB (docs/FUNNEL_MODEL_V1.md): where its ATK lands. DEF lands
-  // by the band it stands in (forwards press, midfielders destroy, backs defend).
-  const lane = laneOfCard(card);
-  const laneCopy = LANE_COPY[lane];
   const stats = deriveStats(card);
 
   return (
@@ -438,11 +386,10 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
           <StatCell label="ATK" value={String(stats.atk)} />
           <StatCell label="DEF" value={String(stats.def)} />
           <StatCell label="POSITION" value={POSITION_LABEL[card.position] ?? card.position} />
-          <StatCell label="NATION" value={flag ? card.nation ?? '—' : nationCode(card.nation) || '—'} />
+          <StatCell label="NATION" value={nationCode(card.nation) || '—'} />
           {/* ROLE is the prominent, accent-coloured identity where ARCHETYPE was.
-              It spans the full row (durability moved down beside fitness), and it
-              taps open a one-line explainer — Regista/Trequartista/etc. are real
-              football identities the player shouldn't need to google. */}
+              It spans the remaining columns and taps open a one-line explainer —
+              Regista/Trequartista/etc. are real football identities. */}
           <TapStatCell
             label="ROLE"
             value={role}
@@ -450,16 +397,6 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
             open={openTip === 'role'}
             onToggle={toggleTip('role')}
             tipBody={roleBlurb(role)}
-          />
-          {/* JOB — the funnel lane this card's power feeds (one per card; Commanders
-              lift the whole team). The legibility contract: read a card, know its job. */}
-          <TapStatCell
-            label="JOB"
-            value={laneCopy.label.toUpperCase()}
-            color="var(--gold)"
-            open={openTip === 'job'}
-            onToggle={toggleTip('job')}
-            tipBody={`${laneCopy.blurb} ATK feeds this; DEF counts where he stands — forwards press, midfielders break up play, the back line defends.`}
           />
         </div>
         {/* Where they can operate — eligible pitch positions as pixel chips. */}
@@ -471,23 +408,8 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
             ))}
           </div>
         </div>
-        {/* Physical-condition block: FITNESS (today's legs, when tracked) with
-            DURABILITY (the body's long-run risk profile) directly beneath it —
-            the owner's deliberate grouping. Durability always shows, fitness only
-            once a run tracks it. The durability row taps open its explainer. */}
+        {/* FITNESS (today's legs) shows only once a run tracks it. */}
         {typeof card.fitness === 'number' && <FitnessRow fitness={card.fitness} />}
-        <DurabilityRow
-          label={dur.label}
-          color={dur.color}
-          blurb={dur.blurb}
-          open={openTip === 'durability'}
-          onToggle={toggleTip('durability')}
-        />
-        {card.personalityTheme && card.personalityTheme !== 'General' && (
-          <div className="flex flex-wrap" style={{ gap: 5 }}>
-            <Chip label="THEME" value={card.personalityTheme} />
-          </div>
-        )}
       </Panel>
 
       {traits.length > 0 && <TraitsSection traits={traits} rarity={card.rarity} accent={accent} />}
@@ -523,25 +445,9 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
         </Panel>
       )}
 
-      {(card.bio || card.quirk) && (
+      {card.bio && (
         <Panel>
-          {card.bio && (
-            <p style={{ fontSize: 11.5, lineHeight: 1.45, color: 'var(--cream-soft)', margin: 0 }}>{card.bio}</p>
-          )}
-          {card.quirk && (
-            <p
-              style={{
-                fontFamily: 'var(--font-flavour, serif)',
-                fontStyle: 'italic',
-                fontSize: 11,
-                lineHeight: 1.4,
-                color: 'var(--dust)',
-                margin: 0,
-              }}
-            >
-              {'“'}{card.quirk}{'”'}
-            </p>
-          )}
+          <p style={{ fontSize: 11.5, lineHeight: 1.45, color: 'var(--cream-soft)', margin: 0 }}>{card.bio}</p>
         </Panel>
       )}
     </div>
