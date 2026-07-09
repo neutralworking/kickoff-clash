@@ -29,6 +29,9 @@ export type Trigger =
   | 'kickoff'
   | 'full-time';
 
+/** A positional reference an action targets (positional.ts resolves the slots). */
+export type PositionalRef = 'in-front' | 'behind' | 'beside' | 'same-lane' | 'opposite';
+
 /** Where a verb points. The dial targets are the core new primitive. */
 export type TraitTarget =
   | { kind: 'own-dial'; contest: Contest } // amplify → raise own contest dial
@@ -36,6 +39,7 @@ export type TraitTarget =
   | { kind: 'chance'; op: 'volume' | 'quality' | 'xg' } // CREATE→FINISH pipeline
   | { kind: 'retain' } // the possession retain roll
   | { kind: 'set-piece'; op: 'prob' | 'conversion' }
+  | { kind: 'positional'; ref: PositionalRef; axis: 'att' | 'def' } // fixed effect on a related slot
   | { kind: 'fitness' }
   | { kind: 'energy' }
   | { kind: 'cash' };
