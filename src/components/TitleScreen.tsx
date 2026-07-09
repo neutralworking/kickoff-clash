@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 interface TitleScreenProps {
   onNewRun: () => void;
   onContinue?: () => void;
@@ -91,8 +93,9 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
           </button>
         )}
 
-        {/* Six-contest rebuild (NW-143, P5) — the engine-v2 run loop. */}
-        <a
+        {/* Six-contest rebuild (NW-143, P5) — the engine-v2 run loop. next/link
+            prepends the deploy basePath (/kickoff-clash), which a raw <a> would not. */}
+        <Link
           href="/play"
           className="w-full text-center transition-all hover:brightness-125 active:scale-[0.97]"
           style={{
@@ -106,7 +109,7 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
           }}
         >
           ▸ Six-Contest Rebuild <span style={{ color: 'var(--gold)' }}>(v2 beta)</span>
-        </a>
+        </Link>
       </div>
     </div>
   );
