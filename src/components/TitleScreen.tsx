@@ -108,7 +108,7 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
             marginTop: 2,
           }}
         >
-          ▸ Six-Contest Rebuild <span style={{ color: 'var(--gold)' }}>(v2 beta)</span>
+          ▸ Six-Contest Rebuild
         </Link>
       </div>
     </div>
