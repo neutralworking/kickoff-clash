@@ -18,7 +18,7 @@
  */
 
 import { type Position, type Contest, contestDials } from './contests';
-import { simulateMatch, type Squad } from './match';
+import { simulateMatch, type Squad, type MatchResult } from './match';
 import { type Manager, MANAGERS, COMMIT_MIN } from './managers';
 import { FORMATIONS, type FormationId } from './adherence';
 import { type KCCard, squadTraits } from './cards';
@@ -275,6 +275,106 @@ export function simulateRun(seed: number, manager: Manager, pool: KCCard[], comm
     run = applyFixture(run, pool, f, manager, committed);
   }
   return run;
+}
+
+// ---- interactive entry points (the P5 UI drives the loop, NW-143) ----------
+// The headless path above (simulateRun/applyFixture) auto-drafts and auto-plays.
+// An interactive run lets the PLAYER pick the XI and watch the match, so the UI
+// needs the fixture set up (opponent + target + a draft pool) and then the
+// fixture resolved from the XI it chose. Both stay in the engine — the UI never
+// computes game state, it renders what these return (SYNERGY_MODEL §9).
+
+export interface FixtureSetup {
+  fixture: number;
+  boss: boolean;
+  challenge: ChallengeRule | null;
+  target: number;
+  /** The modelled opponent for this fixture (posture + drafted XI + actions). */
+  opponent: Squad;
+  /** The shop stream the player drafts their XI from (same sample the bot uses). */
+  pool: KCCard[];
+  /** The shop-bot's committed XI — the default the player can tweak. */
+  suggestedXI: KCCard[];
+  formation: FormationId;
+}
+
+/** Everything the fixture + squad screens need, computed by the engine. */
+export function fixtureSetup(run: RunState, pool: KCCard[]): FixtureSetup {
+  const manager = MANAGERS.find((m) => m.id === run.managerId)!;
+  const f = run.fixture + 1;
+  const challenge = challengeForFixture(run.seed, f);
+  const target = round1(fixtureTarget(f) * (challenge?.targetMult ?? 1));
+  const stream = sample(pool, run.seed + f * 101, 200);
+  const suggestedXI =
+    draftViable(stream, manager, run.seed + f * 101) ??
+    fillBalanced(stream, FORMATIONS[manager.formation], run.seed + f * 101) ??
+    [];
+  const opponent = opponentSquad(pool, f, run.seed + f * 977, challenge);
+  return { fixture: f, boss: isBoss(f), challenge, target, opponent, pool: stream, suggestedXI, formation: manager.formation };
+}
+
+/**
+ * Resolve a fixture from the PLAYER's chosen XI: build the squad (quality boost +
+ * traits + set-piece kit + dial bonus), simulate, then bank the economy /
+ * permadeath exactly as the headless `applyFixture` does. Returns the updated run
+ * AND the match result (its event log is what the match/post-match screens render).
+ * NB: the settlement tail is kept in sync with applyFixture by hand.
+ */
+export function resolveFixture(run: RunState, playerXI: KCCard[], setup: FixtureSetup): { run: RunState; result: MatchResult } {
+  const manager = MANAGERS.find((m) => m.id === run.managerId)!;
+  const f = setup.fixture;
+  const setPieces = !setup.challenge?.noSetPieces && hasKit(playerXI);
+  const ps: Squad = {
+    cards: boost(playerXI, run.quality),
+    manager,
+    formation: manager.formation,
+    traits: squadTraits(playerXI),
+    hasTaker: setPieces,
+    hasCarrier: setPieces,
+    dialBonus: qualityBonus(run.quality),
+  };
+  const res = simulateMatch(ps, setup.opponent, { seed: run.seed + f, target: setup.target });
+  const points = round1(res.points[0]);
+  const beaten = points >= setup.target;
+  const cashEarned = beaten ? round1(CASH_WIN + points * CASH_PER_POINT) : 0;
+  const fr: FixtureResult = {
+    fixture: f,
+    boss: isBoss(f),
+    challenge: setup.challenge?.id ?? null,
+    target: setup.target,
+    points,
+    oppPoints: round1(res.points[1]),
+    score: res.score,
+    beaten,
+    cashEarned,
+  };
+  const log = [...run.log, fr];
+  const nextRun: RunState = beaten
+    ? {
+        ...run,
+        fixture: f,
+        cash: round1(run.cash + cashEarned + res.cash[0]),
+        quality: round1(run.quality + cashEarned * K_QUALITY),
+        completed: f >= RUN_FIXTURES,
+        alive: true,
+        log,
+      }
+    : { ...run, fixture: f - 1, alive: false, log };
+  return { run: nextRun, result: res };
+}
+
+/** Deck quality → the flat dial bonus a squad of that quality fields (the shop
+ *  preview shows what a purchase buys on the pitch). Mirrors playerSquad. */
+export function deckDialBonus(quality: number): Partial<Record<Contest, number>> {
+  return qualityBonus(quality);
+}
+
+/** Invest cash into the deck (shop): spend `amount`, gain quality at the run's
+ *  rate. Clamped to available cash. Pure — returns the updated run. */
+export function investCash(run: RunState, amount: number): RunState {
+  const spend = Math.max(0, Math.min(amount, Math.floor(run.cash)));
+  if (spend <= 0) return run;
+  return { ...run, cash: round1(run.cash - spend), quality: round1(run.quality + spend * K_QUALITY) };
 }
 
 /** The fixture a run died at (RUN_FIXTURES+1 if it completed). */
