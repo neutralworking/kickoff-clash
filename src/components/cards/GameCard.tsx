@@ -35,26 +35,26 @@ import {
   POSITION_COLOR,
   TACTIC_CAT_COLOR,
   INVESTMENT_META,
-  fitnessMeter,
   formatCash,
   nationFlag,
   nationCode,
   lastName,
   definingTraitsFor,
-  shortTraitLabel,
-  roleToBody,
-  roleEmblem,
   managerAccent,
   managerTraitStyle,
-  eligiblePositions,
-  positionChipVisual,
   TACTIC_ICON,
-  type BodyKind,
-  type EmblemRect,
   type ManagerProp,
   type ChalkRect,
-  type ResolvedTrait,
 } from './cardTokens';
+import {
+  portraitBackgroundStyle,
+  rarityFrame,
+  fitnessColor,
+  conditionRecipe,
+  WEAR_GLYPH,
+  HERO,
+  type ConditionGrade,
+} from './portrait';
 
 // The trait glyphs (✦ ➴ ⚑ ◣ …) live outside the Silkscreen glyph set, so render
 // them in a Unicode-complete fallback stack. The READABLE pixel-font label is the
@@ -123,67 +123,93 @@ export default function GameCard({
   className,
   ariaLabel,
 }: GameCardProps) {
-  const accent = accentFor(model);
-  const glass = glassFor(model, accent);
   const full = size === 'full';
 
-  // Stacked elevation: the hard ink-black pixel drop (the flat-sprite tell) PLUS
-  // a soft ambient shadow underneath (real height). Selected adds an accent ring;
-  // Epic/Legendary add a coloured glow halo to the same stack.
-  const inkDrop = `0 ${full ? 6 : 3}px 0 0 var(--ink-black)`;
-  const ambient = `0 ${full ? 12 : 5}px ${full ? 26 : 10}px rgba(2,9,5,0.5)`;
-  const glow = glass.glow ? `0 0 ${full ? 22 : 14}px ${full ? 3 : 1}px ${glass.glow}` : null;
-  const ring = selected ? `0 0 0 2px ${accent}` : null;
-  const boxShadow = [ring, inkDrop, ambient, glow].filter(Boolean).join(', ');
+  let frameStyle: React.CSSProperties;
+  let content: React.ReactNode;
 
-  const frameStyle: React.CSSProperties = {
-    position: 'relative',
-    width: '100%',
-    aspectRatio: `${ASPECT}`,
-    borderRadius: full ? 'var(--radius)' : 'var(--radius-sm)',
-    border: `${full ? 3 : 2}px solid var(--ink-black)`,
-    background: 'linear-gradient(165deg, var(--surface-raised) 0%, var(--surface) 55%, var(--felt) 100%)',
-    boxShadow,
-    overflow: 'hidden',
-    opacity: dimmed ? 0.42 : 1,
-    display: 'flex',
-    flexDirection: 'column',
-    textAlign: 'left',
-    cursor: onClick ? 'pointer' : 'default',
-    transition: 'transform 0.12s ease',
-    minWidth: 0,
-    animationDelay: delay != null ? `${delay}ms` : undefined,
-  };
+  if (model.variant === 'player') {
+    // PIXEL HERO: the rarity is the FRAME MATERIAL (foil gradient) — the padding IS
+    // the border. A near-black inner face carries the crisp pixel anatomy.
+    const fr = rarityFrame(model.card.rarity);
+    const ring = selected ? '0 0 0 2px var(--gold), ' : '';
+    frameStyle = {
+      position: 'relative',
+      width: '100%',
+      aspectRatio: `${ASPECT}`,
+      borderRadius: full ? 16 : 10,
+      padding: full ? 6 : 4,
+      background: fr.frame,
+      boxShadow: ring + fr.glow,
+      boxSizing: 'border-box',
+      opacity: dimmed ? 0.42 : 1,
+      display: 'flex',
+      textAlign: 'left',
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'transform 0.12s ease',
+      minWidth: 0,
+      animationDelay: delay != null ? `${delay}ms` : undefined,
+    };
+    content = <PlayerFace card={model.card} full={full} frameLabel={fr.label} labelColor={fr.lc} foil={fr.foil} />;
+  } else {
+    const accent = accentFor(model);
+    const glass = glassFor(model, accent);
+    // Stacked elevation: the hard ink-black pixel drop (the flat-sprite tell) PLUS
+    // a soft ambient shadow underneath (real height). Selected adds an accent ring;
+    // Epic/Legendary add a coloured glow halo to the same stack.
+    const inkDrop = `0 ${full ? 6 : 3}px 0 0 var(--ink-black)`;
+    const ambient = `0 ${full ? 12 : 5}px ${full ? 26 : 10}px rgba(2,9,5,0.5)`;
+    const glow = glass.glow ? `0 0 ${full ? 22 : 14}px ${full ? 3 : 1}px ${glass.glow}` : null;
+    const ring = selected ? `0 0 0 2px ${accent}` : null;
+    const boxShadow = [ring, inkDrop, ambient, glow].filter(Boolean).join(', ');
 
-  const body =
-    model.variant === 'player' ? (
-      <PlayerBody card={model.card} full={full} accent={accent} />
-    ) : model.variant === 'manager' ? (
-      <ManagerBody manager={model.manager} full={full} accent={accent} />
-    ) : model.variant === 'tactic' ? (
-      <TacticBody tactic={model.tactic} full={full} accent={accent} />
-    ) : (
-      <InvestmentBody investment={model.investment} full={full} accent={accent} />
+    frameStyle = {
+      position: 'relative',
+      width: '100%',
+      aspectRatio: `${ASPECT}`,
+      borderRadius: full ? 'var(--radius)' : 'var(--radius-sm)',
+      border: `${full ? 3 : 2}px solid var(--ink-black)`,
+      background: 'linear-gradient(165deg, var(--surface-raised) 0%, var(--surface) 55%, var(--felt) 100%)',
+      boxShadow,
+      overflow: 'hidden',
+      opacity: dimmed ? 0.42 : 1,
+      display: 'flex',
+      flexDirection: 'column',
+      textAlign: 'left',
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'transform 0.12s ease',
+      minWidth: 0,
+      animationDelay: delay != null ? `${delay}ms` : undefined,
+    };
+
+    const body =
+      model.variant === 'manager' ? (
+        <ManagerBody manager={model.manager} full={full} accent={accent} />
+      ) : model.variant === 'tactic' ? (
+        <TacticBody tactic={model.tactic} full={full} accent={accent} />
+      ) : (
+        <InvestmentBody investment={model.investment} full={full} accent={accent} />
+      );
+
+    content = (
+      <>
+        {/* Accent top rail — the family signature, lit on its top edge. */}
+        <div style={{ position: 'relative', height: full ? 5 : 3, background: accent, flexShrink: 0, zIndex: 2 }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.55), transparent)' }} />
+        </div>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', zIndex: 2 }}>
+          {body}
+        </div>
+        {/* Accent bottom rail — shaded on its top edge for a seated look. */}
+        <div style={{ position: 'relative', height: full ? 5 : 3, background: accent, flexShrink: 0, zIndex: 2 }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(0deg, rgba(0,0,0,0.4), transparent)' }} />
+        </div>
+
+        {/* --- GLASS CHROME OVERLAYS (under the content z-index, never on pixels) --- */}
+        <GlassChrome glass={glass} full={full} />
+      </>
     );
-
-  const content = (
-    <>
-      {/* Accent top rail — the family signature, lit on its top edge. */}
-      <div style={{ position: 'relative', height: full ? 5 : 3, background: accent, flexShrink: 0, zIndex: 2 }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.55), transparent)' }} />
-      </div>
-      <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', zIndex: 2 }}>
-        {body}
-      </div>
-      {/* Accent bottom rail — shaded on its top edge for a seated look. */}
-      <div style={{ position: 'relative', height: full ? 5 : 3, background: accent, flexShrink: 0, zIndex: 2 }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(0deg, rgba(0,0,0,0.4), transparent)' }} />
-      </div>
-
-      {/* --- GLASS CHROME OVERLAYS (under the content z-index, never on pixels) --- */}
-      <GlassChrome glass={glass} full={full} />
-    </>
-  );
+  }
 
   if (onClick) {
     return (
@@ -333,533 +359,227 @@ function accentFor(model: GameCardModel): string {
 }
 
 // ===========================================================================
-// PLAYER body
+// PLAYER face — "Pixel Hero" (design handoff 2a/3a)
+//
+// A black-card-stock face inside a rarity foil frame. Top→bottom: header
+// (position badge + ATK/DEF columns) · seeded 16-bit portrait window · name ·
+// gold ROLE band · action panel (name + rules text on `full`, name-only on
+// `grid`) · footer (rarity label + condition chip, `full` only). Legendary earns
+// an animated foil sweep. The portrait is procedural (portrait.ts, seeded by the
+// card id) — crisp pixels, never blurred; the foil/glow lives on the frame.
 // ===========================================================================
 
-function PlayerBody({ card, full, accent }: { card: Card; full: boolean; accent: string }) {
-  const posColor = POSITION_COLOR[card.position] ?? 'var(--dust)';
-  const flag = nationFlag(card.nation);
-  const nationText = nationCode(card.nation);
-  const hasFitness = typeof card.fitness === 'number';
-  // The role drives the sprite silhouette + emblem; the sub-line prints the ROLE
-  // (a real, evocative identity) rather than the scoring-internal archetype.
-  const bodyKind = roleToBody(card.tacticalRole, card.position);
-  const emblem = roleEmblem(card.tacticalRole, card.position);
-  const subLine = card.tacticalRole ?? card.archetype;
-  // Defining traits — N pills where N = rarity (so rarity reads as trait depth).
+function PlayerFace({
+  card,
+  full,
+  frameLabel,
+  labelColor,
+  foil,
+}: {
+  card: Card;
+  full: boolean;
+  frameLabel: string;
+  labelColor: string;
+  foil: boolean;
+}) {
+  const posColor = POSITION_COLOR[card.position] ?? '#9aa0a8';
+  const stats = deriveStats(card);
+  const name = lastName(card.name).toUpperCase();
+  const role = card.tacticalRole ?? card.archetype;
+  // The player's ACTION is their marquee defining trait (label + one-line rules
+  // text). Falls back to the printed ability when a card carries no defining trait.
   const traits = definingTraitsFor(card);
-  const positions = eligiblePositions(card.position);
-  // The sprite is now a SMALL CORNER BADGE, not a centre-stage hero — freeing the
-  // card's midsection for the data the owner asked to see (playable positions)
-  // at a legible size. It keeps its own hard ink frame so it still
-  // reads as a distinct object seated in the card, not a stray icon. Sized to
-  // leave the header row room to breathe even at the tightest grid width (the
-  // 4-up pack-reveal page — the narrowest real card on screen).
-  const badgeSize = full ? 42 : 24;
+  const primary = traits[0];
+  const actionName = (primary ? primary.copy.label : card.abilityName ?? '').toUpperCase();
+  const actionText = primary ? primary.copy.blurb : card.abilityText ?? '';
+  const cond = conditionRecipe(card.condition);
+
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: full ? 11 : '5px 6px' }}>
-      {/* Header row: [sprite badge · nation] on the left, the BIG rating on the
-          right — still the strongest single signal, always --line-white. The
-          sprite lives here now (top-left corner), not centre-stage. The primary
-          POSITION is no longer a separate header tab — it's the first (filled)
-          chip in the attributes row below, so it isn't drawn twice and the
-          header keeps real room for the badge + nation instead of a squeeze. */}
-      <div className="flex items-start justify-between" style={{ gap: full ? 6 : 4 }}>
-        {/* Left group is the SHRINKABLE side of the header: minWidth 0 + overflow
-            hidden all the way down so the flag column clips before it can ever
-            reach the rating (which is flexShrink 0). Emoji flags render wider on
-            real devices than headless metrics suggest — the overlap fix must be
-            structural, not eyeballed. */}
-        <div className="flex items-center" style={{ gap: full ? 7 : 5, minWidth: 0, flex: '1 1 auto', overflow: 'hidden' }}>
-          <div
-            style={{
-              width: badgeSize,
-              height: badgeSize,
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 'var(--radius-sm)',
-              border: `${full ? 2 : 1.5}px solid var(--ink-black)`,
-              background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(0,0,0,0.32))',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -1px 0 rgba(0,0,0,0.4)',
-              overflow: 'hidden',
-            }}
-          >
-            <PlayerSprite
-              accent={accent}
-              posColor={posColor}
-              bodyKind={bodyKind}
-              emblem={emblem}
-              isGK={card.position === 'GK'}
-              size={badgeSize}
-            />
-          </div>
-          {/* Nation — a flag (+ code once there's room at `full`), reading as its
-              own signal. The column is genuinely truncatable (minWidth 0 +
-              overflow hidden on BOTH the column and the glyph line) so the flag
-              can only ever clip against its own box, never spill under the
-              rating — the grid glyph is also a step smaller than `full` since
-              the 4-up pack grid is the tightest real card on screen. */}
-          {(flag || nationText) && (
-            <div className="flex flex-col" style={{ gap: 1, minWidth: 0, overflow: 'hidden' }}>
-              {flag && (
-                <span
-                  data-kc="nation-flag"
-                  style={{ fontSize: full ? 20 : 13, lineHeight: 1.2, display: 'block', maxWidth: '100%', overflow: 'hidden' }}
-                >
-                  {flag}
-                </span>
-              )}
-              {(full || !flag) && nationText && (
-                <span
-                  data-kc="nation-code"
-                  className="truncate"
-                  style={{ display: 'block', maxWidth: '100%', fontFamily: PIXEL, fontSize: full ? 9 : 7, color: 'var(--dust)', lineHeight: 1, letterSpacing: 0.3 }}
-                >
-                  {nationText}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-        {/* The Snap-scale two-stat block (FUNNEL_MODEL_V1): ATK red, DEF blue —
-            the numbers the engine actually plays with (−1..20). */}
-        {(() => {
-          const stats = deriveStats(card);
-          const num = (v: number, colour: string) => (
-            <span style={{ fontFamily: PIXEL, fontSize: full ? 24 : 14, lineHeight: 0.9, color: colour, textShadow: '0 2px 0 var(--ink-black)' }}>
-              {v}
-            </span>
-          );
-          return (
-            <div className="flex items-start" style={{ flexShrink: 0, gap: full ? 8 : 5 }}>
-              <div className="flex flex-col items-center" style={{ gap: 2 }}>
-                {num(stats.atk, 'var(--cream)')}
-                <span data-kc="rating" style={{ fontFamily: PIXEL, fontSize: full ? 8 : 6, letterSpacing: 0.5, color: 'var(--kit-red)', lineHeight: 1 }}>ATK</span>
-              </div>
-              <div className="flex flex-col items-center" style={{ gap: 2 }}>
-                {num(stats.def, 'var(--cream-soft)')}
-                <span style={{ fontFamily: PIXEL, fontSize: full ? 8 : 6, letterSpacing: 0.5, color: 'var(--kit-blue)', lineHeight: 1 }}>DEF</span>
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* Attributes row (NEW) — the space the sprite used to hog centre-stage is
-          now spent on data: every position this card is ELIGIBLE to fill (own
-          slot filled, alternates outlined — same visual language as CardModal's
-          "CAN OPERATE" chips). This row owns the card's full width (nothing
-          squeezed beside a badge). Grid caps at 3 — a single line at the
-          tightest card width, own slot always included — full shows every slot
-          (rarely more than 4). No overflow "+N" chip at grid: it would push a
-           4th item onto a second line and reintroduce the clip the cap exists
-          to prevent; CardModal always has the complete list. */}
-      <div className="flex flex-wrap items-center" style={{ gap: full ? 5 : 2, marginTop: full ? 9 : 6 }}>
-        {(full ? positions : positions.slice(0, 3)).map((p, i) => (
-          <PositionPill key={p} pos={p} primary={i === 0} full={full} />
-        ))}
-      </div>
-
-      {/* Nameplate — surname is the second-strongest signal, so it reads large and
-          bright; the role is the quiet sub-line. A hard accent rule under the
-          name seats it as the card's identity band. */}
-      <div style={{ borderTop: `2px solid ${accent}`, paddingTop: full ? 6 : 3, marginTop: full ? 7 : 5 }}>
-        <span
-          className="truncate"
-          style={{ display: 'block', fontFamily: PIXEL, fontSize: full ? 16 : 12, color: 'var(--cream)', lineHeight: 1.05, textShadow: '0 1px 0 var(--ink-black)' }}
-        >
-          {lastName(card.name).toUpperCase()}
-        </span>
-        <span className="truncate" style={{ display: 'block', fontSize: full ? 11 : 8.5, color: 'var(--dust)', letterSpacing: 0.2, lineHeight: 1.1, marginTop: 1 }}>
-          {subLine}
-        </span>
-      </div>
-
-      {/* Fitness pip meter (where condition is tracked). Crisp pixel cells. */}
-      {hasFitness && <FitnessMeter fitness={card.fitness as number} full={full} />}
-
-      {/* Defining-trait rail — the action-buff signature, now READABLE: every pill
-          carries its pixel-font word at BOTH sizes (the old glyph-only grid chip
-          read as a blank box). Count = rarity, so a Legendary visibly carries more
-          than a Common. Coloured by trait kind. */}
-      {traits.length > 0 && <TraitPillStrip traits={traits} full={full} />}
-    </div>
-  );
-}
-
-/** "CAN OPERATE" position chip — own slot FILLED in the position colour, every
- *  other eligible slot outlined. Mirrors CardModal's PositionChip so the on-card
- *  face and the expanded detail read as the same visual language. */
-function PositionPill({ pos, primary, full }: { pos: string; primary: boolean; full: boolean }) {
-  const v = positionChipVisual(pos, primary);
-  return (
-    <span
+    <div
       style={{
-        fontFamily: PIXEL,
-        fontSize: full ? 9.5 : 6.5,
-        letterSpacing: 0.2,
-        lineHeight: 1,
-        color: v.text,
-        background: v.bg,
-        border: `1px solid ${v.border}`,
-        borderRadius: 3,
-        padding: full ? '4px 6px' : '2px 3px',
-        boxShadow: primary ? 'inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -1px 0 rgba(0,0,0,0.3)' : undefined,
+        position: 'relative',
+        flex: 1,
+        minWidth: 0,
+        overflow: 'hidden',
+        borderRadius: full ? 11 : 7,
+        border: `2px solid ${HERO.ink}`,
+        background: HERO.faceGradient,
+        display: 'flex',
+        flexDirection: 'column',
+        filter: cond.filt !== 'none' ? cond.filt : undefined,
+        clipPath: cond.clip !== 'none' ? cond.clip : undefined,
       }}
     >
-      {pos}
-    </span>
-  );
-}
-
-/**
- * The on-card defining-trait rail. Each pill is glyph + WORD, coloured by trait
- * KIND. The word is the signal (pixel font renders A–Z reliably); the glyph is a
- * small accent in a Unicode-complete fallback face so a missing symbol never
- * blanks the chip. On `grid` the word is a short identifier (POACHER, OFFSIDE);
- * on `full` it is the complete label. Pills wrap, capped so 4 (a Legendary) never
- * crowd the data above.
- */
-function TraitPillStrip({ traits, full }: { traits: ResolvedTrait[]; full: boolean }) {
-  // Cap the on-card rail at TWO pills (+ a "+N" chip for the rest) at BOTH sizes so
-  // it never crowds out the sprite — which keeps a FLOOR height — or clips against
-  // the frame. The full modal card is a small ~235px portrait; its DEFINING TRAITS
-  // panel below lists every trait in full, so the card stays a portrait, not a
-  // four-row list, and nothing is lost.
-  const cap = 2;
-  const overflow = Math.max(0, traits.length - cap);
-  const shown = traits.slice(0, cap);
-  const grid2up = !full && shown.length >= 2;
-  return (
-    <div className="flex flex-wrap items-center" style={{ gap: full ? 4 : 3, marginTop: full ? 7 : 4 }}>
-      {shown.map((t, i) => (
-        <span
-          key={`${t.name}-${i}`}
-          title={t.copy.label}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: full ? 4 : 2,
-            fontFamily: PIXEL,
-            fontSize: full ? 8.5 : grid2up ? 6 : 7,
-            letterSpacing: full ? 0.3 : 0.1,
-            lineHeight: 1,
-            color: t.style.color,
-            background: t.style.bg,
-            border: `1px solid ${t.style.color}`,
-            borderRadius: 3,
-            padding: full ? '4px 6px' : grid2up ? '3px 3px' : '3px 4px',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
-            flex: grid2up ? '1 1 44%' : undefined,
-            minWidth: 0,
-            justifyContent: 'center',
-          }}
-        >
-          {/* On the 2-up grid the word is the whole budget — drop the glyph so the
-              label never clips (POSTMAN, OFFSIDE need the room). */}
-          {!grid2up && (
-            <span aria-hidden style={{ fontFamily: GLYPH_FONT, fontSize: full ? 9 : 7.5, lineHeight: 1, opacity: 0.95, flexShrink: 0 }}>{t.copy.glyph}</span>
-          )}
-          <span className="truncate" style={{ lineHeight: 1 }}>{full ? t.copy.label.toUpperCase() : shortTraitLabel(t.name, t.copy.label)}</span>
-        </span>
-      ))}
-      {overflow > 0 && (
+      {/* HEADER — position badge (left) · ATK/DEF columns (right) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: full ? '10px 10px 0' : '6px 6px 0', gap: 4 }}>
         <span
           style={{
             fontFamily: PIXEL,
-            fontSize: full ? 8 : 6,
+            fontSize: full ? 9 : 6,
             lineHeight: 1,
-            color: 'var(--dust)',
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid var(--border)',
-            borderRadius: 3,
-            padding: full ? '4px 5px' : '3px 3px',
+            color: HERO.badgeText,
+            background: posColor,
+            padding: full ? '4px 6px' : '2px 4px',
+            borderRadius: full ? 3 : 2,
+            border: `1px solid ${HERO.ink}`,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3)',
             flexShrink: 0,
           }}
         >
-          {`+${overflow}`}
+          {card.position}
         </span>
+        <div style={{ display: 'flex', gap: full ? 10 : 5, flexShrink: 0 }}>
+          <StatCol value={stats.atk} label="ATK" valueColor={HERO.cream} labelColor={HERO.atk} full={full} />
+          <StatCol value={stats.def} label="DEF" valueColor={HERO.creamBody} labelColor={HERO.def} full={full} />
+        </div>
+      </div>
+
+      {/* PORTRAIT WINDOW — the seeded 16-bit bust, bottom-anchored. */}
+      <div
+        style={{
+          position: 'relative',
+          flex: 1,
+          minHeight: full ? 96 : 52,
+          marginTop: 2,
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+          background: `radial-gradient(90% 80% at 50% 30%, rgba(232,178,60,${full ? 0.2 : 0.16}), transparent 72%)`,
+        }}
+      >
+        {full && <div style={{ position: 'absolute', left: 12, right: 12, bottom: 0, height: 1, background: 'rgba(232,178,60,0.35)' }} />}
+        <div
+          className="pixelated"
+          aria-hidden
+          style={{ ...portraitBackgroundStyle(card.id), width: '100%', height: full ? '92%' : '94%' }}
+        />
+      </div>
+
+      {/* NAME */}
+      <div style={{ padding: full ? '7px 10px 6px' : '5px 6px 2px' }}>
+        <span
+          style={{
+            display: 'block',
+            fontFamily: PIXEL,
+            fontSize: full ? 15 : 8,
+            color: HERO.cream,
+            textShadow: `0 ${full ? 2 : 1}px 0 ${HERO.ink}`,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {name}
+        </span>
+      </div>
+
+      {/* GOLD ROLE BAND */}
+      <div
+        style={{
+          background: full ? HERO.roleBand : HERO.roleBandMini,
+          borderTop: `${full ? 2 : 1}px solid ${HERO.ink}`,
+          borderBottom: `${full ? 2 : 1}px solid ${HERO.ink}`,
+          padding: full ? '4px 10px' : '2px 6px',
+          marginTop: full ? 0 : 2,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 4,
+        }}
+      >
+        <span style={{ fontFamily: PIXEL, fontSize: full ? 9 : 6, color: '#171207', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {role}
+        </span>
+        {full && <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: 'rgba(23,18,7,0.65)', flexShrink: 0 }}>ROLE</span>}
+      </div>
+
+      {/* ACTION — full panel (name + rules text) on profile, name-only on grid. */}
+      {full ? (
+        <div style={{ margin: '8px 8px 6px', borderRadius: 6, border: '1px solid rgba(232,178,60,0.4)', background: 'rgba(0,0,0,0.35)', padding: '7px 8px 8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1.5, color: HERO.creamMuted }}>ACTION</span>
+            <span style={{ flex: 1, height: 1, background: 'rgba(232,178,60,0.3)' }} />
+          </div>
+          {actionName && <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 9, color: HERO.gold, marginTop: 5 }}>{actionName}</span>}
+          {actionText && (
+            <span style={{ display: 'block', fontFamily: 'var(--font-body, sans-serif)', fontSize: 10.5, lineHeight: 1.45, color: HERO.creamBody, marginTop: 4 }}>
+              {actionText}
+            </span>
+          )}
+        </div>
+      ) : (
+        <div style={{ padding: '4px 6px 6px', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span aria-hidden style={{ fontFamily: PIXEL, fontSize: 5, color: HERO.creamMuted, flexShrink: 0 }}>◆</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 6.5, color: HERO.gold, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {actionName || role}
+          </span>
+        </div>
+      )}
+
+      {/* FOOTER — rarity label · condition chip (profile only). */}
+      {full && (
+        <div style={{ padding: '0 10px 9px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1.5, color: labelColor, whiteSpace: 'nowrap' }}>{frameLabel}</span>
+          <span
+            style={{
+              fontFamily: PIXEL,
+              fontSize: 6,
+              letterSpacing: 1,
+              color: cond.cc,
+              border: `1px solid ${cond.cc}`,
+              borderRadius: 3,
+              padding: '2px 5px',
+              flexShrink: 0,
+            }}
+          >
+            {WEAR_GLYPH} {cond.label}
+          </span>
+        </div>
+      )}
+
+      {/* WEAR OVERLAY — drawn on the face when the card has degraded (design 3a). */}
+      {cond.wearBg !== 'none' && <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: cond.wearBg }} />}
+      {cond.stampDisp === 'flex' && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: full ? 9 : 7, color: '#e0332d', border: '2px solid #e0332d', borderRadius: 4, padding: '3px 6px', background: 'rgba(11,7,3,0.75)', transform: 'rotate(-12deg)' }}>
+            DESTROYED
+          </span>
+        </div>
+      )}
+
+      {/* LEGENDARY FOIL SWEEP — travelling gloss band (respects reduced-motion via .card-foil). */}
+      {foil && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'inherit', pointerEvents: 'none' }}>
+          <div
+            className="card-foil"
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              width: '45%',
+              background: 'linear-gradient(90deg, transparent, rgba(255,240,205,0.30), transparent)',
+              mixBlendMode: 'screen',
+            }}
+          />
+        </div>
       )}
     </div>
   );
 }
 
-/** Small crisp pixel fitness meter — N filled cells of 6, banded by condition. */
-function FitnessMeter({ fitness, full }: { fitness: number; full: boolean }) {
-  const { filled, total, color } = fitnessMeter(fitness);
-  const cellW = full ? 9 : 5;
-  const cellH = full ? 6 : 4;
-  const gap = full ? 2 : 1.5;
+/** One stacked stat column — big Silkscreen value over a 6px tinted label. */
+function StatCol({ value, label, valueColor, labelColor, full }: { value: number; label: string; valueColor: string; labelColor: string; full: boolean }) {
   return (
-    <div className="flex items-center" style={{ gap: full ? 5 : 3, marginTop: full ? 6 : 3 }}>
-      <span style={{ fontFamily: PIXEL, fontSize: full ? 7 : 5.5, letterSpacing: 0.4, color: 'var(--dust)', lineHeight: 1, flexShrink: 0 }}>FIT</span>
-      <div className="flex" style={{ gap }}>
-        {Array.from({ length: total }).map((_, i) => (
-          <span
-            key={i}
-            style={{
-              width: cellW,
-              height: cellH,
-              background: i < filled ? color : 'rgba(255,255,255,0.10)',
-              boxShadow: i < filled
-                ? `inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(0,0,0,0.35), 0 0 0 1px var(--ink-black)`
-                : 'inset 0 0 0 1px rgba(0,0,0,0.35)',
-            }}
-          />
-        ))}
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+      <span style={{ fontFamily: PIXEL, fontSize: full ? 18 : 12, lineHeight: full ? 0.9 : 1, color: valueColor, textShadow: `0 ${full ? 2 : 1}px 0 ${HERO.ink}` }}>
+        {value}
+      </span>
+      {full && <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: labelColor, lineHeight: 1 }}>{label}</span>}
     </div>
   );
 }
 
-/**
- * Per-role player portrait. sprite = BODY[bodyKind] tinted by POSITION_COLOR +
- * EMBLEM[role]. One light source TOP-LEFT on every body (highlights on top/left,
- * base in the middle, shadow on bottom/right, a 1px rim-light on the lit edge),
- * ~5-colour palette derived from the position tint. Seven bodies cover all 23
- * roles; the emblem is a tiny role motif stamped on the chest.
- *
- * Rendered as a small CORNER BADGE (not a centre-stage hero) at a fixed pixel
- * `size` — the whole 24×24 figure scales down uniformly into the badge, so it
- * stays a complete, crisp silhouette rather than a cropped close-up.
- */
-function PlayerSprite({
-  accent,
-  posColor,
-  bodyKind,
-  emblem,
-  isGK,
-  size,
-}: {
-  accent: string;
-  posColor: string;
-  bodyKind: BodyKind;
-  emblem: EmblemRect[];
-  isGK: boolean;
-  size: number;
-}) {
-  // Kit ramp (3-value) derived from the pitch-position tint so a defender's kit
-  // reads blue, a forward's red, etc. — the body silhouette carries the role, the
-  // colour carries the position. Keeper always wears the keeper green.
-  const kitBase = isGK ? '#1f9d4f' : posHex(posColor);
-  const kit = kitBase;
-  const kitHi = lighten(kitBase, 0.32);
-  const kitSh = darken(kitBase, 0.34);
-  // Skin ramp.
-  const skinHi = '#f4dcb8';
-  const skin = '#e0b486';
-  const skinSh = '#b88a5e';
-  // Hair ramp.
-  const hairHi = '#5a4636';
-  const hair = '#3a2a1e';
-
-  const emblemFill = (f: EmblemRect['fill']): string =>
-    f === 'accent' ? accent : f === 'white' ? 'var(--line-white)' : f === 'ink' ? 'var(--ink-black)' : 'rgba(0,0,0,0.4)';
-
-  return (
-    <svg
-      className="pixelated"
-      viewBox="0 0 24 24"
-      style={{ width: size, height: size, display: 'block' }}
-      shapeRendering="crispEdges"
-    >
-      {/* seat plate — a soft dark disc so the sprite reads off the card fill */}
-      <rect x="3" y="3" width="18" height="18" fill="rgba(0,0,0,0.22)" />
-
-      {/* HEAD — shared across bodies. Base, top-left highlight, bottom-right shadow. */}
-      <rect x="9" y="4" width="6" height="6" fill={skin} />
-      <rect x="9" y="4" width="3" height="3" fill={skinHi} />
-      <rect x="13" y="8" width="2" height="2" fill={skinSh} />
-      {/* HAIR — caps the head, lit on top-left */}
-      <rect x="9" y="3" width="6" height="2" fill={hair} />
-      <rect x="9" y="3" width="3" height="1" fill={hairHi} />
-      <rect x="9" y="4" width="1" height="2" fill={hair} />
-      <rect x="14" y="6" width="1" height="2" fill={skinSh} />
-      {/* NECK */}
-      <rect x="10" y="10" width="4" height="1" fill={skinSh} />
-
-      {/* BODY — the role silhouette. Each is a self-contained top-left-lit block. */}
-      <SpriteBody kind={bodyKind} kit={kit} kitHi={kitHi} kitSh={kitSh} accent={accent} isGK={isGK} />
-
-      {/* EMBLEM — the role motif, stamped on the chest (drawn over the shirt). */}
-      {emblem.map((r, i) => (
-        <rect key={i} x={r.x} y={r.y} width={r.w} height={r.h} fill={emblemFill(r.fill)} />
-      ))}
-
-      {/* position pip on the shorts — the pitch-position tint as a hard chip */}
-      <rect x="14" y="19" width="2" height="2" fill={posColor} />
-    </svg>
-  );
-}
-
-/**
- * The seven role BODIES. Each draws a torso/stance around the shared head+neck
- * (head at y3–10). All lit top-left: a highlight band on the top/left face, a
- * shadow band on the bottom/right, a 1px rim-light down the lit edge. Colours are
- * the kit ramp so the whole set stays a family; the silhouette is the identity.
- */
-function SpriteBody({
-  kind,
-  kit,
-  kitHi,
-  kitSh,
-  accent,
-  isGK,
-}: {
-  kind: BodyKind;
-  kit: string;
-  kitHi: string;
-  kitSh: string;
-  accent: string;
-  isGK: boolean;
-}) {
-  const collar = (
-    <>
-      <rect x="10" y="11" width="4" height="1" fill="var(--line-white)" />
-      <rect x="11" y="12" width="2" height="1" fill={kitSh} />
-    </>
-  );
-  const shorts = (
-    <>
-      <rect x="8" y="19" width="8" height="2" fill="var(--line-white)" />
-      <rect x="8" y="19" width="8" height="1" fill="#ffffff" />
-    </>
-  );
-
-  switch (kind) {
-    case 'keeper':
-      // Broad frame, gloves out, big padded shoulders. Must survive grid size.
-      return (
-        <>
-          {/* wide jersey */}
-          <rect x="5" y="11" width="14" height="8" fill={kit} />
-          <rect x="5" y="11" width="14" height="2" fill={kitHi} />
-          <rect x="5" y="17" width="14" height="2" fill={kitSh} />
-          <rect x="5" y="11" width="1" height="8" fill={kitHi} />
-          <rect x="18" y="11" width="1" height="8" fill={kitSh} />
-          {/* big padded sleeves reaching wide (ready to save) */}
-          <rect x="3" y="11" width="2" height="6" fill={kit} />
-          <rect x="3" y="11" width="1" height="6" fill={kitHi} />
-          <rect x="19" y="11" width="2" height="6" fill={kitSh} />
-          {collar}
-          {shorts}
-        </>
-      );
-    case 'centreback':
-      // Tall, square-shouldered, arms folded across the chest (solid).
-      return (
-        <>
-          <rect x="6" y="11" width="12" height="8" fill={kit} />
-          <rect x="6" y="11" width="12" height="2" fill={kitHi} />
-          <rect x="6" y="17" width="12" height="2" fill={kitSh} />
-          <rect x="6" y="11" width="1" height="8" fill={kitHi} />
-          <rect x="17" y="11" width="1" height="8" fill={kitSh} />
-          {/* folded forearms — a darker band across the middle */}
-          <rect x="7" y="15" width="10" height="2" fill={kitSh} />
-          <rect x="7" y="15" width="10" height="1" fill={kit} />
-          {/* squared shoulders (sleeves flush) */}
-          <rect x="4" y="12" width="2" height="4" fill={kit} />
-          <rect x="4" y="12" width="1" height="4" fill={kitHi} />
-          <rect x="18" y="12" width="2" height="4" fill={kitSh} />
-          {collar}
-          {shorts}
-        </>
-      );
-    case 'fullback':
-      // Leaner, one arm swung out (overlapping run), narrower torso.
-      return (
-        <>
-          <rect x="7" y="11" width="10" height="8" fill={kit} />
-          <rect x="7" y="11" width="10" height="2" fill={kitHi} />
-          <rect x="7" y="17" width="10" height="2" fill={kitSh} />
-          <rect x="7" y="11" width="1" height="8" fill={kitHi} />
-          <rect x="16" y="11" width="1" height="8" fill={kitSh} />
-          {/* trailing arm swung back-left (lit), leading arm forward-right */}
-          <rect x="4" y="13" width="3" height="2" fill={kit} />
-          <rect x="4" y="13" width="1" height="2" fill={kitHi} />
-          <rect x="17" y="12" width="2" height="3" fill={kitSh} />
-          {collar}
-          {shorts}
-        </>
-      );
-    case 'holding':
-      // Balanced, planted, arms slightly out for the base — the anchor stance.
-      return (
-        <>
-          <rect x="6" y="11" width="12" height="8" fill={kit} />
-          <rect x="6" y="11" width="12" height="2" fill={kitHi} />
-          <rect x="6" y="17" width="12" height="2" fill={kitSh} />
-          <rect x="6" y="11" width="1" height="8" fill={kitHi} />
-          <rect x="17" y="11" width="1" height="8" fill={kitSh} />
-          {/* both arms out, low — a wide, grounded base */}
-          <rect x="4" y="13" width="2" height="4" fill={kit} />
-          <rect x="4" y="13" width="1" height="4" fill={kitHi} />
-          <rect x="18" y="13" width="2" height="4" fill={kitSh} />
-          {collar}
-          {shorts}
-        </>
-      );
-    case 'playmaker':
-      // Poised, chest open, a ball at the feet (the creator's canvas).
-      return (
-        <>
-          <rect x="6" y="11" width="12" height="8" fill={kit} />
-          <rect x="6" y="11" width="12" height="2" fill={kitHi} />
-          <rect x="6" y="17" width="12" height="2" fill={kitSh} />
-          <rect x="6" y="11" width="1" height="8" fill={kitHi} />
-          <rect x="17" y="11" width="1" height="8" fill={kitSh} />
-          {/* relaxed arms tucked to the sides */}
-          <rect x="5" y="12" width="1" height="5" fill={kit} />
-          <rect x="18" y="12" width="1" height="5" fill={kitSh} />
-          {collar}
-          {shorts}
-          {/* ball at the feet — a small lit sphere */}
-          <rect x="15" y="20" width="3" height="3" fill="var(--line-white)" />
-          <rect x="15" y="20" width="3" height="1" fill="#ffffff" />
-          <rect x="17" y="22" width="1" height="1" fill="rgba(0,0,0,0.4)" />
-        </>
-      );
-    case 'winger':
-      // Dynamic, leaning forward — torso pitched right (running at pace).
-      return (
-        <>
-          <rect x="6" y="11" width="12" height="8" fill={kit} />
-          <rect x="6" y="11" width="12" height="2" fill={kitHi} />
-          <rect x="6" y="17" width="12" height="2" fill={kitSh} />
-          <rect x="6" y="11" width="1" height="8" fill={kitHi} />
-          <rect x="17" y="11" width="1" height="8" fill={kitSh} />
-          {/* pumping arms: leading arm forward-high, trailing arm back-low */}
-          <rect x="17" y="10" width="3" height="2" fill={kitSh} />
-          <rect x="4" y="15" width="3" height="2" fill={kit} />
-          <rect x="4" y="15" width="1" height="2" fill={kitHi} />
-          {collar}
-          {/* offset shorts (mid-stride) */}
-          <rect x="9" y="19" width="8" height="2" fill="var(--line-white)" />
-          <rect x="9" y="19" width="8" height="1" fill="#ffffff" />
-        </>
-      );
-    case 'striker':
-    default:
-      // Front-on, arms wide/coiled — the finisher, shoulders broad and lifted.
-      return (
-        <>
-          <rect x="6" y="11" width="12" height="8" fill={kit} />
-          <rect x="6" y="11" width="12" height="2" fill={kitHi} />
-          <rect x="6" y="17" width="12" height="2" fill={kitSh} />
-          <rect x="6" y="11" width="1" height="8" fill={kitHi} />
-          <rect x="17" y="11" width="1" height="8" fill={kitSh} />
-          {/* arms flared out and up — coiled to strike */}
-          <rect x="3" y="12" width="3" height="2" fill={kit} />
-          <rect x="3" y="12" width="1" height="2" fill={kitHi} />
-          <rect x="18" y="12" width="3" height="2" fill={kitSh} />
-          {collar}
-          {shorts}
-        </>
-      );
-  }
-}
 
 // ===========================================================================
 // MANAGER body

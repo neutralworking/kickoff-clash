@@ -22,6 +22,7 @@ import type { TraitKind } from '../../lib/trait-copy';
 import CardModal from '../cards/CardModal';
 import type { GameCardModel } from '../cards/GameCard';
 import { PIXEL, lastName, POSITION_COLOR, RARITY_COLOR } from '../cards/cardTokens';
+import { portraitBackgroundStyle } from '../cards/portrait';
 
 interface PitchMatchViewProps {
   matchState: MatchV5State;
@@ -264,9 +265,15 @@ function PitchCard({
           <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, color: 'var(--line-white)' }}>{spot.rating}</span>
         ) : null}
       </div>
-      {/* Mini sprite — a flat pixel kit block, tinted by side. */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-        <MiniSprite side={side} isGK={spot.isGK} accent={accent} />
+      {/* Seeded 16-bit portrait (Pixel Hero) — same face as the gallery/pack cards,
+          so a card on the pitch reads as the same object. Falls back to the flat
+          kit sprite for tokens that carry no card id (the faceless opponent). */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', position: 'relative' }}>
+        {spot.cardId !== undefined ? (
+          <div className="pixelated" aria-hidden style={{ ...portraitBackgroundStyle(spot.cardId), width: '100%', height: '96%' }} />
+        ) : (
+          <MiniSprite side={side} isGK={spot.isGK} accent={accent} />
+        )}
         {/* Sent off: the card is on the pitch display but OUT of every contest. */}
         {spot.sentOff && (
           <span aria-label="Sent off" style={{ position: 'absolute', inset: 0, background: 'rgba(20,4,4,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>

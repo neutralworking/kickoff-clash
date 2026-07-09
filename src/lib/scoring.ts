@@ -38,6 +38,9 @@ export interface Card {
   phoenixMatchesSurvived?: number;  // tracks for Phoenix promotion
   injured?: boolean;                 // for Fragile cards — miss next match
   fitness?: number;                  // 1–6 dynamic condition, depletes across increments (MATCH_ENGINE §3.1)
+  /** Pixel Hero card-wear grade (degrades with matches played). Optional — the
+   *  card face defaults to MINT when unset; no mechanic wires it yet (display-ready). */
+  condition?: 'MINT' | 'PLAYED' | 'WORN' | 'CREASED' | 'TORN';
   // Extended fields from kc_characters
   bio?: string;
   tags?: string[];

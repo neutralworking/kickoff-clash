@@ -138,7 +138,7 @@ export default function CardModal({ model, onClose }: CardModalProps) {
         {/* Card + detail. Each re-enables pointer events; the gaps between/around
             them stay click-through, so a tap on empty space hits the backdrop. */}
         <div className="flex-1 min-h-0 flex flex-col items-center justify-start" style={{ gap: 14, pointerEvents: 'none' }}>
-          <div className="hero-pop shrink-0" style={{ width: 168, maxWidth: '46%', pointerEvents: 'auto' }}>
+          <div className="hero-pop shrink-0" style={{ width: model.variant === 'player' ? 208 : 172, maxWidth: model.variant === 'player' ? '62%' : '48%', pointerEvents: 'auto' }}>
             <GameCard model={model} size="full" />
           </div>
 
