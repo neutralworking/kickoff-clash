@@ -267,12 +267,20 @@ function tacticMods(
       each(feedsFinish, 1, 0);          // +FINISH from dead balls
       break;
     case 'dark_arts':
-      out.enemyMods.push({ source: src, who: 'star', atk: -1, def: -1 });
-      // 0–100 fitness axis: a ~25% knock on their star's legs.
-      out.enemyDrains.push({ source: src, amount: -25 });
+      // GATED (Card Shark #2): the leveller. The dark arts only come out when
+      // you're NOT ahead — level or chasing — so it's a situational play, not a
+      // free universal debuff you auto-include every match.
+      if (!leading) {
+        out.enemyMods.push({ source: src, who: 'star', atk: -1, def: -1 });
+        // 0–100 fitness axis: a ~25% knock on their star's legs.
+        out.enemyDrains.push({ source: src, amount: -25 });
+      }
       break;
     case 'youth_policy':
-      if (ctx.increment >= 3) each(() => true, 1, 1);
+      // GATED (Card Shark #2): "fresh legs" now lifts only the TIRED — a late-game
+      // (60'+) +2/+2 to any starter under 70% fitness, not a blanket whole-XI buff.
+      // A rested XI gets little; a jaded one gets rescued — its real identity.
+      if (ctx.increment >= 3) each((c) => c.fitness < 70, 2, 2);
       break;
     case 'overload_left':
       each((c) => c.lane === 'L' && feedsCreate(c), 2, 0);  // attackers in the L lane → +CREATE

@@ -185,7 +185,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'dark_arts',
     name: 'Dark Arts',
-    effect: 'Their best player −1 ATK/−1 DEF and loses fitness each round.',
+    effect: 'While level or behind: their best player −1 ATK/−1 DEF and loses fitness each round.',
     flavour: '"They don\'t call it the beautiful game for nothing. Beautifully ugly."',
     rarity: 'legendary',
     category: 'specialist',
@@ -193,7 +193,7 @@ export const ALL_TACTICS: TacticCard[] = [
   {
     id: 'youth_policy',
     name: 'Fresh Legs',
-    effect: 'From 60\' on: the whole XI +1 ATK/+1 DEF.',
+    effect: 'From 60\' on: tired players (under 70% fitness) +2 ATK/+2 DEF.',
     flavour: '"Fresh legs win late games."',
     rarity: 'legendary',
     category: 'specialist',
