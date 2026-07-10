@@ -1,26 +1,30 @@
 'use client';
 
 /**
- * Kickoff Clash — GameCard
+ * Kickoff Clash — GameCard (v3, "Turn 7" locked card language)
  *
- * The reusable, pixel-art PLAYING CARD. One shared frame, four variants:
- *   • PLAYER     — sprite portrait, position tab, big rating, surname, archetype.
- *   • MANAGER    — gaffer crest, name, philosophy flavour, trait pills.
- *   • TACTIC     — category crest, name, effect, category tab.
- *   • INVESTMENT — Boardroom crest, ladder tab, cost, football name, effect line.
+ * The reusable playing card. One shared frame → inner pair, four variants:
+ *   • PLAYER     — stadium-horizon pitch, seeded face-first bust, theme medallion,
+ *                  ATK/DEF stats, name + role + position pills, rarity/theme meta.
+ *   • MANAGER    — aged leather, suited bust, 👔 medallion, name + role, JOKER chip,
+ *                  effect + flavour block.
+ *   • TACTIC     — dark tactical board, big category medallion, class medallion,
+ *                  charge pips, name + descriptor + category chip, effect + flavour.
+ *   • INVESTMENT — Boardroom crest (unchanged glass-chrome family).
  *
- * Two sizes: `grid` (the dense token in a list/pack/sheet) and `full` (the
- * expanded card rendered inside CardModal). Both share the same frame so a
- * tapped grid card visibly grows into its full self.
+ * Two sizes: `grid` (dense token) and `full` (the CardModal blow-up). Both share
+ * the same frame so a tapped grid card grows into its full self.
  *
- * The reconciliation (LOCKED): GLASSY FRAME, PIXEL INTERIOR. The frame carries
- * the depth — an inner top-edge highlight, a rarity-tinted diagonal sheen sweep,
- * a soft rarity glow on Epic/Legendary, and real stacked elevation. The interior
- * (sprite + flat blocks + Silkscreen) stays crisp pixel art: `pixelated`,
- * `shapeRendering="crispEdges"`, no blur, no soft shadow on a sprite — depth on a
- * sprite comes from MORE pixels (a 3-value ramp + rim-light), never a filter.
+ * The reconciliation (LOCKED): GLASSY FOIL FRAME, PIXEL INTERIOR. The 5px foil
+ * band IS the rarity border (gradient + glow live on the frame). The interior —
+ * the seeded portrait, the flat blocks, the Silkscreen — stays crisp pixel art
+ * (`pixelated`, `crispEdges`, no blur, no soft shadow on a pixel).
  *
- * Tokens come from cardTokens.ts and DESIGN.md. See DESIGN.md › Cards + Glass.
+ * The card FACE follows the Turn-7 handoff (no on-card contest icons / action
+ * panel — those live in CardModal). Game data the static art spec omits is folded
+ * in tastefully: tactic charge pips, player fitness bar + wear overlay/condition.
+ *
+ * Tokens come from cardTokens.ts + portrait.ts. See DESIGN.md › Cards.
  */
 
 import type { Card } from '../../lib/scoring';
@@ -28,41 +32,52 @@ import { deriveStats } from '../../lib/funnel';
 import type { JokerCard } from '../../lib/jokers';
 import { type TacticCard, tacticCapacity } from '../../lib/tactics';
 import type { InvestmentCard } from '../../lib/economy';
-import { contestsForCard, contestsForManager, contestsForTactic } from '../../lib/contest-map';
 import {
   PIXEL,
-  RARITY_COLOR,
-  RARITY_GLASS,
   POSITION_COLOR,
-  TACTIC_CAT_COLOR,
   TACTIC_RARITY_TO_FRAME,
+  MANAGER_RARITY_TO_FRAME,
   INVESTMENT_META,
   formatCash,
-  nationFlag,
-  nationCode,
   lastName,
-  definingTraitsFor,
-  managerAccent,
-  managerTraitStyle,
-  TACTIC_ICON,
-  type ManagerProp,
-  type ChalkRect,
+  eligiblePositions,
+  fitnessMeter,
+  themeMedallion,
+  tacticMedallion,
+  MANAGER_MEDALLION,
+  DURABILITY_META,
+  type ClassMedallion,
 } from './cardTokens';
-import { ContestIcons, ChargePips } from './ContestIcons';
+import { ChargePips } from './ContestIcons';
 import {
-  portraitBackgroundStyle,
+  portraitArtStyle,
   rarityFrame,
   conditionRecipe,
   WEAR_GLYPH,
-  HERO,
-  type ConditionGrade,
+  PLAYER_PITCH_BG,
+  MANAGER_LEATHER_BG,
+  TACTIC_BOARD_BG,
+  GROUND_SHADOW_BG,
+  NAME_BAND_BG,
+  META_STRIP_BG,
+  EFFECT_BLOCK_BG,
+  INNER_INK,
 } from './portrait';
 
-// The trait glyphs (✦ ➴ ⚑ ◣ …) live outside the Silkscreen glyph set, so render
-// them in a Unicode-complete fallback stack. The READABLE pixel-font label is the
-// signal; the glyph is a small accent that degrades gracefully if a symbol is
-// missing. (Why the old glyph-only grid chip read as a blank box.)
+// Class-medallion + theme glyphs (⚔ ⚡ ♫ ❤ 👔 🛡️ …) fall outside the Silkscreen
+// glyph set, so render them in a Unicode-complete fallback stack — the readable
+// pixel-font label is the signal; the glyph is the accent.
 const GLYPH_FONT = "'DejaVu Sans', 'Noto Sans Symbols', 'Segoe UI Symbol', sans-serif";
+
+// Body font (role line, effect text) and flavour font (quotes), per the handoff.
+const BODY_FONT = "var(--font-body, 'DM Sans', sans-serif)";
+const FLAVOUR_FONT = "var(--font-flavour, 'Playfair Display', serif)";
+
+// Handoff surface tokens.
+const CREAM = '#f2ead6';
+const CREAM_SOFT = '#c9bb95';
+const DUST = '#9a8b6a';
+const STAT_CREAM = '#fbf7ec';
 
 export type CardSize = 'grid' | 'full';
 
@@ -91,32 +106,6 @@ interface GameCardProps {
 // Card aspect is a true playing-card 2.5:3.5 ratio.
 const ASPECT = 2.5 / 3.5;
 
-/**
- * The glass treatment for a card, derived from its accent + (for players) the
- * rarity glass companion. Non-player families fall back to a quiet glass with a
- * faint accent sheen and no glow halo, so a gaffer/tactic/investment reads as the
- * same material without the rarity escalation.
- */
-interface CardGlass {
-  /** 3-value rim ramp [shadow, base, highlight] for the inner frame edges. */
-  ramp: [string, string, string];
-  /** Outer glow token, or null for none. */
-  glow: string | null;
-  /** Diagonal sheen strength 0–1. */
-  sheen: number;
-  /** Legendary animated foil. */
-  foil: boolean;
-}
-
-function glassFor(model: GameCardModel, accent: string): CardGlass {
-  if (model.variant === 'player') {
-    const g = RARITY_GLASS[model.card.rarity] ?? RARITY_GLASS.Common;
-    return { ramp: g.ramp, glow: g.glow, sheen: g.sheen, foil: g.foil };
-  }
-  // Gaffer / tactic / investment: quiet glass, faint accent sheen, no glow halo.
-  return { ramp: [accent, accent, accent], glow: null, sheen: 0.45, foil: false };
-}
-
 export default function GameCard({
   model,
   size = 'grid',
@@ -132,56 +121,14 @@ export default function GameCard({
   let frameStyle: React.CSSProperties;
   let content: React.ReactNode;
 
-  if (model.variant === 'player' || model.variant === 'tactic') {
-    // PIXEL HERO: the rarity is the FRAME MATERIAL (foil gradient) — the padding IS
-    // the border. A near-black inner face carries the crisp pixel anatomy. Players
-    // key the frame off card rarity; tactics off tactic rarity (Common/Rare/Legendary
-    // → matte / silver / holo) so a called-play card is the same premium object.
-    const frameRarity =
-      model.variant === 'player' ? model.card.rarity : TACTIC_RARITY_TO_FRAME[model.tactic.rarity];
-    const fr = rarityFrame(frameRarity);
-    const ring = selected ? '0 0 0 2px var(--gold), ' : '';
-    frameStyle = {
-      position: 'relative',
-      width: '100%',
-      aspectRatio: `${ASPECT}`,
-      borderRadius: full ? 16 : 10,
-      padding: full ? 6 : 4,
-      background: fr.frame,
-      boxShadow: ring + fr.glow,
-      boxSizing: 'border-box',
-      opacity: dimmed ? 0.42 : 1,
-      display: 'flex',
-      textAlign: 'left',
-      cursor: onClick ? 'pointer' : 'default',
-      transition: 'transform 0.12s ease',
-      minWidth: 0,
-      animationDelay: delay != null ? `${delay}ms` : undefined,
-    };
-    content =
-      model.variant === 'player' ? (
-        <PlayerFace card={model.card} full={full} frameLabel={fr.label} labelColor={fr.lc} foil={fr.foil} />
-      ) : (
-        <TacticFace
-          tactic={model.tactic}
-          charges={model.charges}
-          full={full}
-          frameLabel={fr.label}
-          labelColor={fr.lc}
-          foil={fr.foil}
-        />
-      );
-  } else {
-    const accent = accentFor(model);
-    const glass = glassFor(model, accent);
-    // Stacked elevation: the hard ink-black pixel drop (the flat-sprite tell) PLUS
-    // a soft ambient shadow underneath (real height). Selected adds an accent ring;
-    // Epic/Legendary add a coloured glow halo to the same stack.
+  if (model.variant === 'investment') {
+    // Investment keeps the original glass-chrome family (not part of the Turn-7
+    // three-class respec — Boardroom cards stay their own material).
+    const accent = INVESTMENT_META[model.investment.ladder]?.accent ?? 'var(--gold)';
     const inkDrop = `0 ${full ? 6 : 3}px 0 0 var(--ink-black)`;
     const ambient = `0 ${full ? 12 : 5}px ${full ? 26 : 10}px rgba(2,9,5,0.5)`;
-    const glow = glass.glow ? `0 0 ${full ? 22 : 14}px ${full ? 3 : 1}px ${glass.glow}` : null;
     const ring = selected ? `0 0 0 2px ${accent}` : null;
-    const boxShadow = [ring, inkDrop, ambient, glow].filter(Boolean).join(', ');
+    const boxShadow = [ring, inkDrop, ambient].filter(Boolean).join(', ');
 
     frameStyle = {
       position: 'relative',
@@ -202,32 +149,75 @@ export default function GameCard({
       animationDelay: delay != null ? `${delay}ms` : undefined,
     };
 
-    const body =
-      model.variant === 'manager' ? (
-        <ManagerBody manager={model.manager} full={full} accent={accent} />
-      ) : (
-        <InvestmentBody investment={model.investment} full={full} accent={accent} />
-      );
-
     content = (
       <>
-        {/* Accent top rail — the family signature, lit on its top edge. */}
         <div style={{ position: 'relative', height: full ? 5 : 3, background: accent, flexShrink: 0, zIndex: 2 }}>
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.55), transparent)' }} />
         </div>
         <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', zIndex: 2 }}>
-          {body}
+          <InvestmentBody investment={model.investment} full={full} accent={accent} />
         </div>
-        {/* Accent bottom rail — shaded on its top edge for a seated look. */}
         <div style={{ position: 'relative', height: full ? 5 : 3, background: accent, flexShrink: 0, zIndex: 2 }}>
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(0deg, rgba(0,0,0,0.4), transparent)' }} />
         </div>
-
-        {/* --- GLASS CHROME OVERLAYS (under the content z-index, never on pixels) --- */}
-        <GlassChrome glass={glass} full={full} />
       </>
     );
+
+    if (onClick) {
+      return (
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={ariaLabel}
+          className={`active:scale-95 ${delay != null ? 'chip-reveal' : ''} ${className ?? ''}`}
+          style={frameStyle}
+        >
+          {content}
+        </button>
+      );
+    }
+    return (
+      <div className={`${delay != null ? 'chip-reveal' : ''} ${className ?? ''}`} style={frameStyle}>
+        {content}
+      </div>
+    );
   }
+
+  // --- PLAYER / MANAGER / TACTIC: the v3 foil-frame → inner card. ---
+  const frameRarity =
+    model.variant === 'player'
+      ? model.card.rarity
+      : model.variant === 'manager'
+        ? MANAGER_RARITY_TO_FRAME[model.manager.rarity] ?? 'Rare'
+        : TACTIC_RARITY_TO_FRAME[model.tactic.rarity];
+  const fr = rarityFrame(frameRarity);
+  const ring = selected ? '0 0 0 2px var(--gold), ' : '';
+  frameStyle = {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: `${ASPECT}`,
+    borderRadius: full ? 15 : 9,
+    padding: full ? 5 : 3,
+    background: fr.frame,
+    boxShadow: ring + fr.glow,
+    boxSizing: 'border-box',
+    opacity: dimmed ? 0.42 : 1,
+    display: 'flex',
+    textAlign: 'left',
+    cursor: onClick ? 'pointer' : 'default',
+    transition: 'transform 0.12s ease',
+    minWidth: 0,
+    animationDelay: delay != null ? `${delay}ms` : undefined,
+  };
+
+  content =
+    model.variant === 'player' ? (
+      <PlayerFace card={model.card} full={full} frameLabel={fr.label} labelColor={fr.lc} foil={fr.foil} />
+    ) : model.variant === 'manager' ? (
+      <ManagerFace manager={model.manager} full={full} foil={fr.foil} />
+    ) : (
+      <TacticFace tactic={model.tactic} charges={model.charges} full={full} foil={fr.foil} />
+    );
 
   if (onClick) {
     return (
@@ -249,171 +239,13 @@ export default function GameCard({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Glass chrome — the lit-glass tells layered behind the pixel content. All at
-// z-index 1 (content sits at 2), pointer-events none, never blurring a pixel.
-// ---------------------------------------------------------------------------
-
-function GlassChrome({ glass, full }: { glass: CardGlass; full: boolean }) {
-  const [, , highlight] = glass.ramp;
-  return (
-    <>
-      {/* Inner top-edge highlight — the "lit glass" tell, brightest at the top. */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: full ? 40 : 22,
-          background: `linear-gradient(180deg, rgba(242,246,239,0.18) 0%, transparent 100%)`,
-          pointerEvents: 'none',
-          zIndex: 1,
-        }}
-      />
-      {/* A 1px rim-light hairline just inside the ink border, rarity-tinted. */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          borderRadius: 'inherit',
-          boxShadow: `inset 0 0 0 1px ${withAlpha(highlight, glass.sheen > 0 ? 0.34 : 0.16)}, inset 0 1px 0 0 rgba(242,246,239,0.22)`,
-          pointerEvents: 'none',
-          zIndex: 1,
-        }}
-      />
-      {/* Rarity-tinted diagonal sheen sweep (static on Common→Epic; absent on Common). */}
-      {glass.sheen > 0 && (
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: `linear-gradient(118deg, transparent 30%, ${withAlpha(highlight, 0.06 * glass.sheen)} 44%, ${withAlpha(highlight, 0.22 * glass.sheen)} 50%, ${withAlpha(highlight, 0.05 * glass.sheen)} 56%, transparent 70%)`,
-            pointerEvents: 'none',
-            zIndex: 1,
-            mixBlendMode: 'screen',
-          }}
-        />
-      )}
-      {/* Legendary foil: an animated travelling gloss band over the static sheen. */}
-      {glass.foil && (
-        <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'inherit', pointerEvents: 'none', zIndex: 1 }}>
-          <div
-            className="card-foil"
-            style={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              left: 0,
-              width: '46%',
-              background: `linear-gradient(90deg, transparent, ${withAlpha(highlight, 0.34)} 50%, transparent)`,
-              mixBlendMode: 'screen',
-            }}
-          />
-        </div>
-      )}
-    </>
-  );
-}
-
-/** Parse a hex colour to [r,g,b], or null if it isn't a hex string. */
-function hexToRgb(color: string): [number, number, number] | null {
-  if (!color.startsWith('#')) return null;
-  let hex = color.slice(1);
-  if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
-  const n = parseInt(hex, 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-/** A hex position colour, defaulting to a mid-grey for CSS-var/unknown tints so
- *  the sprite ramp always has a concrete base to lighten/darken from. */
-function posHex(color: string): string {
-  return color.startsWith('#') ? color : '#7a828c';
-}
-
-/** Lighten a hex toward white by `t` (0–1). Used for the top-left kit highlight. */
-function lighten(color: string, t: number): string {
-  const rgb = hexToRgb(color);
-  if (!rgb) return color;
-  const [r, g, b] = rgb.map((c) => Math.round(c + (255 - c) * t));
-  return `rgb(${r},${g},${b})`;
-}
-
-/** Darken a hex toward black by `t` (0–1). Used for the bottom-right kit shadow. */
-function darken(color: string, t: number): string {
-  const rgb = hexToRgb(color);
-  if (!rgb) return color;
-  const [r, g, b] = rgb.map((c) => Math.round(c * (1 - t)));
-  return `rgb(${r},${g},${b})`;
-}
-
-/** Apply an alpha to a colour. Hex (#rgb/#rrggbb) → rgba; otherwise wrap as-is. */
-function withAlpha(color: string, a: number): string {
-  if (color.startsWith('#')) {
-    let hex = color.slice(1);
-    if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
-    const n = parseInt(hex, 16);
-    const r = (n >> 16) & 255;
-    const g = (n >> 8) & 255;
-    const b = n & 255;
-    return `rgba(${r},${g},${b},${a})`;
-  }
-  // CSS var or named colour — fall back to a neutral light so the effect survives.
-  return `rgba(242,246,239,${a})`;
-}
-
-// ---------------------------------------------------------------------------
-// Accent per variant
-// ---------------------------------------------------------------------------
-
-function accentFor(model: GameCardModel): string {
-  if (model.variant === 'player') return RARITY_COLOR[model.card.rarity] ?? RARITY_COLOR.Common;
-  if (model.variant === 'manager') return 'var(--kit-red)';
-  if (model.variant === 'tactic') return TACTIC_CAT_COLOR[model.tactic.category] ?? 'var(--gold)';
-  return INVESTMENT_META[model.investment.ladder]?.accent ?? 'var(--gold)';
-}
-
 // ===========================================================================
-// PLAYER face — "Pixel Hero" (design handoff 2a/3a)
-//
-// A black-card-stock face inside a rarity foil frame. Top→bottom: header
-// (position badge + ATK/DEF columns) · seeded 16-bit portrait window · name ·
-// gold ROLE band · action panel (name + rules text on `full`, name-only on
-// `grid`) · footer (rarity label + condition chip, `full` only). Legendary earns
-// an animated foil sweep. The portrait is procedural (portrait.ts, seeded by the
-// card id) — crisp pixels, never blurred; the foil/glow lives on the frame.
+// Shared v3 card scaffolding
 // ===========================================================================
 
-function PlayerFace({
-  card,
-  full,
-  frameLabel,
-  labelColor,
-  foil,
-}: {
-  card: Card;
-  full: boolean;
-  frameLabel: string;
-  labelColor: string;
-  foil: boolean;
-}) {
-  const posColor = POSITION_COLOR[card.position] ?? '#9aa0a8';
-  const stats = deriveStats(card);
-  const name = lastName(card.name).toUpperCase();
-  const role = card.tacticalRole ?? card.archetype;
-  // The player's ACTION is their marquee defining trait (label + one-line rules
-  // text). Falls back to the printed ability when a card carries no defining trait.
-  const traits = definingTraitsFor(card);
-  const primary = traits[0];
-  const actionName = (primary ? primary.copy.label : card.abilityName ?? '').toUpperCase();
-  const actionText = primary ? primary.copy.blurb : card.abilityText ?? '';
-  const cond = conditionRecipe(card.condition);
-  // Which of the six contests this card helps with (display approximation).
-  const contests = contestsForCard(card);
-
+/** The inner surface — rounded, ink-bordered flex column that holds the three
+ *  stacked regions. The foil frame is the parent's padding. */
+function Inner({ background, full, foil, children }: { background: string; full: boolean; foil: boolean; children: React.ReactNode }) {
   return (
     <div
       style={{
@@ -422,76 +254,137 @@ function PlayerFace({
         minWidth: 0,
         overflow: 'hidden',
         borderRadius: full ? 11 : 7,
-        border: `2px solid ${HERO.ink}`,
-        background: HERO.faceGradient,
+        border: `2px solid ${INNER_INK}`,
+        background,
         display: 'flex',
         flexDirection: 'column',
-        filter: cond.filt !== 'none' ? cond.filt : undefined,
-        clipPath: cond.clip !== 'none' ? cond.clip : undefined,
       }}
     >
-      {/* HEADER — position badge (left) · ATK/DEF columns (right) */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: full ? '10px 10px 0' : '6px 6px 0', gap: 4 }}>
-        <span
-          style={{
-            fontFamily: PIXEL,
-            fontSize: full ? 10 : 8,
-            lineHeight: 1,
-            color: HERO.badgeText,
-            background: posColor,
-            padding: full ? '4px 6px' : '3px 4px',
-            borderRadius: full ? 3 : 2,
-            border: `1px solid ${HERO.ink}`,
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3)',
-            flexShrink: 0,
-          }}
-        >
-          {card.position}
-        </span>
-        <div style={{ display: 'flex', gap: full ? 10 : 5, flexShrink: 0 }}>
-          <StatCol value={stats.atk} label="ATK" valueColor={HERO.cream} labelColor={HERO.atk} full={full} />
-          <StatCol value={stats.def} label="DEF" valueColor={HERO.creamBody} labelColor={HERO.def} full={full} />
-        </div>
-      </div>
+      {children}
+      {foil && <FoilSweep />}
+    </div>
+  );
+}
 
-      {/* PORTRAIT WINDOW — the seeded 16-bit bust, bottom-anchored. */}
+/** Legendary holo foil sweep — a travelling gloss band over the whole inner face.
+ *  Screen-blended, reduced-motion aware (via .card-foil). Never touches a pixel. */
+function FoilSweep() {
+  return (
+    <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'inherit', pointerEvents: 'none', zIndex: 5 }}>
+      <div
+        className="card-foil"
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: 0,
+          width: '45%',
+          background: 'linear-gradient(90deg, transparent, rgba(255,240,205,0.30), transparent)',
+          mixBlendMode: 'screen',
+        }}
+      />
+    </div>
+  );
+}
+
+/** The top-left class medallion + its class label chip. Same slot on every class;
+ *  glyph/colour swap by class (the single at-a-glance class tell). */
+function Medallion({
+  med,
+  classLabel,
+  chipFg,
+  chipBg,
+  full,
+}: {
+  med: ClassMedallion;
+  classLabel: string;
+  chipFg: string;
+  chipBg: string;
+  full: boolean;
+}) {
+  const size = full ? 38 : 22;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: full ? 8 : 5,
+        left: full ? 8 : 5,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: full ? 3 : 2,
+        zIndex: 3,
+      }}
+    >
       <div
         style={{
-          position: 'relative',
-          flex: 1,
-          minHeight: full ? 76 : 52,
-          marginTop: 2,
+          width: size,
+          height: size,
+          borderRadius: '50%',
+          background: 'rgba(11,7,3,0.8)',
+          border: `2px solid ${med.color}`,
           display: 'flex',
-          alignItems: 'flex-end',
+          alignItems: 'center',
           justifyContent: 'center',
-          background: `radial-gradient(90% 80% at 50% 30%, rgba(232,178,60,${full ? 0.2 : 0.16}), transparent 72%)`,
+          boxShadow: '0 2px 7px rgba(0,0,0,0.6)',
         }}
       >
-        {full && <div style={{ position: 'absolute', left: 12, right: 12, bottom: 0, height: 1, background: 'rgba(232,178,60,0.35)' }} />}
-        {/* CONTEST ICONS — the six-contest badges this card helps with (warm=attack,
-            cool=defence), overlaid on the empty top-left of the bottom-anchored
-            portrait so they add zero layout height (the fixed-aspect face is dense). */}
-        {contests.length > 0 && (
-          <div style={{ position: 'absolute', top: full ? 7 : 4, left: full ? 8 : 5, zIndex: 3 }}>
-            <ContestIcons keys={contests} full={full} />
-          </div>
-        )}
-        <div
-          className="pixelated"
-          aria-hidden
-          style={{ ...portraitBackgroundStyle(card.id), width: '100%', height: full ? '92%' : '94%' }}
-        />
+        <span style={{ fontFamily: GLYPH_FONT, fontSize: full ? 18 : 11, lineHeight: 1, color: med.color }}>{med.glyph}</span>
       </div>
+      <span
+        style={{
+          fontFamily: PIXEL,
+          fontSize: full ? 6 : 5,
+          letterSpacing: full ? 1 : 0.5,
+          lineHeight: 1,
+          color: chipFg,
+          background: chipBg,
+          padding: full ? '2px 4px' : '1px 3px',
+          borderRadius: 3,
+        }}
+      >
+        {classLabel}
+      </span>
+    </div>
+  );
+}
 
-      {/* NAME */}
-      <div style={{ padding: full ? '7px 10px 6px' : '5px 6px 2px' }}>
+/** The name band — name (Silkscreen) over role (DM Sans) on the left, a right slot
+ *  for position pills (player) / class chip (manager, tactic). */
+function NameBand({
+  name,
+  role,
+  right,
+  full,
+  nameSize,
+}: {
+  name: string;
+  role: string;
+  right: React.ReactNode;
+  full: boolean;
+  nameSize?: number;
+}) {
+  return (
+    <div
+      style={{
+        background: NAME_BAND_BG,
+        borderTop: `2px solid ${INNER_INK}`,
+        padding: full ? '8px 10px' : '5px 6px',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: full ? 8 : 5,
+        flexShrink: 0,
+        zIndex: 2,
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
         <span
           style={{
             display: 'block',
             fontFamily: PIXEL,
-            fontSize: full ? 15 : 8,
-            color: HERO.cream,
-            textShadow: `0 ${full ? 2 : 1}px 0 ${HERO.ink}`,
+            fontSize: nameSize ?? (full ? 15 : 8.5),
+            color: CREAM,
+            textShadow: `0 ${full ? 2 : 1}px 0 ${INNER_INK}`,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -499,645 +392,363 @@ function PlayerFace({
         >
           {name}
         </span>
-      </div>
-
-      {/* GOLD ROLE BAND */}
-      <div
-        style={{
-          background: full ? HERO.roleBand : HERO.roleBandMini,
-          borderTop: `${full ? 2 : 1}px solid ${HERO.ink}`,
-          borderBottom: `${full ? 2 : 1}px solid ${HERO.ink}`,
-          padding: full ? '4px 10px' : '2px 6px',
-          marginTop: full ? 0 : 2,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 4,
-        }}
-      >
-        <span style={{ fontFamily: PIXEL, fontSize: full ? 9 : 6, color: '#171207', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {role}
-        </span>
-        {full && <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: 'rgba(23,18,7,0.65)', flexShrink: 0 }}>ROLE</span>}
-      </div>
-
-      {/* ACTION — full panel (name + rules text) on profile, name-only on grid. */}
-      {full ? (
-        <div style={{ margin: '8px 8px 6px', borderRadius: 6, border: '1px solid rgba(232,178,60,0.4)', background: 'rgba(0,0,0,0.35)', padding: '7px 8px 8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1.5, color: HERO.creamMuted }}>ACTION</span>
-            <span style={{ flex: 1, height: 1, background: 'rgba(232,178,60,0.3)' }} />
-          </div>
-          {actionName && <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 9, color: HERO.gold, marginTop: 5 }}>{actionName}</span>}
-          {actionText && (
-            // The card is a fixed-aspect frame, so the rules text is clamped to a
-            // graceful preview (the modal's detail panel below shows it in full).
-            <span
-              style={{
-                display: '-webkit-box',
-                WebkitBoxOrient: 'vertical',
-                WebkitLineClamp: 2,
-                overflow: 'hidden',
-                fontFamily: 'var(--font-body, sans-serif)',
-                fontSize: 10.5,
-                lineHeight: 1.4,
-                color: HERO.creamBody,
-                marginTop: 4,
-              }}
-            >
-              {actionText}
-            </span>
-          )}
-        </div>
-      ) : (
-        <div style={{ padding: '4px 6px 6px', display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span aria-hidden style={{ fontFamily: PIXEL, fontSize: 5, color: HERO.creamMuted, flexShrink: 0 }}>◆</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 6.5, color: HERO.gold, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {actionName || role}
-          </span>
-        </div>
-      )}
-
-      {/* FOOTER — rarity label · condition chip (profile only). */}
-      {full && (
-        <div style={{ padding: '0 10px 9px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1.5, color: labelColor, whiteSpace: 'nowrap' }}>{frameLabel}</span>
-          <span
-            style={{
-              fontFamily: PIXEL,
-              fontSize: 6,
-              letterSpacing: 1,
-              color: cond.cc,
-              border: `1px solid ${cond.cc}`,
-              borderRadius: 3,
-              padding: '2px 5px',
-              flexShrink: 0,
-            }}
-          >
-            {WEAR_GLYPH} {cond.label}
-          </span>
-        </div>
-      )}
-
-      {/* WEAR OVERLAY — drawn on the face when the card has degraded (design 3a). */}
-      {cond.wearBg !== 'none' && <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: cond.wearBg }} />}
-      {cond.stampDisp === 'flex' && (
-        <div aria-hidden style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-          <span style={{ fontFamily: PIXEL, fontSize: full ? 9 : 7, color: '#e0332d', border: '2px solid #e0332d', borderRadius: 4, padding: '3px 6px', background: 'rgba(11,7,3,0.75)', transform: 'rotate(-12deg)' }}>
-            DESTROYED
-          </span>
-        </div>
-      )}
-
-      {/* LEGENDARY FOIL SWEEP — travelling gloss band (respects reduced-motion via .card-foil). */}
-      {foil && (
-        <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'inherit', pointerEvents: 'none' }}>
-          <div
-            className="card-foil"
-            style={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              left: 0,
-              width: '45%',
-              background: 'linear-gradient(90deg, transparent, rgba(255,240,205,0.30), transparent)',
-              mixBlendMode: 'screen',
-            }}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** One stacked stat column — big Silkscreen value over a 6px tinted label. */
-function StatCol({ value, label, valueColor, labelColor, full }: { value: number; label: string; valueColor: string; labelColor: string; full: boolean }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-      <span style={{ fontFamily: PIXEL, fontSize: full ? 18 : 12, lineHeight: full ? 0.9 : 1, color: valueColor, textShadow: `0 ${full ? 2 : 1}px 0 ${HERO.ink}` }}>
-        {value}
-      </span>
-      {full && <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: labelColor, lineHeight: 1 }}>{label}</span>}
-    </div>
-  );
-}
-
-
-// ===========================================================================
-// MANAGER body
-// ===========================================================================
-
-function ManagerBody({ manager, full, accent }: { manager: JokerCard; full: boolean; accent: string }) {
-  const flag = nationFlag(manager.nation);
-  const visibleTraits = full ? manager.traits : manager.traits.slice(0, 2);
-  const gaffer = managerAccent(manager.traits);
-  // Only the four contest-reworked gaffers name a contest; identity managers omit it.
-  const contests = contestsForManager(manager.id);
-  return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: full ? 10 : '5px 6px' }}>
-      {/* Header: MANAGER tab (+ contest icon) · nation */}
-      <div className="flex items-center justify-between" style={{ gap: 4 }}>
-        <div className="flex items-center" style={{ gap: full ? 6 : 4, minWidth: 0 }}>
-          <span
-            style={{
-              background: accent,
-              color: 'var(--line-white)',
-              fontFamily: PIXEL,
-              fontSize: full ? 9 : 7,
-              lineHeight: 1,
-              padding: full ? '5px 6px' : '3px 4px',
-              borderRadius: 3,
-              letterSpacing: 0.5,
-              flexShrink: 0,
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.3)',
-            }}
-          >
-            MANAGER
-          </span>
-          {contests.length > 0 && <ContestIcons keys={contests} full={full} />}
-        </div>
-        {flag ? (
-          <span style={{ fontSize: full ? 15 : 11, lineHeight: 1 }}>{flag}</span>
-        ) : manager.nation ? (
-          <span style={{ fontFamily: PIXEL, fontSize: full ? 8 : 6.5, color: 'var(--dust)', lineHeight: 1 }}>
-            {nationCode(manager.nation)}
-          </span>
-        ) : null}
-      </div>
-
-      {/* Gaffer crest sprite — a big half-body bust (no rating/fitness competes for
-          space, so the crest is the hero) differentiated by the primary trait's
-          tie/pocket-square tint + a small prop. */}
-      <div style={{ flex: 1, minHeight: full ? 0 : 58, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: full ? '6px 0 0' : '2px 0 0', overflow: 'hidden' }}>
-        <ManagerSprite tie={gaffer.tie} prop={gaffer.prop} full={full} />
-      </div>
-
-      {/* Nameplate — manager name seated on a hard accent rule (matches the player
-          card's identity band), then the EFFECT (what the manager does) as the
-          load-bearing line, and the philosophy as the quiet flavour beneath it. */}
-      <div style={{ borderTop: `2px solid ${accent}`, paddingTop: full ? 6 : 3, marginTop: full ? 4 : 2 }}>
-        <span className="truncate" style={{ display: 'block', fontFamily: PIXEL, fontSize: full ? 13 : 9.5, color: 'var(--cream)', lineHeight: 1.1, textShadow: '0 1px 0 var(--ink-black)' }}>
-          {manager.name.toUpperCase()}
-        </span>
-        <p
-          style={{
-            fontSize: full ? 11 : 8.5,
-            lineHeight: 1.35,
-            color: 'var(--cream)',
-            margin: '4px 0 0',
-            display: '-webkit-box',
-            WebkitLineClamp: full ? 4 : 3,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-          }}
-        >
-          {manager.effect}
-        </p>
-        <p
-          style={{
-            fontFamily: 'var(--font-flavour, serif)',
-            fontStyle: 'italic',
-            fontSize: full ? 11 : 8,
-            lineHeight: 1.3,
-            color: 'var(--dust)',
-            margin: '3px 0 0',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-          }}
-        >
-          {'“'}{manager.philosophy}{'”'}
-        </p>
-      </div>
-      {/* Trait tags — a gaffer's identity (Direct Play, Low Block, …), now COLOURED
-          BY MEANING (defensive-blue, attacking-red, …) instead of a fixed kit-red,
-          so a Low Block gaffer never reads the same as a Motivator. The grid layout
-          reserves a min-height row so two tags never clip. */}
-      <div
-        className="flex flex-wrap"
-        style={{ gap: full ? 5 : 3, marginTop: full ? 8 : 4, minHeight: full ? undefined : 18, flexShrink: 0 }}
-      >
-        {visibleTraits.map((t) => {
-          const s = managerTraitStyle(t);
-          return (
-            <span
-              key={t}
-              style={{
-                fontFamily: PIXEL,
-                fontSize: full ? 8.5 : 6.5,
-                letterSpacing: 0.3,
-                color: s.color,
-                background: s.bg,
-                border: `1px solid ${s.color}`,
-                borderRadius: 4,
-                padding: full ? '4px 6px' : '3px 4px',
-                lineHeight: 1,
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {t.toUpperCase()}
-            </span>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Gaffer BUST: a proper half-body (head + shoulders + suit + tie), ~60% of the
- * card height, filling the frame from the bottom up. It has no rating/fitness
- * competing for space, so the crest is the hero. Lit top-left — hair/forehead
- * highlight, right-shoulder shadow, a rim-light down the left lapel. The TIE +
- * pocket-square carry the primary-trait tint, and a small PROP (clipboard /
- * whistle / scarf / rosette / shield) differentiates the gaffer's identity.
- *
- * The viewBox is 24×20 (wider-than-tall bust) so a big head+shoulders fills the
- * width; the sprite's own container bottom-aligns it so the shoulders meet the
- * nameplate rule.
- */
-function ManagerSprite({ tie, prop, full }: { tie: string; prop: ManagerProp; full: boolean }) {
-  // Suit ramp (charcoal).
-  const suitHi = '#33465a';
-  const suit = '#1e2a38';
-  const suitSh = '#0e151d';
-  // Skin ramp.
-  const skinHi = '#f4dcb8';
-  const skin = '#e0b486';
-  const skinSh = '#b88a5e';
-  const tieHi = lighten(posHex(tie), 0.4);
-  const tieSh = darken(posHex(tie), 0.34);
-  return (
-    <svg
-      className="pixelated"
-      viewBox="0 0 24 20"
-      preserveAspectRatio="xMidYMax meet"
-      style={{ width: full ? '96%' : '98%', maxWidth: full ? 150 : 82, height: '100%', display: 'block' }}
-      shapeRendering="crispEdges"
-    >
-      {/* HAIR — big crown, lit top-left */}
-      <rect x="7" y="0" width="10" height="4" fill="#2a2018" />
-      <rect x="7" y="0" width="6" height="2" fill="#43342a" />
-      <rect x="6" y="1" width="1" height="3" fill="#2a2018" />
-      <rect x="17" y="1" width="1" height="3" fill="#1c150f" />
-
-      {/* HEAD — large, base + top-left highlight + bottom-right shadow */}
-      <rect x="7" y="3" width="10" height="8" fill={skin} />
-      <rect x="7" y="3" width="5" height="4" fill={skinHi} />
-      <rect x="14" y="7" width="3" height="4" fill={skinSh} />
-      {/* brow line + eyes (a hint of a face) */}
-      <rect x="9" y="6" width="2" height="1" fill={skinSh} />
-      <rect x="13" y="6" width="2" height="1" fill={skinSh} />
-      {/* ears */}
-      <rect x="6" y="6" width="1" height="2" fill={skin} />
-      <rect x="17" y="6" width="1" height="2" fill={skinSh} />
-      {/* jaw shadow */}
-      <rect x="8" y="10" width="8" height="1" fill={skinSh} />
-
-      {/* NECK */}
-      <rect x="10" y="11" width="4" height="2" fill={skinSh} />
-      <rect x="10" y="11" width="2" height="1" fill={skin} />
-
-      {/* SHOULDERS + SUIT — a broad bust filling the width, lit top-left */}
-      <rect x="2" y="13" width="20" height="7" fill={suit} />
-      <rect x="2" y="13" width="20" height="2" fill={suitHi} />
-      <rect x="2" y="18" width="20" height="2" fill={suitSh} />
-      {/* rim-light left shoulder, shaded right shoulder */}
-      <rect x="2" y="13" width="1" height="7" fill={suitHi} />
-      <rect x="21" y="13" width="1" height="7" fill={suitSh} />
-
-      {/* SHIRT V (white), lit top */}
-      <polygon points="9,13 15,13 12,19" fill="var(--line-white)" />
-      <polygon points="9,13 15,13 12,15" fill="#ffffff" />
-
-      {/* LAPELS — darker, right one fully shadowed */}
-      <polygon points="7,13 10,13 7,18" fill={suitSh} />
-      <polygon points="17,13 14,13 17,18" fill="#070d11" />
-
-      {/* TIE in the trait tint — lit knot, base, shaded tail */}
-      <rect x="11" y="13" width="2" height="6" fill={posHex(tie)} />
-      <rect x="11" y="13" width="2" height="1" fill={tieHi} />
-      <rect x="11" y="17" width="2" height="2" fill={tieSh} />
-
-      {/* POCKET SQUARE (trait tint) on the right breast */}
-      <rect x="17" y="15" width="2" height="1" fill={posHex(tie)} />
-      <rect x="17" y="15" width="1" height="1" fill={tieHi} />
-
-      {/* PROP — a small held item on the left breast that names the gaffer's craft */}
-      <GafferProp prop={prop} tie={posHex(tie)} tieHi={tieHi} tieSh={tieSh} />
-    </svg>
-  );
-}
-
-/** The gaffer's held prop, drawn on the left breast (x 3–7, y 14–19). Lit top-left. */
-function GafferProp({ prop, tie, tieHi, tieSh }: { prop: ManagerProp; tie: string; tieHi: string; tieSh: string }) {
-  switch (prop) {
-    case 'clipboard':
-      return (
-        <>
-          <rect x="3" y="14" width="4" height="5" fill="#d8cfa8" />
-          <rect x="3" y="14" width="4" height="1" fill="#efe8c8" />
-          <rect x="4" y="13" width="2" height="1" fill="#9c8f5e" /> {/* clip */}
-          <rect x="4" y="16" width="2" height="1" fill={tie} />
-          <rect x="4" y="17" width="3" height="1" fill="rgba(0,0,0,0.35)" />
-        </>
-      );
-    case 'whistle':
-      return (
-        <>
-          <rect x="4" y="14" width="3" height="2" fill="#c9c9c9" />
-          <rect x="4" y="14" width="3" height="1" fill="#efefef" />
-          <rect x="3" y="16" width="1" height="1" fill="#7d7d7d" />
-          {/* lanyard in the trait tint */}
-          <rect x="6" y="13" width="1" height="2" fill={tie} />
-          <rect x="4" y="16" width="1" height="1" fill="rgba(0,0,0,0.4)" />
-        </>
-      );
-    case 'scarf':
-      return (
-        <>
-          <rect x="3" y="13" width="2" height="6" fill={tie} />
-          <rect x="3" y="13" width="2" height="1" fill={tieHi} />
-          <rect x="3" y="17" width="2" height="2" fill={tieSh} />
-          <rect x="4" y="15" width="1" height="1" fill="#ffffff" /> {/* stripe */}
-        </>
-      );
-    case 'rosette':
-      return (
-        <>
-          <rect x="4" y="14" width="3" height="3" fill={tie} />
-          <rect x="4" y="14" width="3" height="1" fill={tieHi} />
-          <rect x="5" y="15" width="1" height="1" fill="#ffffff" />
-          {/* ribbon tails */}
-          <rect x="4" y="17" width="1" height="2" fill={tie} />
-          <rect x="6" y="17" width="1" height="2" fill={tieSh} />
-        </>
-      );
-    case 'shield':
-      return (
-        <>
-          <rect x="4" y="14" width="3" height="3" fill={tie} />
-          <rect x="4" y="14" width="3" height="1" fill={tieHi} />
-          <rect x="5" y="17" width="1" height="1" fill={tie} />
-          <rect x="5" y="15" width="1" height="1" fill="#ffffff" />
-        </>
-      );
-    default:
-      return null;
-  }
-}
-
-// ===========================================================================
-// TACTIC face — "Pixel Hero" (Task A)
-//
-// A tactic is a full playing card now, on the SAME rarity foil frame as a player.
-// A black-card-stock face inside the foil frame. Top→bottom: header (category tab
-// + charge pips) · chalk tactic BOARD sprite · play name · category accent band
-// (contest icons: what the call RAISES) · effect (panel on `full`, clamped line on
-// `grid`) · footer (rarity foil label + charges, `full` only). Legendary earns the
-// animated foil sweep. The board is crisp pixel art; the foil/glow lives on the frame.
-// ===========================================================================
-
-function TacticFace({
-  tactic,
-  charges,
-  full,
-  frameLabel,
-  labelColor,
-  foil,
-}: {
-  tactic: TacticCard;
-  charges?: number;
-  full: boolean;
-  frameLabel: string;
-  labelColor: string;
-  foil: boolean;
-}) {
-  const accent = TACTIC_CAT_COLOR[tactic.category] ?? 'var(--gold)';
-  const capacity = tacticCapacity(tactic);
-  // Undefined charges => a fresh/full card (every pip lit).
-  const filled = charges == null ? capacity : Math.max(0, Math.min(capacity, charges));
-  const contests = contestsForTactic(tactic.id);
-
-  return (
-    <div
-      style={{
-        position: 'relative',
-        flex: 1,
-        minWidth: 0,
-        overflow: 'hidden',
-        borderRadius: full ? 11 : 7,
-        border: `2px solid ${HERO.ink}`,
-        background: HERO.faceGradient,
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      {/* HEADER — category badge (left) · charge pips (right) */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: full ? '10px 10px 0' : '6px 6px 0', gap: 4 }}>
-        <span
-          style={{
-            fontFamily: PIXEL,
-            fontSize: full ? 9 : 7,
-            lineHeight: 1,
-            color: 'var(--ink-black)',
-            background: accent,
-            padding: full ? '4px 6px' : '3px 4px',
-            borderRadius: full ? 3 : 2,
-            border: `1px solid ${HERO.ink}`,
-            letterSpacing: 0.5,
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -1px 0 rgba(0,0,0,0.25)',
-            flexShrink: 0,
-          }}
-        >
-          {tactic.category.toUpperCase()}
-        </span>
-        <ChargePips capacity={capacity} charges={filled} accent={accent} full={full} />
-      </div>
-
-      {/* BOARD WINDOW — the bespoke chalk scene, centred (the card's hero). */}
-      <div
-        style={{
-          position: 'relative',
-          flex: 1,
-          minHeight: full ? 72 : 50,
-          marginTop: 2,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: full ? '6px 0' : '2px 0',
-          background: `radial-gradient(90% 80% at 50% 40%, rgba(31,157,79,${full ? 0.16 : 0.13}), transparent 72%)`,
-          overflow: 'hidden',
-        }}
-      >
-        <TacticSprite id={tactic.id} accent={accent} full={full} />
-      </div>
-
-      {/* NAME */}
-      <div style={{ padding: full ? '6px 10px 5px' : '4px 6px 2px' }}>
         <span
           style={{
             display: 'block',
-            fontFamily: PIXEL,
-            fontSize: full ? 14 : 8,
-            color: HERO.cream,
-            textShadow: `0 ${full ? 2 : 1}px 0 ${HERO.ink}`,
+            fontFamily: BODY_FONT,
+            fontSize: full ? 11 : 7,
+            color: CREAM_SOFT,
+            marginTop: full ? 4 : 2,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
           }}
         >
-          {tactic.name.toUpperCase()}
+          {role}
         </span>
       </div>
+      {right && <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: full ? 5 : 3 }}>{right}</div>}
+    </div>
+  );
+}
 
-      {/* CATEGORY ACCENT BAND — seats the play on a hard accent rule and carries the
-          CONTEST icons (what the call raises). Falls back to a kicker when neutral. */}
-      <div
+/** A class chip (manager JOKER / tactic category) for the name band's right slot. */
+function ClassChip({ glyph, label, color, bg, border, full }: { glyph: string; label: string; color: string; bg: string; border: string; full: boolean }) {
+  return (
+    <span
+      style={{
+        fontFamily: PIXEL,
+        fontSize: full ? 8 : 6,
+        lineHeight: 1,
+        color,
+        background: bg,
+        border: `1px solid ${border}`,
+        borderRadius: 4,
+        padding: full ? '4px 6px' : '3px 4px',
+        whiteSpace: 'nowrap',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: full ? 4 : 2,
+      }}
+    >
+      <span aria-hidden style={{ fontFamily: GLYPH_FONT, fontSize: full ? 9 : 7, lineHeight: 1 }}>{glyph}</span>
+      {full && label}
+    </span>
+  );
+}
+
+/** The effect + flavour block (manager, tactic) — replaces the player meta strip. */
+function EffectBlock({ effect, flavour, full }: { effect: string; flavour: string; full: boolean }) {
+  // Some flavour strings already carry their own quotation marks; don't double up.
+  const fq = flavour.trim();
+  const quoted = /^["'“]/.test(fq) ? fq : `“${fq}”`;
+  return (
+    <div
+      style={{
+        background: EFFECT_BLOCK_BG,
+        padding: full ? '6px 10px 8px' : '4px 6px 6px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: full ? 5 : 2,
+        flexShrink: 0,
+        zIndex: 2,
+      }}
+    >
+      <span
         style={{
-          background: 'rgba(0,0,0,0.35)',
-          borderTop: `${full ? 2 : 1}px solid ${accent}`,
-          borderBottom: `${full ? 2 : 1}px solid ${accent}`,
-          padding: full ? '4px 10px' : '3px 6px',
-          marginTop: full ? 0 : 1,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 4,
-          minHeight: full ? undefined : 16,
+          fontFamily: BODY_FONT,
+          fontSize: full ? 10.5 : 8,
+          lineHeight: 1.35,
+          color: CREAM,
+          display: '-webkit-box',
+          WebkitBoxOrient: 'vertical',
+          WebkitLineClamp: full ? 4 : 2,
+          overflow: 'hidden',
         }}
       >
-        {contests.length > 0 ? (
-          <ContestIcons keys={contests} full={full} />
-        ) : (
-          <span style={{ fontFamily: PIXEL, fontSize: full ? 7 : 5.5, letterSpacing: 1, color: 'rgba(242,234,214,0.55)' }}>
-            CALLED PLAY
-          </span>
-        )}
-        {full && contests.length > 0 && <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: 'rgba(203,185,138,0.85)', flexShrink: 0 }}>RAISES</span>}
-      </div>
-
-      {/* EFFECT — full panel on profile, clamped line on grid. */}
-      {full ? (
-        <div style={{ margin: '8px 8px 6px', borderRadius: 6, border: `1px solid ${withAlpha('#e8b23a', 0.4)}`, background: 'rgba(0,0,0,0.35)', padding: '7px 8px 8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1.5, color: HERO.creamMuted }}>EFFECT</span>
-            <span style={{ flex: 1, height: 1, background: 'rgba(232,178,60,0.3)' }} />
-          </div>
-          <span
-            style={{
-              display: '-webkit-box',
-              WebkitBoxOrient: 'vertical',
-              WebkitLineClamp: 3,
-              overflow: 'hidden',
-              fontFamily: 'var(--font-body, sans-serif)',
-              fontSize: 10.5,
-              lineHeight: 1.4,
-              color: HERO.creamBody,
-              marginTop: 4,
-            }}
-          >
-            {tactic.effect}
-          </span>
-        </div>
-      ) : (
-        <div style={{ padding: '3px 6px 6px' }}>
-          <span
-            style={{
-              display: '-webkit-box',
-              WebkitBoxOrient: 'vertical',
-              WebkitLineClamp: 2,
-              overflow: 'hidden',
-              fontSize: 8.5,
-              lineHeight: 1.3,
-              color: HERO.creamBody,
-            }}
-          >
-            {tactic.effect}
-          </span>
-        </div>
-      )}
-
-      {/* FOOTER — rarity foil label + charge count (profile only). */}
-      {full && (
-        <div style={{ padding: '0 10px 9px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1.5, color: labelColor, whiteSpace: 'nowrap' }}>{frameLabel}</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.5, color: HERO.creamMuted, flexShrink: 0 }}>
-            {filled}/{capacity} CHARGES
-          </span>
-        </div>
-      )}
-
-      {/* LEGENDARY FOIL SWEEP — travelling gloss band (respects reduced-motion via .card-foil). */}
-      {foil && (
-        <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'inherit', pointerEvents: 'none' }}>
-          <div
-            className="card-foil"
-            style={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              left: 0,
-              width: '45%',
-              background: 'linear-gradient(90deg, transparent, rgba(255,240,205,0.30), transparent)',
-              mixBlendMode: 'screen',
-            }}
-          />
-        </div>
+        {effect}
+      </span>
+      {flavour && full && (
+        <span
+          style={{
+            fontFamily: FLAVOUR_FONT,
+            fontStyle: 'italic',
+            fontSize: 11,
+            lineHeight: 1.3,
+            color: DUST,
+            display: '-webkit-box',
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: 2,
+            overflow: 'hidden',
+          }}
+        >
+          {quoted}
+        </span>
       )}
     </div>
   );
 }
 
-/**
- * Tactic crest: the shared pixel tactic BOARD (green field, lit top rail, shaded
- * base, halfway line — the family signature) with a bespoke chalk SCENE drawn on
- * top, dispatched on tactic.id from TACTIC_ICON. Every scene is lit top-left and
- * uses ≤6 colours (category accent + chalk white + ink shadow + a ball dot).
- * Anything without a scene falls back to the classic chevron.
- */
-function TacticSprite({ id, accent, full }: { id: string; accent: string; full: boolean }) {
-  const scene = TACTIC_ICON[id];
-  const chalkFill = (f: ChalkRect['fill']): string =>
-    f === 'accent' ? accent : f === 'chalk' ? 'rgba(242,246,239,0.92)' : f === 'ball' ? '#ffffff' : 'rgba(0,0,0,0.42)';
+// ===========================================================================
+// PLAYER face (#7a)
+// ===========================================================================
+
+function PlayerFace({ card, full, frameLabel, labelColor, foil }: { card: Card; full: boolean; frameLabel: string; labelColor: string; foil: boolean }) {
+  const stats = deriveStats(card);
+  const name = lastName(card.name).toUpperCase();
+  const role = card.tacticalRole ?? card.archetype;
+  const med = themeMedallion(card.personalityTheme);
+  const cond = conditionRecipe(card.condition);
+  const dura = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
+  const hasFitness = typeof card.fitness === 'number';
+  const fit = hasFitness ? fitnessMeter(card.fitness as number) : null;
+
+  const primaryPos = card.position;
+  // Secondary "can operate" slots sit left of the primary; only at full — the grid
+  // card keeps just the primary pill so the surname has room to read.
+  const secondary = full ? eligiblePositions(card.position).slice(1, 3) : [];
+
   return (
-    <svg
-      className="pixelated"
-      viewBox="0 0 24 24"
-      style={{ width: full ? '94%' : '100%', maxWidth: full ? 168 : 100, height: '100%', maxHeight: full ? 168 : 100, aspectRatio: '1', display: 'block' }}
-      shapeRendering="crispEdges"
+    <Inner background="#0f1510" full={full} foil={foil}>
+      {/* ART REGION — stadium horizon, bust, medallion, stats, ground shadow, wear. */}
+      <div style={{ position: 'relative', flex: 1, minHeight: full ? 96 : 40, background: PLAYER_PITCH_BG, overflow: 'hidden' }}>
+        {/* ground shadow ellipse */}
+        <div
+          style={{
+            position: 'absolute',
+            left: '50%',
+            bottom: full ? 8 : 5,
+            transform: 'translateX(-50%)',
+            width: '52%',
+            height: full ? 22 : 12,
+            borderRadius: '50%',
+            background: GROUND_SHADOW_BG,
+          }}
+        />
+        {/* the seeded face-first bust (shared club kit) */}
+        <div className="pixelated" aria-hidden style={portraitArtStyle(card.id)} />
+
+        {/* class medallion (top-left) */}
+        <Medallion med={med} classLabel="PLAYER" chipFg={STAT_CREAM} chipBg="rgba(11,7,3,0.8)" full={full} />
+
+        {/* stats (top-right): ATK / DEF */}
+        <div style={{ position: 'absolute', top: full ? 9 : 5, right: full ? 9 : 5, display: 'flex', gap: full ? 6 : 3, zIndex: 3 }}>
+          <StatChip value={stats.atk} label="ATK" labelColor="#ff8f6a" full={full} />
+          <StatChip value={stats.def} label="DEF" labelColor="#8fb6ff" full={full} />
+        </div>
+
+        {/* fitness bar (folded-in game data) — a thin banded bar on the turf line. */}
+        {fit && (
+          <div style={{ position: 'absolute', left: full ? 10 : 6, right: full ? 10 : 6, bottom: 0, height: full ? 3 : 2, background: 'rgba(11,7,3,0.55)', borderRadius: 1, zIndex: 3, overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${Math.round(((fit.filled / fit.total) * 100))}%`, background: fit.color }} />
+          </div>
+        )}
+
+        {/* wear overlay + DESTROYED stamp (condition tell) */}
+        {cond.wearBg !== 'none' && <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: cond.wearBg, zIndex: 3 }} />}
+        {cond.stampDisp === 'flex' && (
+          <div aria-hidden style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 4 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: full ? 9 : 7, color: '#e0332d', border: '2px solid #e0332d', borderRadius: 4, padding: '3px 6px', background: 'rgba(11,7,3,0.75)', transform: 'rotate(-12deg)' }}>
+              DESTROYED
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* NAME BAND — name + role, position pills on the right. */}
+      <NameBand
+        name={name}
+        role={role}
+        full={full}
+        right={
+          <>
+            {secondary.map((p) => (
+              <PositionPill key={p} pos={p} primary={false} full={full} />
+            ))}
+            <PositionPill pos={primaryPos} primary full={full} />
+          </>
+        }
+      />
+
+      {/* META STRIP — rarity foil label (left) · theme + condition/durability (right). */}
+      <div
+        style={{
+          background: META_STRIP_BG,
+          borderTop: '1px solid rgba(232,178,60,0.25)',
+          padding: full ? '5px 10px 7px' : '3px 6px 4px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 4,
+          flexShrink: 0,
+          zIndex: 2,
+        }}
+      >
+        <span style={{ fontFamily: PIXEL, fontSize: full ? 6 : 5, letterSpacing: full ? 1.5 : 0.6, color: labelColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {full ? frameLabel : card.rarity.toUpperCase()}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: full ? 7 : 4, flexShrink: 0 }}>
+          {full && cond.label !== 'MINT' && (
+            <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: cond.cc, whiteSpace: 'nowrap' }}>
+              {WEAR_GLYPH} {cond.label}
+            </span>
+          )}
+          {full && (
+            <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: dura.color, whiteSpace: 'nowrap' }}>
+              {dura.label.toUpperCase()}
+            </span>
+          )}
+          <span style={{ fontFamily: PIXEL, fontSize: full ? 6 : 5, letterSpacing: 0.5, color: med.color, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: full ? 3 : 2 }}>
+            <span aria-hidden style={{ fontFamily: GLYPH_FONT }}>{med.glyph}</span>
+            {full && med.label}
+          </span>
+        </div>
+      </div>
+    </Inner>
+  );
+}
+
+/** A stacked ATK/DEF stat chip — big Silkscreen value on a dark rounded chip. */
+function StatChip({ value, label, labelColor, full }: { value: number; label: string; labelColor: string; full: boolean }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(11,7,3,0.74)', borderRadius: full ? 6 : 4, padding: full ? '3px 7px' : '2px 4px' }}>
+      <span style={{ fontFamily: PIXEL, fontSize: full ? 18 : 11, lineHeight: 0.9, color: STAT_CREAM, textShadow: `0 ${full ? 2 : 1}px 0 ${INNER_INK}` }}>{value}</span>
+      <span style={{ fontFamily: PIXEL, fontSize: full ? 5 : 4, letterSpacing: full ? 1 : 0.5, color: labelColor, marginTop: 1 }}>{label}</span>
+    </div>
+  );
+}
+
+/** A position pill — the primary slot is a larger filled pill; secondaries smaller,
+ *  placed to its left. Both filled in the position colour with cream text. */
+function PositionPill({ pos, primary, full }: { pos: string; primary: boolean; full: boolean }) {
+  const color = POSITION_COLOR[pos] ?? '#9aa0a8';
+  return (
+    <span
+      style={{
+        fontFamily: PIXEL,
+        fontSize: primary ? (full ? 13 : 8) : full ? 7 : 6,
+        lineHeight: 1,
+        color: STAT_CREAM,
+        background: color,
+        padding: primary ? (full ? '5px 8px' : '3px 4px') : full ? '3px 4px' : '2px 3px',
+        borderRadius: primary ? (full ? 5 : 3) : 3,
+        border: `1px solid ${INNER_INK}`,
+        boxShadow: primary ? 'inset 0 1px 0 rgba(255,255,255,0.35)' : undefined,
+        whiteSpace: 'nowrap',
+      }}
     >
-      <rect x="3" y="3" width="18" height="18" fill="rgba(0,0,0,0.22)" />
-
-      {/* tactic board — green field, lit top rail, shaded bottom */}
-      <rect x="4" y="4" width="16" height="16" fill="#15402a" />
-      <rect x="4" y="4" width="16" height="2" fill="#1f5e3c" />
-      <rect x="4" y="18" width="16" height="2" fill="#0c2419" />
-      {/* board rim-light left edge */}
-      <rect x="4" y="4" width="1" height="16" fill="#236b45" />
-      {/* halfway line */}
-      <rect x="4" y="11" width="16" height="1" fill="rgba(242,246,239,0.16)" />
-
-      {scene ? (
-        scene.map((r, i) => (
-          <rect key={i} x={r.x} y={r.y} width={r.w} height={r.h} fill={chalkFill(r.fill)} />
-        ))
-      ) : (
-        <>
-          {/* CHEVRON fallback — accent body, white lit edge, dark seated shadow */}
-          <polygon points="6,15 12,8 18,15 15,15 12,11 9,15" fill={accent} />
-          <polygon points="6,15 12,8 18,15 16,15 12,9 8,15" fill="rgba(255,255,255,0.35)" />
-          <polygon points="9,16 12,12 15,16 14,16 12,13 10,16" fill="rgba(0,0,0,0.35)" />
-        </>
-      )}
-    </svg>
+      {pos}
+    </span>
   );
 }
 
 // ===========================================================================
-// INVESTMENT body (Boardroom)
+// MANAGER face (#7b)
+// ===========================================================================
+
+function ManagerFace({ manager, full, foil }: { manager: JokerCard; full: boolean; foil: boolean }) {
+  const name = manager.name.toUpperCase();
+  const role = manager.traits[0] ?? 'The Gaffer';
+  return (
+    <Inner background="linear-gradient(165deg, #2f2415, #161009)" full={full} foil={foil}>
+      {/* ART REGION — aged leather, suited bust, medallion, ground shadow. */}
+      <div style={{ position: 'relative', flex: 1, minHeight: full ? 96 : 40, background: MANAGER_LEATHER_BG, overflow: 'hidden' }}>
+        <div
+          style={{
+            position: 'absolute',
+            left: '50%',
+            bottom: full ? 8 : 5,
+            transform: 'translateX(-50%)',
+            width: '52%',
+            height: full ? 22 : 12,
+            borderRadius: '50%',
+            background: GROUND_SHADOW_BG,
+          }}
+        />
+        <div className="pixelated" aria-hidden style={portraitArtStyle(manager.id, { suit: true })} />
+        <Medallion med={MANAGER_MEDALLION} classLabel="MANAGER" chipFg="#0b0703" chipBg="#e8b23a" full={full} />
+      </div>
+
+      {/* NAME BAND — name + role, JOKER chip on the right. Manager names are full
+          (first + last), so a slightly smaller face keeps two words legible. */}
+      <NameBand
+        name={name}
+        role={role}
+        full={full}
+        nameSize={full ? 13 : 8}
+        right={<ClassChip glyph={'\u{1F0CF}'} label="JOKER" color="#e8b23a" bg="rgba(232,178,60,0.14)" border="rgba(232,178,60,0.4)" full={full} />}
+      />
+
+      {/* EFFECT + FLAVOUR block. */}
+      <EffectBlock effect={manager.effect} flavour={manager.philosophy} full={full} />
+    </Inner>
+  );
+}
+
+// ===========================================================================
+// TACTIC face (#7c)
+// ===========================================================================
+
+const TACTIC_DESCRIPTOR: Record<string, string> = {
+  attacking: 'Attacking play',
+  defensive: 'Defensive shape',
+  specialist: 'Set play',
+};
+
+function TacticFace({ tactic, charges, full, foil }: { tactic: TacticCard; charges?: number; full: boolean; foil: boolean }) {
+  const med = tacticMedallion(tactic.category);
+  const capacity = tacticCapacity(tactic);
+  const filled = charges == null ? capacity : Math.max(0, Math.min(capacity, charges));
+  const name = tactic.name.toUpperCase();
+  const descriptor = TACTIC_DESCRIPTOR[tactic.category] ?? 'Called play';
+
+  return (
+    <Inner background="linear-gradient(165deg, #2f2415, #161009)" full={full} foil={foil}>
+      {/* ART REGION — dark tactical board, big centred category medallion. */}
+      <div style={{ position: 'relative', flex: 1, minHeight: full ? 96 : 40, background: TACTIC_BOARD_BG, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        {/* big centred category medallion (the tactic hero) */}
+        <div
+          style={{
+            width: full ? 70 : 40,
+            height: full ? 70 : 40,
+            borderRadius: '50%',
+            background: 'rgba(11,7,3,0.7)',
+            border: `2px solid ${med.color}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 3px 10px rgba(0,0,0,0.6)',
+          }}
+        >
+          <span style={{ fontFamily: GLYPH_FONT, fontSize: full ? 36 : 21, lineHeight: 1, color: med.color }}>{med.glyph}</span>
+        </div>
+
+        {/* class medallion (top-left) */}
+        <Medallion med={med} classLabel="TACTIC" chipFg={STAT_CREAM} chipBg={med.color} full={full} />
+
+        {/* charge pips (folded-in game data) — top-right resource slot. */}
+        <div style={{ position: 'absolute', top: full ? 9 : 5, right: full ? 9 : 5, zIndex: 3 }}>
+          <ChargePips capacity={capacity} charges={filled} accent={med.color} full={full} />
+        </div>
+      </div>
+
+      {/* NAME BAND — name + descriptor, category chip on the right. */}
+      <NameBand
+        name={name}
+        role={descriptor}
+        full={full}
+        nameSize={full ? 14 : 8}
+        right={<ClassChip glyph={med.glyph} label={med.label} color={med.color} bg="rgba(0,0,0,0.32)" border={med.color} full={full} />}
+      />
+
+      {/* EFFECT + FLAVOUR block. */}
+      <EffectBlock effect={tactic.effect} flavour={tactic.flavour} full={full} />
+    </Inner>
+  );
+}
+
+// ===========================================================================
+// INVESTMENT body (Boardroom) — unchanged glass-chrome family.
 // ===========================================================================
 
 function InvestmentBody({ investment, full, accent }: { investment: InvestmentCard; full: boolean; accent: string }) {

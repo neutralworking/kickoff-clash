@@ -70,6 +70,64 @@ export const RARITY_SHEEN: Record<string, number> = {
 };
 
 // ---------------------------------------------------------------------------
+// v3 CLASS MEDALLION system (Turn-7 handoff). The top-left medallion is the
+// single at-a-glance tell for a card's CLASS. Same slot, glyph + border swap:
+//   • player  → personality-theme glyph/colour + PLAYER label
+//   • manager → 👔 on amber + MANAGER label
+//   • tactic  → category glyph/colour + TACTIC label
+// Glyphs are Unicode codepoints (rendered in a symbol-complete fallback stack by
+// the card, since Silkscreen lacks them). Colours are concrete hex so a medallion
+// border/glyph always resolves (CSS-var accents would break an SVG border).
+// ---------------------------------------------------------------------------
+
+export interface ClassMedallion {
+  glyph: string;
+  /** Medallion border + glyph tint. */
+  color: string;
+  /** The class/theme label chip under the medallion. */
+  label: string;
+}
+
+/** Player personality themes → medallion glyph · colour · label (v3 handoff). */
+export const PERSONALITY_THEME_META: Record<string, ClassMedallion> = {
+  General: { glyph: '⚔', color: '#e23b35', label: 'GENERAL' },
+  Catalyst: { glyph: '⚡', color: '#e8b23a', label: 'CATALYST' },
+  Maestro: { glyph: '♫', color: '#a855f7', label: 'MAESTRO' },
+  Captain: { glyph: '❤', color: '#e23b35', label: 'CAPTAIN' },
+  Professor: { glyph: '\u{1F4DA}', color: '#3d7bd6', label: 'PROFESSOR' },
+};
+
+/** Resolve a player's theme medallion, defaulting to a neutral Catalyst-gold. */
+export function themeMedallion(theme: string | undefined): ClassMedallion {
+  return PERSONALITY_THEME_META[theme ?? ''] ?? { glyph: '★', color: '#e8b23a', label: 'PLAYER' };
+}
+
+/** Tactic categories → medallion glyph · colour · label (v3 handoff). Concrete
+ *  hex (not the CSS-var TACTIC_CAT_COLOR) so the medallion border/glyph resolves. */
+export const TACTIC_CAT_MEDALLION: Record<string, ClassMedallion> = {
+  attacking: { glyph: '⚔', color: '#e23b35', label: 'ATTACK' },
+  defensive: { glyph: '\u{1F6E1}️', color: '#3d7bd6', label: 'DEF' },
+  specialist: { glyph: '✨', color: '#a855f7', label: 'SPECIAL' },
+};
+
+/** Resolve a tactic's category medallion, defaulting to specialist-purple. */
+export function tacticMedallion(category: string | undefined): ClassMedallion {
+  return TACTIC_CAT_MEDALLION[category ?? ''] ?? TACTIC_CAT_MEDALLION.specialist;
+}
+
+/** The manager class medallion — always the amber necktie joker (v3 handoff). */
+export const MANAGER_MEDALLION: ClassMedallion = { glyph: '\u{1F454}', color: '#e8b23a', label: 'MANAGER' };
+
+// Manager rarity → foil frame. A gaffer is a JOKER — a premium card — so even the
+// lowest tier sits on silver, escalating to a holo legend. (Managers carry a
+// common/uncommon/rare rarity; the handoff draws the manager on a gold frame.)
+export const MANAGER_RARITY_TO_FRAME: Record<string, string> = {
+  common: 'Rare',
+  uncommon: 'Epic',
+  rare: 'Legendary',
+};
+
+// ---------------------------------------------------------------------------
 // Defining-trait pill palette (CARDS_V1 §4). A card carries N defining traits
 // (N = rarity), each with a `kind` from trait-copy.ts. This is the single source
 // of truth for how a kind reads on a pill: an accent colour the pill borders +

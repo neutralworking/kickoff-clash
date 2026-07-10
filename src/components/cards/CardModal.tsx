@@ -143,9 +143,10 @@ export default function CardModal({ model, onClose }: CardModalProps) {
           <div
             className="hero-pop shrink-0"
             style={{
-              // Player + tactic are the tall Pixel-Hero cards, so they blow up larger.
-              width: model.variant === 'player' || model.variant === 'tactic' ? 208 : 172,
-              maxWidth: model.variant === 'player' || model.variant === 'tactic' ? '62%' : '48%',
+              // Player / manager / tactic are the tall v3 foil cards, so they blow
+              // up larger; investment is the shorter Boardroom card.
+              width: model.variant === 'investment' ? 172 : 208,
+              maxWidth: model.variant === 'investment' ? '48%' : '62%',
               pointerEvents: 'auto',
             }}
           >
