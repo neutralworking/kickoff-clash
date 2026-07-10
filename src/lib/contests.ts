@@ -48,10 +48,54 @@ export interface ContestTotals {
   /** The forecast header: Σ effective ATK / DEF of the whole side. */
   attack: number;
   defence: number;
+  /** The commitment payoff applied to each contest (0 when uncommitted). Folded
+   *  into the totals above (except `commit.finish`, which the shot need reads). */
+  commit: CommitInfo;
 }
 
 const KEEP_IDS = new Set(['Controller', 'Passer', 'Engine']);
 const CREATE_IDS = new Set(['Creator', 'Dribbler', 'Sprinter']);
+
+// ---------------------------------------------------------------------------
+// COMMITMENT PAYOFF — the build-around (Card Shark #1). Stacking cards into ONE
+// contest earns a step bonus to it, so drafting AROUND an axis pays off
+// super-linearly: the extra card adds its own points AND pushes the side over a
+// commitment threshold. Two steps (a satisfying "you hit it" jump), bounded so
+// there's no runaway. Thresholds are counts of cards FEEDING each contest (the
+// same feedsX partition contestTotals scores on); a balanced XI clears none, a
+// committed build clears one or two.
+//   • keep/press/create/brk/stop bonuses fold straight into the contest total
+//     (they drive possession / the outcome slide / the shot defence).
+//   • FINISH is a MEAN-free display sum AND a real lever only via the shot need,
+//     so its bonus is surfaced on `commit.finish` and added to the shooter's
+//     need in resolveShot — a genuine conversion kick for a finisher-stacked XI.
+// ---------------------------------------------------------------------------
+
+export interface CommitInfo {
+  keep: number; press: number; create: number; brk: number; stop: number; finish: number;
+}
+
+type CKey = keyof CommitInfo;
+/** Feeder-count thresholds for the two commitment steps, per contest. FINISH/BREAK
+ *  sit lower (fewer cards naturally feed them); STOP/KEEP/PRESS/CREATE higher. */
+// Calibrated against MEASURED feeder-count distributions over 88 sampled XIs
+// (median · max): KEEP 2·4, PRESS 3·6, CREATE 4·9, BREAK 4·5, STOP 5·6, FINISH 1·5.
+// Each T1 sits at/above the balanced MEDIAN so an ordinary XI trips nothing, and
+// only a deliberate over-commitment — a ball-player stack, an attack-loaded XI, a
+// packed midfield, a back five, a striker trio — earns a step. (CREATE/FINISH run
+// hot on strong attacking drafts, which ARE committed to those axes, so T1 there
+// still means "you built for it".)
+const COMMIT_T1: Record<CKey, number> = { keep: 5, press: 5, create: 7, brk: 5, stop: 6, finish: 3 };
+const COMMIT_T2: Record<CKey, number> = { keep: 6, press: 6, create: 9, brk: 6, stop: 7, finish: 4 };
+/** Bonus at step 1 / step 2. STOP is a MEAN (small scale) so its steps are smaller. */
+const COMMIT_B1: Record<CKey, number> = { keep: 3, press: 3, create: 3, brk: 3, stop: 1, finish: 3 };
+const COMMIT_B2: Record<CKey, number> = { keep: 7, press: 7, create: 7, brk: 7, stop: 2, finish: 6 };
+
+function commitStep(key: CKey, n: number): number {
+  if (n >= COMMIT_T2[key]) return COMMIT_B2[key];
+  if (n >= COMMIT_T1[key]) return COMMIT_B1[key];
+  return 0;
+}
 
 // ---------------------------------------------------------------------------
 // Contest-targeting predicates — the SINGLE partition contestTotals scores on.
@@ -83,22 +127,37 @@ export const feedsFinish = (c: EffCard): boolean => laneOfCard(c.card) === 'fini
 export function contestTotals(cards: EffCard[]): ContestTotals {
   let keep = 0, press = 0, create = 0, brk = 0, finish = 0, attack = 0, defence = 0;
   let stopSum = 0, stopN = 0;
+  // Feeder COUNTS per contest → the commitment payoff. (stopN doubles as STOP's.)
+  let nKeep = 0, nPress = 0, nCreate = 0, nBrk = 0, nFinish = 0;
   for (const c of cards) {
     attack += c.atk;
     defence += c.def;
-    if (KEEP_IDS.has(c.archetype)) keep += c.atk;
-    if (c.band === 'ATT' || c.archetype === 'Engine') press += c.def;
-    if (CREATE_IDS.has(c.archetype) || c.band === 'ATT') create += c.atk;
-    if (c.band === 'MID') brk += c.def;
+    if (KEEP_IDS.has(c.archetype)) { keep += c.atk; nKeep += 1; }
+    if (c.band === 'ATT' || c.archetype === 'Engine') { press += c.def; nPress += 1; }
+    if (CREATE_IDS.has(c.archetype) || c.band === 'ATT') { create += c.atk; nCreate += 1; }
+    if (c.band === 'MID') { brk += c.def; nBrk += 1; }
     if (c.band === 'DEF') { stopSum += c.def; stopN += 1; }
-    if (laneOfCard(c.card) === 'finishing') finish += c.atk;
+    if (laneOfCard(c.card) === 'finishing') { finish += c.atk; nFinish += 1; }
   }
+  const commit: CommitInfo = {
+    keep: commitStep('keep', nKeep),
+    press: commitStep('press', nPress),
+    create: commitStep('create', nCreate),
+    brk: commitStep('brk', nBrk),
+    stop: commitStep('stop', stopN),
+    finish: commitStep('finish', nFinish),
+  };
   return {
-    keep: Math.round(keep), press: Math.round(press),
-    create: Math.round(create), brk: Math.round(brk),
-    stop: stopN ? Math.round(stopSum / stopN) : 0,
-    finish: Math.round(finish),
+    // keep/press/create/brk/stop bonuses fold into the total (they drive the
+    // contest levers directly); FINISH's stays on `commit` for the shot need.
+    keep: Math.round(keep) + commit.keep,
+    press: Math.round(press) + commit.press,
+    create: Math.round(create) + commit.create,
+    brk: Math.round(brk) + commit.brk,
+    stop: (stopN ? Math.round(stopSum / stopN) : 0) + commit.stop,
+    finish: Math.round(finish) + commit.finish,
     attack: Math.round(attack), defence: Math.round(defence),
+    commit,
   };
 }
 
@@ -371,7 +430,10 @@ export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext):
   ): void => {
     const margin = shooter.atk - def.totals.stop;
     const drama = inc === 4 ? LATE_DRAMA : 0;
-    const need = clamp(SHOT_BASE[quality] + MARGIN_PER_POINT * margin + drama, NEED_MIN, NEED_MAX);
+    // FINISH commitment (a finisher-stacked XI) converts a touch better — the
+    // build-around's payoff, routed into the shot need (finish's only real lever).
+    const finishCommit = att.totals.commit?.finish ?? 0;
+    const need = clamp(SHOT_BASE[quality] + MARGIN_PER_POINT * margin + drama + finishCommit, NEED_MIN, NEED_MAX);
     const roll = d100(seed, inc, att.idx, i, 3);
     att.shots += 1;
     att.xg += need / 100;

@@ -10,8 +10,8 @@
  * Escape.
  *
  * Detail content per variant:
- *   • Player     — position (long), archetype (+secondary), rating, rarity, nation,
- *                  durability, tags, strengths, weaknesses, quirk, bio.
+ *   • Player     — position (long) + eligible slots, role, rarity, nation,
+ *                  character, nickname, availability, contests, actions, bio.
  *   • Manager    — nation, philosophy, effect, trait pills.
  *   • Tactic     — category, effect, flavour, contradiction note.
  *   • Investment — ladder, tier, cost, Boardroom effect, flavour.
@@ -44,7 +44,6 @@ import {
   roleBlurb,
   type ResolvedTrait,
 } from './cardTokens';
-import { deriveStats } from '../../lib/funnel';
 import { conditionRecipe } from './portrait';
 
 // Trait glyphs (✦ ➴ ⚑ …) sit outside the Silkscreen glyph set; render them in a
@@ -402,12 +401,11 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
     setOpenTip((cur) => (cur === tip ? null : tip));
   };
 
-  const stats = deriveStats(card);
   const dura = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
 
   return (
     <div className="flex flex-col" style={{ gap: 10 }}>
-      {/* ── IDENTITY: name + the headline OVERALL, the retro FM-screen banner ── */}
+      {/* ── IDENTITY: name + grade, position, where they operate, role, contests ── */}
       <Panel>
         <div className="flex items-center justify-between" style={{ gap: 8 }}>
           <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'var(--cream)', lineHeight: 1.15 }}>{card.name}</span>
@@ -416,31 +414,23 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
           </span>
         </div>
 
-        <div className="flex" style={{ gap: 10, alignItems: 'stretch' }}>
-          <OverallBadge power={card.power} accent={accent} />
-          <div className="flex flex-col" style={{ gap: 6, flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 7,
-                background: 'rgba(0,0,0,0.28)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '6px 8px',
-                minWidth: 0,
-              }}
-            >
-              <PositionChip pos={card.position} primary />
-              <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 10, color: accent, letterSpacing: 0.3, lineHeight: 1.1 }}>
-                {POSITION_LABEL[card.position] ?? card.position}
-              </span>
-            </div>
-            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              <StatCell label="ATK" value={String(stats.atk)} color="var(--line-white)" />
-              <StatCell label="DEF" value={String(stats.def)} color="var(--line-white)" />
-            </div>
-          </div>
+        {/* Primary position + its long label — the headline "what he is". */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 7,
+            background: 'rgba(0,0,0,0.28)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '6px 8px',
+            minWidth: 0,
+          }}
+        >
+          <PositionChip pos={card.position} primary />
+          <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 10, color: accent, letterSpacing: 0.3, lineHeight: 1.1 }}>
+            {POSITION_LABEL[card.position] ?? card.position}
+          </span>
         </div>
 
         {/* Where they can operate — eligible pitch positions as pixel chips. */}
@@ -468,32 +458,14 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
         <ContestRow heading="HELPS WITH" keys={contestsForCard(card)} />
       </Panel>
 
-      {/* ── DOSSIER: the two-column BIO | ATTRIBUTES stat screen (the reference
-          layout, rendered in the pixel house style) ── */}
+      {/* ── BIO: the identity ledger — nation, character, nickname, grade ── */}
       <Panel>
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'start' }}>
-          {/* LEFT — the BIO ledger (label : value rows, alternating for the dense
-              tabular read). */}
-          <div className="flex flex-col" style={{ gap: 6, minWidth: 0 }}>
-            <Label>BIO</Label>
-            <div className="flex flex-col" style={{ gap: 3 }}>
-              <BioRow label="NATION" value={nationValue(card.nation)} alt />
-              <BioRow label="CHARACTER" value={(card.personalityTheme ?? '—').toUpperCase()} color={accent} />
-              <BioRow label="AKA" value={card.nickname ? `“${card.nickname}”` : '—'} alt />
-              <BioRow label="GRADE" value={card.rarity.toUpperCase()} color={accent} />
-            </div>
-          </div>
-
-          {/* RIGHT — the ATTRIBUTES column: the four pillars under evocative
-              football labels, each a retro number + a crisp pixel bar (0–99). */}
-          <div className="flex flex-col" style={{ gap: 6, minWidth: 0 }}>
-            <Label>ATTRIBUTES</Label>
-            <div className="flex flex-col" style={{ gap: 7 }}>
-              {PILLAR_META.map((p) => (
-                <AttrRow key={p.key} label={p.label} value={card.pillars?.[p.key] ?? 0} />
-              ))}
-            </div>
-          </div>
+        <Label>BIO</Label>
+        <div className="flex flex-col" style={{ gap: 3 }}>
+          <BioRow label="NATION" value={nationValue(card.nation)} alt />
+          <BioRow label="CHARACTER" value={(card.personalityTheme ?? '—').toUpperCase()} color={accent} />
+          <BioRow label="AKA" value={card.nickname ? `“${card.nickname}”` : '—'} alt />
+          <BioRow label="GRADE" value={card.rarity.toUpperCase()} color={accent} />
         </div>
       </Panel>
 
@@ -670,26 +642,8 @@ function PositionChip({ pos, primary }: { pos: string; primary: boolean }) {
 
 // ---------------------------------------------------------------------------
 // PLAYER stat-screen primitives (the FM-style dossier). Every value derives from
-// a real Card field — OVERALL is `power` (BRS), the attribute bars are the four
-// `pillars`, ATK/DEF are `deriveStats`. No invented numbers.
+// a real Card field — no invented numbers.
 // ---------------------------------------------------------------------------
-
-/** The evocative football labels the four raw pillars render under. Purely a
- *  relabel — the number is the pillar value, untouched. */
-const PILLAR_META: { key: 'technical' | 'tactical' | 'mental' | 'physical'; label: string }[] = [
-  { key: 'technical', label: 'TECHNIQUE' },
-  { key: 'tactical', label: 'VISION' },
-  { key: 'mental', label: 'COMPOSURE' },
-  { key: 'physical', label: 'PHYSICAL' },
-];
-
-/** Band colour for an attribute value (0–99) — strong green / solid gold / weak
- *  red, so a squad's shape reads at a glance the way an FM screen does. */
-function attrBand(v: number): string {
-  if (v >= 70) return 'var(--success)';
-  if (v >= 45) return 'var(--gold)';
-  return 'var(--danger)';
-}
 
 /** Nation display: real flag emoji where we have one, else the short code. */
 function nationValue(nation?: string): string {
@@ -697,33 +651,6 @@ function nationValue(nation?: string): string {
   const code = nationCode(nation);
   if (flag) return code ? `${flag} ${code}` : flag;
   return code || '—';
-}
-
-/** The headline OVERALL rating — the retro FM banner number. `power` (BRS 52–95)
- *  is the card's overall; rendered big in --line-white (contrast law) inside an
- *  accent-tinted glass box (the frame is glass, the number is crisp). */
-function OverallBadge({ power, accent }: { power: number; accent: string }) {
-  return (
-    <div
-      style={{
-        flexShrink: 0,
-        width: 92,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 2,
-        padding: '8px 6px',
-        background: 'rgba(0,0,0,0.35)',
-        border: `2px solid ${accent}`,
-        borderRadius: 'var(--radius-sm)',
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.14), 0 0 12px -4px ${accent}`,
-      }}
-    >
-      <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: accent, lineHeight: 1 }}>OVERALL</span>
-      <span style={{ fontFamily: PIXEL, fontSize: 40, color: 'var(--line-white)', lineHeight: 1 }}>{power}</span>
-    </div>
-  );
 }
 
 /** One BIO ledger row — a label:value pair, alternating fill for the dense table. */
@@ -744,44 +671,6 @@ function BioRow({ label, value, color, alt }: { label: string; value: string; co
       <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 8.5, color: color ?? 'var(--cream)', lineHeight: 1.2, textAlign: 'right' }}>
         {value}
       </span>
-    </div>
-  );
-}
-
-/** One ATTRIBUTES row — label + retro number (--line-white) over a crisp pixel
- *  bar, banded by value. The bar is segmented (hard pixels, no gradient). */
-function AttrRow({ label, value }: { label: string; value: number }) {
-  const color = attrBand(value);
-  return (
-    <div className="flex flex-col" style={{ gap: 3, minWidth: 0 }}>
-      <div className="flex items-baseline justify-between" style={{ gap: 6 }}>
-        <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--dust)' }}>{label}</span>
-        <span style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--line-white)', lineHeight: 1 }}>{value}</span>
-      </div>
-      <PixelBar pct={value / 99} color={color} />
-    </div>
-  );
-}
-
-/** A crisp segmented pixel meter (0–1). Hard edges, one light source; no blur,
- *  no gradient — the pixel-interior law applied to a data widget. */
-function PixelBar({ pct, color, segments = 10 }: { pct: number; color: string; segments?: number }) {
-  const filled = Math.max(0, Math.min(segments, Math.round(pct * segments)));
-  return (
-    <div className="flex" style={{ gap: 1.5 }}>
-      {Array.from({ length: segments }).map((_, i) => (
-        <span
-          key={i}
-          style={{
-            flex: 1,
-            height: 6,
-            background: i < filled ? color : 'rgba(255,255,255,0.07)',
-            boxShadow: i < filled
-              ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 0 0 1px var(--ink-black)'
-              : 'inset 0 0 0 1px rgba(0,0,0,0.4)',
-          }}
-        />
-      ))}
     </div>
   );
 }
