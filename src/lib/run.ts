@@ -980,6 +980,20 @@ function createOwnedCardId(state: RunState, sourceId: number): number {
   return state.seed + state.deck.length * 100 + sourceId + Date.now() % 100000;
 }
 
+/** Add several cards to the deck at once (a ripped pack), each with a fresh owned
+ *  id. Returns the new state AND the cards as they now sit in the deck (with ids),
+ *  so the caller can reveal exactly what was pulled. */
+export function addCardsToDeck(state: RunState, cards: Card[]): { state: RunState; added: Card[] } {
+  let next = state;
+  const added: Card[] = [];
+  for (const c of cards) {
+    const newCard = { ...c, id: createOwnedCardId(next, c.id) };
+    next = { ...next, deck: [...next.deck, newCard] };
+    added.push(newCard);
+  }
+  return { state: next, added };
+}
+
 /**
  * Sell a card from deck for transfer fee
  */
