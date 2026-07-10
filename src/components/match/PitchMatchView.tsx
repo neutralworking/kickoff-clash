@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { MatchV5State, IncrementResult, MatchBeat, MatchStats, PlayerMatchStat, MatchForecast } from '../../lib/match-v5';
+import type { MatchV5State, IncrementResult, MatchBeat, MatchStats, ContestStats, PlayerMatchStat, MatchForecast } from '../../lib/match-v5';
 import type { PointMod } from '../../lib/points';
 import type { Formation, FormationSlot } from '../../lib/formations';
 import { getFormation } from '../../lib/formations';
-import type { Band, Lane, Cell } from '../../lib/field';
+import type { Band, Lane } from '../../lib/field';
 import { cellOf, bandOf } from '../../lib/field';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard } from '../../lib/tactics';
@@ -1085,12 +1085,6 @@ function StatBar({ you, opp, fmt, delay }: { you: number; opp: number; fmt?: (n:
   );
 }
 
-function StatLabel({ children, delay }: { children: React.ReactNode; delay: number }) {
-  return (
-    <div className="stat-row-in" style={{ textAlign: 'center', fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.6, color: 'var(--dust)', marginBottom: 4, marginTop: 2, animationDelay: `${delay}ms` }}>{children}</div>
-  );
-}
-
 /** A compact PERIOD / MATCH pairing for one stat: the live 15' window value beside
  *  the running match-to-date total, so the team-talk reads both at a glance. */
 function StatPair({
@@ -1122,9 +1116,71 @@ function StatPair({
   );
 }
 
+// ---------------------------------------------------------------------------
+// The six contests, as the stats overlay reads them. Each group is a small panel
+// with its name coloured by contest FAMILY and its two ContestStats metrics as
+// YOU-vs-OPP StatPair rows (this-period value + match-to-date). Family colours:
+//   KEEP / CREATE  → possession-gold  · PRESS / BREAK → ball-winning blue
+//   FINISH         → kit-red          · STOP          → wall-green
+// The `field` keys index straight into ContestStats (match-v5) — one source.
+// ---------------------------------------------------------------------------
+type ContestField = keyof ContestStats;
+interface ContestMeta {
+  name: string;
+  color: string;
+  metrics: { label: string; field: ContestField; fmt?: (n: number) => string }[];
+}
+const CONTEST_META: ContestMeta[] = [
+  { name: 'KEEP', color: 'var(--gold)', metrics: [
+    { label: 'POSS %', field: 'possessionPct' },
+    { label: 'POSSESSION', field: 'possessions' } ] },
+  { name: 'CREATE', color: 'var(--gold)', metrics: [
+    { label: 'SHOTS', field: 'shots' },
+    { label: 'BIG CH.', field: 'bigChances' } ] },
+  { name: 'FINISH', color: 'var(--kit-red)', metrics: [
+    { label: 'ON TARGET', field: 'shotsOnTarget' },
+    { label: 'GOALS', field: 'goals' } ] },
+  { name: 'BREAK', color: 'var(--kit-blue)', metrics: [
+    { label: 'TURNOVERS', field: 'turnoversWon' },
+    { label: 'INTERCEPT', field: 'interceptions' } ] },
+  { name: 'PRESS', color: 'var(--kit-blue)', metrics: [
+    { label: 'PRESSURES', field: 'pressures' },
+    { label: 'TACKLES', field: 'tackles' } ] },
+  { name: 'STOP', color: 'var(--success)', metrics: [
+    { label: 'SAVES', field: 'saves' },
+    { label: 'BLOCKS', field: 'blocks' } ] },
+];
+
+function ContestGroup({ meta, stats, cumulative, delay }: {
+  meta: ContestMeta; stats: MatchStats; cumulative: CumulativeStats; delay: number;
+}) {
+  return (
+    <div className="stat-row-in" style={{
+      display: 'flex', flexDirection: 'column', gap: 6, padding: '7px 8px 8px',
+      borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)',
+      borderTop: `3px solid ${meta.color}`, boxShadow: '0 2px 0 0 var(--ink-black)',
+      background: 'var(--surface)', animationDelay: `${delay}ms`, minWidth: 0,
+    }}>
+      <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.7, color: meta.color, lineHeight: 1 }}>{meta.name}</span>
+      {meta.metrics.map((m, i) => (
+        <StatPair
+          key={m.field}
+          label={m.label}
+          you={stats.yourContest[m.field]}
+          opp={stats.opponentContest[m.field]}
+          matchYou={cumulative.yourContest[m.field]}
+          matchOpp={cumulative.opponentContest[m.field]}
+          fmt={m.fmt}
+          delay={delay + i * 40}
+        />
+      ))}
+    </div>
+  );
+}
+
 function StatsScreen({
   stats, cumulative, minute, periodLabel, youName, oppName, scoreYou, scoreOpp, isFullTime,
-  goals, surnameOf, onRatings, onContinue,
+  goals, coachNotes, log, surnameOf, onRatings, onContinue,
 }: {
   stats: MatchStats;
   cumulative: CumulativeStats;
@@ -1137,121 +1193,99 @@ function StatsScreen({
   isFullTime: boolean;
   /** Goals so far (scorer + assister), chronological — the per-match record (req 4). */
   goals: GoalLine[];
+  /** The assistant's team-talk reads — RELOCATED here from the plan screen. */
+  coachNotes: CoachNote[];
+  /** The full match log so far (all beats, chronological) — the expanded readout. */
+  log: GoalLine[];
   surnameOf: (n: string) => string;
   /** Open the per-player ratings sheet (req 5). */
   onRatings: () => void;
   onContinue: () => void;
 }) {
-  // FIX 7 — tally won cells from the full 9-cell grid (was the 3 L/C/R lanes).
-  const gridZones: Band[] = ['ATT', 'MID', 'DEF']; // top → bottom (your perspective)
-  const gridLanes: Lane[] = ['L', 'C', 'R'];        // left → right
-  const countGrid = (g: Record<Cell, boolean>) =>
-    gridZones.reduce((acc, b) => acc + gridLanes.reduce((a, l) => a + (g[`${b}_${l}` as Cell] ? 1 : 0), 0), 0);
-  const youZonesWon = countGrid(stats.yourZoneGrid);
-  const oppZonesWon = countGrid(stats.opponentZoneGrid);
   return (
     <div className="stats-rise" style={{ position: 'absolute', inset: 0, zIndex: 14, background: 'linear-gradient(180deg, #08130c, #0a160e)', display: 'flex', flexDirection: 'column', padding: '14px 14px 14px', overflow: 'hidden' }}>
-      {/* The whole readout — header, matchup, four stat bars, the zones map — is
-          ONE centred cluster with even gaps between its groups. It fills the body
-          from the middle outward (no empty top half, no edge-stretched voids).
-          CONTINUE stays a fixed footer below. */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly', paddingTop: 6, paddingBottom: 2 }}>
-        {/* Scoreboard — period marker, running score, and the matchup, as one block. */}
-        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {/* Header: the period marker + the running score */}
-          <div className="stat-row-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 9.5, color: 'var(--gold)', letterSpacing: 0.6 }}>{isFullTime ? 'FULL TIME' : `${minute}' — ${periodLabel} HALF`}</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 18, color: 'var(--line-white)' }}>
-              <span style={{ color: YOU }}>{scoreYou}</span> – <span style={{ color: OPP }}>{scoreOpp}</span>
-            </span>
-          </div>
+      {/* Fixed scoreboard header — period marker + running score + the matchup.
+          Everything below scrolls INTERNALLY; the page itself never scrolls. */}
+      <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
+        <div className="stat-row-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 9.5, color: 'var(--gold)', letterSpacing: 0.6 }}>{isFullTime ? 'FULL TIME' : `${minute}' — ${periodLabel} HALF`}</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 18, color: 'var(--line-white)' }}>
+            <span style={{ color: YOU }}>{scoreYou}</span> – <span style={{ color: OPP }}>{scoreOpp}</span>
+          </span>
+        </div>
+        <div className="stat-row-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animationDelay: '40ms' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 800, color: YOU, overflow: 'hidden' }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: YOU }} />{youName}
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 800, color: OPP, overflow: 'hidden' }}>
+            <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oppName}</span><span style={{ width: 8, height: 8, borderRadius: 2, background: OPP }} />
+          </span>
+        </div>
+      </div>
 
-          {/* Side names */}
-          <div className="stat-row-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animationDelay: '40ms' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 800, color: YOU, overflow: 'hidden' }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: YOU }} />{youName}
-            </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 800, color: OPP, overflow: 'hidden' }}>
-              <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oppName}</span><span style={{ width: 8, height: 8, borderRadius: 2, background: OPP }} />
-            </span>
-          </div>
+      {/* Scroll region — the ONLY thing that scrolls. Coach team-talk (relocated
+          here), the xG headline, the six-contest grid, the goals ledger, and the
+          expanded match log, in that order. */}
+      <div className="tactic-sheet-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 1px 4px' }}>
+        {/* Coach TEAM TALK — moved out of the plan screen into this between-period beat. */}
+        <CoachPanel notes={coachNotes} style={{ margin: 0 }} />
 
-          {/* GOALS FEED (req 4, FIX 2) — scorer + assister + minute for EVERY goal, no
-              truncation. The list scrolls INTERNALLY when long so the page never does;
-              the full record is always visible here, not just the last few. */}
-          {goals.length > 0 && (
-            <div className="stat-row-in" style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', background: 'var(--surface)', animationDelay: '55ms' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.6, color: 'var(--gold)' }}>GOALS</span>
-                <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)' }}>{goals.length}</span>
-              </div>
-              {/* Scroll region: caps at ~5 rows tall, scrolls internally beyond that. */}
-              <div style={{ maxHeight: 116, overflowY: 'auto', overscrollBehavior: 'contain', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }} className="tactic-sheet-scroll">
-                <GoalsFeed goals={goals} surnameOf={surnameOf} delay={60} />
+        {/* Caption: which column is this-period vs match-to-date (applies to xG + grid). */}
+        <div className="stat-row-in" style={{ display: 'flex', justifyContent: 'center', gap: 6, animationDelay: '60ms' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--cream-soft)' }}>THIS 15{"'"}</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--dust)' }}>·</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--ink)' }}>MATCH SO FAR</span>
+        </div>
+
+        {/* xG — the headline number above the contest grid. */}
+        <div className="stat-row-in" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', borderTop: '3px solid var(--amber)', boxShadow: '0 2px 0 0 var(--ink-black)', background: 'var(--surface)', animationDelay: '70ms' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.7, color: 'var(--amber)', lineHeight: 1 }}>EXPECTED GOALS</span>
+          <StatPair label="xG" you={stats.yourXG} opp={stats.opponentXG} matchYou={cumulative.yourXG} matchOpp={cumulative.opponentXG} fmt={(n) => n.toFixed(2)} delay={80} />
+        </div>
+
+        {/* THE SIX CONTESTS — one small panel each, coloured by family, two metrics apiece. */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {CONTEST_META.map((meta, i) => (
+            <ContestGroup key={meta.name} meta={meta} stats={stats} cumulative={cumulative} delay={110 + i * 40} />
+          ))}
+        </div>
+
+        {/* GOALS ledger — scorer + assister + minute for every goal. */}
+        {goals.length > 0 && (
+          <div className="stat-row-in" style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', background: 'var(--surface)', animationDelay: '340ms' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.6, color: 'var(--gold)' }}>GOALS</span>
+              <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)' }}>{goals.length}</span>
+            </div>
+            <GoalsFeed goals={goals} surnameOf={surnameOf} delay={350} />
+          </div>
+        )}
+
+        {/* MATCH LOG — expanded: every beat so far (chances, shots, cards, corners),
+            chronological, side-coloured. Taller than the pitch-screen ticker, scrolls
+            internally beyond ~9 rows so this beat can show much more of the match. */}
+        {log.length > 0 && (
+          <div className="stat-row-in" style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', background: 'var(--surface)', animationDelay: '360ms' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.6, color: 'var(--cream-soft)' }}>MATCH LOG</span>
+              <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)' }}>{log.length}</span>
+            </div>
+            <div className="tactic-sheet-scroll" style={{ maxHeight: 200, overflowY: 'auto', overscrollBehavior: 'contain', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {log.map((l, i) => {
+                  const col = l.type === 'goal-yours' ? YOU : l.type === 'goal-opponent' ? OPP : l.side === 'you' ? YOU : OPP;
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, width: 30 }}>{l.time}</span>
+                      <span style={{ width: 5, height: 5, borderRadius: '50%', flexShrink: 0, background: l.side === 'you' ? YOU : OPP }} />
+                      <span style={{ fontSize: 10.5, color: col, opacity: l.type === 'chance' ? 0.85 : 1, fontWeight: l.type !== 'chance' ? 800 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.text}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          )}
-        </div>
-
-        {/* Four stats — each a PERIOD value (headline + diverging bar) over its
-            MATCH-to-date total, so the team-talk reads this 15' window and the whole
-            match at once. The MATCH totals come from cumulativeStats(scores). */}
-        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {/* Caption: which column is which. */}
-          <div className="stat-row-in" style={{ display: 'flex', justifyContent: 'center', gap: 6, animationDelay: '70ms' }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--cream-soft)' }}>THIS 15{"'"}</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--dust)' }}>·</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--ink)' }}>MATCH SO FAR</span>
           </div>
-          <StatPair label="xG" you={stats.yourXG} opp={stats.opponentXG} matchYou={cumulative.yourXG} matchOpp={cumulative.opponentXG} fmt={(n) => n.toFixed(2)} delay={90} />
-          <StatPair label="POSS %" you={stats.yourPossessionPct} opp={stats.opponentPossessionPct} matchYou={cumulative.yourPossessionPct} matchOpp={cumulative.opponentPossessionPct} delay={140} />
-          <StatPair label="SHOTS" you={stats.yourShots} opp={stats.opponentShots} matchYou={cumulative.yourShots} matchOpp={cumulative.opponentShots} delay={190} />
-          <StatPair label="ON TARGET" you={stats.yourShotsOnTarget} opp={stats.opponentShotsOnTarget} matchYou={cumulative.yourShotsOnTarget} matchOpp={cumulative.opponentShotsOnTarget} delay={240} />
-        </div>
-
-        {/* FIX 7 — ZONES WON as a pitch-shaped 3×3 mini-heatmap. Oriented from your
-            perspective: ATT third at the TOP (toward the opponent's goal), MID in
-            the middle, DEF at the BOTTOM (your goal); columns L/C/R left-to-right.
-            Green = you lead the cell, red = opponent, neutral = level. Each cell
-            carries its SIGNED control margin (engine `zoneMargin`): +n you lead,
-            -n the opponent leads, 0 level. A slim DEF/MID/ATT caption column sits
-            to the LEFT of every row so each cell is free for its number. */}
-        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-          <StatLabel delay={280}>ZONES WON · <span style={{ color: YOU }}>{youZonesWon}</span>–<span style={{ color: OPP }}>{oppZonesWon}</span> <span style={{ color: 'var(--ink)' }}>· MATCH <span style={{ color: YOU, opacity: 0.8 }}>{cumulative.yourZonesWon}</span>–<span style={{ color: OPP, opacity: 0.8 }}>{cumulative.opponentZonesWon}</span></span></StatLabel>
-          <div className="stat-row-in" style={{ display: 'flex', justifyContent: 'center', animationDelay: '290ms' }}>
-            {/* A pitch-shaped frame: top goal (opponent's) → bottom goal (yours).
-                LABEL_W reserves a slim row-caption column; the 3 lanes fill the rest. */}
-            <div style={{ position: 'relative', width: 202, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', background: '#0a1a10', padding: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {/* opponent goal mouth (top) */}
-              <div style={{ position: 'absolute', top: -3, left: 'calc(50% + 13px)', transform: 'translateX(-50%)', width: 32, height: 3, borderRadius: '0 0 2px 2px', background: OPP }} />
-              {/* your goal mouth (bottom) */}
-              <div style={{ position: 'absolute', bottom: -3, left: 'calc(50% + 13px)', transform: 'translateX(-50%)', width: 32, height: 3, borderRadius: '2px 2px 0 0', background: YOU }} />
-              {gridZones.map((band) => (
-                <div key={band} style={{ display: 'grid', gridTemplateColumns: '26px repeat(3, 1fr)', gap: 4, alignItems: 'stretch' }}>
-                  {/* Row caption: full word DEF / MID / ATT, out to the side. */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.3, color: 'var(--dust)', lineHeight: 1 }}>{band}</span>
-                  </div>
-                  {gridLanes.map((lane) => {
-                    const cell = `${band}_${lane}` as Cell;
-                    const youWon = stats.yourZoneGrid[cell];
-                    const oppWon = stats.opponentZoneGrid[cell];
-                    const bg = youWon ? YOU : oppWon ? OPP : 'var(--surface)';
-                    const margin = stats.zoneMargin[cell] ?? 0;
-                    const marginText = margin > 0 ? `+${margin}` : String(margin);
-                    // High contrast on the bright tints (dark ink); muted cream on neutral.
-                    const fg = youWon || oppWon ? 'var(--ink-black)' : 'var(--cream-soft)';
-                    return (
-                      <div key={cell} title={`${band} ${lane}`} style={{ height: 26, borderRadius: 2, background: bg, border: '1px solid var(--ink-black)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span style={{ fontFamily: PIXEL, fontSize: 10, color: fg, lineHeight: 1, fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{marginText}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Footer — RATINGS opens the per-player marks (req 5: the sub-decision
@@ -1317,7 +1351,7 @@ const COACH_TONE: Record<CoachNote['tone'], { dot: string; text: string }> = {
   info: { dot: 'var(--cream-soft)', text: 'var(--cream-soft)' },
 };
 
-function CoachPanel({ notes }: { notes: CoachNote[] }) {
+function CoachPanel({ notes, style }: { notes: CoachNote[]; style?: React.CSSProperties }) {
   if (notes.length === 0) return null;
   return (
     <div
@@ -1328,6 +1362,7 @@ function CoachPanel({ notes }: { notes: CoachNote[] }) {
         boxShadow: '0 2px 0 0 var(--ink-black)',
         background: 'linear-gradient(165deg, var(--surface-raised), var(--surface))',
         overflow: 'hidden',
+        ...style,
       }}
     >
       {/* Speaker bar — the assistant has the room. */}
@@ -1651,15 +1686,17 @@ export default function PitchMatchView({
   const hasPlayed = matchState.scores.length > 0;
   const hasPoorRating = hasPlayed && playerStatsList.some((s) => s.rating < 6);
 
-  // FIX 5 — the assistant's reads for this break (assistant.coachNotes). The
-  // 'tactics' kind is dropped display-side: it only restates the slot count the
+  // FIX 5 — the assistant's reads (assistant.coachNotes), RELOCATED to the
+  // between-period stats overlay (StatsScreen). Computed unconditionally now (it's
+  // cheap and pure) so it's populated while resolving, when the overlay renders.
+  // The 'tactics' kind is dropped display-side: it only restates the slot count the
   // plan strip already shows. What remains (weakness / fitness / momentum) is
-  // genuinely situational; when nothing remains the panel doesn't render.
+  // genuinely situational; when nothing remains the coach block doesn't render.
   const notes = useMemo<CoachNote[]>(
-    () => (isBreak ? coachNotes(matchState, {
+    () => coachNotes(matchState, {
       weaknessLabel: opponentBuild.weakness,
-    }).filter((n) => n.kind !== 'tactics') : []),
-    [isBreak, matchState, opponentBuild.weakness],
+    }).filter((n) => n.kind !== 'tactics'),
+    [matchState, opponentBuild.weakness],
   );
 
   // FIX 3 — match-to-date totals for the stats screen (cumulativeStats over scores).
@@ -1890,28 +1927,12 @@ export default function PitchMatchView({
         </div>
       </div>
 
-      {/* FIX 5 — the assistant's team-talk reads, surfaced prominently at a break
-          (halftime / between / pre-kickoff). It takes the ticker's spot during the
-          break — the recent events it would show are subsumed by the coach's
-          momentum line, and the full MATCH LOG stays one tap away below. */}
-      {isBreak && notes.length > 0 ? (
-        <>
-          <CoachPanel notes={notes} />
-          {/* A slim, tappable strip keeps the full match log reachable during the talk. */}
-          {feed.length > 0 && (
-            <button onClick={() => setTickerOpen(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 16px 8px', padding: '6px 10px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', border: `1px solid ${HERO.gold}4d`, flexShrink: 0, cursor: 'pointer' }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, color: 'var(--dust)' }}>MATCH LOG</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
-                <span style={{ fontSize: 10.5, color: feed.length ? lineColour(feed[feed.length - 1]) : 'var(--dust)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{feed[feed.length - 1]?.text ?? ''}</span>
-                <span style={{ fontFamily: PIXEL, fontSize: 9, color: 'var(--dust)', flexShrink: 0 }}>›</span>
-              </span>
-            </button>
-          )}
-        </>
-      ) : (
-      /* Ticker — three lines, tap to expand. Pre-kickoff shows a coach prompt.
+      {/* Ticker — three lines, tap to expand. Pre-kickoff shows a coach prompt.
          While resolving, the firing TRAITS take the ticker as styled callouts so
-         a missed on-pitch flash is still captured in the running commentary. */
+         a missed on-pitch flash is still captured in the running commentary. The
+         team-talk COACH panel no longer lives here — it was relocated to the
+         between-period stats overlay (StatsScreen). */}
+      {(
       <button onClick={() => setTickerOpen(true)} style={{ textAlign: 'left', margin: '0 16px 10px', padding: '8px 12px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', border: `1px solid ${HERO.gold}4d`, flexShrink: 0, cursor: 'pointer', display: 'grid', gap: 3 }}>
         {preKickoff ? (
           // ISSUE 6 — guidance, not a fake match event (no minute stamp).
@@ -2535,6 +2556,8 @@ export default function PitchMatchView({
           scoreOpp={displayGoals.opp}
           isFullTime={matchState.currentIncrement >= INCREMENT_MINUTES_LEN - 1}
           goals={goalsLedger}
+          coachNotes={notes}
+          log={feed}
           surnameOf={lastName}
           onRatings={() => setRatingsOpen(true)}
           onContinue={onContinue}

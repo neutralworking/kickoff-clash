@@ -189,6 +189,35 @@ export interface IncrementResult {
   bookings: RoundBooking[];
 }
 
+/**
+ * Per-side, per-contest metric ledger (SCORING_V2 six-contest readout). Twelve
+ * counters — two per contest — aggregated from the round's typed `RoundBeat[]`
+ * log plus the raw `RoundOutcome` counts. Pure display: NONE of these feeds the
+ * match math (scores, xG, shot law). Each formula is documented at its build site
+ * in `resolveIncrement`. Some metrics are strict SUBSETS of others by design
+ * (shotsOnTarget ⊂ shots; tackles ⊂ turnoversWon; interceptions ⊂ turnoversWon).
+ */
+export interface ContestStats {
+  // KEEP — ball retention
+  possessionPct: number;   // this side's share of the 6 possessions (0–100)
+  possessions: number;     // this side's possession count this round
+  // CREATE — chance manufacture
+  shots: number;           // shots taken (all resolved shots)
+  bigChances: number;      // resolved BIG-quality chances (goal/save/miss)
+  // FINISH — conversion
+  shotsOnTarget: number;   // shots on target (goals + saves) — subset of shots
+  goals: number;           // goals scored
+  // BREAK — ball-winning by destruction
+  turnoversWon: number;    // opponent moves that broke down (you regained the ball)
+  interceptions: number;   // subset of turnoversWon attributed to the BREAK dial
+  // PRESS — ball-winning by pressure
+  pressures: number;       // opponent possessions you contested (their poss count)
+  tackles: number;         // subset of turnoversWon attributed to the PRESS dial
+  // STOP — the last line
+  saves: number;           // shots your keeper kept out
+  blocks: number;          // stop-trait cancellations of an opposing chance
+}
+
 export interface MatchStats {
   yourXG: number;
   opponentXG: number;
@@ -203,6 +232,9 @@ export interface MatchStats {
   yourZoneGrid: Record<Cell, boolean>;
   opponentZoneGrid: Record<Cell, boolean>;
   zoneMargin: Record<Cell, number>;
+  /** The six-contest metric ledger, per side (SCORING_V2 stats overlay). */
+  yourContest: ContestStats;
+  opponentContest: ContestStats;
 }
 
 export interface MatchV5Result {
@@ -690,6 +722,78 @@ export function resolveIncrement(
   const possTotal = (outcome.yourPossessions + outcome.oppPossessions) || 1;
   const yourPossessionPct = Math.round((outcome.yourPossessions / possTotal) * 100);
 
+  // --- The six-contest metric ledger (SCORING_V2 stats overlay) ---------------
+  // Purely additive read-side counters aggregated from the round's beats + the
+  // raw outcome counts. NONE of this feeds the match math. Formulae per contest:
+  const beats = outcome.beats;
+  const nBeats = (pred: (b: MatchBeat) => boolean) => beats.reduce((n, b) => n + (pred(b) ? 1 : 0), 0);
+  const shotOutcome = (o: MatchBeat['outcome']) => o === 'goal' || o === 'save' || o === 'miss';
+
+  // CREATE · Big Chances — resolved BIG-quality chances for that side (a stopped
+  // big chance never became a shot, so only goal/save/miss count).
+  const yourBig = nBeats((b) => b.side === 'you' && b.quality === 'big' && shotOutcome(b.outcome));
+  const oppBig = nBeats((b) => b.side === 'opp' && b.quality === 'big' && shotOutcome(b.outcome));
+
+  // BREAK · Turnovers Won — the OPPONENT's move broke down (a `turnover` beat is
+  // tagged with the side that LOST the ball), so YOU won it back, and vice-versa.
+  const yourTurnoversWon = nBeats((b) => b.outcome === 'turnover' && b.side === 'opp');
+  const oppTurnoversWon = nBeats((b) => b.outcome === 'turnover' && b.side === 'you');
+
+  // Attribution — each forced turnover is credited to whichever of that side's two
+  // ball-winning dials was higher this increment: BREAK dial ≥ PRESS dial →
+  // Interception, else Tackle. Interceptions + Tackles = Turnovers Won (a clean
+  // partition). Dials are the increment's build totals (split.contest / oppContest).
+  const yourViaBreak = split.contest.brk >= split.contest.press;
+  const yourInterceptions = yourViaBreak ? yourTurnoversWon : 0;
+  const yourTackles = yourTurnoversWon - yourInterceptions;
+  const oppViaBreak = split.oppContest.brk >= split.oppContest.press;
+  const oppInterceptions = oppViaBreak ? oppTurnoversWon : 0;
+  const oppTackles = oppTurnoversWon - oppInterceptions;
+
+  // STOP · Saves — a `save` beat is tagged with the SHOOTER's side, so YOUR keeper's
+  // save is a shot by THEM (side === 'opp') that stayed on target but didn't score.
+  const yourSaves = nBeats((b) => b.outcome === 'save' && b.side === 'opp');
+  const oppSaves = nBeats((b) => b.outcome === 'save' && b.side === 'you');
+  // STOP · Blocks — a `stop` beat (stop-trait cancelled a chance) is tagged with the
+  // DEFENDING side, so YOUR block is side === 'you'.
+  const yourBlocks = nBeats((b) => b.outcome === 'stop' && b.side === 'you');
+  const oppBlocks = nBeats((b) => b.outcome === 'stop' && b.side === 'opp');
+
+  const yourContest: ContestStats = {
+    // KEEP
+    possessionPct: yourPossessionPct,
+    possessions: outcome.yourPossessions,
+    // CREATE
+    shots: outcome.yourShots,
+    bigChances: yourBig,
+    // FINISH
+    shotsOnTarget: outcome.yourOnTarget,
+    goals: outcome.yourGoals,
+    // BREAK
+    turnoversWon: yourTurnoversWon,
+    interceptions: yourInterceptions,
+    // PRESS — you press whenever THEY hold the ball, so pressures = their poss count.
+    pressures: outcome.oppPossessions,
+    tackles: yourTackles,
+    // STOP
+    saves: yourSaves,
+    blocks: yourBlocks,
+  };
+  const opponentContest: ContestStats = {
+    possessionPct: 100 - yourPossessionPct,
+    possessions: outcome.oppPossessions,
+    shots: outcome.oppShots,
+    bigChances: oppBig,
+    shotsOnTarget: outcome.oppOnTarget,
+    goals: outcome.oppGoals,
+    turnoversWon: oppTurnoversWon,
+    interceptions: oppInterceptions,
+    pressures: outcome.yourPossessions,
+    tackles: oppTackles,
+    saves: oppSaves,
+    blocks: oppBlocks,
+  };
+
   const stats: MatchStats = {
     yourXG: outcome.yourXG,
     opponentXG: outcome.oppXG,
@@ -712,6 +816,8 @@ export function resolveIncrement(
     yourZoneGrid,
     opponentZoneGrid,
     zoneMargin,
+    yourContest,
+    opponentContest,
   };
 
   return {
@@ -1008,12 +1114,40 @@ export interface CumulativeStats {
   yourZonesWon: number;
   opponentZonesWon: number;
   zoneMargin: Record<Cell, number>;
+  /** Match-to-date six-contest ledger (running totals across played increments). */
+  yourContest: ContestStats;
+  opponentContest: ContestStats;
+}
+
+/** A zeroed ContestStats — the accumulator seed / empty-match default. */
+function emptyContestStats(): ContestStats {
+  return {
+    possessionPct: 50, possessions: 0,
+    shots: 0, bigChances: 0,
+    shotsOnTarget: 0, goals: 0,
+    turnoversWon: 0, interceptions: 0,
+    pressures: 0, tackles: 0,
+    saves: 0, blocks: 0,
+  };
 }
 
 export function cumulativeStats(scores: IncrementResult[]): CumulativeStats {
   const zoneMargin = Object.fromEntries(CELLS.map((c) => [c, 0])) as Record<Cell, number>;
   let yX = 0, oX = 0, yS = 0, oS = 0, ySoT = 0, oSoT = 0, yPoss = 0, oPoss = 0;
   let yGoals = 0, oGoals = 0, yZW = 0, oZW = 0;
+
+  // Running six-contest ledger — sum every counting metric; possessionPct is
+  // recomputed from the summed possession counts below (so it stays a true share).
+  const yC = emptyContestStats();
+  const oC = emptyContestStats();
+  const addContest = (acc: ContestStats, s: ContestStats) => {
+    acc.possessions += s.possessions;
+    acc.shots += s.shots; acc.bigChances += s.bigChances;
+    acc.shotsOnTarget += s.shotsOnTarget; acc.goals += s.goals;
+    acc.turnoversWon += s.turnoversWon; acc.interceptions += s.interceptions;
+    acc.pressures += s.pressures; acc.tackles += s.tackles;
+    acc.saves += s.saves; acc.blocks += s.blocks;
+  };
 
   for (const s of scores) {
     yGoals += s.yourGoalCount; oGoals += s.opponentGoalCount;
@@ -1026,9 +1160,14 @@ export function cumulativeStats(scores: IncrementResult[]): CumulativeStats {
       if (s.stats.opponentZonesWon[lane]) oZW++;
     }
     for (const cell of CELLS) zoneMargin[cell] += s.stats.zoneMargin[cell] ?? 0;
+    addContest(yC, s.stats.yourContest);
+    addContest(oC, s.stats.opponentContest);
   }
 
   const totPoss = yPoss + oPoss;
+  const posPct = totPoss ? Math.round((yPoss / totPoss) * 100) : 50;
+  yC.possessionPct = posPct;
+  oC.possessionPct = 100 - posPct;
   return {
     periodsPlayed: scores.length,
     yourGoals: yGoals,
@@ -1039,11 +1178,13 @@ export function cumulativeStats(scores: IncrementResult[]): CumulativeStats {
     opponentShots: oS,
     yourShotsOnTarget: ySoT,
     opponentShotsOnTarget: oSoT,
-    yourPossessionPct: totPoss ? Math.round((yPoss / totPoss) * 100) : 50,
+    yourPossessionPct: posPct,
     opponentPossessionPct: totPoss ? Math.round((oPoss / totPoss) * 100) : 50,
     yourZonesWon: yZW,
     opponentZonesWon: oZW,
     zoneMargin,
+    yourContest: yC,
+    opponentContest: oC,
   };
 }
 
