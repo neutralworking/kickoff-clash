@@ -746,6 +746,9 @@ export const MANAGER_TRAIT_STYLE: Record<string, ManagerTraitStyle> = {
   // defensive
   'Low Block': { color: '#3d7bd6', bg: 'rgba(61,123,214,0.16)', prop: 'shield' },
   'Counter-Punch': { color: '#3d7bd6', bg: 'rgba(61,123,214,0.16)', prop: 'shield' },
+  // pressing (ball-winning — raises PRESS)
+  'Organised Press': { color: '#3d7bd6', bg: 'rgba(61,123,214,0.16)', prop: 'whistle' },
+  'High Press': { color: '#3d7bd6', bg: 'rgba(61,123,214,0.16)', prop: 'whistle' },
   // attacking / direct
   'Direct Play': { color: '#e23b35', bg: 'rgba(226,59,53,0.16)', prop: 'clipboard' },
   'Aerial Targets': { color: '#e23b35', bg: 'rgba(226,59,53,0.16)', prop: 'clipboard' },

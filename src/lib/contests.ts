@@ -53,6 +53,33 @@ export interface ContestTotals {
 const KEEP_IDS = new Set(['Controller', 'Passer', 'Engine']);
 const CREATE_IDS = new Set(['Creator', 'Dribbler', 'Sprinter']);
 
+// ---------------------------------------------------------------------------
+// Contest-targeting predicates — the SINGLE partition contestTotals scores on.
+//
+// A tactic/manager that wants to raise a contest must buff the SAME cards
+// contestTotals buckets into it, or the mod lands diffusely / in the wrong
+// contest / in none. These predicates mirror the `for` loop above exactly, so
+// `each(feedsX, …)` is guaranteed to move contest X. The AXIS each raises:
+//   KEEP / CREATE / FINISH  ← +ATK   (attacking currency)
+//   PRESS / BREAK / STOP     ← +DEF   (defensive currency)
+// FINISH is real: the shot law (resolveShot) reads the shooter's atk, and the
+// shooter is weighted toward the finishing lane, so +ATK to feedsFinish cards
+// is a genuine conversion lever.
+// ---------------------------------------------------------------------------
+
+/** KEEP: ball-keeping craft — Controllers, Passers, Engines (+ATK). */
+export const feedsKeep = (c: EffCard): boolean => KEEP_IDS.has(c.archetype);
+/** PRESS: ball-winning — the front line + Engines (they run both ways) (+DEF). */
+export const feedsPress = (c: EffCard): boolean => c.band === 'ATT' || c.archetype === 'Engine';
+/** CREATE: chance craft — Creators/Dribblers/Sprinters + the front line (+ATK). */
+export const feedsCreate = (c: EffCard): boolean => CREATE_IDS.has(c.archetype) || c.band === 'ATT';
+/** BREAK: midfield destruction — the MID band (+DEF). */
+export const feedsBreak = (c: EffCard): boolean => c.band === 'MID';
+/** STOP: the last line — the DEF band, keeper included (+DEF). */
+export const feedsStop = (c: EffCard): boolean => c.band === 'DEF';
+/** FINISH: the shot — finishing-lane cards; +ATK raises their goal odds (+ATK). */
+export const feedsFinish = (c: EffCard): boolean => laneOfCard(c.card) === 'finishing';
+
 export function contestTotals(cards: EffCard[]): ContestTotals {
   let keep = 0, press = 0, create = 0, brk = 0, finish = 0, attack = 0, defence = 0;
   let stopSum = 0, stopN = 0;
