@@ -414,11 +414,11 @@ function PlayerFace({
         <span
           style={{
             fontFamily: PIXEL,
-            fontSize: full ? 9 : 6,
+            fontSize: full ? 10 : 8,
             lineHeight: 1,
             color: HERO.badgeText,
             background: posColor,
-            padding: full ? '4px 6px' : '2px 4px',
+            padding: full ? '4px 6px' : '3px 4px',
             borderRadius: full ? 3 : 2,
             border: `1px solid ${HERO.ink}`,
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3)',

@@ -252,6 +252,13 @@ function PitchCard({
       {/* Foil frame → clipped pixel interior (portrait + name). */}
       <div style={{ borderRadius: 7, padding: 2, background: frameBg, boxShadow: spot.isStar ? '0 2px 0 0 #0b0703, 0 4px 8px rgba(0,0,0,0.45), 0 0 12px rgba(232,178,60,0.5)' : '0 2px 0 0 #0b0703, 0 4px 8px rgba(0,0,0,0.45)' }}>
         <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 5, border: `1.5px solid ${HERO.ink}`, background: 'linear-gradient(165deg, #2f2415, #191309)' }}>
+          {/* Position badge — top-left inside the face (the corner bubbles overhang
+              OUTSIDE the card, so this stays clear). Coloured by position family. */}
+          {spot.position && (
+            <span style={{ position: 'absolute', top: 2, left: 2, zIndex: 2, background: POSITION_COLOR[spot.position] ?? 'var(--dust)', color: HERO.badgeText, fontFamily: PIXEL, fontSize: 6, lineHeight: 1, padding: '2px 3px', borderRadius: 2, border: `1px solid ${HERO.ink}` }}>
+              {spot.position}
+            </span>
+          )}
           {/* Portrait window (36px) — same seeded face as gallery/pack cards. */}
           <div style={{ height: 36, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'radial-gradient(90% 80% at 50% 30%, rgba(232,178,60,0.16), transparent 72%)' }}>
             {spot.cardId !== undefined ? (
@@ -265,11 +272,16 @@ function PitchCard({
               </span>
             )}
           </div>
-          {/* Name over the gold hairline top border. */}
+          {/* Name + role over the gold hairline top border. */}
           <div style={{ padding: '2px 3px 3px', borderTop: `1px solid ${HERO.gold}66` }}>
             <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 5, color: HERO.cream, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center', lineHeight: 1.3 }}>
               {spot.name ?? '—'}
             </span>
+            {(spot.card?.tacticalRole || spot.archetype) && (
+              <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 4, color: HERO.gold, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center', lineHeight: 1.3, opacity: 0.9 }}>
+                {(spot.card?.tacticalRole ?? spot.archetype ?? '').toUpperCase()}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -309,7 +321,7 @@ function SubCard({ card, dim }: { card: Card; dim?: boolean }) {
     <div style={{ width: '100%', borderRadius: 5, padding: 2, background: frameSpec.frame, boxShadow: `0 2px 0 0 ${HERO.ink}, 0 3px 6px rgba(0,0,0,0.4)`, opacity: dim ? 0.3 : 1, pointerEvents: 'none' }}>
       <div style={{ overflow: 'hidden', borderRadius: 3, border: `1px solid ${HERO.ink}`, background: 'linear-gradient(165deg, #2f2415, #191309)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 3px 0' }}>
-          <span style={{ background: posColor, color: HERO.badgeText, fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1, padding: '1px 2px', borderRadius: 2 }}>{card.position}</span>
+          <span style={{ background: posColor, color: HERO.badgeText, fontFamily: PIXEL, fontSize: 6, lineHeight: 1, padding: '2px 3px', borderRadius: 2, border: `1px solid ${HERO.ink}` }}>{card.position}</span>
           <span style={{ fontFamily: PIXEL, fontSize: 6.5, lineHeight: 1, color: HERO.cream, fontVariantNumeric: 'tabular-nums' }}>{st.atk}/{st.def}</span>
         </div>
         <div style={{ height: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -317,6 +329,9 @@ function SubCard({ card, dim }: { card: Card; dim?: boolean }) {
         </div>
         <div style={{ padding: '0 3px 2px' }}>
           <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 4.5, color: HERO.cream, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3 }}>{lastName(card.name)}</span>
+          {(card.tacticalRole || card.archetype) && (
+            <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 4, color: HERO.gold, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3, opacity: 0.9 }}>{(card.tacticalRole ?? card.archetype ?? '').toUpperCase()}</span>
+          )}
         </div>
       </div>
     </div>
