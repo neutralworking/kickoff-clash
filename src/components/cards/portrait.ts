@@ -1,13 +1,21 @@
 /**
  * Kickoff Clash — "Pixel Hero" procedural portrait generator + rarity foil tokens.
  *
- * A direct port of the owner's design-handoff logic (`pixA`, `FR`, `fc`, `CONDS`
- * from `Player Card Art Directions.dc.html`, sections 2a/3a). Everything here is
- * code-generated — there are NO image assets. A card's stable id seeds a unique
- * 16-bit half-body portrait, emitted as an SVG of `<rect>`s
- * (`shape-rendering="crispEdges"`) delivered as a `data:image/svg+xml` URI.
+ * A direct port of the owner's v3 design-handoff logic (`pix5c`, `FR`, `fc`,
+ * `CONDS`, `THEME`, `PITCH` from `Player Card Art Directions.dc.html`, the
+ * locked Turn-7 section). Everything here is code-generated — there are NO image
+ * assets. A card's stable id seeds a unique face-first pixel bust, drawn on a
+ * 40×50 grid and emitted as an SVG of `<rect>`s (`shape-rendering="crispEdges"`)
+ * delivered as a `data:image/svg+xml` URI.
  *
- * Same seed ⇒ same portrait forever. Portraits are memoized per seed.
+ * `pix5c(seedStr, opts)` is a close-up bust: the kit/attire is minimal so all the
+ * variation lives in the FACE (5 complexions, 3 face widths, 3 jaw shapes, 9
+ * hairstyles × 3 hairlines, 6 beard styles, 3 eye/nose/brow shapes, iris colour,
+ * plus low-probability freckles/scar/monobrow/age-lines/grey). `opts.suit` swaps
+ * the football kit for a blazer + shirt + tie (manager portraits); `opts.kit` is
+ * the shared club colour so a squad reads as one team.
+ *
+ * Same seed (+opts) ⇒ same portrait forever. Portraits are memoized.
  *
  * Reconciliation stays intact: the FRAME is glass/foil (gradients + glow live on
  * the outer frame), the INTERIOR is crisp pixel art (the portrait renders with
@@ -62,7 +70,7 @@ function pick<T>(r: () => number, a: readonly T[]): T {
   return a[Math.floor(r() * a.length)];
 }
 
-// Rolled-trait palettes (ported).
+// Rolled-trait palettes (ported from the v3 handoff `pix5c`).
 const SKINS: readonly [string, string, string][] = [
   ['#f6e0c0', '#e6bd8e', '#c09066'],
   ['#eccba0', '#d3a06b', '#a97a4b'],
@@ -71,154 +79,429 @@ const SKINS: readonly [string, string, string][] = [
   ['#6e4a30', '#4e3220', '#33200f'],
 ];
 const HAIRC: readonly string[] = ['#1c150f', '#43342a', '#6b4a2a', '#c09a3e', '#8a2f22', '#d8d3c8'];
-const KITS: readonly [string, string][] = [
-  ['#e0332d', '#fbf7ec'],
-  ['#2b74e0', '#fbf7ec'],
-  ['#7a1f3d', '#8fd0ff'],
-  ['#1f9d4f', '#f5d97a'],
-  ['#f5a623', '#171310'],
-  ['#f2ead6', '#171310'],
-  ['#5b2d8a', '#f2ead6'],
-  ['#171310', '#e8b23a'],
-];
+const IRIS5: readonly string[] = ['#3a2a1c', '#5b3a1e', '#2b74e0', '#4a7bb5', '#3f7a4a', '#6b6f52', '#1c150f'];
+const PORTRAIT_INK = '#14100a';
+
+/** The default shared club colour for player kits (a squad reads as one team). */
+export const DEFAULT_KIT = '#e0332d';
+
+export interface PortraitOpts {
+  /** Draw a blazer + shirt + tie instead of a football kit (manager portraits). */
+  suit?: boolean;
+  /** Shared club colour for the kit (players only). Defaults to DEFAULT_KIT. */
+  kit?: string;
+}
 
 // ---------------------------------------------------------------------------
-// pixA — seeded 20×26 half-body pixel bust (ported 1:1 from the handoff)
+// pix5c — seeded 40×50 face-first pixel bust (ported 1:1 from the v3 handoff).
+// The kit/attire is deliberately minimal so all the variation lives in the face.
 // ---------------------------------------------------------------------------
 
-function pixA(seedStr: string): string {
+function pix5c(seedStr: string, opts?: PortraitOpts): string {
   const r = lcg(fnv1a(seedStr));
-  const [skinHi, skin, skinSh] = pick(r, SKINS);
-  const hairC = pick(r, HAIRC);
-  const hairHi = mix(hairC, '#ffffff', 0.18);
-  const [kit, kit2] = pick(r, KITS);
-  const kitHi = mix(kit, '#ffffff', 0.25);
+  const F = Math.floor;
+  const suit = !!opts?.suit;
+  const kitClub = opts?.kit ?? DEFAULT_KIT;
+  const INK = PORTRAIT_INK;
+
+  const SK = pick(r, SKINS);
+  const skinHi = mix(SK[0], '#ffffff', 0.05);
+  const skin = SK[1];
+  const skinSh = SK[2];
+  const skinDk = mix(skinSh, '#000000', 0.28);
+  const skinRim = mix(skin, '#f5d97a', 0.42);
+  const hairC0 = pick(r, HAIRC);
+  const kit = kitClub;
+  const kl = hexBytes(kit);
+  const lum = kl[0] * 0.3 + kl[1] * 0.6 + kl[2] * 0.1;
+  const kitHi = mix(kit, '#ffffff', 0.26);
   const kitSh = mix(kit, '#000000', 0.3);
-  const pat = Math.floor(r() * 5);
-  const hs = Math.floor(r() * 6);
-  const pose = Math.floor(r() * 3);
-  const beard = r() < 0.28;
+  const collar = lum > 150 ? INK : '#fbf7ec';
 
-  const R: string[] = [];
+  // face variation axes (all seeded)
+  const faceW = F(r() * 3);
+  const halfW = [9, 10, 11][faceW];
+  const jaw = F(r() * 3);
+  const hs = F(r() * 9);
+  const hl = F(r() * 3);
+  const fh = F(r() * 6);
+  const mo = F(r() * 4);
+  const eyeShape = F(r() * 3);
+  const noseW = F(r() * 3);
+  const browT = F(r() * 3);
+  const iris = pick(r, IRIS5);
+  const age = r();
+  const grey = age > 0.82;
+  const freckles = r() < 0.22;
+  const scar = r() < 0.14;
+  const monobrow = r() < 0.08;
+  const HC = grey ? mix(hairC0, '#d8d3c8', 0.55) : hairC0;
+  const HH = mix(HC, '#ffffff', 0.26);
+  const HS = mix(HC, '#000000', 0.34);
+
+  const Q: string[] = [];
   const px = (x: number, y: number, w: number, h: number, c: string) =>
-    R.push('<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + c + '"/>');
+    Q.push('<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + c + '"/>');
+  const dot = (x: number, y: number, c: string) => px(x, y, 1, 1, c);
+  const dith = (x: number, y: number, w: number, h: number, c: string) => {
+    for (let yy = y; yy < y + h; yy++)
+      for (let xx = x; xx < x + w; xx++) if (((xx + yy) & 1) === 0) px(xx, yy, 1, 1, c);
+  };
+  const cx = 20; // face centre
 
-  // torso + shoulders
-  px(3, 15, 14, 11, kit);
-  px(2, 16, 1, 7, kit);
-  px(17, 16, 1, 7, kitSh);
-  if (pat === 1) for (let x = 5; x <= 15; x += 3) px(x, 15, 1, 11, kit2);
-  if (pat === 2) for (let y = 17; y <= 25; y += 3) px(3, y, 14, 1, kit2);
-  if (pat === 3) for (let i = 0; i < 6; i++) px(3 + i * 2, 14 + i * 2, 2, 2, kit2);
-  if (pat === 4) px(3, 15, 7, 11, kit2);
-  px(3, 15, 14, 1, kitHi);
-  px(3, 25, 14, 1, kitSh);
-  px(3, 16, 1, 9, kitHi);
-  px(16, 16, 1, 9, kitSh);
-
-  // pose
-  if (pose === 0) {
-    px(4, 19, 12, 2, kitSh);
-    px(4, 19, 12, 1, mix(kit, '#000000', 0.12));
-    px(5, 20, 2, 1, skin);
-    px(13, 20, 2, 1, skinSh);
+  // ---- shoulders: football kit, or a tailored suit for managers ----
+  if (suit) {
+    const suitC = '#26272e';
+    const suitHi = mix(suitC, '#ffffff', 0.16);
+    const suitSh = mix(suitC, '#000000', 0.45);
+    const shirt = '#ece9e0';
+    const shirtSh = mix(shirt, '#000000', 0.14);
+    const tie = ['#7a1f2b', '#1f3a6b', '#4a1f5b', '#20222a', '#5a4a1f'][fnv1a(seedStr) % 5];
+    px(0, 44, 40, 6, suitC);
+    px(3, 42, 34, 2, suitC);
+    px(8, 41, 24, 1, suitC);
+    px(0, 44, 40, 1, suitHi);
+    px(0, 48, 40, 2, suitSh);
+    px(0, 44, 2, 6, suitHi);
+    px(38, 44, 2, 6, suitSh);
+    dith(4, 47, 32, 3, suitSh);
+    px(cx - 4, 41, 8, 9, shirt);
+    px(cx - 4, 41, 8, 1, shirtSh);
+    px(cx - 6, 41, 3, 9, suitC);
+    px(cx + 3, 41, 3, 9, suitC);
+    px(cx - 3, 43, 2, 7, suitC);
+    px(cx + 1, 43, 2, 7, suitC);
+    px(cx - 6, 41, 1, 9, suitHi);
+    px(cx + 5, 41, 1, 9, suitSh);
+    px(cx - 4, 40, 3, 2, shirt);
+    px(cx + 1, 40, 3, 2, shirt);
+    px(cx - 4, 40, 1, 2, shirtSh);
+    px(cx - 1, 41, 2, 1, mix(tie, '#000000', 0.22));
+    px(cx - 1, 42, 2, 8, tie);
+    px(cx - 1, 42, 1, 8, mix(tie, '#ffffff', 0.22));
+    px(cx, 42, 1, 8, mix(tie, '#000000', 0.16));
+  } else {
+    px(0, 44, 40, 6, kit);
+    px(3, 42, 34, 2, kit);
+    px(8, 41, 24, 1, kit);
+    px(0, 44, 40, 1, kitHi);
+    px(0, 48, 40, 2, kitSh);
+    px(0, 44, 2, 6, kitHi);
+    px(38, 44, 2, 6, kitSh);
+    dith(4, 47, 32, 3, kitSh);
+    px(cx - 5, 41, 10, 2, collar);
+    px(cx - 4, 43, 3, 2, collar);
+    px(cx + 1, 43, 3, 2, collar);
   }
-  if (pose === 1) {
-    px(1, 17, 1, 4, kit);
-    px(18, 17, 1, 4, kitSh);
-    px(1, 21, 2, 2, skin);
-    px(17, 21, 2, 2, skinSh);
+
+  // ---- neck ----
+  px(cx - 4, 34, 8, 8, skin);
+  px(cx - 4, 34, 2, 8, skinHi);
+  px(cx + 2, 34, 2, 8, skinSh);
+  px(cx - 4, 40, 8, 2, skinDk);
+  dith(cx - 3, 37, 6, 3, skinSh);
+
+  // ---- head base: oval built from row spans ----
+  const L = cx - halfW;
+  const Rr = cx + halfW;
+  px(L + 2, 4, Rr - L - 4, 2, skin);
+  px(L + 1, 6, Rr - L - 2, 2, skin);
+  px(L, 8, Rr - L, 18, skin);
+  if (jaw === 0) {
+    px(L + 1, 26, Rr - L - 2, 3, skin);
+    px(L + 3, 29, Rr - L - 6, 2, skin);
+    px(cx - 2, 31, 4, 2, skin);
   }
-  if (pose === 2) {
-    px(17, 9, 2, 5, kitSh);
-    px(17, 7, 2, 2, skin);
-    px(17, 7, 2, 1, skinHi);
+  if (jaw === 1) {
+    px(L + 1, 26, Rr - L - 2, 3, skin);
+    px(L + 2, 29, Rr - L - 4, 2, skin);
+    px(cx - 3, 31, 6, 2, skin);
+  }
+  if (jaw === 2) {
+    px(L, 26, Rr - L, 4, skin);
+    px(L + 1, 30, Rr - L - 2, 2, skin);
+  }
+  // shading: rim light left, shade right, cheekbone dither
+  px(L, 8, 2, 18, skinRim);
+  px(L + 2, 8, 2, 14, skinHi);
+  px(Rr - 2, 8, 2, 18, skinSh);
+  dith(Rr - 5, 10, 3, 16, skinSh);
+  px(Rr - 1, 10, 1, 14, skinDk);
+  dith(L + 3, 22, 4, 4, skinHi);
+  px(L + 2, 30, Rr - L - 4, 1, skinSh);
+  dith(L + 3, 28, Rr - L - 6, 2, skinSh);
+
+  // ---- ears ----
+  px(L - 2, 16, 2, 6, skin);
+  px(L - 2, 18, 1, 3, skinSh);
+  dot(L - 1, 19, skinDk);
+  px(Rr, 16, 2, 6, skinSh);
+  px(Rr + 1, 18, 1, 3, skinDk);
+
+  // ---- eyebrows ----
+  const bY = 14;
+  const blX = L + 2;
+  const brX = Rr - 8;
+  const brow = (bx: number) => {
+    if (browT === 0) px(bx, bY, 6, 1, HS);
+    if (browT === 1) {
+      px(bx, bY, 6, 2, HS);
+      px(bx, bY - 1, 3, 1, HS);
+    }
+    if (browT === 2) {
+      px(bx, bY + 1, 6, 1, HS);
+      px(bx + 4, bY, 2, 1, HS);
+    }
+  };
+  brow(blX);
+  brow(brX);
+  if (monobrow) px(blX + 6, bY, brX - blX - 6, 1, HS);
+
+  // ---- eyes ----
+  const eY = 16;
+  const elX = L + 2;
+  const erX = Rr - 8;
+  const eye = (ex: number) => {
+    px(ex, eY, 6, 3, '#fbf7ec');
+    if (eyeShape === 1) {
+      px(ex, eY, 1, 3, skinSh);
+      px(ex + 5, eY, 1, 3, skinSh);
+    }
+    if (eyeShape === 2) {
+      px(ex, eY - 1, 6, 1, skin);
+      px(ex + 1, eY, 4, 3, '#fbf7ec');
+    }
+    px(ex + 2, eY, 2, 3, iris);
+    px(ex + 2, eY, 1, 3, mix(iris, '#000000', 0.3));
+    px(ex + 2, eY, 1, 1, mix(iris, '#ffffff', 0.5));
+    px(ex + 3, eY + 1, 1, 1, INK);
+    px(ex, eY + 3, 6, 1, skinSh);
+    px(ex - 1, eY - 1, 1, 1, skinDk);
+  };
+  eye(elX);
+  eye(erX);
+
+  // ---- nose ----
+  const nTop = 15;
+  const nw = [0, 1, 1][noseW];
+  px(cx - 1, nTop, 1, 6, mix(skin, '#ffffff', 0.16));
+  px(cx, nTop, 1, 7, skinSh);
+  px(cx, nTop + 6, 1, 1, skinDk);
+  px(cx - 2 - nw, 21, 4 + nw * 2, 1, skinSh);
+  px(cx - 2 - nw, 21, 1, 1, skinDk);
+  px(cx + 1 + nw, 21, 1, 1, skinDk);
+  dot(cx - 1, 22, mix(skin, '#ffffff', 0.14));
+
+  // ---- cheeks / freckles / scar ----
+  dith(L + 2, 21, 3, 3, mix(skin, '#e0332d', 0.13));
+  dith(Rr - 5, 21, 3, 3, mix(skin, '#e0332d', 0.1));
+  if (freckles) {
+    const fk = mix(skin, '#7d4f28', 0.5);
+    dot(L + 3, 22, fk);
+    dot(L + 5, 23, fk);
+    dot(Rr - 5, 22, fk);
+    dot(Rr - 4, 24, fk);
+    dot(cx - 3, 23, fk);
+    dot(cx + 3, 23, fk);
+  }
+  if (scar) px(Rr - 6, 11, 1, 4, mix(skin, '#a9713f', 0.6));
+
+  // ---- age lines ----
+  if (age > 0.6) {
+    px(L + 3, 12, 4, 1, skinSh);
+    px(Rr - 7, 12, 4, 1, skinSh);
+    px(cx - 3, 25, 2, 1, skinSh);
+    px(cx + 2, 25, 2, 1, skinSh);
   }
 
-  // collar + neck
-  px(8, 14, 4, 1, '#fbf7ec');
-  px(9, 12, 2, 2, skinSh);
+  // ---- mouth ----
+  const mY = 26;
+  const mL = cx - 4;
+  const mW = 8;
+  if (mo === 0) {
+    px(mL, mY, mW, 1, '#5a2a1c');
+    px(mL + 1, mY + 1, mW - 2, 1, mix(skin, '#5a2a1c', 0.4));
+  }
+  if (mo === 1) {
+    dot(mL - 1, mY - 1, '#5a2a1c');
+    dot(mL + mW, mY - 1, '#5a2a1c');
+    px(mL, mY, mW, 1, '#5a2a1c');
+    px(mL + 1, mY + 1, mW - 2, 1, mix(skin, '#5a2a1c', 0.4));
+  }
+  if (mo === 2) {
+    px(mL, mY, mW, 2, '#3a1a12');
+    px(mL + 1, mY, mW - 2, 1, '#fbf7ec');
+  }
+  if (mo === 3) {
+    dot(mL - 1, mY, '#5a2a1c');
+    dot(mL + mW, mY, '#5a2a1c');
+    px(mL, mY + 1, mW, 1, '#5a2a1c');
+  }
 
-  // head
-  px(7, 4, 6, 7, skin);
-  px(7, 4, 3, 3, skinHi);
-  px(12, 7, 1, 4, skinSh);
-  px(8, 10, 4, 1, skinSh);
-  px(6, 7, 1, 2, skin);
-  px(13, 7, 1, 2, skinSh);
+  // ---- facial hair ----
+  const stub = mix(skin, HC, 0.42);
+  if (fh === 1) {
+    dith(L, 23, 3, 9, stub);
+    dith(Rr - 3, 23, 3, 9, stub);
+    dith(L + 2, 29, Rr - L - 4, 3, stub);
+    dith(mL, mY - 1, mW, 1, stub);
+  }
+  if (fh === 2) {
+    px(L, 21, 3, 12, HC);
+    px(Rr - 3, 21, 3, 12, HC);
+    px(L + 2, 30, Rr - L - 4, 3, HC);
+    px(mL, mY - 1, mW, 1, HC);
+    px(L, 21, 1, 6, HS);
+    dith(L + 1, 22, 2, 4, HH);
+  }
+  if (fh === 3) {
+    px(cx - 4, 24, 8, 2, HC);
+    px(cx - 3, 23, 6, 1, HC);
+  }
+  if (fh === 4) {
+    px(mL - 1, mY - 1, mW + 2, 2, HC);
+    px(cx - 2, 30, 4, 3, HC);
+  }
+  if (fh === 5) {
+    px(L, 20, 2, 13, HC);
+    px(Rr - 2, 20, 2, 13, HC);
+    px(L + 2, 31, Rr - L - 4, 2, HC);
+  }
 
-  // face
-  px(8, 7, 1, 1, '#14100a');
-  px(11, 7, 1, 1, '#14100a');
-  px(8, 6, 2, 1, skinSh);
-  px(11, 6, 2, 1, skinSh);
-  if (beard) px(7, 9, 6, 2, hairC);
-  px(9, 9, 2, 1, beard ? '#14100a' : skinSh);
-
-  // hair
+  // ---- hair + hairline ----
+  const top = 2 + hl;
   if (hs === 0) {
-    px(7, 3, 6, 2, hairC);
-    px(7, 3, 3, 1, hairHi);
+    px(L, top, Rr - L, 5 - hl, HC);
+    px(L, top, F((Rr - L) / 2), 1, HH);
+    px(L, top + 4, 2, 4, HC);
+    px(Rr - 2, top + 4, 2, 4, HC);
+    dith(L + 2, top + 1, Rr - L - 4, 2, HS);
   }
-  if (hs === 1) {
-    px(7, 2, 6, 3, hairC);
-    px(7, 2, 3, 1, hairHi);
-    px(7, 5, 1, 1, hairC);
-    px(12, 5, 1, 1, hairC);
-  }
+  if (hs === 1) px(L + 1, top + 1, Rr - L - 2, 3 - hl, mix(skin, HC, 0.5));
   if (hs === 2) {
-    px(6, 1, 8, 4, hairC);
-    px(6, 1, 4, 1, hairHi);
-    px(6, 4, 1, 3, hairC);
-    px(13, 4, 1, 3, hairC);
+    px(L - 1, 1, Rr - L + 2, 7, HC);
+    px(L - 1, 1, F((Rr - L) / 2), 1, HH);
+    px(L - 1, 8, 2, 5, HC);
+    px(Rr - 1, 8, 2, 5, HC);
+    dith(L, 2, Rr - L, 4, HS);
   }
   if (hs === 3) {
-    px(7, 3, 6, 2, hairC);
-    px(6, 4, 1, 7, hairC);
-    px(13, 4, 1, 7, hairC);
-    px(7, 3, 3, 1, hairHi);
+    px(L, top, Rr - L, 4, HC);
+    px(L - 1, top, 2, 22, HC);
+    px(Rr - 1, top, 2, 22, HC);
+    px(L, top, F((Rr - L) / 2), 1, HH);
   }
   if (hs === 4) {
-    px(9, 1, 2, 3, hairC);
-    px(9, 1, 1, 1, hairHi);
-    px(7, 3, 6, 1, hairC);
+    px(cx - 3, 0, 6, 5, HC);
+    px(cx - 3, 0, 3, 1, HH);
+    px(L, top + 1, Rr - L, 2, mix(skin, HC, 0.5));
   }
-  if (hs === 5) px(7, 4, 6, 1, kit2);
+  if (hs === 5) {
+    px(L - 1, 0, Rr - L + 2, 8, HC);
+    px(L - 1, 8, 3, 6, HC);
+    px(Rr - 2, 8, 3, 6, HC);
+    px(L, 1, F((Rr - L) / 2), 1, HH);
+    dith(L, 2, Rr - L, 5, HS);
+  }
+  if (hs === 6) {
+    px(L + 2, top, Rr - L - 4, 1, HC);
+    px(L + 1, top, 3, 3, HC);
+    px(Rr - 4, top, 3, 3, HC);
+  }
+  if (hs === 7) {
+    px(L, top + 1, Rr - L, 2, mix(skin, HC, 0.6));
+    px(L, top, 3, 1, HC);
+    px(Rr - 3, top, 3, 1, HC);
+  }
+  if (hs === 8) {
+    px(L, top, Rr - L, 3, HC);
+    for (let x = L; x < Rr; x += 2) px(x, top + 3, 1, 2, HC);
+    px(L, top, F((Rr - L) / 2), 1, HH);
+  }
 
   return svgUri(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 26" shape-rendering="crispEdges">' +
-      R.join('') +
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 50" shape-rendering="crispEdges">' +
+      Q.join('') +
       '</svg>',
   );
 }
 
 // ---------------------------------------------------------------------------
-// Public portrait API — memoized per seed
+// Public portrait API — memoized per (seed, opts)
 // ---------------------------------------------------------------------------
 
 const _portraitCache = new Map<string, string>();
 
-/** The seeded 16-bit portrait for a card, as a `data:image/svg+xml` URI. Memoized. */
-export function portraitDataUri(seed: string | number): string {
-  const key = String(seed);
+/** The seeded pixel portrait for a card, as a `data:image/svg+xml` URI. Memoized
+ *  by seed + attire (suit) + kit colour, so the same inputs always agree. */
+export function portraitDataUri(seed: string | number, opts?: PortraitOpts): string {
+  const key = `${seed}|${opts?.suit ? 's' : 'p'}|${opts?.kit ?? DEFAULT_KIT}`;
   let uri = _portraitCache.get(key);
   if (uri === undefined) {
-    uri = pixA(key);
+    uri = pix5c(String(seed), opts);
     _portraitCache.set(key, uri);
   }
   return uri;
 }
 
-/** Ready-to-spread background style for a portrait window div. Crisp / pixelated. */
-export function portraitBackgroundStyle(seed: string | number): CSSProperties {
+/** Ready-to-spread background style for a portrait window div. Crisp / pixelated.
+ *  Legacy call sites (match pitch, lineup) use `contain`; the v3 card face uses
+ *  `portraitArtStyle` below for the inset:0, full-bleed close-up bust. */
+export function portraitBackgroundStyle(seed: string | number, opts?: PortraitOpts): CSSProperties {
   return {
-    backgroundImage: `url("${portraitDataUri(seed)}")`,
+    backgroundImage: `url("${portraitDataUri(seed, opts)}")`,
     backgroundSize: 'contain',
     backgroundRepeat: 'no-repeat',
     backgroundPosition: 'center bottom',
     imageRendering: 'pixelated',
   };
 }
+
+/** The v3 card-face art layer: the bust sits `inset:0`, bottom-anchored, sized to
+ *  ~98% of the region height (a close-up that fills the art window). Pixelated. */
+export function portraitArtStyle(seed: string | number, opts?: PortraitOpts): CSSProperties {
+  return {
+    position: 'absolute',
+    inset: 0,
+    backgroundImage: `url("${portraitDataUri(seed, opts)}")`,
+    backgroundSize: 'auto 98%',
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'center bottom',
+    imageRendering: 'pixelated',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Card-face backgrounds (ported from the v3 handoff PITCH map + class surfaces).
+// The pitch is PLAYER-ONLY — the at-a-glance class tell. Managers sit on aged
+// leather, tactics on a dark tactical board.
+// ---------------------------------------------------------------------------
+
+/** Player art background — the LOCKED "stadium horizon": grass across the lower
+ *  half, a dark stand + amber floodlight glow above so the head reads on the sky. */
+export const PLAYER_PITCH_BG =
+  'radial-gradient(78% 58% at 50% 2%, rgba(232,178,60,0.55), transparent 44%), ' +
+  'linear-gradient(180deg, #15231a 0%, #21472d 40%, #3f9a58 62%, #49ae65 100%)';
+
+/** Manager art background — aged leather. */
+export const MANAGER_LEATHER_BG =
+  'radial-gradient(100% 80% at 50% 22%, rgba(232,178,60,0.22), transparent 66%), ' +
+  'linear-gradient(165deg, #3a2c19, #201810)';
+
+/** Tactic art background — a dark tactical board (blue-tinted glow). */
+export const TACTIC_BOARD_BG =
+  'radial-gradient(90% 80% at 50% 34%, rgba(61,123,214,0.28), transparent 64%), ' +
+  'linear-gradient(165deg, #24303f, #14100a)';
+
+/** The soft ground-shadow ellipse the bust stands on. */
+export const GROUND_SHADOW_BG =
+  'radial-gradient(50% 50% at 50% 50%, rgba(0,0,0,0.42), transparent 72%)';
+
+/** Name band + meta strip + effect-block surfaces (ported tokens). */
+export const NAME_BAND_BG = 'linear-gradient(180deg, #241c10, #171207)';
+export const META_STRIP_BG = 'linear-gradient(180deg, #1c1610, #120d07)';
+export const EFFECT_BLOCK_BG = '#120d07';
+export const INNER_INK = '#0b0703';
 
 // ---------------------------------------------------------------------------
 // Rarity foil frames (FR) — the frame material IS the rarity axis on card faces.
