@@ -31,6 +31,7 @@ import { definingTraitsFor } from './defining-traits';
 import type { CoAppearance } from './chem';
 import { chemistryLinks } from './chem';
 import { PERSONALITY_THEMES } from './chemistry';
+import { feedsKeep, feedsPress, feedsCreate, feedsBreak, feedsStop, feedsFinish } from './contests';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -170,13 +171,13 @@ function managerMods(
   };
   switch (joker.id) {
     case 'the_dinosaur':
-      each((c) => c.archetype === 'Target' || c.archetype === 'Powerhouse', 2, 0);
+      each(feedsFinish, 2, 0);        // Direct Play → +FINISH (the forwards)
       break;
     case 'the_professor':
-      each((c) => c.archetype === 'Controller' || c.archetype === 'Passer', 2, 0);
+      each(feedsKeep, 2, 0);          // Possession → +KEEP (the ball-players)
       break;
     case 'the_mourinho':
-      each((c) => c.archetype === 'Destroyer' || c.archetype === 'Cover', 0, 2);
+      each(feedsStop, 0, 2);          // Low Block → +STOP (a clean back line)
       break;
     case 'the_gambler':
       each((c) => c.card.durability === 'glass' || c.card.durability === 'phoenix', 1, 1);
@@ -191,7 +192,7 @@ function managerMods(
       each((c) => linkedIds.has(c.id), 1, 0);
       break;
     case 'scouts_eye':
-      each((c) => c.band === 'DEF', 0, 1);
+      each(feedsPress, 0, 2);         // Organised press → +PRESS
       break;
   }
 }
@@ -211,13 +212,15 @@ function tacticMods(
   };
   const leading = ctx.yourGoals > ctx.theirGoals;
   const trailing = ctx.yourGoals < ctx.theirGoals;
+  // Every lever targets the SAME cards contestTotals scores, via the feedsX
+  // predicates — so the mod moves the contest the copy names.
   switch (tactic.id) {
     case 'high_line':
-      each((c) => c.band !== 'DEF', 1, 0);
-      each((c) => c.band === 'DEF', 0, -1);
+      each(feedsCreate, 1, 0);          // +CREATE (push up)
+      each(feedsStop, 0, -1);           // −STOP (the risk of a high line)
       break;
     case 'press_high':
-      each((c) => c.band === 'ATT', 0, 2);
+      each(feedsPress, 0, 2);           // +PRESS
       for (const c of cards) {
         if (c.archetype === 'Sprinter' || c.archetype === 'Engine') {
           // 0–100 fitness axis: the high press costs the runners ~9%/increment.
@@ -225,35 +228,43 @@ function tacticMods(
         }
       }
       break;
+    case 'gegenpress':
+      if (trailing) {
+        each(feedsPress, 0, 2);         // +PRESS while chasing the game
+        for (const c of cards) {
+          if (feedsPress(c)) out.drains[c.id] = (out.drains[c.id] ?? 0) - 6;
+        }
+      }
+      break;
     case 'wing_play':
-      each((c) => WIDE_POSITIONS.has(c.position), 2, 0);
+      each(feedsCreate, 2, 0);          // +CREATE (was WIDE_POSITIONS — a wide DEFENDER got useless ATK)
       break;
     case 'narrow':
-      each((c) => c.archetype === 'Controller' || c.archetype === 'Passer', 2, 0);
+      each(feedsBreak, 0, 2);           // +BREAK (a compact midfield)
       break;
     case 'low_block':
-      each((c) => c.band === 'DEF', 0, 2);
-      if (leading) each((c) => c.archetype === 'Sprinter' || c.archetype === 'Dribbler', 2, 0);
+      each(feedsStop, 0, 2);            // +STOP
+      if (leading) each(feedsFinish, 2, 0);  // counter threat while parking → +FINISH
       break;
     case 'sit_deep':
-      each((c) => c.band === 'DEF', 0, 1);
-      each((c) => c.archetype === 'Sprinter' || c.archetype === 'Dribbler', 2, 0);
+      each(feedsStop, 0, 1);            // +STOP
+      each(feedsFinish, 2, 0);          // the space behind → +FINISH
       break;
     case 'fortress':
-      each((c) => c.band === 'DEF', 0, 3);
+      each(feedsStop, 0, 3);            // +STOP
       break;
     case 'man_marking':
-      each((c) => c.band === 'MID', 0, 2);
+      each(feedsBreak, 0, 2);           // +BREAK
       break;
     case 'counter_attack':
-      if (trailing) each((c) => c.band === 'ATT', 3, 0);
+      if (trailing) each(feedsFinish, 3, 0);  // +FINISH on the break
       break;
     case 'possession':
-      each((c) => ['Controller', 'Passer', 'Engine'].includes(c.archetype), 2, 0);
+      each(feedsKeep, 2, 0);            // +KEEP
       break;
     case 'set_piece':
       out.chances.push({ name: src, quality: 'half', p: 0.3 });
-      each((c) => c.archetype === 'Target' || c.archetype === 'Commander', 1, 0);
+      each(feedsFinish, 1, 0);          // +FINISH from dead balls
       break;
     case 'dark_arts':
       out.enemyMods.push({ source: src, who: 'star', atk: -1, def: -1 });
@@ -264,14 +275,14 @@ function tacticMods(
       if (ctx.increment >= 3) each(() => true, 1, 1);
       break;
     case 'overload_left':
-      each((c) => c.lane === 'L', 2, 0);
+      each((c) => c.lane === 'L' && feedsCreate(c), 2, 0);  // attackers in the L lane → +CREATE
       break;
     case 'overload_right':
-      each((c) => c.lane === 'R', 2, 0);
+      each((c) => c.lane === 'R' && feedsCreate(c), 2, 0);  // attackers in the R lane → +CREATE
       break;
     case 'route_one':
       out.chances.push({ name: src, quality: 'half', p: 0.25 });
-      each((c) => c.archetype === 'Target', 1, 0);
+      each(feedsFinish, 1, 0);          // +FINISH aerial
       break;
   }
 }
