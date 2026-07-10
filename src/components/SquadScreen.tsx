@@ -296,7 +296,7 @@ export default function SquadScreen({
 
   // Squad status counts (chips only when nonzero; injuries/fitness only exist in talk).
   const injuredCount = xiCards.filter((c) => c.injured).length;
-  const tiredCount = xiCards.filter((c) => !c.injured && fitnessOf(c) < 3).length;
+  const tiredCount = xiCards.filter((c) => !c.injured && fitnessOf(c) < 50).length;
   const misfitCount = useMemo(
     () =>
       sel.starters.reduce<number>((n, id, i) => {

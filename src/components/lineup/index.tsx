@@ -22,7 +22,7 @@ import type { Card } from '../../lib/scoring';
 import type { Formation } from '../../lib/formations';
 import { PIXEL, POSITION_COLOR, lastName } from '../cards/cardTokens';
 import { deriveStats } from '../../lib/funnel';
-import { portraitBackgroundStyle, rarityFrame, HERO } from '../cards/portrait';
+import { portraitBackgroundStyle, rarityFrame, HERO, fitnessColor as fitnessColorForPct } from '../cards/portrait';
 
 // ---------------------------------------------------------------------------
 // Condition glyph (§7) — the 5-grade wear read shown on the selection tile
@@ -60,23 +60,22 @@ export interface DragPointerHandlers {
 // Kept here so every lineup surface reads condition identically.
 // ---------------------------------------------------------------------------
 
-export const fitnessOf = (c: Card): number => c.fitness ?? (c.injured ? 2 : 6);
-const LOW_FITNESS = 2.5; // engine injury-risk threshold (advanceIncrement)
+export const fitnessOf = (c: Card): number => c.fitness ?? (c.injured ? 33 : 100);
+const LOW_FITNESS = 50; // engine injury-risk threshold (advanceIncrement)
 
+// Colour is the canonical 0–100 band fn (portrait.ts) — the single source of truth,
+// so this surface can't drift from the pitch/card. Injured is always danger-red.
 export function fitnessColor(c: Card): string {
   if (c.injured) return 'var(--danger)';
-  const f = fitnessOf(c);
-  if (f >= 4) return 'var(--success)';
-  if (f >= LOW_FITNESS) return 'var(--gold)';
-  return 'var(--danger)';
+  return fitnessColorForPct(fitnessOf(c));
 }
 
 export function fitnessLabel(c: Card): string {
   if (c.injured) return 'INJ';
   const f = fitnessOf(c);
-  if (f >= 4.5) return 'FRESH';
-  if (f >= 3) return 'OK';
-  if (f >= LOW_FITNESS) return 'TIRED';
+  if (f >= 75) return 'FRESH';
+  if (f >= 50) return 'OK';
+  if (f >= 25) return 'TIRED';
   return 'SPENT';
 }
 
@@ -130,7 +129,7 @@ export function PosTag({
 
 export function FitnessBar({ card, width = '100%' }: { card: Card; width?: number | string }) {
   const f = fitnessOf(card);
-  const pct = Math.max(0, Math.min(1, (f - 1) / 5)); // 1→0, 6→1
+  const pct = Math.max(0, Math.min(1, f / 100)); // 0→0, 100→1
   return (
     <div
       style={{
@@ -247,7 +246,7 @@ export function LineupSlot({
             </div>
             {/* fitness bar (3px) */}
             <div style={{ height: 3, background: 'rgba(0,0,0,0.5)' }}>
-              <div style={{ height: '100%', width: `${Math.max(0, Math.min(1, (fitnessOf(card) - 1) / 5)) * 100}%`, background: fitnessColor(card) }} />
+              <div style={{ height: '100%', width: `${Math.max(0, Math.min(1, fitnessOf(card) / 100)) * 100}%`, background: fitnessColor(card) }} />
             </div>
           </div>
           {/* injured corner flag */}
@@ -358,7 +357,7 @@ export function BenchTile({
         </div>
         {/* fitness bar (2px) */}
         <div style={{ height: 2, background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ height: '100%', width: `${Math.max(0, Math.min(1, (fitnessOf(card) - 1) / 5)) * 100}%`, background: fitnessColor(card) }} />
+          <div style={{ height: '100%', width: `${Math.max(0, Math.min(1, fitnessOf(card) / 100)) * 100}%`, background: fitnessColor(card) }} />
         </div>
       </div>
       {/* injured marker */}

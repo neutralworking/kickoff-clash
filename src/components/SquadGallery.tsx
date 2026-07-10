@@ -40,7 +40,7 @@ const SORTS: { id: SortKey; label: string }[] = [
 
 const RARITY_ORDER: Record<string, number> = { Legendary: 0, Epic: 1, Rare: 2, Common: 3 };
 const POSITION_ORDER: Record<string, number> = { GK: 0, CD: 1, WD: 2, DM: 3, CM: 4, AM: 5, WM: 6, WF: 7, CF: 8 };
-const fitnessOf = (c: Card): number => c.fitness ?? (c.injured ? 2 : 6);
+const fitnessOf = (c: Card): number => c.fitness ?? (c.injured ? 33 : 100);
 
 export default function SquadGallery({ deck, onClose, title = 'SQUAD' }: SquadGalleryProps) {
   const [group, setGroup] = useState('all');

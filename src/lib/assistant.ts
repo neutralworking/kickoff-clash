@@ -26,8 +26,8 @@ export interface CoachContext {
   weaknessLabel?: string;
 }
 
-const TIRED_FITNESS = 3;      // at/under this a starter is fading
-const SPENT_FITNESS = 2.5;    // at/under this they risk a knock (engine injury threshold)
+const TIRED_FITNESS = 60;     // at/under this a starter is fading (0–100 axis)
+const SPENT_FITNESS = 50;     // at/under this they risk a knock (engine injury threshold)
 
 /** Build the prioritised coach notes for the current break. At most ~4 lines. */
 export function coachNotes(state: MatchV5State, ctx: CoachContext = {}): CoachNote[] {
@@ -67,17 +67,17 @@ export function coachNotes(state: MatchV5State, ctx: CoachContext = {}): CoachNo
     });
   } else {
     const tired = state.xi
-      .filter((c) => (c.fitness ?? 6) <= TIRED_FITNESS)
-      .sort((a, b) => (a.fitness ?? 6) - (b.fitness ?? 6));
+      .filter((c) => (c.fitness ?? 100) <= TIRED_FITNESS)
+      .sort((a, b) => (a.fitness ?? 100) - (b.fitness ?? 100));
     if (tired.length > 0) {
       const w = tired[0];
-      const spent = (w.fitness ?? 6) <= SPENT_FITNESS;
+      const spent = (w.fitness ?? 100) <= SPENT_FITNESS;
       notes.push({
         kind: 'fitness',
         tone: 'warn',
         text: spent
-          ? `${w.name} is spent (${(w.fitness ?? 6).toFixed(0)}/6) and risks a knock — sub them.`
-          : `${w.name} is tiring (${(w.fitness ?? 6).toFixed(0)}/6) — keep an eye on them.`,
+          ? `${w.name} is spent (${(w.fitness ?? 100).toFixed(0)}%) and risks a knock — sub them.`
+          : `${w.name} is tiring (${(w.fitness ?? 100).toFixed(0)}%) — keep an eye on them.`,
       });
     } else {
       notes.push({ kind: 'fitness', tone: 'good', text: 'Legs look fresh across the XI.' });

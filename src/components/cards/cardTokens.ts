@@ -945,13 +945,14 @@ export function positionChipVisual(pos: string, primary: boolean): { text: strin
 }
 
 /**
- * Fitness pip model. `fitness` is 1–6 (MATCH_ENGINE §3.1); we render it as a small
- * crisp pixel meter. Returns the filled-pip count, total, and a band colour.
+ * Fitness pip model. `fitness` is a 0–100 percentage; we render it as a small crisp
+ * pixel meter of `total` pips, filling proportional to the percent. Returns the
+ * filled-pip count, total, and a band colour (≥75 green / ≥50 amber / else red).
  */
 export function fitnessMeter(fitness: number): { filled: number; total: number; color: string } {
   const total = 6;
-  const filled = Math.max(0, Math.min(total, Math.round(fitness)));
-  const color =
-    filled >= 5 ? 'var(--success)' : filled >= 3 ? 'var(--gold)' : filled >= 1 ? '#f6b765' : 'var(--danger)';
+  const pct = Math.max(0, Math.min(100, fitness));
+  const filled = Math.max(0, Math.min(total, Math.round((pct / 100) * total)));
+  const color = pct >= 75 ? 'var(--success)' : pct >= 50 ? 'var(--gold)' : 'var(--danger)';
   return { filled, total, color };
 }

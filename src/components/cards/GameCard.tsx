@@ -49,7 +49,6 @@ import {
 import {
   portraitBackgroundStyle,
   rarityFrame,
-  fitnessColor,
   conditionRecipe,
   WEAR_GLYPH,
   HERO,
