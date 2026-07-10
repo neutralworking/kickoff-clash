@@ -466,7 +466,7 @@ function TraitsSection({ traits, rarity, accent }: { traits: ResolvedTrait[]; ra
   return (
     <Panel>
       <div className="flex items-center justify-between" style={{ gap: 8 }}>
-        <Label>DEFINING TRAITS</Label>
+        <Label>{ordered.length > 1 ? 'ACTIONS' : 'ACTION'}</Label>
         <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.5, color: accent, lineHeight: 1 }}>
           {rarity.toUpperCase()} · {ordered.length}
         </span>
