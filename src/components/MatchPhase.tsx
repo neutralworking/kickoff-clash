@@ -228,7 +228,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
         height: '100dvh',
         display: 'flex',
         flexDirection: 'column',
-        background: 'var(--felt, #1a3a1a)',
+        background: '#120d07',
         fontFamily: 'var(--font-body, sans-serif)',
         color: 'var(--cream, #f5f0e8)',
         position: 'relative',

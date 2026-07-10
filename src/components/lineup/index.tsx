@@ -20,8 +20,26 @@
 import type { PointerEventHandler } from 'react';
 import type { Card } from '../../lib/scoring';
 import type { Formation } from '../../lib/formations';
-import { PIXEL, RARITY_COLOR, POSITION_COLOR, lastName } from '../cards/cardTokens';
+import { PIXEL, POSITION_COLOR, lastName } from '../cards/cardTokens';
 import { deriveStats } from '../../lib/funnel';
+import { portraitBackgroundStyle, rarityFrame, HERO } from '../cards/portrait';
+
+// ---------------------------------------------------------------------------
+// Condition glyph (§7) — the 5-grade wear read shown on the selection tile
+// footer: ◆ for the intact grades (mint/played), ◢ for the worn grades
+// (worn/creased/torn), tinted by grade. Mirrors the CONDG map in the handoff.
+// ---------------------------------------------------------------------------
+
+const CONDITION_GLYPH: Record<string, { glyph: string; color: string }> = {
+  MINT: { glyph: '◆', color: '#1f9d4f' },
+  PLAYED: { glyph: '◆', color: '#c9bb95' },
+  WORN: { glyph: '◢', color: '#e8b23a' },
+  CREASED: { glyph: '◢', color: '#e0332d' },
+  TORN: { glyph: '◢', color: '#e0332d' },
+};
+function conditionGlyph(card: Card): { glyph: string; color: string } {
+  return CONDITION_GLYPH[card.condition ?? 'MINT'] ?? CONDITION_GLYPH.MINT;
+}
 
 // ---------------------------------------------------------------------------
 // Pointer pass-through — the SquadScreen drag layer disambiguates tap (inspect/
@@ -167,11 +185,9 @@ export function LineupSlot({
   dim?: boolean;
   dropHint?: boolean;
 } & DragPointerHandlers) {
-  const isGK = slot.type === 'GK';
-  const kit = isGK ? '#16a34a' : 'var(--kit-red)';
-  const rarityRing = card ? RARITY_COLOR[card.rarity] ?? 'var(--line-white)' : null;
   const activeMisfit = showMisfit && misfit;
-  const ring = dropHint ? 'var(--gold)' : activeMisfit ? 'var(--danger)' : rarityRing;
+  const frameSpec = card ? rarityFrame(card.rarity) : null;
+  const posColor = card ? POSITION_COLOR[card.position] ?? 'var(--dust)' : 'var(--dust)';
 
   return (
     <button
@@ -185,161 +201,89 @@ export function LineupSlot({
         left: `${slot.x}%`,
         top: `${slot.y}%`,
         transform: `translate(-50%, -50%)${dropHint ? ' scale(1.12)' : ''}`,
-        width: 56,
+        width: 58,
         transition: 'transform 0.1s ease',
         touchAction: onPointerDown ? 'none' : undefined,
         opacity: dim ? 0.3 : 1,
         zIndex: dropHint ? 6 : undefined,
       }}
     >
-      {card ? (
+      {card && frameSpec ? (
+        // §7 selection tile — foil frame → pixel interior (pos + ATK/DEF, portrait,
+        // name + condition glyph, fitness bar). A problem slot (misfit / dropHint)
+        // gets a coloured outline; injured keeps a small corner flag.
         <div
-          className={`relative flex items-center justify-center ${justPlaced ? 'chip-place' : ''}`}
+          className={`relative ${justPlaced ? 'chip-place' : ''}`}
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: '50%',
-            background: `radial-gradient(circle at 50% 32%, ${kit}, ${isGK ? '#0f7a35' : '#b62520'})`,
-            border: `2px solid ${ring}`,
+            width: 58,
+            borderRadius: 7,
+            padding: 2,
+            background: activeMisfit ? 'linear-gradient(135deg, #e0332d, #7a1f1c)' : frameSpec.frame,
             boxShadow: dropHint
-              ? '0 0 0 3px var(--gold-glow), 0 2px 0 0 var(--ink-black)'
-              : activeMisfit
-                ? '0 0 0 2px var(--danger), 0 2px 0 0 var(--ink-black)'
-                : '0 2px 0 0 var(--ink-black), 0 3px 5px rgba(0,0,0,0.4)',
+              ? `0 0 0 3px var(--gold-glow), 0 2px 0 0 ${HERO.ink}`
+              : `0 2px 0 0 ${HERO.ink}, 0 4px 8px rgba(0,0,0,0.45)`,
+            outline: dropHint ? '2px solid var(--gold)' : activeMisfit ? '2px solid #e0332d' : 'none',
+            outlineOffset: 1,
           }}
         >
-          {(() => {
-            const st = deriveStats(card);
-            return (
-              <span
-                style={{
-                  fontFamily: PIXEL,
-                  fontSize: 10,
-                  lineHeight: 1,
-                  color: 'var(--line-white)',
-                  textShadow: '0 1px 0 rgba(0,0,0,0.6)',
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {st.atk}/{st.def}
-              </span>
-            );
-          })()}
-          {/* injured marker */}
+          <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 5, border: `1.5px solid ${HERO.ink}`, background: 'linear-gradient(165deg, #2f2415, #191309)' }}>
+            {/* header: position chip + printed ATK/DEF */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 3px 0' }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1, color: HERO.badgeText, background: activeMisfit ? '#e0332d' : posColor, padding: '1.5px 2.5px', borderRadius: 2 }}>{card.position}</span>
+              {(() => { const st = deriveStats(card); return (
+                <span style={{ fontFamily: PIXEL, fontSize: 7, lineHeight: 1, color: HERO.cream, fontVariantNumeric: 'tabular-nums' }}>{st.atk}/{st.def}</span>
+              ); })()}
+            </div>
+            {/* portrait window (26px) — the seeded pixel bust */}
+            <div style={{ height: 26, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'radial-gradient(90% 80% at 50% 30%, rgba(232,178,60,0.14), transparent 72%)' }}>
+              <div className="pixelated" aria-hidden style={{ ...portraitBackgroundStyle(card.id), width: '58%', height: '100%' }} />
+            </div>
+            {/* footer: name + condition glyph */}
+            <div style={{ padding: '1px 3px 2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1.2, color: HERO.cream, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lastName(card.name)}</span>
+              {(() => { const g = conditionGlyph(card); return (
+                <span aria-label={`Condition ${card.condition ?? 'MINT'}`} style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1, color: g.color, flexShrink: 0 }}>{g.glyph}</span>
+              ); })()}
+            </div>
+            {/* fitness bar (3px) */}
+            <div style={{ height: 3, background: 'rgba(0,0,0,0.5)' }}>
+              <div style={{ height: '100%', width: `${Math.max(0, Math.min(1, (fitnessOf(card) - 1) / 5)) * 100}%`, background: fitnessColor(card) }} />
+            </div>
+          </div>
+          {/* injured corner flag */}
           {showFitness && card.injured && (
-            <span
-              className="absolute"
-              style={{
-                top: -4,
-                left: -4,
-                width: 13,
-                height: 13,
-                borderRadius: '50%',
-                background: 'var(--danger)',
-                border: '1.5px solid var(--ink-black)',
-                color: 'var(--line-white)',
-                fontFamily: PIXEL,
-                fontSize: 8,
-                lineHeight: '10px',
-                textAlign: 'center',
-              }}
-            >
-              +
-            </span>
+            <span className="absolute" style={{ top: -5, left: -5, width: 13, height: 13, borderRadius: '50%', background: 'var(--danger)', border: `1.5px solid ${HERO.ink}`, color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 8, lineHeight: '10px', textAlign: 'center', zIndex: 3 }}>+</span>
           )}
-          {/* inspect pip (tap chip = swap/clear; this = inspect). pointerdown is
-              stopped so the pip never begins a drag on the wrapping chip. */}
+          {/* inspect pip — tap the tile = assign sheet; this = inspect the card. */}
           {onInspect && (
             <span
               role="button"
               aria-label={`Inspect ${lastName(card.name)}`}
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onInspect();
-              }}
+              onClick={(e) => { e.stopPropagation(); onInspect(); }}
               className="absolute flex items-center justify-center"
-              style={{
-                // Fully outside the rating circle — at −3/−4 the pip clipped the
-                // score digits; hung off the corner the number stays readable.
-                bottom: -8,
-                right: -9,
-                width: 14,
-                height: 14,
-                borderRadius: '50%',
-                background: 'var(--ink-black)',
-                border: '1.5px solid var(--line-white)',
-                color: 'var(--line-white)',
-                fontFamily: PIXEL,
-                fontSize: 8,
-                lineHeight: 1,
-              }}
-            >
-              i
-            </span>
+              style={{ bottom: -7, right: -7, width: 14, height: 14, borderRadius: '50%', background: HERO.ink, border: '1.5px solid var(--line-white)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 8, lineHeight: 1, zIndex: 3 }}
+            >i</span>
           )}
         </div>
       ) : (
-        <div
-          className="slot-pulse flex items-center justify-center"
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: '50%',
-            background: 'rgba(7,16,11,0.45)',
-            border: dropHint ? '2px solid var(--gold)' : '2px dashed rgba(242,246,239,0.7)',
-            boxShadow: dropHint ? '0 0 0 3px var(--gold-glow)' : undefined,
-          }}
-        >
-          <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'rgba(242,246,239,0.9)', lineHeight: 1 }}>
-            +
-          </span>
-        </div>
-      )}
-
-      {/* POSITION code — slot's role when empty, the player's actual position when
-          filled (danger-red when they can't cover this slot). Never truncates. */}
-      <span style={{ marginTop: 3 }}>
-        <span
-          style={{
-            fontFamily: PIXEL,
-            fontSize: 8,
-            lineHeight: 1,
-            letterSpacing: 0.3,
-            color: 'var(--ink-black)',
-            background: activeMisfit
-              ? 'var(--danger)'
-              : card
-                ? POSITION_COLOR[card.position] ?? 'var(--dust)'
-                : 'rgba(242,246,239,0.85)',
-            borderRadius: 3,
-            padding: '2px 3px',
-            border: '1px solid var(--ink-black)',
-            display: 'inline-block',
-          }}
-        >
-          {card ? card.position : slot.type}
-        </span>
-      </span>
-
-      {showFitness && card && <FitnessBar card={card} width={34} />}
-
-      {/* Surname when filled — the pixel name label. */}
-      {card && (
-        <span
-          className="truncate text-center"
-          style={{
-            width: 58,
-            marginTop: 2,
-            fontSize: 8.5,
-            fontWeight: 700,
-            color: 'var(--line-white)',
-            textShadow: '0 1px 2px rgba(0,0,0,0.85)',
-            lineHeight: 1.1,
-          }}
-        >
-          {lastName(card.name)}
-        </span>
+        <>
+          <div
+            className="slot-pulse flex items-center justify-center"
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: '50%',
+              background: 'rgba(7,16,11,0.45)',
+              border: dropHint ? '2px solid var(--gold)' : '2px dashed rgba(242,246,239,0.7)',
+              boxShadow: dropHint ? '0 0 0 3px var(--gold-glow)' : undefined,
+            }}
+          >
+            <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'rgba(242,246,239,0.9)', lineHeight: 1 }}>+</span>
+          </div>
+          {/* empty slot role code */}
+          <span style={{ marginTop: 3, fontFamily: PIXEL, fontSize: 8, lineHeight: 1, letterSpacing: 0.3, color: 'var(--ink-black)', background: 'rgba(242,246,239,0.85)', borderRadius: 3, padding: '2px 3px', border: '1px solid var(--ink-black)' }}>{slot.type}</span>
+        </>
       )}
     </button>
   );
@@ -368,7 +312,8 @@ export function BenchTile({
   dropHint?: boolean;
   touchAction?: 'none' | 'pan-x';
 } & DragPointerHandlers) {
-  const ring = RARITY_COLOR[card.rarity] ?? 'var(--border)';
+  const frameSpec = rarityFrame(card.rarity);
+  const posColor = POSITION_COLOR[card.position] ?? 'var(--dust)';
   return (
     <button
       onPointerDown={onPointerDown}
@@ -376,64 +321,58 @@ export function BenchTile({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
       aria-label={lastName(card.name)}
-      className="relative flex flex-col items-center active:scale-95 glass-surface"
+      className="relative flex flex-col active:scale-95"
       style={{
         width: '100%',
-        height: 62,
-        borderRadius: 'var(--radius-sm)',
-        border: `1px solid ${dropHint ? 'var(--gold)' : ring}`,
+        borderRadius: 5,
+        padding: 2,
+        background: frameSpec.frame,
         boxShadow: dropHint
-          ? 'inset 0 1px 0 0 var(--glass-highlight), 0 0 0 2px var(--gold-glow), var(--depth-2)'
-          : `inset 0 1px 0 0 var(--glass-highlight), 0 0 8px ${ring}33, var(--depth-1)`,
+          ? `0 0 0 2px var(--gold-glow), 0 2px 0 0 ${HERO.ink}`
+          : `0 2px 0 0 ${HERO.ink}, 0 3px 6px rgba(0,0,0,0.4)`,
+        outline: dropHint ? '2px solid var(--gold)' : 'none',
         transition: 'transform 0.12s ease',
         minWidth: 0,
-        paddingTop: 3,
         opacity: dim ? 0.3 : 1,
         touchAction: touchAction ?? (onPointerDown ? 'none' : undefined),
       }}
     >
-      {/* top row: POSITION tag + printed ATK/DEF */}
-      <span className="flex items-center justify-center gap-1 relative w-full px-0.5" style={{ zIndex: 2 }}>
-        <PosTag position={card.position} />
-        {(() => {
-          const st = deriveStats(card);
-          return (
-            <span style={{ fontFamily: PIXEL, fontSize: 9.5, lineHeight: 1, color: 'var(--line-white)', fontVariantNumeric: 'tabular-nums' }}>
-              {st.atk}/{st.def}
-            </span>
-          );
-        })()}
-      </span>
-      {/* surname */}
-      <span
-        className="truncate w-full text-center px-0.5 relative"
-        style={{ fontSize: 7.5, color: 'var(--cream-soft)', marginTop: 2, zIndex: 2 }}
-      >
-        {lastName(card.name)}
-      </span>
-      {/* archetype short */}
-      <span
-        className="truncate w-full text-center px-0.5 relative"
-        style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.5, color: 'var(--dust)', marginTop: 1, zIndex: 2 }}
-      >
-        {archShort(card.archetype)}
-      </span>
-      {/* condition */}
-      <span className="relative w-full px-1.5" style={{ marginTop: 'auto', marginBottom: 4, zIndex: 2 }}>
-        <FitnessBar card={card} />
-      </span>
+      <div style={{ overflow: 'hidden', borderRadius: 3, border: `1px solid ${HERO.ink}`, background: 'linear-gradient(165deg, #2f2415, #191309)', width: '100%' }}>
+        {/* header: position chip + ATK/DEF */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 3px 0' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1, color: HERO.badgeText, background: posColor, padding: '1px 2px', borderRadius: 2 }}>{card.position}</span>
+          {(() => { const st = deriveStats(card); return (
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, lineHeight: 1, color: HERO.cream, fontVariantNumeric: 'tabular-nums' }}>{st.atk}/{st.def}</span>
+          ); })()}
+        </div>
+        {/* portrait window (24px) */}
+        <div style={{ height: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div className="pixelated" aria-hidden style={{ ...portraitBackgroundStyle(card.id), width: '60%', height: '100%' }} />
+        </div>
+        {/* surname + condition glyph */}
+        <div style={{ padding: '0 3px 1px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1.2, color: HERO.cream, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lastName(card.name)}</span>
+          {(() => { const g = conditionGlyph(card); return (
+            <span style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1, color: g.color, flexShrink: 0 }}>{g.glyph}</span>
+          ); })()}
+        </div>
+        {/* fitness bar (2px) */}
+        <div style={{ height: 2, background: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ height: '100%', width: `${Math.max(0, Math.min(1, (fitnessOf(card) - 1) / 5)) * 100}%`, background: fitnessColor(card) }} />
+        </div>
+      </div>
       {/* injured marker */}
       {card.injured && (
         <span
           className="absolute"
           style={{
-            top: 3,
-            left: 3,
+            top: -4,
+            left: -4,
             width: 11,
             height: 11,
             borderRadius: '50%',
             background: 'var(--danger)',
-            border: '1px solid var(--ink-black)',
+            border: `1px solid ${HERO.ink}`,
             color: 'var(--line-white)',
             fontFamily: PIXEL,
             fontSize: 7,

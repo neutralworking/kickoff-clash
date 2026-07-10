@@ -22,7 +22,7 @@ import type { TraitKind } from '../../lib/trait-copy';
 import CardModal from '../cards/CardModal';
 import type { GameCardModel } from '../cards/GameCard';
 import { PIXEL, lastName, POSITION_COLOR, RARITY_COLOR } from '../cards/cardTokens';
-import { portraitBackgroundStyle } from '../cards/portrait';
+import { portraitBackgroundStyle, rarityFrame, HERO, fitnessColor as heroFitnessColor } from '../cards/portrait';
 
 interface PitchMatchViewProps {
   matchState: MatchV5State;
@@ -77,6 +77,7 @@ const INTENT_OPTIONS: { id: TeamIntent; label: string; accent: string }[] = [
 // ---------------------------------------------------------------------------
 
 const LINE = 'rgba(242,246,239,0.12)';
+const FURNITURE = 'rgba(255,255,255,0.22)'; // §6 white pitch furniture on the mow-stripe green
 const LANE_X: Record<Lane, number> = { L: 22, C: 50, R: 78 };
 const YOUR_GOAL_Y = 6;   // your XI attacks UP toward the top goal
 const OPP_GOAL_Y = 94;   // the opponent attacks DOWN toward the bottom goal
@@ -115,14 +116,6 @@ interface PitchSpot {
   sentOff?: boolean;      // red-carded — off the pitch, points out of every contest
 }
 
-// Compact archetype code for the token (keeps a 390-wide pitch legible).
-const ARCHETYPE_CODE: Record<string, string> = {
-  Striker: 'ST', Target: 'TG', Powerhouse: 'PW', Dribbler: 'DR', Sprinter: 'SP',
-  Creator: 'CR', Controller: 'CT', Passer: 'PS', Engine: 'EN', Commander: 'CM',
-  Destroyer: 'DS', Cover: 'CV', GK: 'GK',
-};
-const archCode = (archetype?: string) =>
-  archetype ? ARCHETYPE_CODE[archetype] ?? archetype.slice(0, 2).toUpperCase() : null;
 
 const LOW_FITNESS = 2.5; // matches the engine's injury-risk threshold (advanceIncrement)
 // INCREMENT_MINUTES = [15,30,60,75,90] — window END minutes per increment. Index 4
@@ -188,131 +181,115 @@ function FitnessMeter({ fitness }: { fitness: number }) {
   );
 }
 
+/** A single overhanging corner bubble on the pitch card (§6). 19px, offset -8. */
+function CornerBubble({
+  corner, border, valueColor, value, onTap, label,
+}: {
+  corner: 'tl' | 'tr' | 'bl' | 'br';
+  border: string;
+  valueColor: string;
+  value: string | number;
+  onTap?: () => void;
+  label?: string;
+}) {
+  const pos: React.CSSProperties =
+    corner === 'tl' ? { top: -8, left: -8 }
+      : corner === 'tr' ? { top: -8, right: -8 }
+        : corner === 'bl' ? { bottom: -8, left: -8 }
+          : { bottom: -8, right: -8 };
+  return (
+    <span
+      role={onTap ? 'button' : undefined}
+      aria-label={label}
+      onPointerDown={onTap ? (e) => e.stopPropagation() : undefined}
+      onClick={onTap ? (e) => { e.stopPropagation(); onTap(); } : undefined}
+      style={{
+        position: 'absolute', ...pos, width: 19, height: 19, borderRadius: '50%',
+        background: '#171207',
+        border: `1.5px solid ${border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: '0 2px 0 rgba(0,0,0,0.5)', zIndex: 6,
+        cursor: onTap ? 'pointer' : undefined,
+      }}
+    >
+      <span style={{ fontFamily: PIXEL, fontSize: 6.5, lineHeight: 1, color: valueColor, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+    </span>
+  );
+}
+
 function PitchCard({
   spot, side, accent, dim, glow, onStatTap,
 }: {
   spot: PitchSpot;
   side: 'you' | 'opp';
-  accent: string;        // rarity ring / top rail colour
+  accent: string;        // rarity ring / top rail colour (fallback for id-less tokens)
   dim?: boolean;         // dragged-from card fades
   glow?: boolean;        // carrier glow during resolve
-  /** Tap the ATK/DEF pair → open this card's modifier receipt. */
+  /** Tap the ATK/DEF bubbles → open this card's modifier receipt. */
   onStatTap?: () => void;
 }) {
-  const posColor = spot.position ? POSITION_COLOR[spot.position] ?? 'var(--dust)' : 'var(--dust)';
   const youKit = side === 'you';
-  // The card face tints to the side so a glance reads friend vs foe, but the
-  // rarity rail still signals quality.
-  const faceTop = youKit ? 'linear-gradient(165deg, #16361f, #0e2616)' : 'linear-gradient(165deg, #3a1411, #2a0d0b)';
-  // ── Wave E surfaces (yours only — rivals carry no live per-match stats). ──
-  const showStats = youKit;
-  const misfit = showStats && spot.posFit === false && !spot.isGK; // wrong-position warning (req 3)
-  // Effective (fitness-adjusted) power is the headline level the engine actually uses;
-  // when it's below base power, flag it tired so the drop is legible (req 1).
-  const effShown = showStats && typeof spot.effPower === 'number';
+  // ── Pixel-Hero foil frame is the rarity axis (§6). Misfit reddens the frame. ──
+  const frameSpec = rarityFrame(spot.rarity);
+  const showStats = youKit; // rivals carry no live per-match stats
+  const misfit = showStats && spot.posFit === false && !spot.isGK;
+  const frameBg = misfit
+    ? 'linear-gradient(135deg, #e0332d, #7a1f1c)'
+    : frameSpec.frame;
+  // FIT bubble reads the live 1–6 condition as a % of full, coloured by band.
+  const fitPct = typeof spot.fitness === 'number' ? Math.round((Math.max(1, Math.min(6, spot.fitness)) / 6) * 100) : null;
+  const goals = spot.goals ?? 0;
   return (
-    <div
-      className={glow ? 'carrier-glow' : undefined}
-      style={{
-        width: CARD_W, height: CARD_H,
-        borderRadius: 'var(--radius-sm)',
-        border: '2px solid var(--ink-black)',
-        background: faceTop,
-        boxShadow: spot.isStar
-          ? '0 2px 0 0 var(--ink-black), 0 0 0 2px var(--gold-glow)'
-          : '0 2px 0 0 var(--ink-black)',
-        overflow: 'hidden',
-        display: 'flex', flexDirection: 'column',
-        opacity: dim ? 0.3 : 1,
-        position: 'relative',
-      }}
-    >
-      {/* Rarity / accent top rail — the card family signature. A misfit reddens it. */}
-      <div style={{ height: 3, background: misfit ? 'var(--danger)' : accent, flexShrink: 0 }} />
-      {/* Header: position tab · power. The power shown is the EFFECTIVE (fitness-adjusted)
-          level for your players (req 1); a down-on-power card greys + carries a ▾.
-          A misfit's position tab goes solid red — the Team Talk's misfit vocabulary. */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 4px 0', gap: 2 }}>
-        <span style={{ background: misfit ? 'var(--danger)' : posColor, color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1, padding: '2px 3px', borderRadius: 2 }}>
-          {spot.isGK ? 'GK' : spot.position ?? '—'}
-        </span>
-        {typeof spot.atkEff === 'number' && typeof spot.defEff === 'number' ? (
-          // LIVE ATK/DEF — the feedback numbers. Colour tells the story at a glance:
-          // green = buffed above the printed stat (teammates/manager/tactics),
-          // red = below it (fitness drain, out-of-band placement, opposition),
-          // white = as printed.
-          (() => {
-            const tone = (eff: number, base?: number) =>
-              typeof base !== 'number' || eff === base ? 'var(--line-white)'
-                : eff > base ? 'var(--success)' : 'var(--danger)';
-            const changed = spot.atkEff !== spot.baseAtk || spot.defEff !== spot.baseDef;
-            return (
-              <span
-                role={onStatTap ? 'button' : undefined}
-                aria-label={onStatTap ? 'Show stat modifiers' : undefined}
-                onPointerDown={onStatTap ? (e) => { e.stopPropagation(); } : undefined}
-                onClick={onStatTap ? (e) => { e.stopPropagation(); onStatTap(); } : undefined}
-                title={onStatTap && changed ? 'Tap for the modifier receipt' : undefined}
-                style={{ display: 'inline-flex', alignItems: 'baseline', gap: 1, flexShrink: 0, whiteSpace: 'nowrap', cursor: onStatTap ? 'pointer' : undefined, padding: onStatTap ? '2px 2px' : undefined, margin: onStatTap ? '-2px -2px' : undefined }}
-              >
-                <span style={{ fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: tone(spot.atkEff!, spot.baseAtk), fontVariantNumeric: 'tabular-nums' }}>{spot.atkEff}</span>
-                <span style={{ fontFamily: PIXEL, fontSize: 6, lineHeight: 1, color: 'var(--dust)' }}>/</span>
-                <span style={{ fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: tone(spot.defEff!, spot.baseDef), fontVariantNumeric: 'tabular-nums' }}>{spot.defEff}</span>
-              </span>
-            );
-          })()
-        ) : spot.rating !== undefined ? (
-          <span style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1, color: 'var(--line-white)' }}>{spot.rating}</span>
-        ) : null}
-      </div>
-      {/* Seeded 16-bit portrait (Pixel Hero) — same face as the gallery/pack cards,
-          so a card on the pitch reads as the same object. Falls back to the flat
-          kit sprite for tokens that carry no card id (the faceless opponent). */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', position: 'relative' }}>
-        {spot.cardId !== undefined ? (
-          <div className="pixelated" aria-hidden style={{ ...portraitBackgroundStyle(spot.cardId), width: '100%', height: '96%' }} />
-        ) : (
-          <MiniSprite side={side} isGK={spot.isGK} accent={accent} />
-        )}
-        {/* Sent off: the card is on the pitch display but OUT of every contest. */}
-        {spot.sentOff && (
-          <span aria-label="Sent off" style={{ position: 'absolute', inset: 0, background: 'rgba(20,4,4,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
-            <span style={{ width: 10, height: 14, background: 'var(--danger)', border: '1px solid var(--ink-black)', borderRadius: 1.5, transform: 'rotate(8deg)', boxShadow: '0 1px 0 0 var(--ink-black)' }} />
-          </span>
-        )}
-        {/* A yellow in the book — the pip warns a second means red + suspension. */}
-        {spot.booked && !spot.sentOff && (
-          <span aria-label="Booked" style={{ position: 'absolute', top: 0, right: 2, width: 6, height: 9, background: 'var(--gold)', border: '1px solid var(--ink-black)', borderRadius: 1, transform: 'rotate(8deg)', zIndex: 2 }} />
-        )}
-        {/* Rating badge (req 5) — colour-coded 0–10, bottom-left over the sprite. */}
-        {showStats && typeof spot.matchRating === 'number' && (() => {
-          const band = ratingBand(spot.matchRating);
-          return (
-            <span style={{ position: 'absolute', left: 2, bottom: 0, fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: band.ink, background: band.fill, border: '1px solid var(--ink-black)', borderRadius: 2, padding: '1.5px 2.5px', fontVariantNumeric: 'tabular-nums' }}>
-              {spot.matchRating.toFixed(1)}
+    <div style={{ width: CARD_W, position: 'relative', opacity: dim ? 0.3 : 1 }} className={glow ? 'carrier-glow' : undefined}>
+      {/* Event chips centred ABOVE the card (§6): goal chip / yellow-card rect. */}
+      {showStats && (goals > 0 || (spot.booked && !spot.sentOff)) && (
+        <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 3, alignItems: 'center', zIndex: 7, pointerEvents: 'none' }}>
+          {goals > 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: PIXEL, fontSize: 6, color: HERO.cream, background: 'rgba(11,7,3,0.92)', border: `1px solid ${HERO.gold}66`, borderRadius: 3, padding: '1px 4px', whiteSpace: 'nowrap', lineHeight: 1 }}>
+              <BallGlyph size={7} />{goals > 1 ? goals : ''}
             </span>
-          );
-        })()}
-        {/* Goal/assist badges live OUTSIDE the card frame (rendered by the pitch loop,
-            GoalAssistBadges) so the sprite stays clean — a running record of who's done
-            what, persisting all match (req 4). */}
-      </div>
-      {/* Surname + archetype code */}
-      <div style={{ padding: '0 4px 2px' }}>
-        <div style={{ fontSize: 9, fontWeight: 800, color: 'var(--cream)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {spot.name ?? '—'}
+          )}
+          {spot.booked && !spot.sentOff && (
+            <span aria-label="Booked" style={{ width: 6, height: 9, background: '#f5c542', border: `1px solid ${HERO.ink}`, borderRadius: 1 }} />
+          )}
         </div>
-        {!spot.isGK && spot.archetype && (
-          <div style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.2, color: 'var(--dust)', lineHeight: 1.1, marginTop: 1 }}>
-            {archCode(spot.archetype)}
+      )}
+      {/* Foil frame → clipped pixel interior (portrait + name). */}
+      <div style={{ borderRadius: 7, padding: 2, background: frameBg, boxShadow: spot.isStar ? '0 2px 0 0 #0b0703, 0 4px 8px rgba(0,0,0,0.45), 0 0 12px rgba(232,178,60,0.5)' : '0 2px 0 0 #0b0703, 0 4px 8px rgba(0,0,0,0.45)' }}>
+        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 5, border: `1.5px solid ${HERO.ink}`, background: 'linear-gradient(165deg, #2f2415, #191309)' }}>
+          {/* Portrait window (36px) — same seeded face as gallery/pack cards. */}
+          <div style={{ height: 36, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'radial-gradient(90% 80% at 50% 30%, rgba(232,178,60,0.16), transparent 72%)' }}>
+            {spot.cardId !== undefined ? (
+              <div className="pixelated" aria-hidden style={{ ...portraitBackgroundStyle(spot.cardId), width: '62%', height: '100%' }} />
+            ) : (
+              <MiniSprite side={side} isGK={spot.isGK} accent={accent} />
+            )}
+            {spot.sentOff && (
+              <span aria-label="Sent off" style={{ position: 'absolute', inset: 0, background: 'rgba(20,4,4,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+                <span style={{ width: 9, height: 13, background: '#e0332d', border: `1px solid ${HERO.ink}`, borderRadius: 1.5, transform: 'rotate(8deg)', boxShadow: '0 1px 0 0 #0b0703' }} />
+              </span>
+            )}
           </div>
-        )}
-      </div>
-      {/* Fitness meter (req 6) — a banded condition bar pinned to the card foot (yours only). */}
-      {showStats && typeof spot.fitness === 'number' && (
-        <div style={{ padding: '0 3px 3px', flexShrink: 0 }}>
-          <FitnessMeter fitness={spot.fitness} />
+          {/* Name over the gold hairline top border. */}
+          <div style={{ padding: '2px 3px 3px', borderTop: `1px solid ${HERO.gold}66` }}>
+            <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 5, color: HERO.cream, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center', lineHeight: 1.3 }}>
+              {spot.name ?? '—'}
+            </span>
+          </div>
         </div>
+      </div>
+      {/* Four corner bubbles (yours only) — ATK · DEF · FIT · RTG (§6 semantics). */}
+      {showStats && typeof spot.atkEff === 'number' && (
+        <CornerBubble corner="tl" border={HERO.atk} valueColor={typeof spot.baseAtk === 'number' && spot.atkEff !== spot.baseAtk ? (spot.atkEff > spot.baseAtk ? '#5fd08a' : '#f0928c') : HERO.cream} value={spot.atkEff} onTap={onStatTap} label="Attack, tap for modifiers" />
+      )}
+      {showStats && typeof spot.defEff === 'number' && (
+        <CornerBubble corner="tr" border={HERO.def} valueColor={typeof spot.baseDef === 'number' && spot.defEff !== spot.baseDef ? (spot.defEff > spot.baseDef ? '#5fd08a' : '#f0928c') : HERO.cream} value={spot.defEff} onTap={onStatTap} label="Defence, tap for modifiers" />
+      )}
+      {showStats && fitPct !== null && (
+        <CornerBubble corner="bl" border={heroFitnessColor(fitPct)} valueColor={heroFitnessColor(fitPct)} value={fitPct} label={`Fitness ${fitPct}%`} />
+      )}
+      {showStats && typeof spot.matchRating === 'number' && (
+        <CornerBubble corner="br" border={HERO.gold} valueColor={HERO.goldHi} value={spot.matchRating.toFixed(1)} label={`Rating ${spot.matchRating.toFixed(1)}`} />
       )}
     </div>
   );
@@ -329,37 +306,23 @@ function PitchCard({
 // ---------------------------------------------------------------------------
 function SubCard({ card, dim }: { card: Card; dim?: boolean }) {
   const posColor = POSITION_COLOR[card.position] ?? 'var(--dust)';
-  const accent = RARITY_COLOR[card.rarity] ?? RARITY_COLOR.Common;
+  const frameSpec = rarityFrame(card.rarity);
+  const st = deriveStats(card);
   return (
-    <div
-      style={{
-        width: '100%', borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)',
-        background: 'linear-gradient(165deg, var(--surface-raised), var(--surface))',
-        boxShadow: '0 2px 0 0 var(--ink-black)', overflow: 'hidden',
-        opacity: dim ? 0.3 : 1, pointerEvents: 'none',
-      }}
-    >
-      {/* Rarity rail */}
-      <div style={{ height: 3, background: accent }} />
-      <div style={{ padding: '4px 5px 5px', display: 'flex', flexDirection: 'column', gap: 3 }}>
-        {/* Position tab · printed ATK/DEF */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-          <span style={{ background: posColor, color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 7, lineHeight: 1, padding: '2px 3px', borderRadius: 2 }}>{card.position}</span>
-          {(() => {
-            const st = deriveStats(card);
-            return (
-              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 2 }}>
-                <span style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--cream)' }}>{st.atk}</span>
-                <span style={{ fontFamily: PIXEL, fontSize: 7, lineHeight: 1, color: 'var(--dust)' }}>/</span>
-                <span style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1, color: 'var(--cream-soft)' }}>{st.def}</span>
-              </span>
-            );
-          })()}
+    // §6 bench micro card — foil frame → pixel interior (pos + ATK/DEF, portrait,
+    // name). A pure <div> (pointerEvents:none) so the wrapping button owns the drag.
+    <div style={{ width: '100%', borderRadius: 5, padding: 2, background: frameSpec.frame, boxShadow: `0 2px 0 0 ${HERO.ink}, 0 3px 6px rgba(0,0,0,0.4)`, opacity: dim ? 0.3 : 1, pointerEvents: 'none' }}>
+      <div style={{ overflow: 'hidden', borderRadius: 3, border: `1px solid ${HERO.ink}`, background: 'linear-gradient(165deg, #2f2415, #191309)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 3px 0' }}>
+          <span style={{ background: posColor, color: HERO.badgeText, fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1, padding: '1px 2px', borderRadius: 2 }}>{card.position}</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 6.5, lineHeight: 1, color: HERO.cream, fontVariantNumeric: 'tabular-nums' }}>{st.atk}/{st.def}</span>
         </div>
-        {/* Surname */}
-        <div style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--cream)', lineHeight: 1.05, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lastName(card.name)}</div>
-        {/* Role (archetype) — fits efficiently on one muted line. */}
-        <div style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.2, color: 'var(--dust)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{archCode(card.archetype) ?? card.archetype}</div>
+        <div style={{ height: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div className="pixelated" aria-hidden style={{ ...portraitBackgroundStyle(card.id), width: '60%', height: '100%' }} />
+        </div>
+        <div style={{ padding: '0 3px 2px' }}>
+          <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 4.5, color: HERO.cream, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3 }}>{lastName(card.name)}</span>
+        </div>
       </div>
     </div>
   );
@@ -376,9 +339,9 @@ function SubCard({ card, dim }: { card: Card; dim?: boolean }) {
 // ---------------------------------------------------------------------------
 
 const TACTIC_CATEGORY_COLOR: Record<TacticCard['category'], string> = {
-  attacking: 'var(--kit-red)',
-  defensive: 'var(--kit-blue)',
-  specialist: 'var(--gold)',
+  attacking: '#e0332d',   // §6 attacking ⚔
+  defensive: '#2b74e0',   // §6 defensive 🛡
+  specialist: '#a855f7',  // §6 specialist ✨
 };
 
 type EquipState = 'equipped' | 'available' | 'blocked';
@@ -461,52 +424,6 @@ function BallGlyph({ size = 14 }: { size?: number }) {
       <rect x="7" y="6" width="2" height="2" fill="var(--ink-black)" />
       <rect x="5" y="8" width="2" height="1" fill="var(--ink-black)" />
     </svg>
-  );
-}
-
-/** A flat pixel-art boot (cleat), sized for a corner badge. */
-function BootGlyph({ size = 14 }: { size?: number }) {
-  return (
-    <svg className="pixelated" viewBox="0 0 12 12" shapeRendering="crispEdges" style={{ width: size, height: size, display: 'block' }} aria-hidden>
-      {/* upper */}
-      <rect x="3" y="2" width="4" height="5" fill="var(--ink-black)" />
-      {/* ankle laces highlight */}
-      <rect x="4" y="3" width="2" height="1" fill="var(--line-white)" />
-      <rect x="4" y="5" width="2" height="1" fill="var(--line-white)" />
-      {/* foot/toe */}
-      <rect x="3" y="7" width="7" height="2" fill="var(--ink-black)" />
-      {/* sole + studs */}
-      <rect x="3" y="9" width="7" height="1" fill="var(--line-white)" />
-      <rect x="4" y="10" width="1" height="1" fill="var(--ink-black)" />
-      <rect x="6" y="10" width="1" height="1" fill="var(--ink-black)" />
-      <rect x="8" y="10" width="1" height="1" fill="var(--ink-black)" />
-    </svg>
-  );
-}
-
-function GoalAssistBadges({ goals, assists }: { goals: number; assists: number }) {
-  if (goals <= 0 && assists <= 0) return null;
-  return (
-    <div
-      aria-label={`${goals} goals, ${assists} assists`}
-      style={{
-        position: 'absolute', bottom: -9, right: -10, zIndex: 8,
-        display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end', pointerEvents: 'none',
-      }}
-    >
-      {goals > 0 && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: 'var(--gold)', border: '2px solid var(--ink-black)', borderRadius: 5, padding: '2px 3px', boxShadow: '0 2px 0 0 var(--ink-black)', lineHeight: 1 }}>
-          <BallGlyph size={13} />
-          {goals > 1 && <span style={{ fontFamily: PIXEL, fontSize: 8.5, color: 'var(--ink-black)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{goals}</span>}
-        </span>
-      )}
-      {assists > 0 && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: 'var(--kit-blue)', border: '2px solid var(--ink-black)', borderRadius: 5, padding: '2px 3px', boxShadow: '0 2px 0 0 var(--ink-black)', lineHeight: 1 }}>
-          <BootGlyph size={13} />
-          {assists > 1 && <span style={{ fontFamily: PIXEL, fontSize: 8.5, color: 'var(--line-white)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{assists}</span>}
-        </span>
-      )}
-    </div>
   );
 }
 
@@ -1667,6 +1584,18 @@ export default function PitchMatchView({
   // later advance (resolve-done, then later plans) reads CONTINUE.
   const isFirstKickoff = mode === 'plan' && matchState.currentIncrement === 0 && matchState.scores.length === 0;
   const badge = opponentBuild.name.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'OPP';
+  // Opponent PWR for the scoreboard (§6) — the average printed power of the rival XI.
+  const oppPwr = (() => {
+    const live = matchState.opponentXI.filter(Boolean) as Card[];
+    if (live.length === 0) return null;
+    return Math.round(live.reduce((a, c) => a + c.power, 0) / live.length);
+  })();
+  // The period marker word for the scoreboard bar.
+  const scoreMarker = resolving ? 'LIVE'
+    : breakMoment === 'halftime' ? 'HALFTIME'
+      : breakMoment === 'kickoff' ? 'KICK OFF'
+        : matchState.currentIncrement >= INCREMENT_MINUTES_LEN ? 'FULL TIME'
+          : `${periodLabel} HALF`;
   // ISSUE 3 — colour lines by side to match the on-pitch zone colours: you = green,
   // opp = red. Goals brighten; routine chances stay in the side tint, muted.
   const lineColour = (l: FeedLine) =>
@@ -1899,61 +1828,55 @@ export default function PitchMatchView({
         />
       )}
 
-      {/* Header — opponent identity + average strength, the live score, view toggle */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 16px 8px', gap: 12, flexShrink: 0 }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 'var(--radius-sm)', background: 'linear-gradient(160deg, var(--kit-red), #9e1f1a)', border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: PIXEL, fontSize: 11, color: 'var(--line-white)', flexShrink: 0 }}>{badge}</div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--cream)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opponentBuild.name}</span>
-              {/* FIX 6 — the opponent's PLAYING STYLE, clearly labelled "PLAY" so it
-                  reads as their approach (Passive/Balanced/Attacking/…), not a tactic
-                  card. A leading STYLE tab distinguishes it from the tactic pills. */}
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 0, flexShrink: 0, borderRadius: 3, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--cream-soft)', padding: '2px 3px', lineHeight: 1 }}>PLAY</span>
-                <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--cream)', background: 'rgba(0,0,0,0.35)', padding: '2px 4px', lineHeight: 1, whiteSpace: 'nowrap' }}>{oppStyleLabel.toUpperCase()}</span>
-              </span>
-            </div>
-            {/* SCORING_V2 FORECAST — the header IS the sums: your ATTACK v their
-                DEFENCE (+edge), their ATTACK v your DEFENCE (+edge), and the NET.
-                Every number is Σ of effective card points — tap any card's stats
-                for the receipt. The single best read on who wins. */}
-            <div style={{ display: 'grid', gap: 1, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
-              {([
-                { tag: 'ATK', yours: forecast.yourAttack, theirs: forecast.oppDefence, edge: forecast.attackEdge },
-                { tag: 'DEF', yours: forecast.yourDefence, theirs: forecast.oppAttack, edge: forecast.defendEdge },
-              ] as const).map((row) => (
-                <div key={row.tag} style={{ display: 'flex', alignItems: 'baseline', gap: 4, whiteSpace: 'nowrap' }}>
-                  <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.4, color: 'var(--ink-black)', background: row.tag === 'ATK' ? 'var(--kit-red)' : 'var(--kit-blue)', borderRadius: 2, padding: '1.5px 3px', lineHeight: 1, width: 22, textAlign: 'center' }}>{row.tag}</span>
-                  <span style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)', lineHeight: 1 }}>{row.yours}</span>
-                  <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)', lineHeight: 1 }}>v</span>
-                  <span style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream-soft)', lineHeight: 1 }}>{row.theirs}</span>
-                  <span style={{ fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: row.edge > 0 ? 'var(--success)' : row.edge < 0 ? 'var(--danger)' : 'var(--dust)' }}>
-                    {row.edge > 0 ? `+${row.edge}` : row.edge}
-                  </span>
-                </div>
-              ))}
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, whiteSpace: 'nowrap' }}>
-                <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.4, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 2, padding: '1.5px 3px', lineHeight: 1, width: 22, textAlign: 'center' }}>NET</span>
-                <span style={{ fontFamily: PIXEL, fontSize: 10, lineHeight: 1, color: forecast.net > 0 ? 'var(--success)' : forecast.net < 0 ? 'var(--danger)' : 'var(--dust)' }}>
-                  {forecast.net > 0 ? `+${forecast.net}` : forecast.net} {forecast.net > 0 ? '▲ YOU' : forecast.net < 0 ? '▼ THEM' : '· LEVEL'}
-                </span>
-              </div>
-            </div>
-          </div>
+      {/* ── §6 SCOREBOARD BAR — period/clock · your XI · boxed score · rival ·
+          play-style/PWR. All the same live values (displayGoals + shake, clock,
+          opponent identity/style); just the Pixel-Hero chrome. ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 10px', background: 'linear-gradient(180deg, #221a0f, #171207)', borderBottom: `2px solid ${HERO.ink}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: HERO.gold, whiteSpace: 'nowrap' }}>{scoreMarker}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span className={resolving ? 'carrier-glow' : undefined} style={{ width: 5, height: 5, borderRadius: '50%', background: resolving ? 'var(--success)' : HERO.creamMuted, flexShrink: 0, boxShadow: resolving ? '0 0 5px var(--success)' : undefined }} />
+            <span style={{ fontFamily: PIXEL, fontSize: 9, color: HERO.creamMuted, fontVariantNumeric: 'tabular-nums' }}>{clockMMSS}</span>
+          </span>
         </div>
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontFamily: PIXEL, fontSize: 22, lineHeight: 1, color: 'var(--cream)', display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
-            <span className={shake === 'you' ? 'score-tick' : undefined} style={{ display: 'inline-block', color: shake === 'you' ? 'var(--success)' : 'var(--cream)' }}>{displayGoals.you}</span>
-            <span style={{ color: 'var(--dust)' }}>–</span>
-            <span className={shake === 'opp' ? 'score-tick' : undefined} style={{ display: 'inline-block', color: shake === 'opp' ? 'var(--danger)' : 'var(--cream)' }}>{displayGoals.opp}</span>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minWidth: 0 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 9, color: HERO.cream, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 84 }}>YOUR XI</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 20, color: HERO.cream, textShadow: `0 2px 0 ${HERO.ink}`, background: 'rgba(0,0,0,0.4)', border: `1px solid ${HERO.gold}66`, borderRadius: 5, padding: '2px 9px', display: 'inline-flex', alignItems: 'baseline', gap: 3, flexShrink: 0 }}>
+            <span className={shake === 'you' ? 'score-tick' : undefined} style={{ display: 'inline-block', color: shake === 'you' ? 'var(--success)' : HERO.cream }}>{displayGoals.you}</span>
+            <span style={{ color: HERO.creamMuted, fontSize: 15 }}>–</span>
+            <span className={shake === 'opp' ? 'score-tick' : undefined} style={{ display: 'inline-block', color: shake === 'opp' ? 'var(--danger)' : HERO.cream }}>{displayGoals.opp}</span>
+          </span>
+          <span style={{ fontFamily: PIXEL, fontSize: 9, color: HERO.creamMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 84 }}>{opponentBuild.name}</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end', minWidth: 0 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: HERO.def, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 72 }}>{oppStyleLabel.toUpperCase()}</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 9, color: HERO.creamMuted, whiteSpace: 'nowrap' }}>{oppPwr !== null ? `PWR ${oppPwr}` : badge}</span>
+        </div>
+      </div>
+
+      {/* SCORING_V2 FORECAST — the sums that drive the result, kept as a slim strip
+          under the scoreboard: your ATTACK v their DEFENCE (+edge), their ATTACK v
+          your DEFENCE (+edge), and the NET. Tap a pitch card's bubble for the receipt. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px 4px', flexShrink: 0, fontVariantNumeric: 'tabular-nums', overflowX: 'auto', scrollbarWidth: 'none' }}>
+        {([
+          { tag: 'ATK', yours: forecast.yourAttack, theirs: forecast.oppDefence, edge: forecast.attackEdge, bg: HERO.atk },
+          { tag: 'DEF', yours: forecast.yourDefence, theirs: forecast.oppAttack, edge: forecast.defendEdge, bg: HERO.def },
+        ] as const).map((row) => (
+          <div key={row.tag} style={{ display: 'flex', alignItems: 'baseline', gap: 4, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.4, color: HERO.ink, background: row.bg, borderRadius: 2, padding: '1.5px 3px', lineHeight: 1, width: 22, textAlign: 'center' }}>{row.tag}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 10, color: HERO.cream, lineHeight: 1 }}>{row.yours}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 7, color: HERO.creamMuted, lineHeight: 1 }}>v</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 10, color: HERO.creamBody, lineHeight: 1 }}>{row.theirs}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: row.edge > 0 ? 'var(--success)' : row.edge < 0 ? 'var(--danger)' : HERO.creamMuted }}>
+              {row.edge > 0 ? `+${row.edge}` : row.edge}
+            </span>
           </div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: resolving ? 'var(--success)' : 'var(--dust)', flexShrink: 0, boxShadow: resolving ? '0 0 5px var(--success)' : undefined }} className={resolving ? 'carrier-glow' : undefined} />
-            {/* FIX 1 — a real mm:ss clock: ticks up while resolving, shows elapsed while planning. */}
-            <span style={{ fontFamily: PIXEL, fontSize: 13, color: resolving ? 'var(--cream)' : 'var(--dust)', fontVariantNumeric: 'tabular-nums' }}>{clockMMSS}</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 7, color: 'var(--dust)', letterSpacing: 0.4 }}>{periodLabel}</span>
-          </div>
+        ))}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, whiteSpace: 'nowrap', marginLeft: 'auto', flexShrink: 0 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.4, color: HERO.ink, background: HERO.gold, borderRadius: 2, padding: '1.5px 3px', lineHeight: 1, width: 22, textAlign: 'center' }}>NET</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 10, lineHeight: 1, color: forecast.net > 0 ? 'var(--success)' : forecast.net < 0 ? 'var(--danger)' : HERO.creamMuted }}>
+            {forecast.net > 0 ? `+${forecast.net}` : forecast.net} {forecast.net > 0 ? '▲ YOU' : forecast.net < 0 ? '▼ THEM' : '· LEVEL'}
+          </span>
         </div>
       </div>
 
@@ -1966,7 +1889,7 @@ export default function PitchMatchView({
           <CoachPanel notes={notes} />
           {/* A slim, tappable strip keeps the full match log reachable during the talk. */}
           {feed.length > 0 && (
-            <button onClick={() => setTickerOpen(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 16px 8px', padding: '6px 10px', borderRadius: 'var(--radius)', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', flexShrink: 0, cursor: 'pointer' }}>
+            <button onClick={() => setTickerOpen(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 16px 8px', padding: '6px 10px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', border: `1px solid ${HERO.gold}4d`, flexShrink: 0, cursor: 'pointer' }}>
               <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, color: 'var(--dust)' }}>MATCH LOG</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
                 <span style={{ fontSize: 10.5, color: feed.length ? lineColour(feed[feed.length - 1]) : 'var(--dust)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{feed[feed.length - 1]?.text ?? ''}</span>
@@ -1979,7 +1902,7 @@ export default function PitchMatchView({
       /* Ticker — three lines, tap to expand. Pre-kickoff shows a coach prompt.
          While resolving, the firing TRAITS take the ticker as styled callouts so
          a missed on-pitch flash is still captured in the running commentary. */
-      <button onClick={() => setTickerOpen(true)} style={{ textAlign: 'left', margin: '0 16px 10px', padding: '8px 12px', borderRadius: 'var(--radius)', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', flexShrink: 0, cursor: 'pointer', display: 'grid', gap: 3 }}>
+      <button onClick={() => setTickerOpen(true)} style={{ textAlign: 'left', margin: '0 16px 10px', padding: '8px 12px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', border: `1px solid ${HERO.gold}4d`, flexShrink: 0, cursor: 'pointer', display: 'grid', gap: 3 }}>
         {preKickoff ? (
           // ISSUE 6 — guidance, not a fake match event (no minute stamp).
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 51 }}>
@@ -2137,16 +2060,21 @@ export default function PitchMatchView({
         </div>
       )}
 
-      {/* Pitch */}
-      <div ref={pitchRef} style={{ position: 'relative', flex: 1, minHeight: 0, margin: '0 16px', borderRadius: 'var(--radius-lg)', border: '2px solid var(--ink-black)', background: oppView
-        ? 'repeating-linear-gradient(180deg, rgba(158,31,26,0.16) 0px, rgba(158,31,26,0.16) 26px, rgba(158,31,26,0.10) 26px, rgba(158,31,26,0.10) 52px)'
-        : 'repeating-linear-gradient(180deg, rgba(31,157,79,0.16) 0px, rgba(31,157,79,0.16) 26px, rgba(31,157,79,0.10) 26px, rgba(31,157,79,0.10) 52px)', boxShadow: '0 3px 0 0 var(--ink-black)', overflow: 'hidden', touchAction: 'none' }}>
-        {/* Pitch markings */}
-        <div style={{ position: 'absolute', left: 10, right: 10, top: '50%', height: 1, borderTop: `1px dashed ${LINE}` }} />
-        <div style={{ position: 'absolute', left: '50%', top: '50%', width: 84, height: 84, transform: 'translate(-50%,-50%)', borderRadius: '50%', border: `1px solid ${LINE}` }} />
+      {/* Pitch — §6 mow-stripe green + white furniture (a red wash flags the
+          "viewing opposition" mode). Every handler/geometry below is unchanged. */}
+      <div ref={pitchRef} style={{ position: 'relative', flex: 1, minHeight: 0, margin: '0 16px', borderRadius: 'var(--radius-lg)', border: `2px solid ${HERO.ink}`, background: oppView
+        ? 'repeating-linear-gradient(180deg, #9e3b36 0 34px, #8a2f2a 34px 68px)'
+        : 'repeating-linear-gradient(180deg, #1f9d4f 0 34px, #1a8a45 34px 68px)', boxShadow: `0 3px 0 0 ${HERO.ink}, inset 0 0 40px rgba(0,0,0,0.3)`, overflow: 'hidden', touchAction: 'none' }}>
+        {/* Pitch markings — white furniture at 0.22 (§6). */}
+        <div style={{ position: 'absolute', inset: 8, border: `1px solid ${FURNITURE}`, borderRadius: 3, pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', left: 8, right: 8, top: '50%', height: 1, background: FURNITURE }} />
+        <div style={{ position: 'absolute', left: '50%', top: '50%', width: 84, height: 84, transform: 'translate(-50%,-50%)', borderRadius: '50%', border: `1px solid ${FURNITURE}` }} />
+        {/* Penalty boxes, open toward the pitch. */}
+        <div style={{ position: 'absolute', left: '50%', top: 8, width: 150, height: 52, transform: 'translateX(-50%)', border: `1px solid ${FURNITURE}`, borderTop: 'none', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', left: '50%', bottom: 8, width: 150, height: 52, transform: 'translateX(-50%)', border: `1px solid ${FURNITURE}`, borderBottom: 'none', pointerEvents: 'none' }} />
         {/* Goals (top = the goal your XI attacks; bottom = your own goal the opponent attacks) */}
-        <div className={shake === (oppView ? 'opp' : 'you') ? 'net-shake' : undefined} style={{ position: 'absolute', left: '50%', top: 0, transform: 'translateX(-50%)', width: 78, height: 14, borderRadius: '0 0 6px 6px', border: `2px solid ${LINE}`, borderTop: 'none', background: 'repeating-linear-gradient(90deg, rgba(242,246,239,0.10) 0 3px, transparent 3px 6px)' }} />
-        <div className={shake === (oppView ? 'you' : 'opp') ? 'net-shake' : undefined} style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: 78, height: 14, borderRadius: '6px 6px 0 0', border: `2px solid ${LINE}`, borderBottom: 'none', background: 'repeating-linear-gradient(90deg, rgba(242,246,239,0.10) 0 3px, transparent 3px 6px)' }} />
+        <div className={shake === (oppView ? 'opp' : 'you') ? 'net-shake' : undefined} style={{ position: 'absolute', left: '50%', top: 0, transform: 'translateX(-50%)', width: 78, height: 12, borderRadius: '0 0 6px 6px', border: `2px solid ${FURNITURE}`, borderTop: 'none', background: 'repeating-linear-gradient(90deg, rgba(255,255,255,0.16) 0 3px, transparent 3px 6px)' }} />
+        <div className={shake === (oppView ? 'you' : 'opp') ? 'net-shake' : undefined} style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: 78, height: 12, borderRadius: '6px 6px 0 0', border: `2px solid ${FURNITURE}`, borderBottom: 'none', background: 'repeating-linear-gradient(90deg, rgba(255,255,255,0.16) 0 3px, transparent 3px 6px)' }} />
 
         {/* ── TELEGRAPH LANE PULSE (planning) — where the telegraphed play commits
             its attack, read from the play's records. Their commitment lands in
@@ -2211,33 +2139,14 @@ export default function PitchMatchView({
                   glow={carrier}
                   onStatTap={!oppView && spot.cardId !== undefined ? () => setReceiptId(spot.cardId!) : undefined}
                 />
-                {/* Goal/assist badges (req 4) — a ⚽ ball on a scorer, a 👟 boot on an
-                    assister, sitting OUTSIDE the card frame (bottom-right). Persist all
-                    match. Yours only (rivals carry no per-match record). */}
-                {!oppView && !isDragging && (
-                  <GoalAssistBadges goals={spot.goals ?? 0} assists={spot.assists ?? 0} />
-                )}
-                {/* fitness / injury flag, top-left corner. */}
-                {condition && (
-                  <span aria-label={condition === 'injured' ? 'Injured' : 'Low fitness'}
-                    style={{ position: 'absolute', top: -5, left: -5, width: 14, height: 14, borderRadius: '50%', background: condition === 'injured' ? 'var(--danger)' : 'var(--amber)', border: '1.5px solid var(--ink-black)', color: condition === 'injured' ? 'var(--line-white)' : 'var(--ink-black)', fontFamily: PIXEL, fontSize: 8, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3 }}>{condition === 'injured' ? '+' : '!'}</span>
-                )}
-                {/* Wave E (req 3) — wrong-position pip, top-left (offset below a condition
-                    pip when both apply). A red 'X' tag matching the Team Talk misfit colour. */}
-                {misfit && (
-                  <span aria-label="Out of position"
-                    style={{ position: 'absolute', top: condition ? 11 : -5, left: -5, height: 14, padding: '0 3px', borderRadius: 4, background: 'var(--danger)', border: '1.5px solid var(--ink-black)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.2, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4 }}>POS</span>
-                )}
+                {/* Goals + bookings live in the card's own event strip and the FIT
+                    bubble now (§6). Injury / misfit / low-fitness read through the
+                    card's red frame + red FIT bubble + the status ring on this button
+                    (ringColor above), so no colliding external pips are drawn. Tap the
+                    card to inspect (endPointer), tap a stat bubble for the receipt. */}
                 {/* drop-target hint when dragging another card over this one. */}
                 {isDropTarget && !isHover && (
-                  <span aria-hidden style={{ position: 'absolute', inset: -2, borderRadius: 'var(--radius-sm)', border: '2px dashed var(--gold)', pointerEvents: 'none' }} />
-                )}
-                {/* inspect pip — tap to open CardModal (yours, in plan). */}
-                {!oppView && mode === 'plan' && spot.cardId !== undefined && (
-                  <span role="button" aria-label="Inspect player"
-                    onPointerDown={(e) => { e.stopPropagation(); }}
-                    onClick={(e) => { e.stopPropagation(); inspectCard(spot.cardId); }}
-                    style={{ position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: '50%', background: 'var(--ink-black)', border: '1.5px solid var(--line-white)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 8, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 9 }}>i</span>
+                  <span aria-hidden style={{ position: 'absolute', inset: -2, borderRadius: 7, border: '2px dashed var(--gold)', pointerEvents: 'none' }} />
                 )}
               </button>
             </div>
@@ -2427,7 +2336,7 @@ export default function PitchMatchView({
             in motion while the pitch animations play. */}
         <button onClick={onContinue} disabled={resolving}
           className={resolving ? undefined : 'advance-btn-pulse'}
-          style={{ flex: 1, position: 'relative', overflow: 'hidden', padding: '11px 0', borderRadius: 'var(--radius)', border: `2px solid ${resolving ? 'var(--success)' : 'var(--ink-black)'}`, boxShadow: '0 4px 0 0 var(--ink-black)', background: resolving ? 'linear-gradient(135deg, #143a24, #0f2c1b)' : 'linear-gradient(135deg, var(--amber), var(--amber-soft))', color: resolving ? 'var(--cream)' : 'var(--cream)', fontFamily: PIXEL, fontSize: 15, cursor: resolving ? 'default' : 'pointer', transition: 'background 200ms, color 200ms' }}>
+          style={{ flex: 1, position: 'relative', overflow: 'hidden', padding: '11px 0', borderRadius: 7, border: `2px solid ${resolving ? 'var(--success)' : HERO.ink}`, boxShadow: resolving ? `0 3px 0 0 ${HERO.ink}` : `0 3px 0 0 ${HERO.ink}, 0 0 16px rgba(232,98,26,0.4)`, background: resolving ? 'linear-gradient(135deg, #143a24, #0f2c1b)' : 'linear-gradient(135deg, #e8621a, #f5a03e)', color: HERO.badgeText, fontFamily: PIXEL, fontSize: 15, textShadow: resolving ? undefined : '0 2px 0 rgba(0,0,0,0.4)', cursor: resolving ? 'default' : 'pointer', transition: 'background 200ms, color 200ms' }}>
           {resolving ? (
             <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, zIndex: 1 }}>
               {/* Live dot — mirrors the header's resolving status pulse. */}
