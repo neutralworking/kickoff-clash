@@ -358,11 +358,13 @@ export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext):
       : creator;
     const gk = def.cards.find((c) => c.gk);
     const qWord = quality === 'big' ? 'a big chance' : quality === 'corner' ? 'the corner' : 'a half-chance';
+    // The shot receipt shows the roll against the goal threshold as a clear
+    // inequality: a GOAL cleared `roll ≤ need`; a save/miss rolled OVER it (`> need`).
     const text = goal
-      ? `${shooter.name} buries ${qWord} — GOAL! (rolled ${roll}, needed ${need})`
+      ? `${shooter.name} buries ${qWord} — GOAL! (rolled ${roll}, needed ≤${need})`
       : onTarget
-        ? `${shooter.name} forces a save${gk ? ` from ${gk.name}` : ''} (rolled ${roll}, needed ${need})`
-        : `${shooter.name} puts ${qWord} wide (rolled ${roll}, needed ${need})`;
+        ? `${shooter.name} forces a save${gk ? ` from ${gk.name}` : ''} (rolled ${roll}, needed >${need})`
+        : `${shooter.name} puts ${qWord} wide (rolled ${roll}, needed >${need})`;
     pushBeat({
       ...clock, side: att.label, lane: shooter.lane,
       xg: need / 100, roll, need, quality, outcome,
