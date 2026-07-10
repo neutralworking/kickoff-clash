@@ -127,11 +127,11 @@ export interface SideBuild {
 // Pass A: the card's own condition
 // ---------------------------------------------------------------------------
 
-/** Fitness (1–6) → flat points off BOTH stats. Visible, never a multiplier. */
+/** Fitness (0–100) → flat points off BOTH stats. Visible, never a multiplier. */
 export function fitnessPenalty(fitness: number): number {
-  if (fitness >= 5.5) return 0;
-  if (fitness >= 4) return -1;
-  if (fitness >= 2.5) return -2;
+  if (fitness >= 90) return 0;
+  if (fitness >= 70) return -1;
+  if (fitness >= 50) return -2;
   return -3;
 }
 
@@ -220,7 +220,8 @@ function tacticMods(
       each((c) => c.band === 'ATT', 0, 2);
       for (const c of cards) {
         if (c.archetype === 'Sprinter' || c.archetype === 'Engine') {
-          out.drains[c.id] = (out.drains[c.id] ?? 0) - 0.5;
+          // 0–100 fitness axis: the high press costs the runners ~9%/increment.
+          out.drains[c.id] = (out.drains[c.id] ?? 0) - 9;
         }
       }
       break;
@@ -256,7 +257,8 @@ function tacticMods(
       break;
     case 'dark_arts':
       out.enemyMods.push({ source: src, who: 'star', atk: -1, def: -1 });
-      out.enemyDrains.push({ source: src, amount: -1.5 });
+      // 0–100 fitness axis: a ~25% knock on their star's legs.
+      out.enemyDrains.push({ source: src, amount: -25 });
       break;
     case 'youth_policy':
       if (ctx.increment >= 3) each(() => true, 1, 1);
@@ -355,7 +357,7 @@ export function buildSide(input: SideInput): SideBuild {
     const band = bandOf(cell);
     const lane = laneOf(cell);
     const base = deriveStats(card);
-    const fitness = card.fitness ?? (card.injured ? 2 : 6);
+    const fitness = card.fitness ?? (card.injured ? 33 : 100);
     const mods: PointMod[] = [];
 
     const fp = fitnessPenalty(fitness);

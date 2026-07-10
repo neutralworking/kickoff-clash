@@ -107,6 +107,14 @@ export const INJURY_CHANCE: Record<Durability, number> = {
   titanium: 0,
 };
 
+// --- Fitness scale (SCORING_V2) -------------------------------------------
+// Fitness is a 0–100 percentage. FITNESS_MAX is the fresh/rested ceiling; a
+// player who finishes a match under LOW_FITNESS risks both an in-match injury
+// (match-v5 advanceIncrement) AND permanent condition loss (run applyMatchWear)
+// — the single sub-50 line both systems key off.
+export const FITNESS_MAX = 100;
+export const LOW_FITNESS = 50;
+
 export const DURABILITY_PRICE_MOD: Record<Durability, number> = {
   glass: 0.5,
   fragile: 0.7,

@@ -585,7 +585,7 @@ function FitnessRow({ fitness }: { fitness: number }) {
           />
         ))}
       </div>
-      <span style={{ fontFamily: PIXEL, fontSize: 9, color, lineHeight: 1 }}>{filled}/{total}</span>
+      <span style={{ fontFamily: PIXEL, fontSize: 9, color, lineHeight: 1 }}>{Math.round(fitness)}</span>
     </div>
   );
 }

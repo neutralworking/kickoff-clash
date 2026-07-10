@@ -17,7 +17,7 @@
  */
 
 import type { Card, SlottedCard, Durability } from './scoring';
-import { seededRandom } from './scoring';
+import { seededRandom, FITNESS_MAX, LOW_FITNESS } from './scoring';
 import type { Connection, CrossSynergy } from './chemistry';
 import { findPositionalConnections } from './chemistry';
 import type { Formation, FormationSlot } from './formations';
@@ -235,18 +235,20 @@ export interface MatchVerdict {
  *  faceless side doesn't run. The balance-sweep's difficulty dial. */
 export const OPP_COHESION_PTS = [0, 0, 1, 1, 2];
 
-// --- Fitness (drain machinery unchanged; the PENALTY is now flat points in points.ts) ---
+// --- Fitness (0–100 axis; the PENALTY is flat points in points.ts) ---
+// Per-increment drain by durability: a standard MID card loses ~7 × 0.9 ≈ 6.3/increment,
+// so ~31 over a 5-increment match (~31% of full) — the same ~30% shape as the old 1–6 scale.
 const FITNESS_DRAIN: Record<Durability, number> = {
-  glass: 0.70, fragile: 0.55, phoenix: 0.60, standard: 0.40, iron: 0.28, titanium: 0.06,
+  glass: 12, fragile: 9, phoenix: 10, standard: 7, iron: 5, titanium: 1,
 };
 const BAND_INVOLVEMENT: Record<Band, number> = { ATT: 1.2, MID: 0.9, DEF: 0.5 };
 
 export function fitnessFactor(fitness: number): number {
-  return 0.52 + 0.08 * clamp(fitness, 1, 6); // 6 → 1.0, 1 → 0.6
+  return 0.6 + 0.004 * clamp(fitness, 0, FITNESS_MAX); // 100 → 1.0, 0 → 0.6
 }
 
 export function fitnessOf(card: Card): number {
-  return card.fitness ?? (card.injured ? 2 : 6);
+  return card.fitness ?? (card.injured ? 33 : FITNESS_MAX);
 }
 
 /** Base power scaled by live fitness — the shop/scale readout (never match math). */
@@ -772,11 +774,11 @@ export function advanceIncrement(state: MatchV5State, result: IncrementResult): 
     const card = newXi[i];
     const slot = state.formation.slots[i] ?? lastSlot;
     const band = bandOf(cellOf(slot.x, slot.y));
-    const drain = (FITNESS_DRAIN[card.durability] ?? 0.5) * BAND_INVOLVEMENT[band];
-    const fitness = clamp((card.fitness ?? 6) - drain + (traitDrain[card.id] ?? 0), 1, 6);
+    const drain = (FITNESS_DRAIN[card.durability] ?? 7) * BAND_INVOLVEMENT[band];
+    const fitness = clamp((card.fitness ?? FITNESS_MAX) - drain + (traitDrain[card.id] ?? 0), 0, FITNESS_MAX);
 
     let injured = card.injured;
-    if (!injured && fitness < 2.5) {
+    if (!injured && fitness < LOW_FITNESS) {
       let risk = 0;
       if (card.durability === 'glass') risk = 0.15;
       else if (card.durability === 'phoenix') risk = 0.12;
@@ -791,7 +793,7 @@ export function advanceIncrement(state: MatchV5State, result: IncrementResult): 
   let newOpponentXI = state.opponentXI;
   if (state.opponentXI.some((c) => traitDrain[c.id])) {
     newOpponentXI = state.opponentXI.map((c) =>
-      traitDrain[c.id] ? { ...c, fitness: clamp(fitnessOf(c) + traitDrain[c.id], 1, 6) } : c,
+      traitDrain[c.id] ? { ...c, fitness: clamp(fitnessOf(c) + traitDrain[c.id], 0, FITNESS_MAX) } : c,
     );
   }
 

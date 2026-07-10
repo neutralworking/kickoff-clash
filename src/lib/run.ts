@@ -8,7 +8,7 @@
 import {
   Card, SlottedCard, Durability, PlayingStyle,
   PLAYING_STYLES, DURABILITY_WEIGHTS, SHATTER_CHANCE, INJURY_CHANCE,
-  seededRandom,
+  seededRandom, FITNESS_MAX, LOW_FITNESS,
 } from './scoring';
 import { ActionCard, ALL_ACTION_CARDS, getActionCardsByType } from './actions';
 import {
@@ -123,28 +123,28 @@ export function buildMatchSeed(seed: number, cup: number, matchInCup: number): n
 // fitness forward; rested players recover; a drawn tie went to extra time and drains
 // everyone who played a little more. Fitness resets to fresh between cups (handled at
 // the shop). This is what makes squad rotation a real decision.
-export const REST_RECOVERY = 2.5;   // a rested (benched) player recovers this per tie
-export const EXTRA_TIME_DRAIN = 1.0; // a drawn tie costs everyone who played this much
+export const REST_RECOVERY = 42;   // a rested (benched) player recovers this per tie (0–100)
+export const EXTRA_TIME_DRAIN = 17; // a drawn tie costs everyone who played this much (0–100)
 
 /**
  * Fold a match's fitness back onto the deck: the XI that finished carries its drained
- * fitness (minus extra-time on a draw, floored at 1) AND any injury picked up in the tie;
- * everyone else recovers toward 6. Injuries persist through the cup (cleared only at the
- * between-cup reset) — overplaying a fragile star can lose him for the final.
+ * fitness (minus extra-time on a draw, floored at 0) AND any injury picked up in the tie;
+ * everyone else recovers toward FITNESS_MAX. Injuries persist through the cup (cleared only
+ * at the between-cup reset) — overplaying a fragile star can lose him for the final.
  */
 export function applyMatchFitness(
   deck: Card[],
   playedXi: Card[],
   result: 'win' | 'draw' | 'loss',
 ): Card[] {
-  const played = new Map(playedXi.map((c) => [c.id, { fitness: c.fitness ?? 6, injured: !!c.injured }]));
+  const played = new Map(playedXi.map((c) => [c.id, { fitness: c.fitness ?? FITNESS_MAX, injured: !!c.injured }]));
   const etDrain = result === 'draw' ? EXTRA_TIME_DRAIN : 0;
   return deck.map((c) => {
     const p = played.get(c.id);
     if (p) {
-      return { ...c, fitness: Math.max(1, p.fitness - etDrain), injured: c.injured || p.injured };
+      return { ...c, fitness: Math.max(0, p.fitness - etDrain), injured: c.injured || p.injured };
     }
-    return { ...c, fitness: Math.min(6, (c.fitness ?? 6) + REST_RECOVERY) };
+    return { ...c, fitness: Math.min(FITNESS_MAX, (c.fitness ?? FITNESS_MAX) + REST_RECOVERY) };
   });
 }
 
@@ -217,24 +217,47 @@ export function conditionForMatches(n: number): ConditionGrade {
   return 'MINT';
 }
 
+/** Chance an under-LOW_FITNESS card takes an EXTRA wear tick — heavy legs age faster. */
+export const STRAIN_WEAR_CHANCE = 0.35;
+
 /**
  * Fold a fixture's WEAR onto the deck: every card that featured gains a match on
  * its odometer and its `condition` is recomputed; a card that reaches TORN retires
  * (removed from the deck for good). Benched cards are untouched — rotation spreads
- * the wear. Returns the surviving deck + the cards that retired this fixture.
+ * the wear.
+ *
+ * Condition-loss coupling (SCORING_V2): a card that FINISHED the match under
+ * LOW_FITNESS (its drained end-of-match legs, read from `playedXi` — NOT the recovered
+ * deck) risks an EXTRA odometer tick (STRAIN_WEAR_CHANCE), advancing its wear by 2 this
+ * fixture instead of 1. So running a player into the ground ages the card faster and
+ * rotation-to-stay-fresh literally preserves condition. Seeded → deterministic.
+ *
+ * Returns the surviving deck, the cards that retired this fixture, and the cards that
+ * took the extra strain tick (for post-match commentary).
  */
-export function applyMatchWear(deck: Card[], playedXi: Card[]): { deck: Card[]; torn: Card[] } {
+export function applyMatchWear(
+  deck: Card[],
+  playedXi: Card[],
+  seed: number,
+): { deck: Card[]; torn: Card[]; strained: Card[] } {
+  // End-of-match fitness by id: the DRAINED value the XI limped off on. Read from
+  // playedXi so the strain roll keys off the real match-end legs, not the folded deck.
+  const finishFit = new Map(playedXi.map((c) => [c.id, c.fitness ?? FITNESS_MAX]));
   const playedIds = new Set(playedXi.map((c) => c.id));
   const torn: Card[] = [];
+  const strained: Card[] = [];
   const next = deck.map((c) => {
     if (!playedIds.has(c.id)) return c;
-    const matchesPlayed = (c.matchesPlayed ?? 0) + 1;
+    const finished = finishFit.get(c.id) ?? FITNESS_MAX;
+    const strain = finished < LOW_FITNESS && seededRandom(seed + c.id * 131) < STRAIN_WEAR_CHANCE;
+    const matchesPlayed = (c.matchesPlayed ?? 0) + (strain ? 2 : 1);
     const worn: Card = { ...c, matchesPlayed, condition: conditionForMatches(matchesPlayed) };
+    if (strain) strained.push(worn);
     if (worn.condition === 'TORN') torn.push(worn);
     return worn;
   });
   const tornIds = new Set(torn.map((c) => c.id));
-  return { deck: next.filter((c) => !tornIds.has(c.id)), torn };
+  return { deck: next.filter((c) => !tornIds.has(c.id)), torn, strained };
 }
 
 // ---------------------------------------------------------------------------

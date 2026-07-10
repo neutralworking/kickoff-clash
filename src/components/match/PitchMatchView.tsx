@@ -97,9 +97,9 @@ interface PitchSpot {
   position?: string;      // position tab
   rarity?: string;        // rarity ring colour
   archetype?: string;     // role hint (short code)
-  fitness?: number;       // 1–6 dynamic condition
+  fitness?: number;       // 0–100 dynamic condition
   injured?: boolean;
-  lowFitness?: boolean;   // fitness ≤ 2.5 (engine's injury-risk threshold)
+  lowFitness?: boolean;   // fitness < 50 (engine's injury-risk threshold)
   // ── PER-MATCH READOUT (Wave E) — read-side stats off playerMatchStats. ──
   effPower?: number;      // fitness-adjusted power (the on-pitch level)
   tired?: boolean;        // effPower < base power → legible "down on power" tell
@@ -117,7 +117,7 @@ interface PitchSpot {
 }
 
 
-const LOW_FITNESS = 2.5; // matches the engine's injury-risk threshold (advanceIncrement)
+const LOW_FITNESS = 50; // matches the engine's injury-risk threshold (advanceIncrement)
 // INCREMENT_MINUTES = [15,30,60,75,90] — window END minutes per increment. Index 4
 // (90') is full time. Mirrored here (display-only) so the ticking clock can read
 // the previous increment's end and the current window's bounds. Kept local so the
@@ -153,26 +153,21 @@ function ratingBand(r: number): { fill: string; ink: string } {
   return { fill: 'var(--gold)', ink: 'var(--ink-black)' };
 }
 
-// ── Wave E fitness band (req 6): a 6-step condition meter. Fresh = green, low = red. ──
-function fitnessColor(f: number): string {
-  if (f <= LOW_FITNESS) return 'var(--danger)';
-  if (f <= 4) return 'var(--amber)';
-  return 'var(--success)';
-}
-
-/** A compact banded fitness meter (6 ticks) — fills proportional to live condition.
- *  Pixel-flat (no blur/soft shadow on the bars), banded so it reads at a glance. */
+/** A compact banded fitness meter (6 ticks) — fills proportional to live 0–100 condition.
+ *  Colour comes from portrait.ts fitnessColor (the canonical band fn), so this can't drift
+ *  from the card/pitch. Pixel-flat (no blur/soft shadow on the bars), banded to read fast. */
 function FitnessMeter({ fitness }: { fitness: number }) {
-  const f = Math.max(1, Math.min(6, Math.round(fitness)));
-  const col = fitnessColor(fitness);
+  const pct = Math.max(0, Math.min(100, fitness));
+  const filled = Math.round((pct / 100) * 6);
+  const col = heroFitnessColor(fitness);
   return (
-    <div aria-label={`Fitness ${f} of 6`} style={{ display: 'flex', gap: 1.5, alignItems: 'stretch' }}>
+    <div aria-label={`Fitness ${Math.round(pct)} of 100`} style={{ display: 'flex', gap: 1.5, alignItems: 'stretch' }}>
       {Array.from({ length: 6 }).map((_, i) => (
         <span
           key={i}
           style={{
             flex: 1, height: 4, borderRadius: 1,
-            background: i < f ? col : 'rgba(0,0,0,0.45)',
+            background: i < filled ? col : 'rgba(0,0,0,0.45)',
             border: '0.5px solid rgba(7,16,11,0.6)',
           }}
         />
@@ -236,8 +231,8 @@ function PitchCard({
   const frameBg = misfit
     ? 'linear-gradient(135deg, #e0332d, #7a1f1c)'
     : frameSpec.frame;
-  // FIT bubble reads the live 1–6 condition as a % of full, coloured by band.
-  const fitPct = typeof spot.fitness === 'number' ? Math.round((Math.max(1, Math.min(6, spot.fitness)) / 6) * 100) : null;
+  // FIT bubble reads the live 0–100 condition directly, coloured by band.
+  const fitPct = typeof spot.fitness === 'number' ? Math.round(Math.max(0, Math.min(100, spot.fitness))) : null;
   const goals = spot.goals ?? 0;
   return (
     <div style={{ width: CARD_W, position: 'relative', opacity: dim ? 0.3 : 1 }} className={glow ? 'carrier-glow' : undefined}>
@@ -1009,7 +1004,7 @@ function RatingRow({ st, rank, live }: { st: PlayerMatchStat; rank: number; live
       {/* Fitness meter — the sub-decision tell. */}
       <div style={{ width: 54, display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'stretch' }}>
         <FitnessMeter fitness={st.fitness} />
-        <span style={{ fontFamily: PIXEL, fontSize: 6.5, color: fitnessColor(st.fitness), textAlign: 'right', lineHeight: 1 }}>FIT {Math.round(st.fitness)}/6</span>
+        <span style={{ fontFamily: PIXEL, fontSize: 6.5, color: heroFitnessColor(st.fitness), textAlign: 'right', lineHeight: 1 }}>FIT {Math.round(st.fitness)}/100</span>
       </div>
     </div>
   );
@@ -1614,7 +1609,7 @@ export default function PitchMatchView({
     for (const s of youSpots) {
       if (s.cardId === undefined) continue;
       if (s.injured && !injuredSpot) injuredSpot = s;
-      if (s.lowFitness && (s.fitness ?? 6) < tiredVal) { tiredVal = s.fitness ?? 6; tiredSpot = s; }
+      if (s.lowFitness && (s.fitness ?? 100) < tiredVal) { tiredVal = s.fitness ?? 100; tiredSpot = s; }
     }
     return injuredSpot ?? tiredSpot;
   }, [planning, youSpots]);

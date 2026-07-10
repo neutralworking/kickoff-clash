@@ -75,11 +75,11 @@ export function autoFill(
 // ---------------------------------------------------------------------------
 
 /** Fitness-adjusted strength for ranking. Raw power tapered by condition (mirrors the
- *  engine's fitnessFactor: 6 → ×1.0, 1 → ×0.6) so tired players drop down the order;
+ *  engine's fitnessFactor: 100 → ×1.0, 0 → ×0.6) so tired players drop down the order;
  *  injured players are pushed to the bottom so auto-select rests them. */
 export function effectiveStrength(c: Card): number {
-  const fit = Math.max(1, Math.min(6, c.fitness ?? 6));
-  const fitMult = 0.52 + 0.08 * fit;
+  const fit = Math.max(0, Math.min(100, c.fitness ?? 100));
+  const fitMult = 0.6 + 0.004 * fit;
   return c.power * fitMult * (c.injured ? 0.2 : 1);
 }
 

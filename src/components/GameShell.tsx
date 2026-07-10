@@ -24,6 +24,7 @@ import {
   interestOn,
   applyMatchFitness,
   applyMatchWear,
+  buildMatchSeed,
 } from '../lib/run';
 import { getShopItem, SCOUT_COST } from '../lib/economy';
 import type { InvestmentCard } from '../lib/economy';
@@ -281,11 +282,22 @@ export default function GameShell() {
     // Card WEAR (Pixel Hero): every card that featured wears a grade; a TORN card
     // retires from the deck. Unlike fitness, wear is permanent and shows on the card
     // face, so a heavily-rotated squad ages visibly and over-used stars eventually go.
-    const wear = applyMatchWear(fitDeck, result.handState.xi);
+    // The strain roll reads END-OF-MATCH fitness (result.handState.xi is the drained XI):
+    // a player who finished under 50% risks an extra wear tick, so heavy legs age faster.
+    const wear = applyMatchWear(
+      fitDeck,
+      result.handState.xi,
+      buildMatchSeed(runState.seed, runState.round, runState.matchInCup),
+    );
     const updatedDeck = wear.deck;
+    const tornIds = new Set(wear.torn.map((c) => c.id));
     for (const c of wear.torn) {
       durResult.worn.push(c);
       durResult.commentary.push(`${c.name} is worn out after ${c.matchesPlayed} matches — retires from the squad.`);
+    }
+    for (const c of wear.strained) {
+      if (tornIds.has(c.id)) continue; // already reported as retired
+      durResult.commentary.push(`${c.name} was run into the ground and shows the strain — the card wears faster.`);
     }
 
     // Update wins/losses
@@ -503,7 +515,7 @@ export default function GameShell() {
         cash: runState.cash + interestOn(runState.cash),
         // Between cups everyone starts fresh: fitness reset and in-cup injuries cleared, so
         // each cup is a self-contained puzzle. (Permanent durability shatter still sticks.)
-        deck: runState.deck.map(c => ({ ...c, fitness: 6, injured: false })),
+        deck: runState.deck.map(c => ({ ...c, fitness: 100, injured: false })),
         tacticsDeck,
         status: 'teamTalk',
       };
