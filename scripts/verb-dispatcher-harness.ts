@@ -79,9 +79,11 @@ function draftXI(frac: number): Card[] {
 const F433 = getFormation('4-3-3');
 
 function playMatch(xi: Card[], seed: number, round = 3, tactics: string[] = []): { state: MatchV5State; results: IncrementResult[] } {
-  let state = initMatch(xi, [], [], F433, 'tiki-taka', [], seed, round, 'Balanced', 'Sprinter', {}, 'balanced', undefined, tactics);
+  let state = initMatch(xi, [], [], F433, 'tiki-taka', [], seed, round, 'Balanced', 'Sprinter', {}, 'balanced', undefined, {});
   const results: IncrementResult[] = [];
   for (let i = 0; i < 5; i++) {
+    // Per-call tactics: re-call the plays each period (advanceIncrement clears them).
+    state = { ...state, activeTactics: tactics };
     const split = evaluateSplit(state, []);
     const result = resolveIncrement(state, split, seed + i * 113);
     results.push(result);
@@ -117,7 +119,7 @@ console.log('— 1. Determinism —');
 console.log('— 2. The receipt law (one currency) —');
 {
   const xi = draftXI(0.2);
-  const state = initMatch(xi, [], [], F433, 'tiki-taka', [], 42, 3, 'Balanced', 'Sprinter', {}, 'attacking', undefined, ['fortress', 'possession']);
+  const state = { ...initMatch(xi, [], [], F433, 'tiki-taka', [], 42, 3, 'Balanced', 'Sprinter', {}, 'attacking', undefined, {}), activeTactics: ['fortress', 'possession'] };
   const split = evaluateSplit(state, []);
   let ok = true;
   let detail = '';
@@ -204,7 +206,7 @@ console.log('— 3. Interactions (flat, targeted, ledgered) —');
   // Tactic targeting: Fortress = +3 DEF to the back line, nothing else.
   {
     const xi = draftXI(0.3);
-    const split = evaluateSplit(initMatch(xi, [], [], F433, 'tiki-taka', [], 5, 1, 'Passive', 'Sprinter', {}, 'balanced', undefined, ['fortress']), []);
+    const split = evaluateSplit({ ...initMatch(xi, [], [], F433, 'tiki-taka', [], 5, 1, 'Passive', 'Sprinter', {}, 'balanced', undefined, {}), activeTactics: ['fortress'] }, []);
     const backline = split.youEff.filter((c) => c.band === 'DEF');
     const others = split.youEff.filter((c) => c.band !== 'DEF');
     check('Fortress: back line +3 DEF',

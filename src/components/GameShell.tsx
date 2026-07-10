@@ -11,13 +11,13 @@ import {
   applyDurabilityResults,
   addCardToDeck,
   sellCard,
-  buyAcademyPlayer,
   applyTraining,
   buyTacticPack,
   buyShopItem,
   buyInvestment,
   healInjuredCard,
   drawRoundTactic,
+  refillTacticCharges,
   cupSize,
   isCupFinal,
   MAX_CUPS,
@@ -324,6 +324,9 @@ export default function GameShell() {
       round: runState.round,
       matchHistory: [...runState.matchHistory, matchResult],
       chemistry,
+      // Between fixtures every owned tactic refills to its rarity capacity — the
+      // next match starts with a full playbook (per-call charges reset).
+      tacticCharges: refillTacticCharges(runState),
       // SCORING_V2 suspensions: red-carded players sit out the NEXT fixture.
       // Overwritten every match — last match's suspensions have been served.
       suspendedIds: result.sentOffIds.filter((id) => runState.deck.some((c) => c.id === id)),
@@ -418,14 +421,6 @@ export default function GameShell() {
     });
   }, []);
 
-  const handleBuyAcademy = useCallback((card: Card) => {
-    setRunState(prev => {
-      if (!prev) return prev;
-      const result = buyAcademyPlayer(prev, card);
-      return result ?? prev;
-    });
-  }, []);
-
   const handleBuyTacticPack = useCallback(() => {
     if (!runState) return;
     const result = buyTacticPack(runState, runState.seed + runState.round * 777);
@@ -508,6 +503,9 @@ export default function GameShell() {
     if (finishedCup) {
       const nextCup = runState.round + 1;
       const tacticsDeck = drawRoundTactic(runState.tacticsDeck, runState.seed * 31 + nextCup * 7);
+      // A newly drawn play enters on a single charge (like a pack pull); the rest
+      // keep the capacities refilled at post-match.
+      const drawn = tacticsDeck.filter((t) => !runState.tacticsDeck.some((o) => o.id === t.id));
       next = {
         ...runState,
         round: nextCup,
@@ -517,6 +515,7 @@ export default function GameShell() {
         // each cup is a self-contained puzzle. (Permanent durability shatter still sticks.)
         deck: runState.deck.map(c => ({ ...c, fitness: 100, injured: false })),
         tacticsDeck,
+        tacticCharges: { ...(runState.tacticCharges ?? {}), ...Object.fromEntries(drawn.map((t) => [t.id, 1])) },
         status: 'teamTalk',
       };
     } else {
@@ -682,7 +681,6 @@ export default function GameShell() {
             onBuyCard={handleBuyCard}
             onSellCard={handleSellCard}
             onBuyJoker={handleBuyJoker}
-            onBuyAcademy={handleBuyAcademy}
             onBuyTacticPack={handleBuyTacticPack}
             onBuyInvestment={handleBuyInvestment}
             onTrainPlayer={handleTrainPlayer}

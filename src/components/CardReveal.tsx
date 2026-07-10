@@ -5,7 +5,7 @@ import type { PackContents } from '../lib/packs';
 import type { Card } from '../lib/scoring';
 import PlayerCard from './PlayerCard';
 import CardHand from './CardHand';
-import TacticCardComp from './TacticCard';
+import GameCard from './cards/GameCard';
 import JokerCardComp from './JokerCard';
 import { RARITY_COLORS } from './theme';
 
@@ -295,11 +295,13 @@ export default function CardReveal({ contents, onComplete }: CardRevealProps) {
             Also in your pack
           </span>
 
-          {/* Tactics */}
+          {/* Tactics — the shared Pixel-Hero tactic card (a fresh pull = 1 charge). */}
           {contents.tactics.length > 0 && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
               {contents.tactics.map(t => (
-                <TacticCardComp key={t.id} tactic={t} compact />
+                <div key={t.id} style={{ width: 84 }}>
+                  <GameCard model={{ variant: 'tactic', tactic: t, charges: 1 }} />
+                </div>
               ))}
             </div>
           )}

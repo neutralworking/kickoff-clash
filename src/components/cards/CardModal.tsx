@@ -22,8 +22,10 @@ import type { Card } from '../../lib/scoring';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard } from '../../lib/tactics';
 import type { InvestmentCard } from '../../lib/economy';
-import { getTacticById } from '../../lib/tactics';
+import { getTacticById, tacticCapacity } from '../../lib/tactics';
+import { contestsForCard, contestsForManager, contestsForTactic, CONTEST_META, type ContestKey } from '../../lib/contest-map';
 import GameCard, { type GameCardModel } from './GameCard';
+import { ContestIcons } from './ContestIcons';
 import {
   PIXEL,
   RARITY_COLOR,
@@ -137,7 +139,15 @@ export default function CardModal({ model, onClose }: CardModalProps) {
         {/* Card + detail. Each re-enables pointer events; the gaps between/around
             them stay click-through, so a tap on empty space hits the backdrop. */}
         <div className="flex-1 min-h-0 flex flex-col items-center justify-start" style={{ gap: 14, pointerEvents: 'none' }}>
-          <div className="hero-pop shrink-0" style={{ width: model.variant === 'player' ? 208 : 172, maxWidth: model.variant === 'player' ? '62%' : '48%', pointerEvents: 'auto' }}>
+          <div
+            className="hero-pop shrink-0"
+            style={{
+              // Player + tactic are the tall Pixel-Hero cards, so they blow up larger.
+              width: model.variant === 'player' || model.variant === 'tactic' ? 208 : 172,
+              maxWidth: model.variant === 'player' || model.variant === 'tactic' ? '62%' : '48%',
+              pointerEvents: 'auto',
+            }}
+          >
             <GameCard model={model} size="full" />
           </div>
 
@@ -150,7 +160,7 @@ export default function CardModal({ model, onClose }: CardModalProps) {
             ) : model.variant === 'manager' ? (
               <ManagerDetail manager={model.manager} />
             ) : model.variant === 'tactic' ? (
-              <TacticDetail tactic={model.tactic} accent={accent} />
+              <TacticDetail tactic={model.tactic} charges={model.charges} accent={accent} />
             ) : (
               <InvestmentDetail investment={model.investment} accent={accent} />
             )}
@@ -316,6 +326,24 @@ function TapStatCell({
   );
 }
 
+/** A labelled contest row for the detail panel — the pixel badges plus a readable
+ *  label list, so the modal teaches which of the six contests the card touches.
+ *  Renders nothing for an empty list (identity managers / neutral tactics). */
+function ContestRow({ heading, keys }: { heading: string; keys: ContestKey[] }) {
+  if (!keys.length) return null;
+  return (
+    <div className="flex flex-col" style={{ gap: 6 }}>
+      <Label>{heading}</Label>
+      <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
+        <ContestIcons keys={keys} full />
+        <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, color: 'var(--cream-soft)', lineHeight: 1.3 }}>
+          {keys.map((k) => CONTEST_META[k].label).join(' · ')}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function TagRow({ items, color, bg }: { items: string[]; color: string; bg: string }) {
   return (
     <div className="flex flex-wrap" style={{ gap: 5 }}>
@@ -408,6 +436,8 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
             ))}
           </div>
         </div>
+        {/* HELPS WITH — which of the six contests this card feeds. */}
+        <ContestRow heading="HELPS WITH" keys={contestsForCard(card)} />
         {/* FITNESS (today's legs) shows only once a run tracks it. */}
         {typeof card.fitness === 'number' && <FitnessRow fitness={card.fitness} />}
       </Panel>
@@ -644,6 +674,8 @@ function ManagerDetail({ manager }: { manager: JokerCard }) {
       <Panel>
         <Label>EFFECT</Label>
         <span style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--cream)' }}>{manager.effect}</span>
+        {/* Only the four contest-reworked gaffers name a contest — omitted otherwise. */}
+        <ContestRow heading="RAISES" keys={contestsForManager(manager.id)} />
       </Panel>
 
       <Panel>
@@ -683,8 +715,10 @@ function ManagerDetail({ manager }: { manager: JokerCard }) {
 // TACTIC detail
 // ---------------------------------------------------------------------------
 
-function TacticDetail({ tactic, accent }: { tactic: TacticCard; accent: string }) {
+function TacticDetail({ tactic, charges, accent }: { tactic: TacticCard; charges?: number; accent: string }) {
   const contradicts = tactic.contradicts ? getTacticById(tactic.contradicts) : null;
+  const capacity = tacticCapacity(tactic);
+  const filled = charges == null ? capacity : Math.max(0, Math.min(capacity, charges));
   return (
     <div className="flex flex-col" style={{ gap: 10 }}>
       <Panel>
@@ -705,10 +739,16 @@ function TacticDetail({ tactic, accent }: { tactic: TacticCard; accent: string }
             {tactic.category.toUpperCase()}
           </span>
         </div>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 6 }}>
+          <StatCell label="RARITY" value={tactic.rarity.toUpperCase()} color={accent} />
+          <StatCell label="CHARGES" value={`${filled} / ${capacity}`} color="var(--gold)" />
+        </div>
         <div className="flex flex-col" style={{ gap: 6 }}>
           <Label>EFFECT</Label>
           <span style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--cream-soft)' }}>{tactic.effect}</span>
         </div>
+        {/* RAISES — which contest(s) this call lifts (a neutral/enemy-debuff play shows none). */}
+        <ContestRow heading="RAISES" keys={contestsForTactic(tactic.id)} />
       </Panel>
 
       <Panel>

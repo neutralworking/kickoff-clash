@@ -27,7 +27,7 @@ import { rollXI } from './hand';
 import type { MatchVerdict } from './match-v5';
 import type { JokerCard } from './jokers';
 import { getExtraDiscards } from './jokers';
-import { ALL_TACTICS, type TacticCard } from './tactics';
+import { ALL_TACTICS, tacticCapacity, type TacticCard } from './tactics';
 import { getFormation, ALL_FORMATIONS } from './formations';
 import { generateOpponentXI, cupMatchPower } from './opponent';
 import type { CoAppearance } from './chem';
@@ -54,6 +54,10 @@ export interface RunState {
   jokers: JokerCard[];           // active jokers (max 3)
   ownedFormations: string[];     // formation IDs the player owns
   tacticsDeck: TacticCard[];     // tactic cards in collection
+  /** Per-tactic charges (tacticId → charges). A pack pull enters at 1; every
+   *  owned tactic refills to its rarity capacity between fixtures. Optional so
+   *  pre-charge saves rehydrate (a missing entry is treated as full capacity). */
+  tacticCharges?: Record<string, number>;
   activeFormation: string;       // currently selected formation ID
   trainingApplied: Record<number, number>; // cardId → total power added (max +20)
   cash: number;
@@ -869,6 +873,9 @@ export function createRun(sel: TeamSelection, seed?: number): RunState {
     jokers: sel.manager ? [sel.manager] : [],
     ownedFormations,
     tacticsDeck: sel.tactics,
+    // Pack-opened → each starts on a single charge; refills to capacity after
+    // the first fixture (see refillTacticCharges).
+    tacticCharges: Object.fromEntries(sel.tactics.map((t) => [t.id, 1])),
     activeFormation: sel.formationId,
     trainingApplied: {},
     cash: 0,
@@ -1163,7 +1170,19 @@ export function buyTacticPack(state: RunState, seed: number): RunState | null {
     ...state,
     cash: state.cash - TACTIC_PACK_COST,
     tacticsDeck: [...state.tacticsDeck, ...newTactics],
+    // Pack pulls enter on a single charge; they refill to capacity next fixture.
+    tacticCharges: { ...(state.tacticCharges ?? {}), ...Object.fromEntries(newTactics.map((t) => [t.id, 1])) },
   };
+}
+
+/** Every owned tactic refilled to its rarity capacity — the between-fixtures
+ *  top-up. Called post-match so the next fixture starts with a full playbook
+ *  (a freshly-packed card keeps its single charge until it has been through a
+ *  fixture, honouring "starts with one in the pack opening"). */
+export function refillTacticCharges(state: RunState): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const t of state.tacticsDeck) out[t.id] = tacticCapacity(t);
+  return out;
 }
 
 /**

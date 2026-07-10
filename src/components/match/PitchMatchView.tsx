@@ -9,7 +9,7 @@ import type { Band, Lane } from '../../lib/field';
 import { cellOf, bandOf } from '../../lib/field';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard } from '../../lib/tactics';
-import { TACTIC_SLOTS } from '../../lib/match-v5';
+import { tacticCapacity } from '../../lib/tactics';
 import { deriveStats } from '../../lib/funnel';
 import type { OpponentBuild, TeamIntent } from '../../lib/run';
 import type { Card } from '../../lib/scoring';
@@ -339,13 +339,14 @@ function SubCard({ card, dim }: { card: Card; dim?: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
-// TACTICS BY CARDS — the equipped hand (up to TACTIC_SLOTS for the match).
+// TACTICS BY CARDS — the CALLED hand (per-call charges).
 //
 // A tactic's category sets its accent (all KC tokens):
 //   attacking → kit-red · defensive → kit-blue · specialist → gold.
-// TacticPill is one owned tactic — tap equips it for the MATCH (ringed EQUIPPED),
-// tap again unequips; slots-full or match-started disables. The inspect pip
-// opens the existing tactic CardModal. Pixel-flat on a hard-shadowed surface.
+// CallPill is one owned tactic — tap CALLS it for the coming period (ringed
+// CALLED), spending one charge; tap again before kick-off refunds it. A play
+// with no charges left is dimmed. Charge pips (●/○) show what's left of the
+// card's rarity capacity. The inspect pip opens the tactic CardModal.
 // ---------------------------------------------------------------------------
 
 const TACTIC_CATEGORY_COLOR: Record<TacticCard['category'], string> = {
@@ -356,9 +357,26 @@ const TACTIC_CATEGORY_COLOR: Record<TacticCard['category'], string> = {
 
 type EquipState = 'equipped' | 'available' | 'blocked';
 
-function CallPill({ tactic, state, onCall, onInspect }: {
+/** Charge pips — `capacity` dots, the first `charges` filled with the accent. */
+function ChargePips({ charges, capacity, accent }: { charges: number; capacity: number; accent: string }) {
+  return (
+    <span aria-hidden style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
+      {Array.from({ length: capacity }, (_, i) => (
+        <span key={i} style={{
+          width: 5, height: 5, borderRadius: '50%',
+          background: i < charges ? accent : 'transparent',
+          border: `1px solid ${i < charges ? accent : 'var(--dust)'}`,
+        }} />
+      ))}
+    </span>
+  );
+}
+
+function CallPill({ tactic, state, charges, capacity, onCall, onInspect }: {
   tactic: TacticCard;
   state: EquipState;
+  charges: number;
+  capacity: number;
   onCall: () => void;
   onInspect: () => void;
 }) {
@@ -366,13 +384,13 @@ function CallPill({ tactic, state, onCall, onInspect }: {
   const called = state === 'equipped';
   const blocked = state === 'blocked';
   return (
-    // No `disabled` attr — the inspect pip must stay tappable on a blocked
-    // tactic; the equip tap itself is guarded below.
+    // No `disabled` attr — the inspect pip must stay tappable on a depleted
+    // tactic; the call tap itself is guarded below.
     <button
       onClick={() => { if (!blocked) onCall(); }}
       aria-disabled={blocked}
       aria-pressed={called}
-      aria-label={`${tactic.name}, ${called ? 'equipped, tap to unequip' : blocked ? 'unavailable' : 'tap to equip'}`}
+      aria-label={`${tactic.name}, ${charges} of ${capacity} charges, ${called ? 'called, tap to cancel' : blocked ? 'no charges left' : 'tap to call'}`}
       style={{
         position: 'relative', flexShrink: 0, textAlign: 'left', padding: 0,
         display: 'flex', alignItems: 'stretch',
@@ -393,9 +411,12 @@ function CallPill({ tactic, state, onCall, onInspect }: {
       <span aria-hidden style={{ width: 3, background: accent, flexShrink: 0 }} />
       <span style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4, padding: '0 8px', minWidth: 0 }}>
         <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--cream)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 112, lineHeight: 1.1 }}>{tactic.name}</span>
-        {called && (
-          <span style={{ alignSelf: 'flex-start', fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--ink-black)', background: accent, borderRadius: 2, padding: '2px 3px', lineHeight: 1 }}>EQUIPPED</span>
-        )}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <ChargePips charges={charges} capacity={capacity} accent={accent} />
+          {called && (
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.3, color: 'var(--ink-black)', background: accent, borderRadius: 2, padding: '2px 3px', lineHeight: 1 }}>CALLED</span>
+          )}
+        </span>
       </span>
       {/* inspect pip — opens the existing tactic CardModal; stopPropagation so a
           tap here never toggles the call (same pattern as the pitch-card pip). */}
@@ -1085,33 +1106,30 @@ function StatBar({ you, opp, fmt, delay }: { you: number; opp: number; fmt?: (n:
   );
 }
 
-/** A compact PERIOD / MATCH pairing for one stat: the live 15' window value beside
- *  the running match-to-date total, so the team-talk reads both at a glance. */
+/** One stat as a YOU-vs-OPP diverging row. `mode` picks which numbers show —
+ *  the live 15' window ('period') or the running match-to-date total ('match') —
+ *  so the overlay stays uncluttered and the toggle swaps the whole board at once. */
 function StatPair({
-  label, you, opp, matchYou, matchOpp, fmt, delay,
+  label, you, opp, matchYou, matchOpp, fmt, delay, mode,
 }: {
   label: string;
   you: number; opp: number;          // this period
   matchYou: number; matchOpp: number; // match to date
   fmt?: (n: number) => string;
   delay: number;
+  mode: StatsMode;
 }) {
   const show = (n: number) => (fmt ? fmt(n) : String(n));
+  const vY = mode === 'match' ? matchYou : you;
+  const vO = mode === 'match' ? matchOpp : opp;
   return (
     <div className="stat-row-in" style={{ animationDelay: `${delay}ms` }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', columnGap: 8 }}>
-        {/* This period — the headline value, the diverging bar */}
-        <span style={{ fontFamily: PIXEL, fontSize: 11, color: YOU, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{show(you)}</span>
+        <span style={{ fontFamily: PIXEL, fontSize: 11, color: YOU, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{show(vY)}</span>
         <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--dust)' }}>{label}</span>
-        <span style={{ fontFamily: PIXEL, fontSize: 11, color: OPP, textAlign: 'left', fontVariantNumeric: 'tabular-nums' }}>{show(opp)}</span>
+        <span style={{ fontFamily: PIXEL, fontSize: 11, color: OPP, textAlign: 'left', fontVariantNumeric: 'tabular-nums' }}>{show(vO)}</span>
       </div>
-      <StatBar you={you} opp={opp} fmt={fmt} delay={delay} />
-      {/* Match-to-date total — a faint sub-line beneath, clearly tagged MATCH. */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', columnGap: 8, marginTop: 1 }}>
-        <span style={{ fontSize: 8.5, color: YOU, opacity: 0.7, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{show(matchYou)}</span>
-        <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: 'var(--ink)' }}>MATCH</span>
-        <span style={{ fontSize: 8.5, color: OPP, opacity: 0.7, textAlign: 'left', fontVariantNumeric: 'tabular-nums' }}>{show(matchOpp)}</span>
-      </div>
+      <StatBar you={vY} opp={vO} fmt={fmt} delay={delay} />
     </div>
   );
 }
@@ -1124,6 +1142,10 @@ function StatPair({
 //   FINISH         → kit-red          · STOP          → wall-green
 // The `field` keys index straight into ContestStats (match-v5) — one source.
 // ---------------------------------------------------------------------------
+/** The stats overlay shows EITHER the just-played 15' window or the match-to-date
+ *  total — a single toggle swaps every number, keeping the board uncluttered. */
+type StatsMode = 'period' | 'match';
+
 type ContestField = keyof ContestStats;
 interface ContestMeta {
   name: string;
@@ -1151,8 +1173,8 @@ const CONTEST_META: ContestMeta[] = [
     { label: 'BLOCKS', field: 'blocks' } ] },
 ];
 
-function ContestGroup({ meta, stats, cumulative, delay }: {
-  meta: ContestMeta; stats: MatchStats; cumulative: CumulativeStats; delay: number;
+function ContestGroup({ meta, stats, cumulative, delay, mode }: {
+  meta: ContestMeta; stats: MatchStats; cumulative: CumulativeStats; delay: number; mode: StatsMode;
 }) {
   return (
     <div className="stat-row-in" style={{
@@ -1172,6 +1194,7 @@ function ContestGroup({ meta, stats, cumulative, delay }: {
           matchOpp={cumulative.opponentContest[m.field]}
           fmt={m.fmt}
           delay={delay + i * 40}
+          mode={mode}
         />
       ))}
     </div>
@@ -1202,6 +1225,8 @@ function StatsScreen({
   onRatings: () => void;
   onContinue: () => void;
 }) {
+  // The busy twin-value board is now a single toggle: THIS 15' or MATCH.
+  const [mode, setMode] = useState<StatsMode>('period');
   return (
     <div className="stats-rise" style={{ position: 'absolute', inset: 0, zIndex: 14, background: 'linear-gradient(180deg, #08130c, #0a160e)', display: 'flex', flexDirection: 'column', padding: '14px 14px 14px', overflow: 'hidden' }}>
       {/* Fixed scoreboard header — period marker + running score + the matchup.
@@ -1230,23 +1255,40 @@ function StatsScreen({
         {/* Coach TEAM TALK — moved out of the plan screen into this between-period beat. */}
         <CoachPanel notes={coachNotes} style={{ margin: 0 }} />
 
-        {/* Caption: which column is this-period vs match-to-date (applies to xG + grid). */}
-        <div className="stat-row-in" style={{ display: 'flex', justifyContent: 'center', gap: 6, animationDelay: '60ms' }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--cream-soft)' }}>THIS 15{"'"}</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--dust)' }}>·</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--ink)' }}>MATCH SO FAR</span>
+        {/* Period / Match toggle — swaps every number below at once (declutter). */}
+        <div className="stat-row-in" style={{ display: 'flex', justifyContent: 'center', animationDelay: '60ms' }}>
+          <div style={{ display: 'flex', borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}>
+            {([['period', `THIS 15'`], ['match', 'MATCH']] as [StatsMode, string][]).map(([m, label]) => {
+              const on = mode === m;
+              return (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  aria-pressed={on}
+                  style={{
+                    fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, padding: '5px 14px',
+                    background: on ? 'var(--amber)' : 'var(--surface)',
+                    color: on ? 'var(--ink-black)' : 'var(--cream-soft)',
+                    cursor: 'pointer', transition: 'background 0.15s ease',
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* xG — the headline number above the contest grid. */}
         <div className="stat-row-in" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', borderTop: '3px solid var(--amber)', boxShadow: '0 2px 0 0 var(--ink-black)', background: 'var(--surface)', animationDelay: '70ms' }}>
           <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.7, color: 'var(--amber)', lineHeight: 1 }}>EXPECTED GOALS</span>
-          <StatPair label="xG" you={stats.yourXG} opp={stats.opponentXG} matchYou={cumulative.yourXG} matchOpp={cumulative.opponentXG} fmt={(n) => n.toFixed(2)} delay={80} />
+          <StatPair label="xG" you={stats.yourXG} opp={stats.opponentXG} matchYou={cumulative.yourXG} matchOpp={cumulative.opponentXG} fmt={(n) => n.toFixed(2)} delay={80} mode={mode} />
         </div>
 
         {/* THE SIX CONTESTS — one small panel each, coloured by family, two metrics apiece. */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           {CONTEST_META.map((meta, i) => (
-            <ContestGroup key={meta.name} meta={meta} stats={stats} cumulative={cumulative} delay={110 + i * 40} />
+            <ContestGroup key={meta.name} meta={meta} stats={stats} cumulative={cumulative} delay={110 + i * 40} mode={mode} />
           ))}
         </div>
 
@@ -1594,20 +1636,25 @@ export default function PitchMatchView({
 
   const manager = jokers[0] ?? null;
 
-  // ── TACTICS BY CARDS — the match's equipped hand (up to TACTIC_SLOTS).
-  // Equip/unequip is pre-kickoff only; after the first whistle the plan is locked
-  // (equipTactics in match-v5 enforces it — this mirrors it for the labels).
-  const equippedIds = matchState.equippedTactics;
-  const equipLocked = matchState.scores.length > 0;
+  // ── TACTICS BY CARDS — the CALLED hand (per-call charges).
+  // At each planning break you CALL a play for the coming period, spending one
+  // of its charges; tap again before kick-off to refund it. A play with no
+  // charges left this match is dimmed. Charges (matchState.tacticCharges) carry
+  // across periods and refill between fixtures.
+  const equippedIds = matchState.activeTactics;
   const equipHand = useMemo(() => {
     return availableTactics.map((tactic) => {
-      const equipped = equippedIds.includes(tactic.id);
-      const state: EquipState = equipped
+      const called = equippedIds.includes(tactic.id);
+      const capacity = tacticCapacity(tactic);
+      const charges = matchState.tacticCharges?.[tactic.id] ?? capacity;
+      const state: EquipState = called
         ? 'equipped'
-        : equipLocked || equippedIds.length >= TACTIC_SLOTS ? 'blocked' : 'available';
-      return { tactic, state };
+        : charges > 0 ? 'available' : 'blocked';
+      return { tactic, state, charges, capacity };
     });
-  }, [availableTactics, equippedIds, equipLocked]);
+  }, [availableTactics, equippedIds, matchState.tacticCharges]);
+  // Any charge left to spend this period → the call hand is worth nudging toward.
+  const anyCallable = equipHand.some((h) => h.state === 'available');
 
   // FIX 1 — A MATCH CLOCK THAT COUNTS (mm:ss).
   //   • PLANNING: show the elapsed time = the last completed increment's end
@@ -1668,8 +1715,9 @@ export default function PitchMatchView({
   const canSubFlag = !!flaggedPlayer && subsRemaining > 0;
   const showSubPrompt = planning && canSubFlag && bench.length > 0;
 
-  // Nudge the TACTICS tab pre-kickoff while slots are free and tactics are owned.
-  const showCallNudge = planning && !equipLocked && equippedIds.length < TACTIC_SLOTS && availableTactics.length > 0;
+  // Nudge the TACTICS row at a break while you've a play worth calling and none
+  // called yet for the coming period.
+  const showCallNudge = planning && anyCallable && equippedIds.length === 0;
 
   // The team-talk break: planning, not scouting the opposition. At a real break
   // (kickoff / halftime / between) the coach panel and the SHAPE + TACTICS entry
@@ -2004,12 +2052,12 @@ export default function PitchMatchView({
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 10px 8px', position: 'relative', zIndex: 2 }}>
             <span className={showCallNudge ? 'carrier-glow' : undefined}
               style={{ flexShrink: 0, fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: showCallNudge ? 'var(--ink-black)' : 'var(--dust)', background: showCallNudge ? 'var(--amber)' : 'rgba(0,0,0,0.3)', border: '1px solid var(--ink-black)', borderRadius: 3, padding: '3px 4px', lineHeight: 1.35, width: 36, textAlign: 'center' }}>
-              TACTICS {equippedIds.length}/{TACTIC_SLOTS}
+              CALL A PLAY
             </span>
             <div className="kc-call-row" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden', flex: 1, minWidth: 0 }}>
               {equipHand.length === 0 && <span style={{ fontSize: 10, color: 'var(--dust)' }}>No tactic cards owned — buy them in the store.</span>}
-              {equipHand.map(({ tactic, state }) => (
-                <CallPill key={tactic.id} tactic={tactic} state={state}
+              {equipHand.map(({ tactic, state, charges, capacity }) => (
+                <CallPill key={tactic.id} tactic={tactic} state={state} charges={charges} capacity={capacity}
                   onCall={() => onToggleTactic(tactic.id)}
                   onInspect={() => setModal({ variant: 'tactic', tactic })} />
               ))}
@@ -2458,13 +2506,13 @@ export default function PitchMatchView({
                 <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--amber)', letterSpacing: 0.8 }}>MATCH TACTICS</span>
                 <button onClick={() => setTrayOpen(false)} aria-label="Close plays" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, marginRight: -8, background: 'none', border: 'none', color: 'var(--dust)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>{'×'}</button>
               </div>
-              {/* EQUIPPED — up to TACTIC_SLOTS for the whole match; locked at kick-off. */}
+              {/* CALLED — the plays live for the coming period (each spent a charge). */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
                 <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', letterSpacing: 0.5 }}>
-                  EQUIPPED {equippedIds.length}/{TACTIC_SLOTS}
+                  CALLED {equippedIds.length}
                 </span>
                 <span style={{ fontSize: 10, color: 'var(--cream-soft)', marginLeft: 'auto', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {equipLocked ? 'Locked at kick-off' : equippedIds.length === 0 ? 'Pick up to 3 before kick-off' : equipHand.filter((h) => h.state === 'equipped').map((h) => h.tactic.name).join(' · ')}
+                  {equippedIds.length === 0 ? 'Call a play for the coming period' : equipHand.filter((h) => h.state === 'equipped').map((h) => h.tactic.name).join(' · ')}
                 </span>
               </div>
               {/* FIX 3 — the opponent read in the shelf: their PLAY style + the SOFT
@@ -2495,15 +2543,15 @@ export default function PitchMatchView({
               </div>
               <div style={{ display: 'grid', gap: 8 }}>
                 {equipHand.length === 0 && <div style={{ fontSize: 11, color: 'var(--dust)' }}>No tactic cards owned — buy them in the store.</div>}
-                {equipHand.map(({ tactic, state }) => {
+                {equipHand.map(({ tactic, state, charges, capacity }) => {
                   const accent = TACTIC_CATEGORY_COLOR[tactic.category] ?? 'var(--gold)';
                   const blocked = state === 'blocked';
                   const called = state === 'equipped';
-                  // The border tells the state apart: accent = equipped,
-                  // ink = available, muted = blocked (slots full / locked).
+                  // The border tells the state apart: accent = called,
+                  // ink = callable, muted = out of charges.
                   const borderColor = called ? accent : blocked ? 'var(--border)' : 'var(--ink-black)';
                   // Top-right status label — the action a tap performs RIGHT NOW.
-                  const label = called ? 'EQUIPPED' : blocked ? (equipLocked ? 'LOCKED' : 'SLOTS FULL') : 'TAP TO EQUIP';
+                  const label = called ? 'CALLED' : blocked ? 'NO CHARGES' : 'TAP TO CALL';
                   const labelColor = called ? accent : blocked ? 'var(--dust)' : 'var(--success)';
                   return (
                     <button
@@ -2527,12 +2575,19 @@ export default function PitchMatchView({
                           <span style={{ width: 6, height: 6, borderRadius: 2, background: accent, flexShrink: 0 }} />
                           <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tactic.name}</span>
                         </span>
-                        <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: labelColor, letterSpacing: 0.3, flexShrink: 0, whiteSpace: 'nowrap' }}>{label}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                          <ChargePips charges={charges} capacity={capacity} accent={accent} />
+                          <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: labelColor, letterSpacing: 0.3, whiteSpace: 'nowrap' }}>{label}</span>
+                        </span>
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--cream-soft)', marginTop: 3, lineHeight: 1.4, paddingLeft: 4 }}>{tactic.effect}</div>
-                      {called && !equipLocked && (
-                        <div style={{ fontSize: 9.5, color: accent, marginTop: 6, paddingLeft: 4 }}>Equipped for this match — tap to unequip</div>
-                      )}
+                      <div style={{ fontSize: 9.5, color: called ? accent : 'var(--dust)', marginTop: 6, paddingLeft: 4 }}>
+                        {called
+                          ? 'Called for this period — tap to cancel'
+                          : blocked
+                            ? 'Out of charges this match'
+                            : `${charges} of ${capacity} charge${capacity > 1 ? 's' : ''} — lasts one period`}
+                      </div>
                     </button>
                   );
                 })}

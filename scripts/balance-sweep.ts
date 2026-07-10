@@ -136,11 +136,16 @@ function runMatch(deck: { xi: Card[]; bench: Card[] }, round: number, seed: numb
   const { style, weakness } = ROUNDS[round];
   let state = initMatch(
     deck.xi, deck.bench, [], formation, 'tiki-taka', [], seed, round, style, weakness,
-    {}, 'balanced', undefined, equipFor(policy, seed),
+    {}, 'balanced', undefined, {},
   );
+  // Per-call tactics: call the policy's plays every period (advanceIncrement
+  // clears them). This measures the same always-present effect the old
+  // equipped model did — the charge economy is a run-loop concern, not balance.
+  const callIds = equipFor(policy, seed);
   let firstAttack = 0;
   let net = 0;
   for (let i = 0; i < 5; i++) {
+    state = { ...state, activeTactics: callIds };
     state = commitAttackers(state, pickAttackers(state));
     const split = evaluateSplit(state, []);
     if (i === 0) {

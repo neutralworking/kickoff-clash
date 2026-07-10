@@ -9,6 +9,8 @@
  */
 
 import type { Card } from '../../lib/scoring';
+import type { TacticRarity } from '../../lib/tactics';
+import type { ContestKey } from '../../lib/contest-map';
 import { pickDefiningTraits, SIGNATURE_OVERRIDES } from '../../lib/defining-traits';
 import { traitCopy, type TraitCopy } from '../../lib/trait-copy';
 
@@ -561,6 +563,110 @@ export const TACTIC_CAT_COLOR: Record<string, string> = {
   attacking: 'var(--kit-red)',
   defensive: 'var(--kit-blue)',
   specialist: 'var(--gold)',
+};
+
+// ---------------------------------------------------------------------------
+// TACTIC rarity → foil frame (Task A). A tactic is a full Pixel-Hero card now,
+// so its rarity drives the SAME foil frame the players use (portrait.ts
+// RARITY_FRAME). Common → matte, Rare → silver foil, Legendary → holo foil (the
+// animated sweep) so the rarest play reads as special. There is no `epic` tactic
+// tier — the three tactic rarities map onto the three most distinct frames.
+// ---------------------------------------------------------------------------
+export const TACTIC_RARITY_TO_FRAME: Record<TacticRarity, string> = {
+  common: 'Common',
+  rare: 'Rare',
+  legendary: 'Legendary',
+};
+
+// ---------------------------------------------------------------------------
+// SIX-CONTEST icons (Task B). A tiny pixel glyph badge per contest, keyed by the
+// canonical ContestKey (contest-map.ts is the neutral label/blurb source; the
+// COLOUR + pixel glyph live here on the card surface). Attack-side contests skew
+// WARM (gold → amber → kit-red), defence-side COOL (teal → kit-blue → pale-blue),
+// so a row reads as "attack help / defence help" at a glance while each of the
+// six keeps a distinct silhouette. Glyphs are pixel rects on a 7×7 grid, lit as
+// one flat tint (crisp, no gradient) — drawn by ContestIcons.tsx.
+// ---------------------------------------------------------------------------
+
+export interface ContestGlyphRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface ContestIconStyle {
+  /** Glyph + border tint. */
+  color: string;
+  /** Low-alpha chip fill (a wash of `color`). */
+  bg: string;
+  /** Pixel rects on a 0..7 grid forming the glyph. */
+  glyph: ContestGlyphRect[];
+}
+
+// 7×7 glyphs — bold, single-tint silhouettes legible at ~11px.
+const CONTEST_GLYPH: Record<ContestKey, ContestGlyphRect[]> = {
+  // KEEP — a ball / possession ring (hollow square ring).
+  keep: [
+    { x: 2, y: 1, w: 3, h: 1 },
+    { x: 1, y: 2, w: 1, h: 3 },
+    { x: 5, y: 2, w: 1, h: 3 },
+    { x: 2, y: 5, w: 3, h: 1 },
+  ],
+  // CREATE — a spark / assist (a plus/cross).
+  create: [
+    { x: 3, y: 0, w: 1, h: 7 },
+    { x: 0, y: 3, w: 7, h: 1 },
+  ],
+  // FINISH — a strike on goal (an up arrow).
+  finish: [
+    { x: 3, y: 0, w: 1, h: 1 },
+    { x: 2, y: 1, w: 3, h: 1 },
+    { x: 1, y: 2, w: 5, h: 1 },
+    { x: 3, y: 3, w: 1, h: 4 },
+  ],
+  // PRESS — pressure collapsing in (a downward chevron V).
+  press: [
+    { x: 0, y: 1, w: 1, h: 1 },
+    { x: 6, y: 1, w: 1, h: 1 },
+    { x: 1, y: 2, w: 1, h: 1 },
+    { x: 5, y: 2, w: 1, h: 1 },
+    { x: 2, y: 3, w: 1, h: 1 },
+    { x: 4, y: 3, w: 1, h: 1 },
+    { x: 3, y: 4, w: 1, h: 1 },
+  ],
+  // BREAK — a tackle / cut (an X).
+  break: [
+    { x: 0, y: 0, w: 1, h: 1 },
+    { x: 1, y: 1, w: 1, h: 1 },
+    { x: 2, y: 2, w: 1, h: 1 },
+    { x: 3, y: 3, w: 1, h: 1 },
+    { x: 4, y: 4, w: 1, h: 1 },
+    { x: 5, y: 5, w: 1, h: 1 },
+    { x: 6, y: 6, w: 1, h: 1 },
+    { x: 6, y: 0, w: 1, h: 1 },
+    { x: 5, y: 1, w: 1, h: 1 },
+    { x: 4, y: 2, w: 1, h: 1 },
+    { x: 2, y: 4, w: 1, h: 1 },
+    { x: 1, y: 5, w: 1, h: 1 },
+    { x: 0, y: 6, w: 1, h: 1 },
+  ],
+  // STOP — the last line (a battlemented wall / shield).
+  stop: [
+    { x: 1, y: 1, w: 1, h: 1 },
+    { x: 3, y: 1, w: 1, h: 1 },
+    { x: 5, y: 1, w: 1, h: 1 },
+    { x: 1, y: 2, w: 5, h: 4 },
+  ],
+};
+
+export const CONTEST_ICON: Record<ContestKey, ContestIconStyle> = {
+  keep: { color: '#f5c542', bg: 'rgba(245,197,66,0.16)', glyph: CONTEST_GLYPH.keep },
+  create: { color: '#f59e0b', bg: 'rgba(245,158,11,0.16)', glyph: CONTEST_GLYPH.create },
+  finish: { color: '#e23b35', bg: 'rgba(226,59,53,0.16)', glyph: CONTEST_GLYPH.finish },
+  press: { color: '#2fc7b0', bg: 'rgba(47,199,176,0.16)', glyph: CONTEST_GLYPH.press },
+  break: { color: '#3d7bd6', bg: 'rgba(61,123,214,0.18)', glyph: CONTEST_GLYPH.break },
+  stop: { color: '#7fb0ee', bg: 'rgba(127,176,238,0.16)', glyph: CONTEST_GLYPH.stop },
 };
 
 // ---------------------------------------------------------------------------
