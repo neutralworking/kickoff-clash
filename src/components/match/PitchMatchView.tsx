@@ -1981,7 +1981,7 @@ export default function PitchMatchView({
          team-talk COACH panel no longer lives here — it was relocated to the
          between-period stats overlay (StatsScreen). */}
       {(
-      <button onClick={() => setTickerOpen(true)} style={{ textAlign: 'left', margin: '0 16px 10px', padding: '8px 12px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', border: `1px solid ${HERO.gold}4d`, flexShrink: 0, cursor: 'pointer', display: 'grid', gap: 3 }}>
+      <button onClick={() => setTickerOpen(true)} style={{ textAlign: 'left', margin: '0 16px 10px', padding: '8px 12px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', border: `1px solid ${HERO.gold}4d`, flexShrink: 0, minWidth: 0, overflow: 'hidden', cursor: 'pointer', display: 'grid', gap: 3 }}>
         {preKickoff ? (
           // ISSUE 6 — guidance, not a fake match event (no minute stamp).
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 51 }}>
@@ -1992,7 +1992,7 @@ export default function PitchMatchView({
           // THIS SPELL — ONE panel for "your plan paid off": the cascade's
           // tactic / manager / chemistry lines (label + attack points, straight
           // off the engine), then the trait firings beneath.
-          <div data-this-spell style={{ display: 'grid', gap: 3, minHeight: 51 }}>
+          <div data-this-spell style={{ display: 'grid', gap: 3, minHeight: 51, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>THIS SPELL</span>
               {traitCallouts.length > 2 && (
@@ -2011,7 +2011,7 @@ export default function PitchMatchView({
               </div>
             )}
             {traitCallouts.slice(0, 2).map((c) => (
-              <div key={c.key} data-trait-callout className="coach-line-in" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, height: 16, lineHeight: '16px' }}>
+              <div key={c.key} data-trait-callout className="coach-line-in" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, height: 16, lineHeight: '16px', overflow: 'hidden', minWidth: 0 }}>
                 <span style={{ fontFamily: PIXEL, fontSize: 11, color: c.accent, flexShrink: 0, width: 13, textAlign: 'center' }}>{c.glyph}</span>
                 <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.3, color: c.accent, flexShrink: 0 }}>{c.label.toUpperCase()}</span>
                 <span style={{ color: 'var(--cream-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
@@ -2026,10 +2026,10 @@ export default function PitchMatchView({
             // text reads as the very event animating on the pitch.
             const isLive = resolving && i === 2 && !!liveSource && e?.text === liveSource.text;
             return (
-              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, height: 17, lineHeight: '17px', color: e ? lineColour(e) : 'transparent', opacity: e ? (isLive ? 1 : 0.5 + (i / 2) * 0.45) : 1, transition: 'opacity 160ms' }}>
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, height: 17, lineHeight: '17px', minWidth: 0, overflow: 'hidden', color: e ? lineColour(e) : 'transparent', opacity: e ? (isLive ? 1 : 0.5 + (i / 2) * 0.45) : 1, transition: 'opacity 160ms' }}>
                 <span style={{ color: 'var(--dust)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, visibility: e ? 'visible' : 'hidden' }}>{e ? e.time : '00:00'}</span>
                 {e && <span style={{ width: 5, height: 5, borderRadius: '50%', flexShrink: 0, background: e.side === 'you' ? 'var(--success)' : 'var(--danger)' }} />}
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: e && e.type !== 'chance' ? 800 : 400 }}>{e ? e.text : ''}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, fontWeight: e && e.type !== 'chance' ? 800 : 400 }}>{e ? e.text : ''}</span>
               </div>
             );
           })
@@ -2370,12 +2370,17 @@ export default function PitchMatchView({
 
       {/* Subs bench — now identity cards. Tap to inspect, drag onto a player to
           sub in. Each sub shows surname + position + rating via the card face. */}
-      <div style={{ display: 'flex', alignItems: 'stretch', gap: 6, padding: '8px 16px 4px', flexShrink: 0, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', flexShrink: 0, width: 30 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '8px 16px 4px', flexShrink: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', flexShrink: 0, width: 30, paddingTop: 2 }}>
           <span style={{ fontFamily: PIXEL, fontSize: 8, color: showSubPrompt ? 'var(--amber)' : 'var(--dust)', lineHeight: 1.2 }}>SUBS</span>
           <span style={{ fontFamily: PIXEL, fontSize: 13, color: showSubPrompt ? 'var(--amber)' : 'var(--cream)', lineHeight: 1 }}>{subsRemaining}</span>
         </div>
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', overflowY: 'hidden', flex: 1, scrollbarWidth: 'none', paddingBottom: 2 }} className="match-joker-row">
+        {/* FIX (subs reachability) — the bench WRAPS to rows instead of a single
+            horizontal-scroll strip. The drag handler captures the pointer on
+            pointerdown (8px threshold), so a horizontal swipe becomes a sub-drag,
+            never a scroll — the old overflow-x strip left subs 6–7 unreachable on a
+            phone. Wrapping keeps every sub (up to 7) visible and tappable/draggable. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1, paddingBottom: 2 }}>
           {bench.length === 0 && <span style={{ fontSize: 10, color: 'var(--dust)', alignSelf: 'center' }}>No subs on the bench.</span>}
           {bench.slice(0, 7).map((card) => {
             const isDragging = drag?.kind === 'bench' && drag.id === card.id;
