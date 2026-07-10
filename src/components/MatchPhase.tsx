@@ -6,6 +6,7 @@ import { getOpponent, getOpponentBuild, buildMatchSeed, cupSize } from '../lib/r
 import { cupMatchPower } from '../lib/opponent';
 import type { HandState } from '../lib/hand';
 import { rollXI, handFromSelection, INCREMENT_MINUTES } from '../lib/hand';
+import { tacticCapacity, getTacticById } from '../lib/tactics';
 import { getFormation } from '../lib/formations';
 import type { MatchV5State, IncrementResult, MatchVerdict } from '../lib/match-v5';
 import {
@@ -14,7 +15,7 @@ import {
   resolveIncrement,
   advanceIncrement,
   makeSub,
-  equipTactics,
+  callTactic,
   getMatchResult,
   playerMatchStats,
 } from '../lib/match-v5';
@@ -61,6 +62,12 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     const hand =
       handFromSelection(eligibleDeck, (runState.startingXI ?? []).filter((id) => !suspended.has(id)), (runState.benchIds ?? []).filter((id) => !suspended.has(id)), formation) ??
       rollXI(eligibleDeck, formation, matchSeed);
+    // Seed this match's tactic charges from the run's persistent counter; a card
+    // with no entry (pre-charge save) is treated as fully charged.
+    const startCharges: Record<string, number> = {};
+    for (const t of runState.tacticsDeck) {
+      startCharges[t.id] = runState.tacticCharges?.[t.id] ?? tacticCapacity(t);
+    }
     return initMatch(
       hand.xi,
       hand.bench,
@@ -75,6 +82,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       runState.chemistry ?? {},
       runState.intent ?? 'balanced',
       cupMatchPower(runState.round, runState.matchInCup, cupSize(runState.round)),
+      startCharges,
     );
   });
 
@@ -180,19 +188,13 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
     setMatchState((prev: MatchV5State) => ({ ...prev, intent }));
   }, []);
 
-  // ---- Equip / unequip a tactic card for the MATCH (pre-kickoff only; up to
-  // TACTIC_SLOTS). Tapping an equipped card unequips it.
+  // ---- Call / un-call a tactic for the coming period (per-call charges). Calling
+  // spends a charge; tapping the called play again before kick-off refunds it.
   const handleToggleTactic = useCallback((tacticId: string) => {
-    const tactic = runState.tacticsDeck.find((card) => card.id === tacticId);
+    const tactic = getTacticById(tacticId);
     if (!tactic) return;
-    setMatchState((prev: MatchV5State) => {
-      const has = prev.equippedTactics.includes(tacticId);
-      const next = has
-        ? prev.equippedTactics.filter((id) => id !== tacticId)
-        : [...prev.equippedTactics, tacticId];
-      return equipTactics(prev, next);
-    });
-  }, [runState.tacticsDeck]);
+    setMatchState((prev: MatchV5State) => callTactic(prev, tacticId, tacticCapacity(tactic)));
+  }, []);
 
   // ---- Finished: return result to GameShell ----
   const handleMatchFinished = useCallback(() => {

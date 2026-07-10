@@ -103,9 +103,11 @@ function playTie(xi: Card[], cup: number, matchInCup: number, seed: number, call
   const power = cupMatchPower(cup, matchInCup, cupSize(cup));
   let state = initMatch(
     xi, [], [], formation, 'tiki-taka', [], seed, cup, style, weakness,
-    {}, 'balanced', power, calls ? CURATED_TACTICS : [],
+    {}, 'balanced', power, {},
   );
+  const callIds = calls ? CURATED_TACTICS : [];
   for (let i = 0; i < 5; i++) {
+    state = { ...state, activeTactics: callIds };
     state = commitAttackers(state, pickAttackers(state));
     state = advanceIncrement(state, resolveIncrement(state, evaluateSplit(state, []), seed));
   }

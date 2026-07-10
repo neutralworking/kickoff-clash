@@ -12,6 +12,7 @@
 
 import { useMemo, useState } from 'react';
 import type { Card } from '../lib/scoring';
+import { getTransferFee } from '../lib/economy';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import { PIXEL } from './cards/cardTokens';
@@ -20,6 +21,12 @@ interface SquadGalleryProps {
   deck: Card[];
   onClose: () => void;
   title?: string;
+  /**
+   * Optional SELL MODE. When provided, every card in the grid gains a transfer fee
+   * + a Sell button; tapping Sell raises an in-gallery confirm step before firing
+   * this callback. When omitted, the gallery stays inspect-only.
+   */
+  onSellCard?: (card: Card) => void;
 }
 
 const POS_GROUPS: { id: string; label: string; positions: string[] }[] = [
@@ -42,10 +49,12 @@ const RARITY_ORDER: Record<string, number> = { Legendary: 0, Epic: 1, Rare: 2, C
 const POSITION_ORDER: Record<string, number> = { GK: 0, CD: 1, WD: 2, DM: 3, CM: 4, AM: 5, WM: 6, WF: 7, CF: 8 };
 const fitnessOf = (c: Card): number => c.fitness ?? (c.injured ? 33 : 100);
 
-export default function SquadGallery({ deck, onClose, title = 'SQUAD' }: SquadGalleryProps) {
+export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCard }: SquadGalleryProps) {
   const [group, setGroup] = useState('all');
   const [sort, setSort] = useState<SortKey>('power');
   const [modal, setModal] = useState<GameCardModel | null>(null);
+  const [sellConfirm, setSellConfirm] = useState<Card | null>(null);
+  const sellMode = !!onSellCard;
 
   const cards = useMemo(() => {
     const groupPositions = POS_GROUPS.find((g) => g.id === group)?.positions ?? [];
@@ -85,8 +94,8 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD' }: SquadGa
           >
             {title}
           </span>
-          <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1, color: 'var(--dust)', marginTop: 2 }}>
-            {cards.length}/{deck.length} CARDS
+          <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1, color: sellMode ? 'var(--gold)' : 'var(--dust)', marginTop: 2 }}>
+            {sellMode ? `${cards.length} CARDS · TAP SELL FOR CASH` : `${cards.length}/${deck.length} CARDS`}
           </span>
         </div>
         <button
@@ -161,17 +170,113 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD' }: SquadGa
         ) : (
           <div className="grid grid-cols-3 gap-2.5">
             {cards.map((c, i) => (
-              <GameCard
-                key={c.id}
-                model={{ variant: 'player', card: c }}
-                onClick={() => setModal({ variant: 'player', card: c })}
-                delay={Math.min(i, 11) * 18}
-                ariaLabel={`Inspect ${c.name}`}
-              />
+              sellMode ? (
+                <div key={c.id} className="flex flex-col" style={{ gap: 5 }}>
+                  <GameCard
+                    model={{ variant: 'player', card: c }}
+                    onClick={() => setModal({ variant: 'player', card: c })}
+                    delay={Math.min(i, 11) * 18}
+                    ariaLabel={`Inspect ${c.name}`}
+                  />
+                  <button
+                    onClick={() => setSellConfirm(c)}
+                    className="active:scale-95"
+                    style={{
+                      height: 40,
+                      borderRadius: 'var(--radius-sm)',
+                      border: '2px solid var(--ink-black)',
+                      background: 'rgba(232,54,47,0.18)',
+                      boxShadow: '0 2px 0 0 var(--ink-black)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 1,
+                    }}
+                  >
+                    <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.4, color: 'var(--cream)', textTransform: 'uppercase' }}>
+                      Sell
+                    </span>
+                    <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--kit-red)' }}>
+                      {'£'}{getTransferFee(c).toLocaleString()}
+                    </span>
+                  </button>
+                </div>
+              ) : (
+                <GameCard
+                  key={c.id}
+                  model={{ variant: 'player', card: c }}
+                  onClick={() => setModal({ variant: 'player', card: c })}
+                  delay={Math.min(i, 11) * 18}
+                  ariaLabel={`Inspect ${c.name}`}
+                />
+              )
             ))}
           </div>
         )}
       </div>
+
+      {/* ── Sell confirm (in-gallery bottom sheet) ─────────────────────────── */}
+      {sellConfirm && (
+        <div
+          className="absolute inset-0 flex flex-col justify-end scrim-fade"
+          style={{ background: 'rgba(2,9,5,0.62)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', zIndex: 60 }}
+          onClick={() => setSellConfirm(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="glass-raised sheen sheet-rise flex flex-col relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              borderTop: '1px solid var(--glass-border)',
+              borderTopLeftRadius: 'var(--radius-lg)',
+              borderTopRightRadius: 'var(--radius-lg)',
+              boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-3)',
+              padding: '14px 16px max(env(safe-area-inset-bottom), 16px)',
+            }}
+          >
+            <div className="flex flex-col items-center" style={{ gap: 14 }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--cream)', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                Confirm Sale
+              </span>
+              <div style={{ width: 118 }}>
+                <GameCard model={{ variant: 'player', card: sellConfirm }} />
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--cream-soft)', textAlign: 'center', lineHeight: 1.4 }}>
+                Sell <b style={{ color: 'var(--cream)' }}>{sellConfirm.name}</b> for{' '}
+                <b style={{ color: 'var(--gold)' }}>{'£'}{getTransferFee(sellConfirm).toLocaleString()}</b>?
+              </p>
+              <div className="flex gap-2 w-full">
+                <button
+                  onClick={() => setSellConfirm(null)}
+                  className="flex-1 glass-raised sheen active:scale-[0.98] relative overflow-hidden"
+                  style={{
+                    height: 46, borderRadius: 'var(--radius-sm)',
+                    boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
+                    fontFamily: PIXEL, fontSize: 11, letterSpacing: 0.4, color: 'var(--cream)', textTransform: 'uppercase',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { onSellCard?.(sellConfirm); setSellConfirm(null); }}
+                  className="flex-1 sheen-strong active:scale-[0.98] relative overflow-hidden"
+                  style={{
+                    height: 46, borderRadius: 'var(--radius-sm)',
+                    border: '2px solid var(--ink-black)',
+                    background: 'linear-gradient(135deg, var(--kit-red), #c0241e)',
+                    boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), 0 2px 0 0 var(--ink-black)',
+                    fontFamily: PIXEL, fontSize: 11, letterSpacing: 0.4, color: 'var(--line-white)', textTransform: 'uppercase',
+                  }}
+                >
+                  Confirm Sale
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <CardModal model={modal} onClose={() => setModal(null)} />
     </div>

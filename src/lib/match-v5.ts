@@ -72,8 +72,14 @@ export interface MatchV5State {
   opponentXI: Card[];
   opponentFormation: Formation;
   chemistry: CoAppearance;
-  /** TACTICS BY CARDS: up to 3 tactic cards equipped before kick-off (ids). */
-  equippedTactics: string[];
+  /** TACTICS BY CARDS (per-call): the tactic ids CALLED for the current period.
+   *  Set at a planning break, cleared when the period resolves — a called play's
+   *  flat effect applies for that period only. Calling one spent a charge. */
+  activeTactics: string[];
+  /** Remaining tactic charges THIS match (tacticId → charges left). Seeded from
+   *  the run's persistent charges at kick-off; a call spends one, an un-call
+   *  before the period resolves refunds it. Refills to capacity between fixtures. */
+  tacticCharges: Record<string, number>;
   /** Match discipline: cardId → yellow cards so far (both sides' ids). */
   bookings: Record<number, number>;
   /** Sent off this match (red cards, both sides). Their points are out of every
@@ -369,7 +375,7 @@ export function initMatch(
   chemistry: CoAppearance = {},
   intent: TeamIntent = 'balanced',
   opponentPower?: number,
-  equippedTactics: string[] = [],
+  tacticCharges: Record<string, number> = {},
 ): MatchV5State {
   const { xi: opponentXI, formation: opponentFormation } = generateOpponentXI(
     opponentRound,
@@ -408,7 +414,8 @@ export function initMatch(
     opponentXI,
     opponentFormation,
     chemistry,
-    equippedTactics,
+    activeTactics: [],
+    tacticCharges,
     bookings: {},
     sentOffIds: [],
     seed,
@@ -416,15 +423,34 @@ export function initMatch(
 }
 
 // ---------------------------------------------------------------------------
-// 1b. equipTactics — set the match's tactic cards (before kick-off)
+// 1b. callTactic — call (or un-call) a tactic for the coming period
 // ---------------------------------------------------------------------------
 
-export const TACTIC_SLOTS = 3;
-
-export function equipTactics(state: MatchV5State, tacticIds: string[]): MatchV5State {
-  if (state.scores.length > 0) return state;
-  const valid = tacticIds.filter((id) => getTacticById(id)).slice(0, TACTIC_SLOTS);
-  return { ...state, equippedTactics: valid };
+/** Toggle a tactic call for the upcoming period. Calling spends one charge;
+ *  un-calling it (before the period resolves) refunds the charge. A play with no
+ *  charges left can't be called. `capacity` is the card's full charge capacity
+ *  (tacticCapacity) — the refund clamp. Charges are a per-match resource: they
+ *  carry across periods within the match and refill between fixtures. */
+export function callTactic(
+  state: MatchV5State,
+  tacticId: string,
+  capacity: number,
+): MatchV5State {
+  if (!getTacticById(tacticId)) return state;
+  const charges = { ...state.tacticCharges };
+  if (state.activeTactics.includes(tacticId)) {
+    return {
+      ...state,
+      activeTactics: state.activeTactics.filter((id) => id !== tacticId),
+      tacticCharges: { ...charges, [tacticId]: Math.min(capacity, (charges[tacticId] ?? 0) + 1) },
+    };
+  }
+  if ((charges[tacticId] ?? 0) <= 0) return state;
+  return {
+    ...state,
+    activeTactics: [...state.activeTactics, tacticId],
+    tacticCharges: { ...charges, [tacticId]: (charges[tacticId] ?? 0) - 1 },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -451,7 +477,7 @@ export function evaluateSplit(
   state: MatchV5State,
   jokers: JokerCard[],
 ): AttackDefenceSplit {
-  const equipped = state.equippedTactics
+  const equipped = state.activeTactics
     .map((id) => getTacticById(id))
     .filter((t): t is TacticCard => !!t);
   const { xi, formation } = state;
@@ -556,7 +582,7 @@ export function evaluateSplit(
     if (band === 'DEF' || band === 'MID') defenders.push(card);
   });
   const orderedAttackers = [...attackers].sort((a, b) => (cardY.get(b.id) ?? 0) - (cardY.get(a.id) ?? 0));
-  const playPattern = inferPlayPattern(orderedAttackers, defenders, state.equippedTactics, state.playingStyle);
+  const playPattern = inferPlayPattern(orderedAttackers, defenders, state.activeTactics, state.playingStyle);
   const { attackSynergies, defenceSynergies, crossSynergies } = findPositionalConnections(
     attackers.map((c) => cardToSlotted(c, formation)),
     defenders.map((c) => cardToSlotted(c, formation)),
@@ -916,6 +942,9 @@ export function advanceIncrement(state: MatchV5State, result: IncrementResult): 
     sentOffIds: newSentOff,
     attackerIds: new Set(),
     attackerOrder: [],
+    // Called plays last one period — clear them so the next break is a fresh
+    // decision. Spent charges (tacticCharges) stay spent for the rest of the match.
+    activeTactics: [],
   };
 }
 

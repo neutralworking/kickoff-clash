@@ -385,7 +385,8 @@ function TacticReveal({ tactics, onOpen }: { tactics: TacticCard[]; onOpen: (t: 
       {tactics.map((t, i) => (
         <GameCard
           key={t.id}
-          model={{ variant: 'tactic', tactic: t }}
+          // A freshly-ripped tactic arrives with a single charge (see tactics.ts).
+          model={{ variant: 'tactic', tactic: t, charges: 1 }}
           delay={i * 35}
           onClick={() => onOpen(t)}
           ariaLabel={`Inspect ${t.name}`}
@@ -586,7 +587,7 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
                 onPick={(id) => setPickedManagerId(id)}
               />
             ) : (
-              <TacticReveal tactics={contents.tactics} onOpen={(t) => setModal({ variant: 'tactic', tactic: t })} />
+              <TacticReveal tactics={contents.tactics} onOpen={(t) => setModal({ variant: 'tactic', tactic: t, charges: 1 })} />
             )}
           </>
         )}

@@ -2,12 +2,10 @@
 
 import { useMemo, useState } from 'react';
 import type { Card } from '../lib/scoring';
-import { seededRandom } from '../lib/scoring';
 import type { RunState } from '../lib/run';
-import { getShopCards, getPlayerPickCards, ALL_CARDS } from '../lib/run';
+import { getShopCards, getPlayerPickCards } from '../lib/run';
 import {
-  CARD_PICK_COST, RARE_PICK_COST, PLAYER_PICK_COST, getTransferFee, getAcademyTier,
-  generateAcademyDurability, JOKER_COST, getStadiumInvestment,
+  CARD_PICK_COST, RARE_PICK_COST, PLAYER_PICK_COST, JOKER_COST, getStadiumInvestment,
   getAcademyInvestment, BOX_OFFICE_INVESTMENT,
 } from '../lib/economy';
 import type { InvestmentCard } from '../lib/economy';
@@ -26,7 +24,6 @@ interface ShopPhaseProps {
   onBuyCard: (card: Card, cost: number) => void;
   onSellCard: (card: Card) => void;
   onBuyJoker: (joker: JokerCardType) => void;
-  onBuyAcademy: (card: Card) => void;
   onBuyTacticPack: () => void;
   onBuyInvestment: (card: InvestmentCard) => void;
   onTrainPlayer: (cardId: number) => void;
@@ -52,7 +49,6 @@ export default function ShopPhase({
   onBuyCard,
   onSellCard,
   onBuyJoker,
-  onBuyAcademy,
   onBuyTacticPack,
   onBuyInvestment,
   onTrainPlayer,
@@ -80,33 +76,10 @@ export default function ShopPhase({
   // Player Pick (budget): 3 Common/Rare candidates, choose one. Seeded per visit.
   const budgetCards = useMemo(() => getPlayerPickCards(shopSeed + 77), [shopSeed]);
   const [tab, setTab] = useState<Tab>('market');
-  const [sellSheet, setSellSheet] = useState(false);
-  const [sellConfirm, setSellConfirm] = useState<Card | null>(null);
   const [modal, setModal] = useState<GameCardModel | null>(null);
   const [showGallery, setShowGallery] = useState(false);
   // Read-only XI view — see the current shape (gaps, fitness, depth) while shopping.
   const [showXI, setShowXI] = useState(false);
-
-  const academy = getAcademyTier(state.academyTier);
-  const acSeed = shopSeed + 777;
-  const academyDurabilities = generateAcademyDurability(state.academyTier, academy.playersOffered, acSeed);
-
-  // Generate academy cards
-  const academyPool = ALL_CARDS.filter(c => {
-    if (academy.maxRarity === 'Common') return c.rarity === 'Common';
-    if (academy.maxRarity === 'Rare') return c.rarity === 'Common' || c.rarity === 'Rare';
-    return c.rarity !== 'Legendary';
-  });
-  const academyCards: Card[] = [];
-  for (let i = 0; i < academy.playersOffered && i < academyPool.length; i++) {
-    const idx = Math.floor(seededRandom(acSeed + i * 31) * academyPool.length);
-    const base = academyPool[idx];
-    academyCards.push({
-      ...base,
-      id: state.seed + 90000 + state.round * 100 + i,
-      durability: academyDurabilities[i],
-    });
-  }
 
   const trainableCards = [...state.deck]
     .map((card) => ({
@@ -252,7 +225,6 @@ export default function ShopPhase({
             onTrainPlayer={onTrainPlayer}
             onHealPlayer={onHealPlayer}
             openModal={setModal}
-            openSell={() => setSellSheet(true)}
             openGallery={() => setShowGallery(true)}
             openXI={() => setShowXI(true)}
           />
@@ -261,10 +233,7 @@ export default function ShopPhase({
         {tab === 'backroom' && (
           <BackroomTab
             state={state}
-            academy={academy}
-            academyCards={academyCards}
             scoutedOpponent={scoutedOpponent}
-            onBuyAcademy={onBuyAcademy}
             onBuyTacticPack={onBuyTacticPack}
             onBuyInvestment={onBuyInvestment}
             onScoutOpponent={onScoutOpponent}
@@ -322,64 +291,18 @@ export default function ShopPhase({
         </BottomSheet>
       )}
 
-      {/* ── Sell bottom sheet (replaces confirm()) ──────────────────────── */}
-      {sellSheet && (
-        <BottomSheet
-          title={sellConfirm ? 'Confirm Sale' : 'Sell Players'}
-          onClose={() => { setSellSheet(false); setSellConfirm(null); }}
-        >
-          {sellConfirm ? (
-            <div className="flex flex-col items-center" style={{ gap: 14 }}>
-              <div style={{ width: 128 }}>
-                <GameCard model={{ variant: 'player', card: sellConfirm }} />
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--cream-soft)', textAlign: 'center', lineHeight: 1.4 }}>
-                Sell <b style={{ color: 'var(--cream)' }}>{sellConfirm.name}</b> for{' '}
-                <b style={{ color: 'var(--gold)' }}>{'£'}{getTransferFee(sellConfirm).toLocaleString()}</b>?
-              </p>
-              <div className="flex gap-2 w-full">
-                <SheetButton
-                  label="Cancel"
-                  tone="muted"
-                  onClick={() => setSellConfirm(null)}
-                />
-                <SheetButton
-                  label="Confirm Sale"
-                  tone="danger"
-                  onClick={() => {
-                    onSellCard(sellConfirm);
-                    setSellConfirm(null);
-                  }}
-                />
-              </div>
-            </div>
-          ) : state.deck.length === 0 ? (
-            <EmptyState text="No players to sell." />
-          ) : (
-            <div className="grid grid-cols-3 gap-3">
-              {state.deck.map(card => (
-                <CardCell
-                  key={card.id}
-                  model={{ variant: 'player', card }}
-                  priceLabel={`£${getTransferFee(card).toLocaleString()}`}
-                  affordable
-                  actionLabel="Sell"
-                  actionTone="danger"
-                  onAction={() => setSellConfirm(card)}
-                  onInspect={() => setModal({ variant: 'player', card })}
-                />
-              ))}
-            </div>
-          )}
-        </BottomSheet>
-      )}
-
       {/* Single CardModal mounted at shop root (renders absolute inset-0). */}
       <CardModal model={modal} onClose={() => setModal(null)} />
 
-      {/* Squad Gallery — full-screen overlay over the shop (renders absolute inset-0). */}
+      {/* Squad Gallery — full-screen overlay over the shop (renders absolute inset-0).
+          Selling now lives here (sell mode): tap a card's Sell for its transfer fee. */}
       {showGallery && (
-        <SquadGallery deck={state.deck} onClose={() => setShowGallery(false)} title="YOUR SQUAD" />
+        <SquadGallery
+          deck={state.deck}
+          onClose={() => setShowGallery(false)}
+          title="YOUR SQUAD"
+          onSellCard={onSellCard}
+        />
       )}
 
       {/* Read-only XI pitch view — the current shape while shopping. */}
@@ -484,7 +407,7 @@ function MarketTab({
 // ===========================================================================
 
 function SquadTab({
-  state, trainableCards, injuredCards, onTrainPlayer, onHealPlayer, openModal, openSell, openGallery, openXI,
+  state, trainableCards, injuredCards, onTrainPlayer, onHealPlayer, openModal, openGallery, openXI,
 }: {
   state: RunState;
   trainableCards: { card: Card; applied: number }[];
@@ -492,7 +415,6 @@ function SquadTab({
   onTrainPlayer: (cardId: number) => void;
   onHealPlayer: (cardId: number) => boolean;
   openModal: (m: GameCardModel) => void;
-  openSell: () => void;
   openGallery: () => void;
   openXI: () => void;
 }) {
@@ -511,7 +433,7 @@ function SquadTab({
           />
           <RowAction
             title="View all cards"
-            sub={`${state.deck.length} owned · filter & inspect`}
+            sub={`${state.deck.length} owned · inspect & sell`}
             actionLabel="View All"
             affordable={state.deck.length > 0}
             onClick={openGallery}
@@ -581,17 +503,6 @@ function SquadTab({
           </div>
         )}
       </SectionCard>
-
-      {/* Sell */}
-      <SectionCard title="Asset Management" accent="var(--gold)">
-        <RowAction
-          title="Sell players"
-          sub={`${state.deck.length} in squad`}
-          actionLabel="Open"
-          affordable={state.deck.length > 0}
-          onClick={openSell}
-        />
-      </SectionCard>
     </div>
   );
 }
@@ -601,14 +512,11 @@ function SquadTab({
 // ===========================================================================
 
 function BackroomTab({
-  state, academy, academyCards, scoutedOpponent,
-  onBuyAcademy, onBuyTacticPack, onBuyInvestment, onScoutOpponent, openModal,
+  state, scoutedOpponent,
+  onBuyTacticPack, onBuyInvestment, onScoutOpponent, openModal,
 }: {
   state: RunState;
-  academy: ReturnType<typeof getAcademyTier>;
-  academyCards: Card[];
   scoutedOpponent: OpponentBuild | null;
-  onBuyAcademy: (card: Card) => void;
   onBuyTacticPack: () => void;
   onBuyInvestment: (card: InvestmentCard) => void;
   onScoutOpponent: () => boolean;
@@ -680,37 +588,6 @@ function BackroomTab({
             onClick={onScoutOpponent}
           />
         )}
-      </SectionCard>
-
-      {/* Academy — sign prospects; tier upgrades live in the Boardroom (Youth Academy) */}
-      <SectionCard
-        title={`Academy · Tier ${state.academyTier}`}
-        accent="var(--success)"
-        right={
-          state.academyTier >= 4
-            ? <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--gold)' }}>MAX TIER</span>
-            : undefined
-        }
-      >
-        <p style={{ fontSize: 10, color: 'var(--dust)', lineHeight: 1.4, marginBottom: 8 }}>
-          {academy.name} intake — {academy.cost === 0 ? 'free' : `£${academy.cost.toLocaleString()}`} per prospect.
-        </p>
-        <div className="grid grid-cols-3 gap-3">
-          {academyCards.map(card => {
-            const affordable = academy.cost === 0 || state.cash >= academy.cost;
-            return (
-              <CardCell
-                key={card.id}
-                model={{ variant: 'player', card }}
-                priceLabel={academy.cost === 0 ? 'FREE' : `£${academy.cost.toLocaleString()}`}
-                affordable={affordable}
-                actionLabel="Sign"
-                onAction={() => { if (affordable) onBuyAcademy(card); }}
-                onInspect={() => openModal({ variant: 'player', card })}
-              />
-            );
-          })}
-        </div>
       </SectionCard>
 
       {/* Tactic pack */}
@@ -1100,44 +977,6 @@ function XIOverlay({
         </div>
       </div>
     </div>
-  );
-}
-
-function SheetButton({
-  label, tone, onClick,
-}: {
-  label: string;
-  tone: 'muted' | 'danger' | 'primary';
-  onClick: () => void;
-}) {
-  const danger = tone === 'danger';
-  const primary = tone === 'primary';
-  const solid = danger || primary;
-  return (
-    <button
-      onClick={onClick}
-      className={`flex-1 active:scale-[0.98] relative overflow-hidden ${solid ? 'sheen-strong' : 'glass-raised sheen'}`}
-      style={{
-        height: 46,
-        borderRadius: 'var(--radius-sm)',
-        border: solid ? '2px solid var(--ink-black)' : undefined,
-        background: danger
-          ? 'linear-gradient(135deg, var(--kit-red), #c0241e)'
-          : primary
-            ? 'linear-gradient(180deg, var(--amber) 0%, var(--amber-soft) 100%)'
-            : undefined,
-        boxShadow: solid
-          ? 'inset 0 1px 0 0 var(--glass-highlight), 0 2px 0 0 var(--ink-black)'
-          : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
-        fontFamily: PIXEL,
-        fontSize: 11,
-        letterSpacing: 0.4,
-        color: solid ? 'var(--line-white)' : 'var(--cream)',
-        textTransform: 'uppercase',
-      }}
-    >
-      {label}
-    </button>
   );
 }
 

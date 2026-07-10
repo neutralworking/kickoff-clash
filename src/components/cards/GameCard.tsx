@@ -26,14 +26,16 @@
 import type { Card } from '../../lib/scoring';
 import { deriveStats } from '../../lib/funnel';
 import type { JokerCard } from '../../lib/jokers';
-import type { TacticCard } from '../../lib/tactics';
+import { type TacticCard, tacticCapacity } from '../../lib/tactics';
 import type { InvestmentCard } from '../../lib/economy';
+import { contestsForCard, contestsForManager, contestsForTactic } from '../../lib/contest-map';
 import {
   PIXEL,
   RARITY_COLOR,
   RARITY_GLASS,
   POSITION_COLOR,
   TACTIC_CAT_COLOR,
+  TACTIC_RARITY_TO_FRAME,
   INVESTMENT_META,
   formatCash,
   nationFlag,
@@ -46,6 +48,7 @@ import {
   type ManagerProp,
   type ChalkRect,
 } from './cardTokens';
+import { ContestIcons, ChargePips } from './ContestIcons';
 import {
   portraitBackgroundStyle,
   rarityFrame,
@@ -66,7 +69,9 @@ export type CardSize = 'grid' | 'full';
 export type GameCardModel =
   | { variant: 'player'; card: Card }
   | { variant: 'manager'; manager: JokerCard }
-  | { variant: 'tactic'; tactic: TacticCard }
+  // `charges` = current called-play charges left (capacity = tacticCapacity). When
+  // omitted, the card renders full (a fresh/full play — all pips lit).
+  | { variant: 'tactic'; tactic: TacticCard; charges?: number }
   | { variant: 'investment'; investment: InvestmentCard };
 
 interface GameCardProps {
@@ -127,10 +132,14 @@ export default function GameCard({
   let frameStyle: React.CSSProperties;
   let content: React.ReactNode;
 
-  if (model.variant === 'player') {
+  if (model.variant === 'player' || model.variant === 'tactic') {
     // PIXEL HERO: the rarity is the FRAME MATERIAL (foil gradient) — the padding IS
-    // the border. A near-black inner face carries the crisp pixel anatomy.
-    const fr = rarityFrame(model.card.rarity);
+    // the border. A near-black inner face carries the crisp pixel anatomy. Players
+    // key the frame off card rarity; tactics off tactic rarity (Common/Rare/Legendary
+    // → matte / silver / holo) so a called-play card is the same premium object.
+    const frameRarity =
+      model.variant === 'player' ? model.card.rarity : TACTIC_RARITY_TO_FRAME[model.tactic.rarity];
+    const fr = rarityFrame(frameRarity);
     const ring = selected ? '0 0 0 2px var(--gold), ' : '';
     frameStyle = {
       position: 'relative',
@@ -149,7 +158,19 @@ export default function GameCard({
       minWidth: 0,
       animationDelay: delay != null ? `${delay}ms` : undefined,
     };
-    content = <PlayerFace card={model.card} full={full} frameLabel={fr.label} labelColor={fr.lc} foil={fr.foil} />;
+    content =
+      model.variant === 'player' ? (
+        <PlayerFace card={model.card} full={full} frameLabel={fr.label} labelColor={fr.lc} foil={fr.foil} />
+      ) : (
+        <TacticFace
+          tactic={model.tactic}
+          charges={model.charges}
+          full={full}
+          frameLabel={fr.label}
+          labelColor={fr.lc}
+          foil={fr.foil}
+        />
+      );
   } else {
     const accent = accentFor(model);
     const glass = glassFor(model, accent);
@@ -184,8 +205,6 @@ export default function GameCard({
     const body =
       model.variant === 'manager' ? (
         <ManagerBody manager={model.manager} full={full} accent={accent} />
-      ) : model.variant === 'tactic' ? (
-        <TacticBody tactic={model.tactic} full={full} accent={accent} />
       ) : (
         <InvestmentBody investment={model.investment} full={full} accent={accent} />
       );
@@ -392,6 +411,8 @@ function PlayerFace({
   const actionName = (primary ? primary.copy.label : card.abilityName ?? '').toUpperCase();
   const actionText = primary ? primary.copy.blurb : card.abilityText ?? '';
   const cond = conditionRecipe(card.condition);
+  // Which of the six contests this card helps with (display approximation).
+  const contests = contestsForCard(card);
 
   return (
     <div
@@ -447,6 +468,14 @@ function PlayerFace({
         }}
       >
         {full && <div style={{ position: 'absolute', left: 12, right: 12, bottom: 0, height: 1, background: 'rgba(232,178,60,0.35)' }} />}
+        {/* CONTEST ICONS — the six-contest badges this card helps with (warm=attack,
+            cool=defence), overlaid on the empty top-left of the bottom-anchored
+            portrait so they add zero layout height (the fixed-aspect face is dense). */}
+        {contests.length > 0 && (
+          <div style={{ position: 'absolute', top: full ? 7 : 4, left: full ? 8 : 5, zIndex: 3 }}>
+            <ContestIcons keys={contests} full={full} />
+          </div>
+        )}
         <div
           className="pixelated"
           aria-hidden
@@ -602,26 +631,31 @@ function ManagerBody({ manager, full, accent }: { manager: JokerCard; full: bool
   const flag = nationFlag(manager.nation);
   const visibleTraits = full ? manager.traits : manager.traits.slice(0, 2);
   const gaffer = managerAccent(manager.traits);
+  // Only the four contest-reworked gaffers name a contest; identity managers omit it.
+  const contests = contestsForManager(manager.id);
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: full ? 10 : '5px 6px' }}>
-      {/* Header: MANAGER tab · nation */}
+      {/* Header: MANAGER tab (+ contest icon) · nation */}
       <div className="flex items-center justify-between" style={{ gap: 4 }}>
-        <span
-          style={{
-            background: accent,
-            color: 'var(--line-white)',
-            fontFamily: PIXEL,
-            fontSize: full ? 9 : 7,
-            lineHeight: 1,
-            padding: full ? '5px 6px' : '3px 4px',
-            borderRadius: 3,
-            letterSpacing: 0.5,
-            flexShrink: 0,
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.3)',
-          }}
-        >
-          MANAGER
-        </span>
+        <div className="flex items-center" style={{ gap: full ? 6 : 4, minWidth: 0 }}>
+          <span
+            style={{
+              background: accent,
+              color: 'var(--line-white)',
+              fontFamily: PIXEL,
+              fontSize: full ? 9 : 7,
+              lineHeight: 1,
+              padding: full ? '5px 6px' : '3px 4px',
+              borderRadius: 3,
+              letterSpacing: 0.5,
+              flexShrink: 0,
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.3)',
+            }}
+          >
+            MANAGER
+          </span>
+          {contests.length > 0 && <ContestIcons keys={contests} full={full} />}
+        </div>
         {flag ? (
           <span style={{ fontSize: full ? 15 : 11, lineHeight: 1 }}>{flag}</span>
         ) : manager.nation ? (
@@ -856,57 +890,203 @@ function GafferProp({ prop, tie, tieHi, tieSh }: { prop: ManagerProp; tie: strin
 }
 
 // ===========================================================================
-// TACTIC body
+// TACTIC face — "Pixel Hero" (Task A)
+//
+// A tactic is a full playing card now, on the SAME rarity foil frame as a player.
+// A black-card-stock face inside the foil frame. Top→bottom: header (category tab
+// + charge pips) · chalk tactic BOARD sprite · play name · category accent band
+// (contest icons: what the call RAISES) · effect (panel on `full`, clamped line on
+// `grid`) · footer (rarity foil label + charges, `full` only). Legendary earns the
+// animated foil sweep. The board is crisp pixel art; the foil/glow lives on the frame.
 // ===========================================================================
 
-function TacticBody({ tactic, full, accent }: { tactic: TacticCard; full: boolean; accent: string }) {
+function TacticFace({
+  tactic,
+  charges,
+  full,
+  frameLabel,
+  labelColor,
+  foil,
+}: {
+  tactic: TacticCard;
+  charges?: number;
+  full: boolean;
+  frameLabel: string;
+  labelColor: string;
+  foil: boolean;
+}) {
+  const accent = TACTIC_CAT_COLOR[tactic.category] ?? 'var(--gold)';
+  const capacity = tacticCapacity(tactic);
+  // Undefined charges => a fresh/full card (every pip lit).
+  const filled = charges == null ? capacity : Math.max(0, Math.min(capacity, charges));
+  const contests = contestsForTactic(tactic.id);
+
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: full ? 10 : '5px 6px' }}>
-      {/* Category tab */}
-      <div className="flex items-center justify-between" style={{ gap: 4 }}>
+    <div
+      style={{
+        position: 'relative',
+        flex: 1,
+        minWidth: 0,
+        overflow: 'hidden',
+        borderRadius: full ? 11 : 7,
+        border: `2px solid ${HERO.ink}`,
+        background: HERO.faceGradient,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* HEADER — category badge (left) · charge pips (right) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: full ? '10px 10px 0' : '6px 6px 0', gap: 4 }}>
         <span
           style={{
-            background: accent,
-            color: 'var(--ink-black)',
             fontFamily: PIXEL,
-            fontSize: full ? 9 : 6.5,
+            fontSize: full ? 9 : 7,
             lineHeight: 1,
-            padding: full ? '5px 6px' : '3px 4px',
-            borderRadius: 3,
+            color: 'var(--ink-black)',
+            background: accent,
+            padding: full ? '4px 6px' : '3px 4px',
+            borderRadius: full ? 3 : 2,
+            border: `1px solid ${HERO.ink}`,
             letterSpacing: 0.5,
-            flexShrink: 0,
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -1px 0 rgba(0,0,0,0.25)',
+            flexShrink: 0,
           }}
         >
           {tactic.category.toUpperCase()}
         </span>
+        <ChargePips capacity={capacity} charges={filled} accent={accent} full={full} />
       </div>
 
-      {/* Tactic crest sprite — bespoke chalk scene per tactic.id on a shared board.
-          No rating/fitness/sprite competes for space here, so the board is the hero
-          of the card: it fills the width. */}
-      <div style={{ flex: 1, minHeight: full ? 0 : 74, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: full ? '10px 0' : '4px 0', overflow: 'hidden' }}>
-        <TacticSprite id={tactic.id} accent={accent} full={full} />
-      </div>
-
-      {/* Name + effect */}
-      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: full ? 12 : 9.5, color: 'var(--cream)', lineHeight: 1.2 }}>
-        {tactic.name}
-      </span>
-      <span
+      {/* BOARD WINDOW — the bespoke chalk scene, centred (the card's hero). */}
+      <div
         style={{
-          fontSize: full ? 11 : 8.5,
-          lineHeight: 1.35,
-          color: 'var(--cream-soft)',
-          marginTop: 3,
-          display: '-webkit-box',
-          WebkitLineClamp: full ? 5 : 3,
-          WebkitBoxOrient: 'vertical',
+          position: 'relative',
+          flex: 1,
+          minHeight: full ? 72 : 50,
+          marginTop: 2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: full ? '6px 0' : '2px 0',
+          background: `radial-gradient(90% 80% at 50% 40%, rgba(31,157,79,${full ? 0.16 : 0.13}), transparent 72%)`,
           overflow: 'hidden',
         }}
       >
-        {tactic.effect}
-      </span>
+        <TacticSprite id={tactic.id} accent={accent} full={full} />
+      </div>
+
+      {/* NAME */}
+      <div style={{ padding: full ? '6px 10px 5px' : '4px 6px 2px' }}>
+        <span
+          style={{
+            display: 'block',
+            fontFamily: PIXEL,
+            fontSize: full ? 14 : 8,
+            color: HERO.cream,
+            textShadow: `0 ${full ? 2 : 1}px 0 ${HERO.ink}`,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {tactic.name.toUpperCase()}
+        </span>
+      </div>
+
+      {/* CATEGORY ACCENT BAND — seats the play on a hard accent rule and carries the
+          CONTEST icons (what the call raises). Falls back to a kicker when neutral. */}
+      <div
+        style={{
+          background: 'rgba(0,0,0,0.35)',
+          borderTop: `${full ? 2 : 1}px solid ${accent}`,
+          borderBottom: `${full ? 2 : 1}px solid ${accent}`,
+          padding: full ? '4px 10px' : '3px 6px',
+          marginTop: full ? 0 : 1,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 4,
+          minHeight: full ? undefined : 16,
+        }}
+      >
+        {contests.length > 0 ? (
+          <ContestIcons keys={contests} full={full} />
+        ) : (
+          <span style={{ fontFamily: PIXEL, fontSize: full ? 7 : 5.5, letterSpacing: 1, color: 'rgba(242,234,214,0.55)' }}>
+            CALLED PLAY
+          </span>
+        )}
+        {full && contests.length > 0 && <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: 'rgba(203,185,138,0.85)', flexShrink: 0 }}>RAISES</span>}
+      </div>
+
+      {/* EFFECT — full panel on profile, clamped line on grid. */}
+      {full ? (
+        <div style={{ margin: '8px 8px 6px', borderRadius: 6, border: `1px solid ${withAlpha('#e8b23a', 0.4)}`, background: 'rgba(0,0,0,0.35)', padding: '7px 8px 8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1.5, color: HERO.creamMuted }}>EFFECT</span>
+            <span style={{ flex: 1, height: 1, background: 'rgba(232,178,60,0.3)' }} />
+          </div>
+          <span
+            style={{
+              display: '-webkit-box',
+              WebkitBoxOrient: 'vertical',
+              WebkitLineClamp: 3,
+              overflow: 'hidden',
+              fontFamily: 'var(--font-body, sans-serif)',
+              fontSize: 10.5,
+              lineHeight: 1.4,
+              color: HERO.creamBody,
+              marginTop: 4,
+            }}
+          >
+            {tactic.effect}
+          </span>
+        </div>
+      ) : (
+        <div style={{ padding: '3px 6px 6px' }}>
+          <span
+            style={{
+              display: '-webkit-box',
+              WebkitBoxOrient: 'vertical',
+              WebkitLineClamp: 2,
+              overflow: 'hidden',
+              fontSize: 8.5,
+              lineHeight: 1.3,
+              color: HERO.creamBody,
+            }}
+          >
+            {tactic.effect}
+          </span>
+        </div>
+      )}
+
+      {/* FOOTER — rarity foil label + charge count (profile only). */}
+      {full && (
+        <div style={{ padding: '0 10px 9px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1.5, color: labelColor, whiteSpace: 'nowrap' }}>{frameLabel}</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.5, color: HERO.creamMuted, flexShrink: 0 }}>
+            {filled}/{capacity} CHARGES
+          </span>
+        </div>
+      )}
+
+      {/* LEGENDARY FOIL SWEEP — travelling gloss band (respects reduced-motion via .card-foil). */}
+      {foil && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'inherit', pointerEvents: 'none' }}>
+          <div
+            className="card-foil"
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              width: '45%',
+              background: 'linear-gradient(90deg, transparent, rgba(255,240,205,0.30), transparent)',
+              mixBlendMode: 'screen',
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
