@@ -10,6 +10,7 @@ import {
   postMatchDurabilityCheck,
   applyDurabilityResults,
   addCardToDeck,
+  addCardsToDeck,
   sellCard,
   applyTraining,
   buyTacticPack,
@@ -33,9 +34,9 @@ import type { HandState } from '../lib/hand';
 import { INCREMENT_MINUTES } from '../lib/hand';
 import type { JokerCard } from '../lib/jokers';
 import { rehydrateJokers } from '../lib/jokers';
-import { ripStarterPacks } from '../lib/packs';
+import { ripStarterPacks, ripCardPack, type PackTier } from '../lib/packs';
 import { getTacticById } from '../lib/tactics';
-import { calculateAttendance, matchReward, JOKER_COST } from '../lib/economy';
+import { calculateAttendance, matchReward, JOKER_COST, SCOUT_PACK_COST, ELITE_PACK_COST } from '../lib/economy';
 import { findConnections } from '../lib/chemistry';
 import { accrueMatch } from '../lib/chem';
 import type { PackContents } from '../lib/packs';
@@ -427,6 +428,21 @@ export default function GameShell() {
     if (result) { setRunState(result); saveRun(result); }
   }, [runState]);
 
+  // Buy + rip a sealed card pack. Deducts the cost, adds the pulls to the deck,
+  // and RETURNS the revealed cards (with their owned ids) so the shop can play the
+  // rip. deck.length seeds the draw so repeated buys in a shop differ. [] if broke.
+  const handleBuyPack = useCallback((tier: PackTier): Card[] => {
+    if (!runState) return [];
+    const cost = tier === 'elite' ? ELITE_PACK_COST : SCOUT_PACK_COST;
+    if (runState.cash < cost) return [];
+    const seed = runState.seed + runState.deck.length * 131 + runState.round * 777 + (tier === 'elite' ? 911 : 0);
+    const { state: withCards, added } = addCardsToDeck(runState, ripCardPack(tier, seed));
+    const next = { ...withCards, cash: withCards.cash - cost };
+    setRunState(next);
+    saveRun(next);
+    return added;
+  }, [runState]);
+
   const handleBuyInvestment = useCallback((card: InvestmentCard) => {
     if (!runState) return;
     const result = buyInvestment(runState, card);
@@ -681,6 +697,7 @@ export default function GameShell() {
             onBuyCard={handleBuyCard}
             onSellCard={handleSellCard}
             onBuyJoker={handleBuyJoker}
+            onBuyPack={handleBuyPack}
             onBuyTacticPack={handleBuyTacticPack}
             onBuyInvestment={handleBuyInvestment}
             onTrainPlayer={handleTrainPlayer}

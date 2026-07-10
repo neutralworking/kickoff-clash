@@ -1,21 +1,22 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Card } from '../lib/scoring';
 import type { RunState } from '../lib/run';
 import { getShopCards, getPlayerPickCards } from '../lib/run';
 import {
   CARD_PICK_COST, RARE_PICK_COST, PLAYER_PICK_COST, JOKER_COST, getStadiumInvestment,
-  getAcademyInvestment, BOX_OFFICE_INVESTMENT,
+  getAcademyInvestment, BOX_OFFICE_INVESTMENT, SCOUT_PACK_COST, ELITE_PACK_COST,
 } from '../lib/economy';
 import type { InvestmentCard } from '../lib/economy';
+import type { PackTier } from '../lib/packs';
 import type { JokerCard as JokerCardType } from '../lib/jokers';
 import { getShopJokers } from '../lib/jokers';
 import type { OpponentBuild } from '../lib/run';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import SquadGallery from './SquadGallery';
-import { PIXEL } from './cards/cardTokens';
+import { PIXEL, RARITY_COLOR } from './cards/cardTokens';
 import { getFormation } from '../lib/formations';
 import { LineupSlot, BenchTile } from './lineup';
 
@@ -24,6 +25,9 @@ interface ShopPhaseProps {
   onBuyCard: (card: Card, cost: number) => void;
   onSellCard: (card: Card) => void;
   onBuyJoker: (joker: JokerCardType) => void;
+  /** Buy + rip a sealed card pack; returns the revealed cards (already added to
+   *  the deck) so the shop can play the rip. []‑result means unaffordable. */
+  onBuyPack: (tier: PackTier) => Card[];
   onBuyTacticPack: () => void;
   onBuyInvestment: (card: InvestmentCard) => void;
   onTrainPlayer: (cardId: number) => void;
@@ -49,6 +53,7 @@ export default function ShopPhase({
   onBuyCard,
   onSellCard,
   onBuyJoker,
+  onBuyPack,
   onBuyTacticPack,
   onBuyInvestment,
   onTrainPlayer,
@@ -80,6 +85,15 @@ export default function ShopPhase({
   const [showGallery, setShowGallery] = useState(false);
   // Read-only XI view — see the current shape (gaps, fitness, depth) while shopping.
   const [showXI, setShowXI] = useState(false);
+  // Sealed-pack rip: the tier + the returned cards (already in the deck) to celebrate.
+  const [packReveal, setPackReveal] = useState<{ tier: PackTier; cards: Card[] } | null>(null);
+
+  // Buy + rip a sealed pack. onBuyPack has already charged the cash and added the
+  // pulls to the deck; a non-empty result means the buy landed, so play the reveal.
+  const handleOpenPack = (tier: PackTier) => {
+    const pulled = onBuyPack(tier);
+    if (pulled.length > 0) setPackReveal({ tier, cards: pulled });
+  };
 
   const trainableCards = [...state.deck]
     .map((card) => ({
@@ -211,6 +225,7 @@ export default function ShopPhase({
             canPickJoker={canPickJoker}
             setShowCardPick={setShowCardPick}
             onBuyJoker={onBuyJoker}
+            onOpenPack={handleOpenPack}
             onRerollShop={onRerollShop}
             setRerollCount={setRerollCount}
             openModal={setModal}
@@ -307,6 +322,16 @@ export default function ShopPhase({
 
       {/* Read-only XI pitch view — the current shape while shopping. */}
       {showXI && <XIOverlay state={state} onInspect={(c) => setModal({ variant: 'player', card: c })} onClose={() => setShowXI(false)} />}
+
+      {/* Sealed-pack rip reveal — celebratory only; the pulls are already in the deck. */}
+      {packReveal && (
+        <PackRipReveal
+          tier={packReveal.tier}
+          cards={packReveal.cards}
+          onInspect={(c) => setModal({ variant: 'player', card: c })}
+          onClose={() => setPackReveal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -317,42 +342,81 @@ export default function ShopPhase({
 
 function MarketTab({
   state, offeredJokers, canPickJoker,
-  setShowCardPick, onBuyJoker, onRerollShop, setRerollCount, openModal,
+  setShowCardPick, onBuyJoker, onOpenPack, onRerollShop, setRerollCount, openModal,
 }: {
   state: RunState;
   offeredJokers: JokerCardType[];
   canPickJoker: boolean;
   setShowCardPick: (v: 'budget' | 'normal' | 'rare' | null) => void;
   onBuyJoker: (joker: JokerCardType) => void;
+  onOpenPack: (tier: PackTier) => void;
   onRerollShop: () => boolean;
   setRerollCount: React.Dispatch<React.SetStateAction<number>>;
   openModal: (m: GameCardModel) => void;
 }) {
   return (
     <div className="flex flex-col gap-3 pb-2">
-      {/* The three pick tiers: budget depth, standard, elite */}
-      <SectionCard title="Player Market" accent="var(--gold)">
+      {/* TRANSFER MARKET — sign a KNOWN player: scout the board, pick one of three. */}
+      <SectionCard
+        title="Transfer Market"
+        accent="var(--gold)"
+        right={
+          <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)', letterSpacing: 0.5 }}>
+            PICK YOUR MAN
+          </span>
+        }
+      >
         <div className="grid grid-cols-2 gap-2">
           <BuyTile
             label="Player Pick"
-            sub="Choose 1 of 3 (Common/Rare)"
+            sub="Sign 1 of 3 — Common/Rare bodies"
             cost={PLAYER_PICK_COST}
             affordable={state.cash >= PLAYER_PICK_COST}
             onClick={() => setShowCardPick('budget')}
           />
           <BuyTile
             label="Card Pick"
-            sub="Choose 1 of 3"
+            sub="Sign 1 of 3 — full board"
             cost={CARD_PICK_COST}
             affordable={state.cash >= CARD_PICK_COST}
             onClick={() => setShowCardPick('normal')}
           />
           <BuyTile
             label="Rare+ Pick"
-            sub="Rare or better"
+            sub="Sign 1 of 3 — Rare or better"
             cost={RARE_PICK_COST}
             affordable={state.cash >= RARE_PICK_COST}
             onClick={() => setShowCardPick('rare')}
+          />
+        </div>
+      </SectionCard>
+
+      {/* CARD PACKS — the SEALED gamble: rip 3 unknown cards, no choosing. */}
+      <SectionCard
+        title="Card Packs"
+        accent="var(--kit-blue)"
+        right={
+          <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)', letterSpacing: 0.5 }}>
+            SEALED · 3 CARDS
+          </span>
+        }
+      >
+        <div className="grid grid-cols-2 gap-2.5">
+          <PackTile
+            tier="scout"
+            label="Scout Pack"
+            sub="Mostly Common — squad depth."
+            cost={SCOUT_PACK_COST}
+            affordable={state.cash >= SCOUT_PACK_COST}
+            onOpen={() => onOpenPack('scout')}
+          />
+          <PackTile
+            tier="elite"
+            label="Elite Pack"
+            sub="Guaranteed Rare+ — the chase."
+            cost={ELITE_PACK_COST}
+            affordable={state.cash >= ELITE_PACK_COST}
+            onOpen={() => onOpenPack('elite')}
           />
         </div>
       </SectionCard>
@@ -976,6 +1040,251 @@ function XIOverlay({
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card Packs — the SEALED gamble tile + its pixel wrapped-pack sprite, and the
+// celebratory RIP reveal overlay. The pulls are already in the deck (the buy
+// handler charged + added them); the reveal is pure theatre.
+// ---------------------------------------------------------------------------
+
+interface PackRamp {
+  body: string; rim: string; shade: string;
+  crimp: string; crimpHi: string; stripe: string; stripeHi: string; emblem: string;
+}
+
+const PACK_RAMP: Record<PackTier, PackRamp> = {
+  // Scout — cool slate/steel foil: standard-issue depth, no shine.
+  scout: { body: '#39485a', rim: '#59718c', shade: '#1f2a36', crimp: '#6f88a4', crimpHi: '#a3bcd6', stripe: '#232f3c', stripeHi: '#3c5064', emblem: '#a9cdec' },
+  // Elite — gold foil: the chase, with a travelling foil sweep on the wrapper.
+  elite: { body: '#6e5416', rim: '#a07f22', shade: '#3a2c0c', crimp: '#c8992f', crimpHi: '#ffe79a', stripe: '#4a3a10', stripeHi: '#7a5f18', emblem: '#ffe79a' },
+};
+
+/** A sealed, wrapped card-pack pixel sprite — foil wrapper, crimped top seam, a
+ *  chalk-white football seal, and three pips (the 3 cards inside). Lit top-left,
+ *  crispEdges. The foil sheen sits on the wrapper (chrome), never on a card. */
+function SealedPackSprite({ ramp, height = 72 }: { ramp: PackRamp; height?: number }) {
+  return (
+    <svg
+      className="pixelated"
+      viewBox="0 0 22 30"
+      preserveAspectRatio="xMidYMid meet"
+      style={{ height, width: 'auto', display: 'block' }}
+      shapeRendering="crispEdges"
+    >
+      {/* drop shadow */}
+      <rect x="4" y="5" width="16" height="24" fill="rgba(0,0,0,0.42)" />
+      {/* wrapper body */}
+      <rect x="3" y="3" width="16" height="25" fill={ramp.body} />
+      <rect x="3" y="3" width="1" height="25" fill={ramp.rim} />
+      <rect x="3" y="3" width="16" height="1" fill={ramp.rim} />
+      <rect x="18" y="3" width="1" height="25" fill={ramp.shade} />
+      <rect x="3" y="27" width="16" height="1" fill={ramp.shade} />
+      {/* top crimp seam */}
+      <rect x="3" y="3" width="16" height="4" fill={ramp.crimp} />
+      <rect x="3" y="3" width="16" height="1" fill={ramp.crimpHi} />
+      {/* crimp teeth biting down into the body */}
+      <rect x="5" y="6" width="2" height="1" fill={ramp.body} />
+      <rect x="9" y="6" width="2" height="1" fill={ramp.body} />
+      <rect x="13" y="6" width="2" height="1" fill={ramp.body} />
+      {/* football seal — chalk white, lit top-left, shaded base + a couple of panels */}
+      <rect x="7" y="12" width="8" height="8" fill="#f2f6ef" />
+      <rect x="7" y="12" width="8" height="1" fill="#ffffff" />
+      <rect x="7" y="19" width="8" height="1" fill="#c2ccbc" />
+      <rect x="14" y="13" width="1" height="6" fill="#c2ccbc" />
+      <rect x="10" y="15" width="2" height="2" fill="#2a2f28" />
+      <rect x="8" y="13" width="1" height="1" fill="#2a2f28" />
+      <rect x="13" y="17" width="1" height="1" fill="#2a2f28" />
+      {/* bottom rarity stripe — tier tint */}
+      <rect x="3" y="22" width="16" height="4" fill={ramp.stripe} />
+      <rect x="3" y="22" width="16" height="1" fill={ramp.stripeHi} />
+      {/* three pips = three cards inside */}
+      <rect x="6" y="23" width="2" height="2" fill={ramp.emblem} />
+      <rect x="10" y="23" width="2" height="2" fill={ramp.emblem} />
+      <rect x="14" y="23" width="2" height="2" fill={ramp.emblem} />
+      {/* diagonal foil sheen on the wrapper (chrome, not a card) */}
+      <polygon points="13,3 16,3 8,28 5,28" fill="rgba(255,255,255,0.12)" />
+    </svg>
+  );
+}
+
+/** A sealed-pack acquisition tile: pixel pack over glass, tier name, contents
+ *  line, and a RIP price footer. Affordability-gated (dim + non-interactive). */
+function PackTile({
+  tier, label, sub, cost, affordable, onOpen,
+}: {
+  tier: PackTier;
+  label: string;
+  sub: string;
+  cost: number;
+  affordable: boolean;
+  onOpen: () => void;
+}) {
+  const elite = tier === 'elite';
+  const accent = elite ? 'var(--gold)' : 'var(--kit-blue)';
+  const glow = elite ? 'var(--gold-glow)' : 'var(--glow-rare)';
+  const ramp = PACK_RAMP[tier];
+  return (
+    <button
+      onClick={affordable ? onOpen : undefined}
+      disabled={!affordable}
+      className={`glass-surface sheen active:scale-[0.98] relative overflow-hidden flex flex-col items-center ${affordable ? 'glow-edge' : ''}`}
+      style={{
+        padding: '12px 10px 0',
+        borderRadius: 'var(--radius-sm)',
+        boxShadow: affordable
+          ? 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)'
+          : 'inset 0 1px 0 0 var(--glass-highlight)',
+        cursor: affordable ? 'pointer' : 'not-allowed',
+        opacity: affordable ? 1 : 0.55,
+        ...(affordable ? { ['--glow' as string]: glow } : {}),
+      }}
+    >
+      {/* Tier-tinted glow wash rising behind the pack. */}
+      <div
+        aria-hidden
+        style={{ position: 'absolute', inset: 0, background: `radial-gradient(120% 62% at 50% 4%, ${glow}, transparent 68%)`, opacity: affordable ? 0.55 : 0.2 }}
+      />
+      {/* Pack sprite (+ foil sweep on Elite). */}
+      <div className="relative" style={{ height: 74, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+        <div style={{ position: 'relative', display: 'inline-block', overflow: 'hidden' }}>
+          <SealedPackSprite ramp={ramp} />
+          {elite && (
+            <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+              <div
+                className="card-foil"
+                style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: '48%', background: 'linear-gradient(90deg, transparent, rgba(255,240,205,0.4), transparent)', mixBlendMode: 'screen' }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+      {/* Name + contents line. */}
+      <div className="relative" style={{ zIndex: 2, width: '100%', textAlign: 'center', marginTop: 2 }}>
+        <div style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)' }}>{label}</div>
+        <div style={{ fontSize: 8.5, color: 'var(--dust)', marginTop: 3, lineHeight: 1.35, minHeight: 24 }}>{sub}</div>
+      </div>
+      {/* RIP price footer — a seated band on the tile's foot. */}
+      <div
+        className="relative"
+        style={{
+          zIndex: 2, width: 'calc(100% + 20px)', marginLeft: -10, marginRight: -10, marginTop: 8,
+          borderTop: '1px solid var(--glass-border)', padding: '8px 0',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          background: 'rgba(0,0,0,0.2)',
+        }}
+      >
+        <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.8, color: affordable ? 'var(--cream)' : 'var(--ink)' }}>RIP</span>
+        <span style={{ fontFamily: PIXEL, fontSize: 10, color: affordable ? accent : 'var(--ink)' }}>{'£'}{cost.toLocaleString()}</span>
+      </div>
+    </button>
+  );
+}
+
+/** The celebratory pack rip: a beat of sealed-pack-tears-open theatre, then the
+ *  three pulls fan up staggered. Each card is inspectable; the pulls are already
+ *  in the deck, so the only action is to close. */
+function PackRipReveal({
+  tier, cards, onInspect, onClose,
+}: {
+  tier: PackTier;
+  cards: Card[];
+  onInspect: (c: Card) => void;
+  onClose: () => void;
+}) {
+  const [stage, setStage] = useState<'rip' | 'cards'>('rip');
+  const ramp = PACK_RAMP[tier];
+  const accent = tier === 'elite' ? 'var(--gold)' : 'var(--kit-blue)';
+
+  // The best pull drives the celebratory flash + headline.
+  const RANK: Record<string, number> = { Common: 0, Rare: 1, Epic: 2, Legendary: 3 };
+  const best = cards.reduce((a, b) => (RANK[b.rarity] > RANK[a.rarity] ? b : a), cards[0]);
+  const bestColor = RARITY_COLOR[best.rarity] ?? RARITY_COLOR.Common;
+  const bigPull = RANK[best.rarity] >= 2;
+
+  useEffect(() => {
+    const t = setTimeout(() => setStage('cards'), 560);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div
+      className="absolute inset-0 scrim-fade flex flex-col"
+      style={{
+        background: 'rgba(2,9,5,0.86)',
+        backdropFilter: 'blur(5px)',
+        WebkitBackdropFilter: 'blur(5px)',
+        zIndex: 60,
+        padding: '16px 16px max(env(safe-area-inset-bottom), 14px)',
+      }}
+      role="dialog"
+      aria-modal="true"
+    >
+      {stage === 'rip' ? (
+        // ── RIP BEAT — the pack jolts, flares white, and tears upward. ──
+        <div className="flex-1 flex items-center justify-center relative">
+          <div aria-hidden className="pack-flash" style={{ position: 'absolute', width: 200, height: 200, borderRadius: '50%', background: `radial-gradient(circle, ${accent}, transparent 62%)` }} />
+          <div className="pack-rip">
+            <SealedPackSprite ramp={ramp} height={188} />
+          </div>
+        </div>
+      ) : (
+        // ── PULLS — headline, the three cards fanning up, and a close. ──
+        <>
+          {bigPull && <div aria-hidden className="pack-rarity-flash" style={{ position: 'absolute', inset: 0, background: bestColor, opacity: 0.55, pointerEvents: 'none', zIndex: 1 }} />}
+
+          <div className="shrink-0 text-center phase-fade-in" style={{ position: 'relative', zIndex: 2, marginTop: 4 }}>
+            <div style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1.5, color: 'var(--dust)' }}>
+              {tier === 'elite' ? 'ELITE PACK' : 'SCOUT PACK'}
+            </div>
+            <div style={{ fontFamily: PIXEL, fontSize: 20, color: 'var(--cream)', textShadow: '0 2px 0 var(--ink-black)', marginTop: 6 }}>
+              {bigPull ? 'BIG PULL!' : 'NICE!'}
+            </div>
+            <div style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.6, color: 'var(--dust)', marginTop: 6 }}>
+              3 CARDS ADDED TO YOUR SQUAD
+            </div>
+          </div>
+
+          {/* The three pulls — inspectable, staggered up. */}
+          <div className="flex-1 min-h-0 flex items-center justify-center overflow-y-auto" style={{ overscrollBehavior: 'contain', position: 'relative', zIndex: 2 }}>
+            <div className="grid grid-cols-3" style={{ gap: 8, width: '100%', maxWidth: 360 }}>
+              {cards.map((card, i) => (
+                <GameCard
+                  key={`${card.id}-${i}`}
+                  model={{ variant: 'player', card }}
+                  onClick={() => onInspect(card)}
+                  delay={i * 120}
+                  ariaLabel={`Inspect ${card.name}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="sheen-strong glow-edge w-full shrink-0 active:scale-[0.99] relative overflow-hidden phase-fade-in"
+            style={{
+              height: 50,
+              marginTop: 12,
+              borderRadius: 'var(--radius)',
+              border: '2px solid var(--ink-black)',
+              background: 'linear-gradient(180deg, var(--amber) 0%, var(--amber-soft) 100%)',
+              boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), 0 3px 0 0 var(--ink-black), var(--depth-2)',
+              fontFamily: PIXEL,
+              fontSize: 13,
+              letterSpacing: 0.8,
+              color: 'var(--line-white)',
+              textTransform: 'uppercase',
+              zIndex: 2,
+              ['--glow' as string]: 'var(--amber-glow)',
+            }}
+          >
+            Add to Squad
+          </button>
+        </>
+      )}
     </div>
   );
 }

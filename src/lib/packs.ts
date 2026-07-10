@@ -62,6 +62,58 @@ export const RIP_COUNTS = { players: 24, managers: 2, tactics: 5 } as const;
 // the real upgrade path. Tuned on scripts/starter-probe.ts.
 const RIP_RARES = 6; // of 24; the remainder are Common
 
+// ---------------------------------------------------------------------------
+// Shop card packs — the SEALED acquisition (economy.ts SCOUT_PACK / ELITE_PACK).
+// A pack rips PACK_SIZE cards from the pool by a per-tier rarity weighting; the
+// Elite tier floors slot 0 to Rare+ so the guarantee always holds. Deterministic
+// per seed. The cards come straight from ALL_CARDS (deduped ids are assigned by
+// run.ts addCardToDeck when they enter the deck).
+// ---------------------------------------------------------------------------
+
+export type PackTier = 'scout' | 'elite';
+export const PACK_SIZE = 3;
+
+/** Rarity weights per tier (relative). Scout = cheap depth (Common-heavy, no
+ *  Legendary); Elite = the chase (Rare-led with an Epic/Legendary tail). */
+const PACK_WEIGHTS: Record<PackTier, Record<string, number>> = {
+  scout: { Common: 78, Rare: 20, Epic: 2, Legendary: 0 },
+  elite: { Common: 28, Rare: 50, Epic: 18, Legendary: 4 },
+};
+
+const RARITIES = ['Common', 'Rare', 'Epic', 'Legendary'] as const;
+
+/** Pick one rarity bucket by weight (seeded), then a random card from it. Falls
+ *  back down the rarity ladder if a bucket is empty. */
+function drawByWeight(weights: Record<string, number>, seed: number): Card | null {
+  const total = RARITIES.reduce((s, r) => s + (weights[r] ?? 0), 0);
+  if (total <= 0) return null;
+  let roll = seededRandom(seed) * total;
+  let chosen: string = 'Common';
+  for (const r of RARITIES) {
+    roll -= weights[r] ?? 0;
+    if (roll <= 0) { chosen = r; break; }
+  }
+  // Walk down the ladder until a non-empty bucket is found.
+  for (let i = RARITIES.indexOf(chosen as typeof RARITIES[number]); i >= 0; i--) {
+    const pool = ALL_CARDS.filter((c) => c.rarity === RARITIES[i]);
+    if (pool.length) return pool[Math.floor(seededRandom(seed + 31) * pool.length)];
+  }
+  return ALL_CARDS[Math.floor(seededRandom(seed + 53) * ALL_CARDS.length)] ?? null;
+}
+
+/** Rip a shop card pack — PACK_SIZE cards by the tier weighting. The Elite tier
+ *  forces its first card to Rare+ so "guaranteed Rare+" always holds. */
+export function ripCardPack(tier: PackTier, seed: number): Card[] {
+  const out: Card[] = [];
+  for (let i = 0; i < PACK_SIZE; i++) {
+    let weights = PACK_WEIGHTS[tier];
+    if (tier === 'elite' && i === 0) weights = { Common: 0, Rare: 62, Epic: 30, Legendary: 8 };
+    const card = drawByWeight(weights, seed + i * 97 + (tier === 'elite' ? 500 : 0));
+    if (card) out.push(card);
+  }
+  return out;
+}
+
 export function ripStarterPacks(seed: number): PackContents {
   const rares = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Rare'), seed + 11).slice(0, RIP_RARES);
   const commons = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Common'), seed).slice(0, RIP_COUNTS.players - rares.length);

@@ -30,6 +30,7 @@ import {
   PIXEL,
   RARITY_COLOR,
   POSITION_LABEL,
+  DURABILITY_META,
   TACTIC_CAT_COLOR,
   INVESTMENT_META,
   eligiblePositions,
@@ -44,6 +45,7 @@ import {
   type ResolvedTrait,
 } from './cardTokens';
 import { deriveStats } from '../../lib/funnel';
+import { conditionRecipe } from './portrait';
 
 // Trait glyphs (✦ ➴ ⚑ …) sit outside the Silkscreen glyph set; render them in a
 // Unicode-complete fallback stack so a symbol never renders as a blank tofu box.
@@ -382,27 +384,30 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
   // loadouts surface first; otherwise the seeded rarity-count pick.
   const traits = definingTraitsFor(card);
 
-  // Tap-to-open explainer for ROLE (mobile-first: no hover). Tapping the cell
-  // toggles its tip; tapping ANYWHERE else closes it via a document-level listener
-  // that never preventDefault/stopPropagation's — so a backdrop tap still closes
-  // the whole modal and Escape stays untouched. The trigger itself stopPropagation's
-  // its opening tap so the same click doesn't instantly self-close.
-  const [openTip, setOpenTip] = useState<'role' | null>(null);
+  // Tap-to-open explainers (mobile-first: no hover). Tapping a cell toggles its
+  // tip; tapping ANYWHERE else closes it via a document-level listener that never
+  // preventDefault/stopPropagation's — so a backdrop tap still closes the whole
+  // modal and Escape stays untouched. Each trigger stopPropagation's its opening
+  // tap so the same click doesn't instantly self-close. ROLE and DURABILITY both
+  // carry an explainer, so the open-tip is a small union rather than a boolean.
+  const [openTip, setOpenTip] = useState<'role' | 'durability' | null>(null);
   useEffect(() => {
     if (!openTip) return;
     const close = () => setOpenTip(null);
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, [openTip]);
-  const toggleTip = (tip: 'role') => (e: React.MouseEvent) => {
+  const toggleTip = (tip: 'role' | 'durability') => (e: React.MouseEvent) => {
     e.stopPropagation();
     setOpenTip((cur) => (cur === tip ? null : tip));
   };
 
   const stats = deriveStats(card);
+  const dura = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
 
   return (
     <div className="flex flex-col" style={{ gap: 10 }}>
+      {/* ── IDENTITY: name + the headline OVERALL, the retro FM-screen banner ── */}
       <Panel>
         <div className="flex items-center justify-between" style={{ gap: 8 }}>
           <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'var(--cream)', lineHeight: 1.15 }}>{card.name}</span>
@@ -410,23 +415,34 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
             {card.rarity.toUpperCase()}
           </span>
         </div>
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 6 }}>
-          <StatCell label="ATK" value={String(stats.atk)} />
-          <StatCell label="DEF" value={String(stats.def)} />
-          <StatCell label="POSITION" value={POSITION_LABEL[card.position] ?? card.position} />
-          <StatCell label="NATION" value={nationCode(card.nation) || '—'} />
-          {/* ROLE is the prominent, accent-coloured identity where ARCHETYPE was.
-              It spans the remaining columns and taps open a one-line explainer —
-              Regista/Trequartista/etc. are real football identities. */}
-          <TapStatCell
-            label="ROLE"
-            value={role}
-            color={accent}
-            open={openTip === 'role'}
-            onToggle={toggleTip('role')}
-            tipBody={roleBlurb(role)}
-          />
+
+        <div className="flex" style={{ gap: 10, alignItems: 'stretch' }}>
+          <OverallBadge power={card.power} accent={accent} />
+          <div className="flex flex-col" style={{ gap: 6, flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                background: 'rgba(0,0,0,0.28)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '6px 8px',
+                minWidth: 0,
+              }}
+            >
+              <PositionChip pos={card.position} primary />
+              <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 10, color: accent, letterSpacing: 0.3, lineHeight: 1.1 }}>
+                {POSITION_LABEL[card.position] ?? card.position}
+              </span>
+            </div>
+            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              <StatCell label="ATK" value={String(stats.atk)} color="var(--line-white)" />
+              <StatCell label="DEF" value={String(stats.def)} color="var(--line-white)" />
+            </div>
+          </div>
         </div>
+
         {/* Where they can operate — eligible pitch positions as pixel chips. */}
         <div className="flex flex-col" style={{ gap: 6 }}>
           <Label>CAN OPERATE</Label>
@@ -436,10 +452,68 @@ function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
             ))}
           </div>
         </div>
+
+        {/* ROLE — the prominent, accent-coloured on-pitch identity; taps open a
+            one-line explainer (Regista/Trequartista/etc. are real football roles). */}
+        <TapStatCell
+          label="ROLE"
+          value={role}
+          color={accent}
+          open={openTip === 'role'}
+          onToggle={toggleTip('role')}
+          tipBody={roleBlurb(role)}
+        />
+
         {/* HELPS WITH — which of the six contests this card feeds. */}
         <ContestRow heading="HELPS WITH" keys={contestsForCard(card)} />
-        {/* FITNESS (today's legs) shows only once a run tracks it. */}
-        {typeof card.fitness === 'number' && <FitnessRow fitness={card.fitness} />}
+      </Panel>
+
+      {/* ── DOSSIER: the two-column BIO | ATTRIBUTES stat screen (the reference
+          layout, rendered in the pixel house style) ── */}
+      <Panel>
+        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'start' }}>
+          {/* LEFT — the BIO ledger (label : value rows, alternating for the dense
+              tabular read). */}
+          <div className="flex flex-col" style={{ gap: 6, minWidth: 0 }}>
+            <Label>BIO</Label>
+            <div className="flex flex-col" style={{ gap: 3 }}>
+              <BioRow label="NATION" value={nationValue(card.nation)} alt />
+              <BioRow label="CHARACTER" value={(card.personalityTheme ?? '—').toUpperCase()} color={accent} />
+              <BioRow label="AKA" value={card.nickname ? `“${card.nickname}”` : '—'} alt />
+              <BioRow label="GRADE" value={card.rarity.toUpperCase()} color={accent} />
+            </div>
+          </div>
+
+          {/* RIGHT — the ATTRIBUTES column: the four pillars under evocative
+              football labels, each a retro number + a crisp pixel bar (0–99). */}
+          <div className="flex flex-col" style={{ gap: 6, minWidth: 0 }}>
+            <Label>ATTRIBUTES</Label>
+            <div className="flex flex-col" style={{ gap: 7 }}>
+              {PILLAR_META.map((p) => (
+                <AttrRow key={p.key} label={p.label} value={card.pillars?.[p.key] ?? 0} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </Panel>
+
+      {/* ── AVAILABILITY: the "100% MATCH FIT" analogue — legs, wear, apps, and the
+          durability grade (all the "can this card play, and for how long" reads) ── */}
+      <Panel>
+        <Label>AVAILABILITY</Label>
+        {typeof card.fitness === 'number' && <AvailabilityBar fitness={card.fitness} />}
+        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          <ConditionCell condition={card.condition} />
+          <StatCell label="APPS (RUN)" value={String(card.matchesPlayed ?? 0)} color="var(--line-white)" />
+        </div>
+        <TapStatCell
+          label="DURABILITY"
+          value={dura.label}
+          color={dura.color}
+          open={openTip === 'durability'}
+          onToggle={toggleTip('durability')}
+          tipBody={dura.blurb}
+        />
       </Panel>
 
       {traits.length > 0 && <TraitsSection traits={traits} rarity={card.rarity} accent={accent} />}
@@ -594,28 +668,179 @@ function PositionChip({ pos, primary }: { pos: string; primary: boolean }) {
   );
 }
 
-/** Crisp pixel fitness meter row inside the detail panel. */
-function FitnessRow({ fitness }: { fitness: number }) {
-  const { filled, total, color } = fitnessMeter(fitness);
+// ---------------------------------------------------------------------------
+// PLAYER stat-screen primitives (the FM-style dossier). Every value derives from
+// a real Card field — OVERALL is `power` (BRS), the attribute bars are the four
+// `pillars`, ATK/DEF are `deriveStats`. No invented numbers.
+// ---------------------------------------------------------------------------
+
+/** The evocative football labels the four raw pillars render under. Purely a
+ *  relabel — the number is the pillar value, untouched. */
+const PILLAR_META: { key: 'technical' | 'tactical' | 'mental' | 'physical'; label: string }[] = [
+  { key: 'technical', label: 'TECHNIQUE' },
+  { key: 'tactical', label: 'VISION' },
+  { key: 'mental', label: 'COMPOSURE' },
+  { key: 'physical', label: 'PHYSICAL' },
+];
+
+/** Band colour for an attribute value (0–99) — strong green / solid gold / weak
+ *  red, so a squad's shape reads at a glance the way an FM screen does. */
+function attrBand(v: number): string {
+  if (v >= 70) return 'var(--success)';
+  if (v >= 45) return 'var(--gold)';
+  return 'var(--danger)';
+}
+
+/** Nation display: real flag emoji where we have one, else the short code. */
+function nationValue(nation?: string): string {
+  const flag = nationFlag(nation);
+  const code = nationCode(nation);
+  if (flag) return code ? `${flag} ${code}` : flag;
+  return code || '—';
+}
+
+/** The headline OVERALL rating — the retro FM banner number. `power` (BRS 52–95)
+ *  is the card's overall; rendered big in --line-white (contrast law) inside an
+ *  accent-tinted glass box (the frame is glass, the number is crisp). */
+function OverallBadge({ power, accent }: { power: number; accent: string }) {
   return (
-    <div className="flex items-center" style={{ gap: 8 }}>
-      <Label>FITNESS</Label>
-      <div className="flex" style={{ gap: 2 }}>
-        {Array.from({ length: total }).map((_, i) => (
-          <span
-            key={i}
-            style={{
-              width: 12,
-              height: 7,
-              background: i < filled ? color : 'rgba(255,255,255,0.10)',
-              boxShadow: i < filled
-                ? 'inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(0,0,0,0.35), 0 0 0 1px var(--ink-black)'
-                : 'inset 0 0 0 1px rgba(0,0,0,0.35)',
-            }}
-          />
-        ))}
+    <div
+      style={{
+        flexShrink: 0,
+        width: 92,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 2,
+        padding: '8px 6px',
+        background: 'rgba(0,0,0,0.35)',
+        border: `2px solid ${accent}`,
+        borderRadius: 'var(--radius-sm)',
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.14), 0 0 12px -4px ${accent}`,
+      }}
+    >
+      <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: accent, lineHeight: 1 }}>OVERALL</span>
+      <span style={{ fontFamily: PIXEL, fontSize: 40, color: 'var(--line-white)', lineHeight: 1 }}>{power}</span>
+    </div>
+  );
+}
+
+/** One BIO ledger row — a label:value pair, alternating fill for the dense table. */
+function BioRow({ label, value, color, alt }: { label: string; value: string; color?: string; alt?: boolean }) {
+  return (
+    <div
+      className="flex items-baseline justify-between"
+      style={{
+        gap: 6,
+        background: alt ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.03)',
+        border: '1px solid var(--border)',
+        borderRadius: 4,
+        padding: '4px 6px',
+        minWidth: 0,
+      }}
+    >
+      <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--dust)', flexShrink: 0 }}>{label}</span>
+      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 8.5, color: color ?? 'var(--cream)', lineHeight: 1.2, textAlign: 'right' }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/** One ATTRIBUTES row — label + retro number (--line-white) over a crisp pixel
+ *  bar, banded by value. The bar is segmented (hard pixels, no gradient). */
+function AttrRow({ label, value }: { label: string; value: number }) {
+  const color = attrBand(value);
+  return (
+    <div className="flex flex-col" style={{ gap: 3, minWidth: 0 }}>
+      <div className="flex items-baseline justify-between" style={{ gap: 6 }}>
+        <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: 'var(--dust)' }}>{label}</span>
+        <span style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--line-white)', lineHeight: 1 }}>{value}</span>
       </div>
-      <span style={{ fontFamily: PIXEL, fontSize: 9, color, lineHeight: 1 }}>{Math.round(fitness)}</span>
+      <PixelBar pct={value / 99} color={color} />
+    </div>
+  );
+}
+
+/** A crisp segmented pixel meter (0–1). Hard edges, one light source; no blur,
+ *  no gradient — the pixel-interior law applied to a data widget. */
+function PixelBar({ pct, color, segments = 10 }: { pct: number; color: string; segments?: number }) {
+  const filled = Math.max(0, Math.min(segments, Math.round(pct * segments)));
+  return (
+    <div className="flex" style={{ gap: 1.5 }}>
+      {Array.from({ length: segments }).map((_, i) => (
+        <span
+          key={i}
+          style={{
+            flex: 1,
+            height: 6,
+            background: i < filled ? color : 'rgba(255,255,255,0.07)',
+            boxShadow: i < filled
+              ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 0 0 1px var(--ink-black)'
+              : 'inset 0 0 0 1px rgba(0,0,0,0.4)',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** The "100% MATCH FIT" analogue — a bold match-fitness bar with a status word,
+ *  banded by the fitness percentage. */
+function AvailabilityBar({ fitness }: { fitness: number }) {
+  const pct = Math.max(0, Math.min(100, Math.round(fitness)));
+  const { color } = fitnessMeter(fitness);
+  const status = pct >= 75 ? 'MATCH FIT' : pct >= 50 ? 'TIRING' : 'JADED';
+  return (
+    <div className="flex flex-col" style={{ gap: 5 }}>
+      <div className="flex items-baseline justify-between" style={{ gap: 6 }}>
+        <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.6, color }}>{`${pct}% ${status}`}</span>
+        <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--dust)' }}>MATCH FITNESS</span>
+      </div>
+      <div
+        style={{
+          position: 'relative',
+          height: 12,
+          background: 'rgba(0,0,0,0.4)',
+          border: '1.5px solid var(--ink-black)',
+          borderRadius: 3,
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: '0 auto 0 0',
+            width: `${pct}%`,
+            background: color,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -2px 0 rgba(0,0,0,0.3)',
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The wear-condition chip cell — reuses the card face's `conditionRecipe` so the
+ *  wear grade reads the same word/colour here as the stamp on the card. */
+function ConditionCell({ condition }: { condition?: string }) {
+  const rec = conditionRecipe(condition);
+  return (
+    <div
+      style={{
+        background: 'rgba(0,0,0,0.25)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-sm)',
+        padding: '6px 8px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 3,
+        minWidth: 0,
+      }}
+    >
+      <Label>CONDITION</Label>
+      <span style={{ fontFamily: PIXEL, fontSize: 10.5, color: rec.cc, lineHeight: 1.1 }}>{rec.label}</span>
     </div>
   );
 }

@@ -89,7 +89,16 @@ export const STADIUMS: Stadium[] = [
 // matchReward) is the lever that lands, and it alone already pulls the median snowball
 // back into a challenging band (see the economy sim). ECONOMY §1.
 export const CARD_PICK_COST = 20000;   // was 15000 — the everyday XI upgrade
-export const RARE_PICK_COST = 48000;   // was 35000 — the guaranteed Rare+ upgrade
+export const RARE_PICK_COST = 44000;   // was 48000 — the guaranteed Rare+ CHOICE (the sealed
+                                       // Elite Pack now offers 3 Rare+ for less, so the pick's
+                                       // premium is for KNOWING which card — trimmed to suit.
+
+// ── Card Packs — the SEALED, random acquisition axis (vs the Picks' known-card
+// transfer market). A pack is paid → ripped → its cards ALL kept. Cheaper PER
+// CARD than a pick, but no choice: packs buy VOLUME/variance, picks buy a KNOWN
+// upgrade. The Scout Pack is the cheap-depth successor to the removed Academy.
+export const SCOUT_PACK_COST = 9000;   // 3 Common-heavy bodies — depth for ~£3k/card
+export const ELITE_PACK_COST = 32000;  // 3 cards, ≥1 Rare+ guaranteed — the chase pull
 /** The cheap DEPTH buy: choose 1 of 3 Common/Rare players, priced under a
  *  match-1 win (BASE_WIN_CASH[0] = 6000) so a squad deficiency can be addressed
  *  immediately after the first game. A body, not a star — the elite picks above
@@ -108,6 +117,8 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'card_pick',       name: 'Card Pick',              description: 'Choose 1 of 3 cards',              cost: CARD_PICK_COST, category: 'card' },
   { id: 'rare_pick',       name: 'Rare+ Pick',             description: 'Choose 1 of 3 (Rare or better)',   cost: RARE_PICK_COST, category: 'card' },
   { id: 'player_pick',     name: 'Player Pick',            description: 'Choose 1 of 3 (Common/Rare)',      cost: PLAYER_PICK_COST, category: 'card' },
+  { id: 'scout_pack',      name: 'Scout Pack',             description: '3 sealed cards — Common-heavy',     cost: SCOUT_PACK_COST, category: 'card' },
+  { id: 'elite_pack',      name: 'Elite Pack',             description: '3 sealed cards — guaranteed Rare+', cost: ELITE_PACK_COST, category: 'card' },
   { id: 'tactical_pack',   name: 'Tactical Pack',          description: '3 random tactical cards',          cost: 10000, category: 'action_pack' },
   { id: 'moment_pack',     name: 'Moment Pack',            description: '2 random moment cards',            cost: 20000, category: 'action_pack' },
   { id: 'mind_games_pack', name: 'Mind Games Pack',        description: '2 random mind game cards',         cost: 15000, category: 'action_pack' },
@@ -227,7 +238,11 @@ export function getAcademyTier(tier: number): Academy {
  *  new high-frequency shop so a mid squad upgrades meaningfully (+5 XI power over a run)
  *  without buying its way to elite (+9 under the old numbers). See ECONOMY §1 (anti-
  *  snowball) — this is the single dial that throttles EVERY purchase type at once. */
-export const BASE_WIN_CASH = [6000, 9500, 13000, 18000, 24000];
+// Cups 1–2 nudged +1000 each (6000→7000, 9500→10500) to absorb the removed Academy
+// (early cheap-card source) — the Scout Pack replaces it as a sink, so early income
+// lifts just enough to afford it without shifting the late-cup pacing that the
+// permadeath curve is tuned around. Cups 3–5 unchanged.
+export const BASE_WIN_CASH = [7000, 10500, 13000, 18000, 24000];
 
 /** Stadium payout multiplier by tier (1-indexed) — the compounding income axis. */
 export const STADIUM_MULT = [1.0, 1.25, 1.6, 2.0, 2.5];
