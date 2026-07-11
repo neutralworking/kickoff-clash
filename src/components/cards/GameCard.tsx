@@ -287,8 +287,10 @@ function FoilSweep() {
   );
 }
 
-/** The top-left class medallion + its class label chip. Same slot on every class;
- *  glyph/colour swap by class (the single at-a-glance class tell). */
+/** The class medallion + its class label chip. Anchored BOTTOM-left so it sits
+ *  over the shoulder/lower chest rather than the face (the bust's face reads
+ *  clean). Same slot on every class; glyph/colour swap by class (the single
+ *  at-a-glance class tell). */
 function Medallion({
   med,
   classLabel,
@@ -307,7 +309,9 @@ function Medallion({
     <div
       style={{
         position: 'absolute',
-        top: full ? 8 : 5,
+        // Bottom-left: over the shoulder, clear of the face. Sits above the
+        // fitness bar (player, bottom:0) so it never collides with it.
+        bottom: full ? 12 : 7,
         left: full ? 8 : 5,
         display: 'flex',
         flexDirection: 'column',
