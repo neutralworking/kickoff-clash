@@ -79,6 +79,28 @@ const CREAM_SOFT = '#c9bb95';
 const DUST = '#9a8b6a';
 const STAT_CREAM = '#fbf7ec';
 
+// ATK/DEF accent tints (warm attack / cool defence) — values stay STAT_CREAM
+// (the contrast law: a rating is always near-white); only the label is tinted.
+const ATK_TINT = '#ff8f6a';
+const DEF_TINT = '#8fb6ff';
+
+/**
+ * Length-aware font sizing so a name/role NEVER truncates: we scale the type down
+ * by character count and let the text wrap (see NameBand). A short surname keeps
+ * the full hero size; a long single word ("Featherstonehaughbottomley") or a long
+ * role ("Deep-Lying Playmaker") steps down and/or wraps so it always shows in full
+ * — no ellipsis, at any card size. Pure length heuristic (no layout measurement),
+ * so it's deterministic and cheap; the wrap is the safety net beneath it.
+ */
+function fitFontSize(text: string, base: number): number {
+  const len = text.trim().length;
+  if (len <= 10) return base;
+  if (len <= 14) return base * 0.86;
+  if (len <= 19) return base * 0.72;
+  if (len <= 26) return base * 0.6;
+  return base * 0.5;
+}
+
 export type CardSize = 'grid' | 'full';
 
 export type GameCardModel =
@@ -386,30 +408,32 @@ function NameBand({
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
+        {/* NAME — auto-sized by length + wraps (break-anywhere for a giant single
+            word). NEVER truncates: the band grows and the art (flex:1) yields. */}
         <span
           style={{
             display: 'block',
             fontFamily: PIXEL,
-            fontSize: nameSize ?? (full ? 15 : 8.5),
+            fontSize: fitFontSize(name, nameSize ?? (full ? 15 : 8.5)),
             color: CREAM,
             textShadow: `0 ${full ? 2 : 1}px 0 ${INNER_INK}`,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
+            lineHeight: 1.12,
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
           }}
         >
           {name}
         </span>
+        {/* ROLE — auto-sized + wraps at word boundaries (breaks only if forced). */}
         <span
           style={{
             display: 'block',
             fontFamily: BODY_FONT,
-            fontSize: full ? 11 : 7,
+            fontSize: fitFontSize(role, full ? 11 : 7),
             color: CREAM_SOFT,
             marginTop: full ? 4 : 2,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
+            lineHeight: 1.2,
+            overflowWrap: 'break-word',
           }}
         >
           {role}
@@ -518,8 +542,10 @@ function PlayerFace({ card, full, frameLabel, labelColor, foil }: { card: Card; 
 
   return (
     <Inner background="#0f1510" full={full} foil={foil}>
-      {/* ART REGION — stadium horizon, bust, medallion, stats, ground shadow, wear. */}
-      <div style={{ position: 'relative', flex: 1, minHeight: full ? 96 : 40, background: PLAYER_PITCH_BG, overflow: 'hidden' }}>
+      {/* ART REGION — stadium horizon + bust ONLY. NOTHING overlays the person: the
+          medallion + ATK/DEF moved down into the bands so the face reads fully clear
+          (owner note). Only the ground shadow, fitness bar + wear share the turf. */}
+      <div style={{ position: 'relative', flex: 1, minHeight: full ? 84 : 34, background: PLAYER_PITCH_BG, overflow: 'hidden' }}>
         {/* ground shadow ellipse */}
         <div
           style={{
@@ -533,18 +559,8 @@ function PlayerFace({ card, full, frameLabel, labelColor, foil }: { card: Card; 
             background: GROUND_SHADOW_BG,
           }}
         />
-        {/* the seeded face-first bust (shared club kit) */}
+        {/* the seeded face-first bust (shared club kit) — unobstructed */}
         <div className="pixelated" aria-hidden style={portraitArtStyle(card.id)} />
-
-        {/* class medallion (bottom-left shoulder; no label — keep the face clean) */}
-        <Medallion med={med} classLabel="" chipFg={STAT_CREAM} chipBg="rgba(11,7,3,0.8)" full={full} />
-
-        {/* stats (bottom-right shoulder): ATK / DEF — off the face, mirroring the
-            medallion, above the fitness bar so the face reads clean. */}
-        <div style={{ position: 'absolute', bottom: full ? 12 : 7, right: full ? 9 : 5, display: 'flex', gap: full ? 6 : 3, zIndex: 3 }}>
-          <StatChip value={stats.atk} label="ATK" labelColor="#ff8f6a" full={full} />
-          <StatChip value={stats.def} label="DEF" labelColor="#8fb6ff" full={full} />
-        </div>
 
         {/* fitness bar (folded-in game data) — a thin banded bar on the turf line. */}
         {fit && (
@@ -579,51 +595,101 @@ function PlayerFace({ card, full, frameLabel, labelColor, foil }: { card: Card; 
         }
       />
 
-      {/* META STRIP — rarity foil label (left) · theme + condition/durability (right). */}
+      {/* STAT STRIP — ATK/DEF chips (relocated off the face) on the left; rarity
+          foil label + theme glyph on the right. Shown at every size. */}
       <div
         style={{
           background: META_STRIP_BG,
           borderTop: '1px solid rgba(232,178,60,0.25)',
-          padding: full ? '5px 10px 7px' : '3px 6px 4px',
+          padding: full ? '6px 10px' : '4px 6px 5px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          gap: 4,
+          gap: full ? 8 : 5,
           flexShrink: 0,
           zIndex: 2,
         }}
       >
-        <span style={{ fontFamily: PIXEL, fontSize: full ? 6 : 5, letterSpacing: full ? 1.5 : 0.6, color: labelColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {full ? frameLabel : card.rarity.toUpperCase()}
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: full ? 7 : 4, flexShrink: 0 }}>
-          {full && cond.label !== 'MINT' && (
-            <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: cond.cc, whiteSpace: 'nowrap' }}>
-              {WEAR_GLYPH} {cond.label}
+        {/* ATK / DEF — compact inline chips, warm/cool label, near-white value. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: full ? 6 : 4, flexShrink: 0 }}>
+          <StatPill value={stats.atk} label="ATK" tint={ATK_TINT} full={full} />
+          <StatPill value={stats.def} label="DEF" tint={DEF_TINT} full={full} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: full ? 4 : 3, flexShrink: 1, minWidth: 0, justifyContent: 'flex-end' }}>
+          {full ? (
+            // At full the long foil label moves to its own meta row below; the stat
+            // strip carries the theme (class tell) so the row stays balanced.
+            <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: med.color, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              <span aria-hidden style={{ fontFamily: GLYPH_FONT, fontSize: 8, lineHeight: 1 }}>{med.glyph}</span>
+              {med.label}
             </span>
+          ) : (
+            // Grid: the foil frame already signals rarity, so the strip carries just
+            // the theme glyph (class tell) — no rarity word to crowd the DEF pill.
+            <span aria-hidden style={{ fontFamily: GLYPH_FONT, fontSize: 7, lineHeight: 1, color: med.color, flexShrink: 0 }}>{med.glyph}</span>
           )}
-          {full && (
-            <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: dura.color, whiteSpace: 'nowrap' }}>
-              {dura.label.toUpperCase()}
-            </span>
-          )}
-          <span style={{ fontFamily: PIXEL, fontSize: full ? 6 : 5, letterSpacing: 0.5, color: med.color, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: full ? 3 : 2 }}>
-            <span aria-hidden style={{ fontFamily: GLYPH_FONT }}>{med.glyph}</span>
-            {full && med.label}
-          </span>
         </div>
       </div>
+
+      {/* META STRIP — rarity foil label (left, its own roomy row) · condition +
+          durability (right). Full only; grid keeps just the compact stat strip. */}
+      {full && (
+        <div
+          style={{
+            background: META_STRIP_BG,
+            borderTop: '1px solid rgba(232,178,60,0.14)',
+            padding: '4px 10px 7px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '3px 8px',
+            flexShrink: 0,
+            zIndex: 2,
+          }}
+        >
+          <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1.2, color: labelColor, whiteSpace: 'nowrap' }}>
+            {frameLabel}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {cond.label !== 'MINT' && (
+              <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: cond.cc, whiteSpace: 'nowrap' }}>
+                {WEAR_GLYPH} {cond.label}
+              </span>
+            )}
+            {/* Only surface a NOTABLE durability (Glass/Iron/Phoenix…) — 'standard'
+                is the quiet default, hidden like MINT so the row never crowds. */}
+            {card.durability !== 'standard' && (
+              <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: dura.color, whiteSpace: 'nowrap' }}>
+                {dura.label.toUpperCase()}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </Inner>
   );
 }
 
-/** A stacked ATK/DEF stat chip — big Silkscreen value on a dark rounded chip. */
-function StatChip({ value, label, labelColor, full }: { value: number; label: string; labelColor: string; full: boolean }) {
+/** A compact inline ATK/DEF stat pill for the meta strip — tinted label + a
+ *  near-white value (the contrast law: a rating stays STAT_CREAM). Lives in a
+ *  card band, never over the portrait. */
+function StatPill({ value, label, tint, full }: { value: number; label: string; tint: string; full: boolean }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(11,7,3,0.74)', borderRadius: full ? 6 : 4, padding: full ? '3px 7px' : '2px 4px' }}>
-      <span style={{ fontFamily: PIXEL, fontSize: full ? 18 : 11, lineHeight: 0.9, color: STAT_CREAM, textShadow: `0 ${full ? 2 : 1}px 0 ${INNER_INK}` }}>{value}</span>
-      <span style={{ fontFamily: PIXEL, fontSize: full ? 5 : 4, letterSpacing: full ? 1 : 0.5, color: labelColor, marginTop: 1 }}>{label}</span>
-    </div>
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: full ? 4 : 2,
+        background: 'rgba(11,7,3,0.55)',
+        border: `1px solid ${tint}55`,
+        borderRadius: full ? 5 : 3,
+        padding: full ? '2px 6px' : '1px 4px',
+      }}
+    >
+      <span style={{ fontFamily: PIXEL, fontSize: full ? 6 : 5, letterSpacing: full ? 1 : 0.5, color: tint, lineHeight: 1 }}>{label}</span>
+      <span style={{ fontFamily: PIXEL, fontSize: full ? 13 : 9, lineHeight: 1, color: STAT_CREAM, textShadow: `0 1px 0 ${INNER_INK}` }}>{value}</span>
+    </span>
   );
 }
 
