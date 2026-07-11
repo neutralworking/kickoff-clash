@@ -335,20 +335,24 @@ function Medallion({
       >
         <span style={{ fontFamily: GLYPH_FONT, fontSize: full ? 18 : 11, lineHeight: 1, color: med.color }}>{med.glyph}</span>
       </div>
-      <span
-        style={{
-          fontFamily: PIXEL,
-          fontSize: full ? 6 : 5,
-          letterSpacing: full ? 1 : 0.5,
-          lineHeight: 1,
-          color: chipFg,
-          background: chipBg,
-          padding: full ? '2px 4px' : '1px 3px',
-          borderRadius: 3,
-        }}
-      >
-        {classLabel}
-      </span>
+      {/* Class label chip — omitted when empty (the player face drops it; the
+          pitch background + bust already tell you it's a player). */}
+      {classLabel && (
+        <span
+          style={{
+            fontFamily: PIXEL,
+            fontSize: full ? 6 : 5,
+            letterSpacing: full ? 1 : 0.5,
+            lineHeight: 1,
+            color: chipFg,
+            background: chipBg,
+            padding: full ? '2px 4px' : '1px 3px',
+            borderRadius: 3,
+          }}
+        >
+          {classLabel}
+        </span>
+      )}
     </div>
   );
 }
@@ -532,11 +536,12 @@ function PlayerFace({ card, full, frameLabel, labelColor, foil }: { card: Card; 
         {/* the seeded face-first bust (shared club kit) */}
         <div className="pixelated" aria-hidden style={portraitArtStyle(card.id)} />
 
-        {/* class medallion (top-left) */}
-        <Medallion med={med} classLabel="PLAYER" chipFg={STAT_CREAM} chipBg="rgba(11,7,3,0.8)" full={full} />
+        {/* class medallion (bottom-left shoulder; no label — keep the face clean) */}
+        <Medallion med={med} classLabel="" chipFg={STAT_CREAM} chipBg="rgba(11,7,3,0.8)" full={full} />
 
-        {/* stats (top-right): ATK / DEF */}
-        <div style={{ position: 'absolute', top: full ? 9 : 5, right: full ? 9 : 5, display: 'flex', gap: full ? 6 : 3, zIndex: 3 }}>
+        {/* stats (bottom-right shoulder): ATK / DEF — off the face, mirroring the
+            medallion, above the fitness bar so the face reads clean. */}
+        <div style={{ position: 'absolute', bottom: full ? 12 : 7, right: full ? 9 : 5, display: 'flex', gap: full ? 6 : 3, zIndex: 3 }}>
           <StatChip value={stats.atk} label="ATK" labelColor="#ff8f6a" full={full} />
           <StatChip value={stats.def} label="DEF" labelColor="#8fb6ff" full={full} />
         </div>
