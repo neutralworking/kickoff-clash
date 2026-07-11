@@ -42,13 +42,13 @@ import {
   lastName,
   eligiblePositions,
   fitnessMeter,
-  themeMedallion,
   tacticMedallion,
   MANAGER_MEDALLION,
   DURABILITY_META,
   type ClassMedallion,
 } from './cardTokens';
-import { ChargePips } from './ContestIcons';
+import { ChargePips, ContestIcons } from './ContestIcons';
+import { contestsForCard } from '../../lib/contest-map';
 import {
   portraitArtStyle,
   rarityFrame,
@@ -529,7 +529,9 @@ function PlayerFace({ card, full, frameLabel, labelColor, foil }: { card: Card; 
   const stats = deriveStats(card);
   const name = lastName(card.name).toUpperCase();
   const role = card.tacticalRole ?? card.archetype;
-  const med = themeMedallion(card.personalityTheme);
+  // The card's "class picture" is the CONTEST(S) it plays in (not personality —
+  // that's not a game concept). Sits next to the role below the portrait.
+  const contests = contestsForCard(card);
   const cond = conditionRecipe(card.condition);
   const dura = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
   const hasFitness = typeof card.fitness === 'number';
@@ -542,9 +544,45 @@ function PlayerFace({ card, full, frameLabel, labelColor, foil }: { card: Card; 
 
   return (
     <Inner background="#0f1510" full={full} foil={foil}>
-      {/* ART REGION — stadium horizon + bust ONLY. NOTHING overlays the person: the
-          medallion + ATK/DEF moved down into the bands so the face reads fully clear
-          (owner note). Only the ground shadow, fitness bar + wear share the turf. */}
+      {/* NAME — ABOVE the picture (owner). Name left, position pills right. */}
+      <div
+        style={{
+          background: NAME_BAND_BG,
+          borderBottom: `2px solid ${INNER_INK}`,
+          padding: full ? '7px 10px' : '4px 6px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: full ? 8 : 4,
+          flexShrink: 0,
+          zIndex: 2,
+        }}
+      >
+        <span
+          style={{
+            fontFamily: PIXEL,
+            color: CREAM,
+            fontSize: fitFontSize(name, full ? 15 : 9),
+            lineHeight: 1.1,
+            letterSpacing: 0.3,
+            overflowWrap: 'anywhere',
+            minWidth: 0,
+            textShadow: `0 2px 0 ${INNER_INK}`,
+          }}
+        >
+          {name}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: full ? 4 : 2, flexShrink: 0 }}>
+          {secondary.map((p) => (
+            <PositionPill key={p} pos={p} primary={false} full={full} />
+          ))}
+          <PositionPill pos={primaryPos} primary full={full} />
+        </div>
+      </div>
+
+      {/* ART REGION — stadium horizon + bust ONLY. NOTHING overlays the person so the
+          face reads fully clear (owner note). Only the ground shadow, fitness bar +
+          wear share the turf. */}
       <div style={{ position: 'relative', flex: 1, minHeight: full ? 84 : 34, background: PLAYER_PITCH_BG, overflow: 'hidden' }}>
         {/* ground shadow ellipse */}
         <div
@@ -580,54 +618,44 @@ function PlayerFace({ card, full, frameLabel, labelColor, foil }: { card: Card; 
         )}
       </div>
 
-      {/* NAME BAND — name + role, position pills on the right. */}
-      <NameBand
-        name={name}
-        role={role}
-        full={full}
-        right={
-          <>
-            {secondary.map((p) => (
-              <PositionPill key={p} pos={p} primary={false} full={full} />
-            ))}
-            <PositionPill pos={primaryPos} primary full={full} />
-          </>
-        }
-      />
-
-      {/* STAT STRIP — ATK/DEF chips (relocated off the face) on the left; rarity
-          foil label + theme glyph on the right. Shown at every size. */}
+      {/* ROLE + CONTEST ICONS then ATK/DEF — stacked so the role gets a full line
+          (it never squeezes into a thin column). Row 1: role + the contest badges
+          it plays in beside it (the "class picture", owner note). Row 2: ATK/DEF. */}
       <div
         style={{
-          background: META_STRIP_BG,
-          borderTop: '1px solid rgba(232,178,60,0.25)',
+          background: NAME_BAND_BG,
+          borderTop: `2px solid ${INNER_INK}`,
           padding: full ? '6px 10px' : '4px 6px 5px',
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: full ? 8 : 5,
+          flexDirection: 'column',
+          gap: full ? 5 : 3,
           flexShrink: 0,
           zIndex: 2,
         }}
       >
+        {/* role (fills the width) + contest badges right beside it */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: full ? 6 : 4 }}>
+          <span
+            style={{
+              fontFamily: BODY_FONT,
+              fontWeight: 500,
+              color: CREAM_SOFT,
+              fontSize: fitFontSize(role, full ? 11 : 7.5),
+              lineHeight: 1.2,
+              overflowWrap: 'break-word',
+              wordBreak: 'normal',
+              minWidth: 0,
+              flex: 1,
+            }}
+          >
+            {role}
+          </span>
+          <ContestIcons keys={contests} full={full} align="end" />
+        </div>
         {/* ATK / DEF — compact inline chips, warm/cool label, near-white value. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: full ? 6 : 4, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: full ? 6 : 4 }}>
           <StatPill value={stats.atk} label="ATK" tint={ATK_TINT} full={full} />
           <StatPill value={stats.def} label="DEF" tint={DEF_TINT} full={full} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: full ? 4 : 3, flexShrink: 1, minWidth: 0, justifyContent: 'flex-end' }}>
-          {full ? (
-            // At full the long foil label moves to its own meta row below; the stat
-            // strip carries the theme (class tell) so the row stays balanced.
-            <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: med.color, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-              <span aria-hidden style={{ fontFamily: GLYPH_FONT, fontSize: 8, lineHeight: 1 }}>{med.glyph}</span>
-              {med.label}
-            </span>
-          ) : (
-            // Grid: the foil frame already signals rarity, so the strip carries just
-            // the theme glyph (class tell) — no rarity word to crowd the DEF pill.
-            <span aria-hidden style={{ fontFamily: GLYPH_FONT, fontSize: 7, lineHeight: 1, color: med.color, flexShrink: 0 }}>{med.glyph}</span>
-          )}
         </div>
       </div>
 
