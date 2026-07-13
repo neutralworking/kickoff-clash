@@ -30,12 +30,11 @@
 
 import { useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import type { Card, SlottedCard } from '../lib/scoring';
+import type { Card } from '../lib/scoring';
 import type { Formation } from '../lib/formations';
 import { getFormation, positionFitsSlot } from '../lib/formations';
 import type { TeamIntent, OpponentBuild } from '../lib/run';
 import type { JokerCard } from '../lib/jokers';
-import { findConnections } from '../lib/chemistry';
 import { SCOUT_COST } from '../lib/economy';
 import {
   type XISelection,
@@ -52,7 +51,11 @@ import { initMatch, evaluateSplit } from '../lib/match-v5';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import SquadGallery from './SquadGallery';
-import { PIXEL, RARITY_COLOR, lastName } from './cards/cardTokens';
+import { ContestHero } from './ContestMeters';
+import { ClassGem } from './cards/ContestIcons';
+import { classOfCard } from '../lib/contest-map';
+import { PIXEL, RARITY_COLOR, POSITION_COLOR, lastName } from './cards/cardTokens';
+import { COMPETENCE_COLOR } from '../lib/team-select';
 import { PosTag, FitnessBar, BenchTile, BenchCover, LineupSlot, fitnessOf } from './lineup';
 import { deriveStats } from '../lib/funnel';
 
@@ -264,6 +267,9 @@ export default function SquadScreen({
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [showScout, setShowScout] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
+  // v4: the MISFIT chip is tap-to-reveal — toggles an amber outline on the
+  // incompetent tokens on the pitch.
+  const [misfitReveal, setMisfitReveal] = useState(false);
   const [placedSlot, setPlacedSlot] = useState<number | null>(null);
   const [modal, setModal] = useState<GameCardModel | null>(null);
 
@@ -303,13 +309,6 @@ export default function SquadScreen({
     () => sel.bench.map((id) => byId.get(id)).filter((c): c is Card => !!c),
     [sel.bench, byId],
   );
-  const xiAvg = xiCards.length ? Math.round(xiCards.reduce((a, c) => a + c.power, 0) / xiCards.length) : 0;
-
-  // Chemistry signal: live synergy connections in the current XI.
-  const chemBonus = useMemo(() => {
-    const slotted: SlottedCard[] = xiCards.map((card, i) => ({ card, slot: `slot_${i}` }));
-    return findConnections(slotted).reduce((s, c) => s + (c.bonus || 0), 0);
-  }, [xiCards]);
 
   // Squad status counts (chips only when nonzero; injuries/fitness only exist in talk).
   const injuredCount = xiCards.filter((c) => c.injured).length;
@@ -347,6 +346,24 @@ export default function SquadScreen({
     );
     return evaluateSplit(state, previewJokers);
   }, [filled, slotCount, sel.starters, sel.bench, byId, formation, previewJokers, seed, round, opponent, intent, opponentPower]);
+
+  // Δ-vs-balanced (v4 hero badge) — the same projection at intent:'balanced', so
+  // the NET badge reads how far the CURRENT intent moves the net off neutral.
+  const balancedNet = useMemo(() => {
+    if (filled !== slotCount || seed == null || round == null) return 0;
+    const xi = sel.starters.map((id) => byId.get(id as number)!);
+    const bench = sel.bench.map((id) => byId.get(id)).filter((c): c is Card => !!c);
+    const state = initMatch(
+      xi, bench, [], formation, 'total-football', previewJokers,
+      seed, round, opponent.style, opponent.weaknessArchetype,
+      {}, 'balanced', opponentPower,
+    );
+    return evaluateSplit(state, previewJokers).forecast.net;
+  }, [filled, slotCount, sel.starters, sel.bench, byId, formation, previewJokers, seed, round, opponent, opponentPower]);
+  const deltaVsBalanced = previewSplit ? previewSplit.forecast.net - balancedNet : 0;
+
+  // Live effective stats per starter card (previewSplit.cardStats), for the tokens.
+  const statsFor = (cardId: number) => previewSplit?.cardStats[cardId];
 
   // ── Lineup operations ────────────────────────────────────────────────────
   function switchFormation(id: string) {
@@ -541,8 +558,24 @@ export default function SquadScreen({
           </span>
         </div>
 
-        <StatBadge value={xiAvg || '--'} label="AVG" />
-        <StatBadge value={`+${chemBonus}`} label="CHEM" accent="var(--gold)" />
+        {mode === 'talk' && (
+          <button
+            onClick={() => setShowGallery(true)}
+            className="active:scale-95 glass-surface sheen shrink-0 relative overflow-hidden"
+            style={{
+              height: 42,
+              padding: '0 10px',
+              borderRadius: 'var(--radius-sm)',
+              boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
+              fontFamily: PIXEL,
+              fontSize: 8.5,
+              letterSpacing: 0.5,
+              color: 'var(--cream)',
+            }}
+          >
+            <span className="relative" style={{ zIndex: 2 }}>SQUAD</span>
+          </button>
+        )}
 
         <button
           onClick={confirm}
@@ -570,55 +603,13 @@ export default function SquadScreen({
         </button>
       </div>
 
-      {/* ── Scout Report entry — opponent name/style/strength free ────────── */}
-      <div className="shrink-0 px-3 mt-1.5 flex items-stretch gap-1.5">
-        <button
-          onClick={() => setShowScout(true)}
-          className="glass-surface sheen flex flex-col justify-center px-2.5 flex-1 min-w-0 active:scale-[0.98] relative overflow-hidden text-left"
-          style={{
-            height: 44,
-            borderRadius: 'var(--radius-sm)',
-            border: scoutUnlocked ? '1px solid var(--gold)' : undefined,
-            boxShadow: scoutUnlocked
-              ? 'inset 0 1px 0 0 var(--glass-highlight), 0 0 10px var(--gold-glow), var(--depth-1)'
-              : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
-            transition: 'transform 0.12s ease',
-          }}
-        >
-          <span className="flex items-center gap-1.5 relative" style={{ zIndex: 2 }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: scoutUnlocked ? 'var(--gold)' : 'var(--dust)' }}>
-              SCOUT REPORT
-            </span>
-            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.5, color: 'var(--dust)', marginLeft: 'auto' }}>
-              PWR {Math.round(opponent.baseStrength)}
-            </span>
-          </span>
-          <span className="flex items-center gap-1.5 relative min-w-0" style={{ zIndex: 2, marginTop: 2 }}>
-            <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 11.5, color: 'var(--cream)' }}>{opponent.name}</span>
-            <span className="shrink-0" style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.5, color: 'var(--kit-blue)', marginLeft: 'auto' }}>
-              {opponent.style.toUpperCase()}
-            </span>
-          </span>
-        </button>
-
-        {mode === 'talk' && (
-          <button
-            onClick={() => setShowGallery(true)}
-            className="active:scale-95 glass-surface sheen shrink-0 relative overflow-hidden"
-            style={{
-              height: 44,
-              padding: '0 11px',
-              borderRadius: 'var(--radius-sm)',
-              boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
-              fontFamily: PIXEL,
-              fontSize: 9,
-              letterSpacing: 0.5,
-              color: 'var(--cream)',
-            }}
-          >
-            <span className="relative" style={{ zIndex: 2 }}>SQUAD</span>
-          </button>
-        )}
+      {/* ── Projected Contest (hero) — the live forecast vs the opponent ───── */}
+      <div className="shrink-0 px-3 mt-1.5">
+        <ContestHero
+          forecast={previewSplit ? previewSplit.forecast : null}
+          deltaVsBalanced={deltaVsBalanced}
+          oppName={opponent.name}
+        />
       </div>
 
       {/* ── Control bar: shape · intent · manager (draft) ─────────────────── */}
@@ -693,8 +684,49 @@ export default function SquadScreen({
         )}
       </div>
 
-      {/* ── Squad status chips (only when something needs attention) ──────── */}
-      {(injuredCount > 0 || tiredCount > 0 || misfitCount > 0 || suspendedCards.length > 0) && (
+      {/* ── Meta line — scout + manager collapsed to names (▾ report), MISFIT
+          tap-to-reveal, plus any talk-mode status chips. ─────────────────── */}
+      <div className="shrink-0 px-3 mt-1.5 flex items-center gap-1.5">
+        <button
+          onClick={() => setShowScout(true)}
+          className="flex items-center gap-1.5 active:scale-[0.98] min-w-0"
+          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', minWidth: 0 }}
+        >
+          <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--kit-blue)', minWidth: 0 }}>
+            SCOUT: {opponent.name.toUpperCase()}
+          </span>
+          {mode === 'talk' && manager == null && jokers?.[0] && (
+            <>
+              <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--dust)', flexShrink: 0 }} />
+              <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--cream-soft)' }}>MGR {jokers[0].name.toUpperCase()}</span>
+            </>
+          )}
+          <span style={{ fontFamily: PIXEL, fontSize: 8, color: scoutUnlocked ? 'var(--gold)' : 'var(--dust)', flexShrink: 0 }}>
+            {'▾'} report
+          </span>
+        </button>
+
+        <button
+          onClick={() => setMisfitReveal((v) => !v)}
+          className="active:scale-95 shrink-0 ml-auto"
+          style={{
+            fontFamily: PIXEL,
+            fontSize: 8,
+            letterSpacing: 0.3,
+            color: misfitCount === 0 ? 'var(--dust)' : misfitReveal ? 'var(--ink-black)' : 'var(--amber)',
+            background: misfitCount === 0 ? 'transparent' : misfitReveal ? 'var(--amber)' : 'rgba(245,158,11,0.12)',
+            border: `1px solid ${misfitCount === 0 ? 'var(--border)' : 'rgba(245,158,11,0.5)'}`,
+            padding: '4px 7px',
+            borderRadius: 'var(--radius-sm)',
+            cursor: 'pointer',
+          }}
+        >
+          {'⚠'} {misfitCount} MISFIT
+        </button>
+      </div>
+
+      {/* ── Talk-mode status chips (suspended / injured / tired) ───────────── */}
+      {(injuredCount > 0 || tiredCount > 0 || suspendedCards.length > 0) && (
         <div className="shrink-0 px-3 mt-1 flex items-center gap-1.5">
           {suspendedCards.length > 0 && (
             <StatusChip
@@ -704,7 +736,6 @@ export default function SquadScreen({
           )}
           {injuredCount > 0 && <StatusChip label={`${injuredCount} INJ`} color="var(--danger)" />}
           {tiredCount > 0 && <StatusChip label={`${tiredCount} TIRED`} color="var(--gold)" />}
-          {misfitCount > 0 && <StatusChip label={`${misfitCount} MISFIT`} color="var(--gold)" />}
         </div>
       )}
 
@@ -726,17 +757,14 @@ export default function SquadScreen({
           {formation.slots.map((slot, i) => {
             const cardId = sel.starters[i];
             const card = cardId != null ? byId.get(cardId) : undefined;
-            // The real MISFIT definition (competenceByIndex): incompetent only —
-            // a "secondary" fit (playable, not ideal) no longer flags red.
-            const misfit = competenceByIndex[i] === 'incompetent';
             return (
               <LineupSlot
                 key={i}
                 slot={slot}
                 card={card}
-                misfit={misfit}
-                showMisfit
-                showFitness={showFitness}
+                competence={competenceByIndex[i]}
+                stats={card ? statsFor(card.id) : undefined}
+                misfitReveal={misfitReveal}
                 justPlaced={placedSlot === i}
                 dim={drag?.from === 'slot' && drag.index === i}
                 dropHint={dropTarget?.kind === 'slot' && dropTarget.index === i}
@@ -755,9 +783,13 @@ export default function SquadScreen({
       {/* ── Bench ──────────────────────────────────────────────────────────── */}
       <div className="shrink-0 px-3 mt-1.5">
         <div className="flex items-center gap-2 mb-1">
-          <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)' }}>
-            SUBS {sel.bench.length}/{BENCH_SIZE}
-          </span>
+          <button
+            onClick={() => setOverlay({ kind: 'bench' })}
+            className="active:scale-95 flex items-center gap-1"
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--gold)' }}
+          >
+            BENCH {sel.bench.length}/{BENCH_SIZE} <span style={{ fontSize: 9 }}>{'▸'} EDIT</span>
+          </button>
           <BenchCover benchCards={benchCards} />
           <div className="flex items-center gap-1 ml-auto">
             <ActionBtn label="AUTO" accent="var(--gold)" onClick={autoPick} />
@@ -815,43 +847,6 @@ export default function SquadScreen({
               </button>
             );
           })}
-        </div>
-      </div>
-
-      {/* ── Reserves — every deck player not named; drag onto pitch/bench ──── */}
-      <div className="shrink-0 px-3 mt-1.5">
-        <div className="flex items-center gap-2 mb-1">
-          <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)' }}>
-            RESERVES {reserves.length}
-          </span>
-        </div>
-        <div
-          ref={reservesRef}
-          data-kc="reserves"
-          className="flex gap-1 overflow-x-auto"
-          style={{
-            overscrollBehavior: 'contain',
-            minHeight: 66,
-            padding: 2,
-            borderRadius: 'var(--radius-sm)',
-            border: dropTarget?.kind === 'reserves' ? '1px solid var(--gold)' : '1px solid transparent',
-            boxShadow: dropTarget?.kind === 'reserves' ? '0 0 0 2px var(--gold-glow)' : undefined,
-            transition: 'box-shadow 0.12s ease',
-          }}
-        >
-          {reserves.map((c) => (
-            <div key={c.id} style={{ width: 64, flexShrink: 0 }}>
-              <BenchTile
-                card={c}
-                touchAction="pan-x"
-                dim={drag?.from === 'reserve' && drag.id === c.id}
-                onPointerDown={(e) => beginPointer({ from: 'reserve', index: -1, id: c.id }, e)}
-                onPointerMove={!drag ? movePointer : undefined}
-                onPointerUp={!drag ? endPointer : undefined}
-                onPointerCancel={cancelPointer}
-              />
-            </div>
-          ))}
         </div>
       </div>
 
@@ -1049,21 +1044,6 @@ function GhostTile({ card }: { card: Card }) {
 // ---------------------------------------------------------------------------
 // StatBadge / StatusChip / ActionBtn — compact glass readouts & buttons.
 // ---------------------------------------------------------------------------
-
-function StatBadge({ value, label, accent }: { value: string | number; label: string; accent?: string }) {
-  // Long values (e.g. a four-digit chemistry sum) step down so they never clip.
-  const len = String(value).length;
-  const fs = len > 4 ? 9 : len > 3 ? 11 : 14;
-  return (
-    <div
-      className="glass-surface flex flex-col items-center justify-center shrink-0 relative overflow-hidden"
-      style={{ width: 44, height: 42, borderRadius: 'var(--radius-sm)', boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)' }}
-    >
-      <span style={{ fontFamily: PIXEL, fontSize: fs, lineHeight: 1, color: accent ?? 'var(--cream)' }}>{value}</span>
-      <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)', marginTop: 2 }}>{label}</span>
-    </div>
-  );
-}
 
 function StatusChip({ label, color }: { label: string; color: string }) {
   return (
@@ -1285,47 +1265,62 @@ function PlayerSheet({
   }, [available, activeSlot]);
 
   return (
-    <div className="grid grid-cols-3 gap-2 overflow-y-auto px-3 pt-1 pb-2 relative" style={{ overscrollBehavior: 'contain', zIndex: 2 }}>
-      {sorted.map((c) => {
-        const eligible = !activeSlot || positionFitsSlot(c.position, activeSlot);
-        return (
-          <div key={c.id} className="relative" style={{ minWidth: 0 }}>
-            <GameCard model={{ variant: 'player', card: c }} dimmed={!eligible} onClick={() => onPick(c.id)} ariaLabel={`Place ${c.name}`} />
-            {showFitness && (
-              <div className="absolute left-0 right-0" style={{ bottom: 0, padding: '0 2px 2px' }}>
-                <FitnessBar card={c} />
-              </div>
-            )}
-            <span
-              role="button"
-              aria-label={`Inspect ${c.name}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onInspect(c);
-              }}
-              className="absolute flex items-center justify-center active:scale-90"
-              style={{
-                // Hangs off the card corner so it never covers the rating
-                // (top-right of the card face is the score).
-                top: -5,
-                right: -5,
-                width: 16,
-                height: 16,
-                borderRadius: '50%',
-                background: 'var(--ink-black)',
-                border: '1.5px solid var(--line-white)',
-                color: 'var(--line-white)',
-                fontFamily: PIXEL,
-                fontSize: 8,
-                lineHeight: 1,
-                zIndex: 2,
-              }}
-            >
-              i
+    <div className="flex flex-col gap-1.5 overflow-y-auto px-3 pt-1 pb-2 relative" style={{ overscrollBehavior: 'contain', zIndex: 2 }}>
+      {/* Competence legend (v4 handoff): the pill colour shows fit in the slot. */}
+      {activeSlot && (
+        <div className="flex items-center gap-3 pb-1">
+          {(['primary', 'secondary', 'incompetent'] as const).map((k) => (
+            <span key={k} className="flex items-center gap-1" style={{ fontSize: 8, color: 'var(--dust)', fontFamily: PIXEL }}>
+              <span style={{ width: 9, height: 9, borderRadius: 2, background: COMPETENCE_COLOR[k].bg, display: 'inline-block' }} />
+              {k === 'primary' ? 'BEST' : k === 'secondary' ? 'OK' : 'MISFIT'}
             </span>
+          ))}
+        </div>
+      )}
+      {sorted.map((c) => {
+        const comp = activeSlot ? competenceOf(c.position, activeSlot) : 'primary';
+        const pillBg = activeSlot ? COMPETENCE_COLOR[comp].bg : POSITION_COLOR[c.position] ?? 'var(--dust)';
+        const pillText = activeSlot ? COMPETENCE_COLOR[comp].text : 'var(--ink-black)';
+        const st = deriveStats(c);
+        return (
+          <div
+            key={c.id}
+            className="flex items-center gap-2 active:scale-[0.99]"
+            style={{
+              background: 'linear-gradient(180deg, #1c1610, #120d07)',
+              border: '1px solid rgba(154,139,115,0.15)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '6px 9px',
+            }}
+          >
+            <ClassGem cls={classOfCard(c)} size={22} />
+            <span style={{ fontFamily: PIXEL, fontSize: 7, lineHeight: 1, color: pillText, background: pillBg, padding: '3px 5px', borderRadius: 3, flexShrink: 0 }}>{c.position}</span>
+            <button
+              onClick={() => onInspect(c)}
+              className="flex flex-col items-start min-w-0 flex-1 active:scale-[0.98]"
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', minWidth: 0, textAlign: 'left' }}
+              aria-label={`Inspect ${c.name}`}
+            >
+              <span className="truncate w-full" style={{ fontFamily: PIXEL, fontSize: 8.5, color: 'var(--cream)' }}>{lastName(c.name)}</span>
+              {showFitness && <FitnessBar card={c} width={64} />}
+            </button>
+            <span style={{ fontFamily: PIXEL, fontSize: 9, color: '#ff8f6a' }}>{st.atk}</span>
+            <span style={{ fontSize: 10, color: 'var(--dust)' }}>/</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 9, color: '#8fb6ff' }}>{st.def}</span>
+            <button
+              onClick={() => onPick(c.id)}
+              className="active:scale-90"
+              aria-label={`Add ${c.name}`}
+              style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--ink-black)', background: 'var(--gold)', padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+            >
+              +
+            </button>
           </div>
         );
       })}
+      {sorted.length === 0 && (
+        <div style={{ fontSize: 11, color: 'var(--dust)', padding: '8px 0' }}>No players available — every card is named.</div>
+      )}
     </div>
   );
 }
