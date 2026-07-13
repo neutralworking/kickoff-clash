@@ -26,6 +26,23 @@ export function startersFilled(sel: XISelection): number {
   return sel.starters.filter((x) => x != null).length;
 }
 
+// ---------------------------------------------------------------------------
+// Competence — how well a card fits the slot it's placed in. `slot.accepts` is
+// already ordered best-fit-first (formations.ts SLOT_ACCEPTS): index 0 is the
+// slot's nominal position, later entries are looser fits, and anything absent
+// is a genuine mismatch. This is the real data behind "MISFIT" — no new
+// taxonomy, just reading the eligibility table we already draft against.
+// ---------------------------------------------------------------------------
+
+export type Competence = 'primary' | 'secondary' | 'incompetent';
+
+export function competenceOf(cardPosition: string, slot: { accepts: string[] }): Competence {
+  const idx = slot.accepts.indexOf(cardPosition);
+  if (idx === 0) return 'primary';
+  if (idx > 0) return 'secondary';
+  return 'incompetent';
+}
+
 /**
  * Auto-fill the selection. `mode: 'all'` clears first and picks a full XI+bench;
  * `mode: 'empty'` keeps current placements and only fills the gaps. Eligible
