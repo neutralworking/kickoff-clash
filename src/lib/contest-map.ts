@@ -120,3 +120,55 @@ export function contestsForTactic(tacticId: string): ContestKey[] {
   const raw = TACTIC_CONTESTS[tacticId] ?? [];
   return CONTEST_ORDER.filter((k) => raw.includes(k));
 }
+
+// ---------------------------------------------------------------------------
+// PLAYER CLASS — the v4 squad-screen "class gem" taxonomy (Creator / Finisher /
+// Destroyer / Controller / Engine / Wall), grounded in the real `archetype`
+// field (13 archetypes → 6 classes) and each tied 1:1 to the contest it most
+// directly serves, so the class badge and the six-contest system agree —
+// FINISHER *is* the card that feeds FINISH, not a separate, invented taxonomy.
+// ---------------------------------------------------------------------------
+
+export type PlayerClass = 'Creator' | 'Finisher' | 'Destroyer' | 'Controller' | 'Engine' | 'Wall';
+
+const ARCHETYPE_TO_CLASS: Record<string, PlayerClass> = {
+  // creation lane — the chance-makers/carriers
+  Creator: 'Creator', Dribbler: 'Creator', Sprinter: 'Creator',
+  // finishing lane — pure goal threat
+  Striker: 'Finisher', Target: 'Finisher',
+  // ball-winning aggression
+  Destroyer: 'Destroyer', Powerhouse: 'Destroyer',
+  // possession orchestration + leadership
+  Passer: 'Controller', Controller: 'Controller', Commander: 'Controller',
+  // box-to-box — its own distinct identity
+  Engine: 'Engine',
+  // the last line
+  Cover: 'Wall', Shotstopper: 'Wall',
+  GK: 'Wall', // the opponent generator's bare keeper archetype
+};
+
+export interface PlayerClassMeta {
+  key: PlayerClass;
+  label: string;
+  /** The handoff's exact class colour. */
+  color: string;
+  /** The contest this class most directly serves — the glyph is borrowed from
+   *  CONTEST_ICON[contest] at the render layer, so the class badge and the
+   *  contest icon system share one pixel-art vocabulary, not two. */
+  contest: ContestKey;
+}
+
+export const PLAYER_CLASS_META: Record<PlayerClass, PlayerClassMeta> = {
+  Creator:    { key: 'Creator',    label: 'CREATOR',    color: '#a855f7', contest: 'create' },
+  Finisher:   { key: 'Finisher',   label: 'FINISHER',   color: '#f2c14e', contest: 'finish' },
+  Destroyer:  { key: 'Destroyer',  label: 'DESTROYER',  color: '#e23b35', contest: 'break' },
+  Controller: { key: 'Controller', label: 'CONTROLLER', color: '#4a9eff', contest: 'keep' },
+  Engine:     { key: 'Engine',     label: 'ENGINE',     color: '#e8621a', contest: 'press' },
+  Wall:       { key: 'Wall',       label: 'WALL',       color: '#4a8f6b', contest: 'stop' },
+};
+
+/** A card's class — every real archetype is covered; Controller is the sane
+ *  fallback for anything unmapped (a generalist, matching its own class). */
+export function classOfCard(card: Pick<Card, 'archetype'>): PlayerClass {
+  return ARCHETYPE_TO_CLASS[card.archetype] ?? 'Controller';
+}
