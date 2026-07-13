@@ -1020,7 +1020,6 @@ function XIOverlay({
             slot={slot}
             card={xi[i]}
             justPlaced={false}
-            showFitness
             onClick={xi[i] ? () => onInspect(xi[i]!) : undefined}
           />
         ))}

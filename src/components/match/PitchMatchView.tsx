@@ -23,6 +23,9 @@ import CardModal from '../cards/CardModal';
 import type { GameCardModel } from '../cards/GameCard';
 import { PIXEL, lastName, POSITION_COLOR, RARITY_COLOR } from '../cards/cardTokens';
 import { portraitBackgroundStyle, rarityFrame, HERO, fitnessColor as heroFitnessColor } from '../cards/portrait';
+import { PitchToken } from '../PitchToken';
+import { ContestMatch } from '../ContestMeters';
+import { competenceOf, type Competence } from '../../lib/team-select';
 
 interface PitchMatchViewProps {
   matchState: MatchV5State;
@@ -142,8 +145,8 @@ const INCREMENT_MINUTES_LEN = INCREMENT_MINUTES_LIST.length; // 5 (last index 4 
 // bigger. Sized so all 11 stay legible and don't badly overlap at 390×844: a
 // 4-wide attacking band tiles ~4×54 = 216px across a ~358px pitch (margins 16px),
 // leaving comfortable gutters; rating/surname/position all read at arm's length.
-const CARD_W = 54;   // up from 44 — bolder face on the pitch
-const CARD_H = 68;   // up from 56, holds the ~2.5:3.5 card ratio
+const CARD_W = 62;   // v4 shared pitch token — larger/taller on the match pitch
+const CARD_H = 64;   // token height (for the trait-aura ring geometry)
 
 // ── Wave E rating colour band (req 5): red <6, neutral 6–7.5, green >7.5. ──
 // Returned as a {fill, ink} pair so the badge always carries a legible foreground.
@@ -176,129 +179,43 @@ function FitnessMeter({ fitness }: { fitness: number }) {
   );
 }
 
-/** A single overhanging corner bubble on the pitch card (§6). 19px, offset -8. */
-function CornerBubble({
-  corner, border, valueColor, value, onTap, label,
-}: {
-  corner: 'tl' | 'tr' | 'bl' | 'br';
-  border: string;
-  valueColor: string;
-  value: string | number;
-  onTap?: () => void;
-  label?: string;
-}) {
-  const pos: React.CSSProperties =
-    corner === 'tl' ? { top: -8, left: -8 }
-      : corner === 'tr' ? { top: -8, right: -8 }
-        : corner === 'bl' ? { bottom: -8, left: -8 }
-          : { bottom: -8, right: -8 };
-  return (
-    <span
-      role={onTap ? 'button' : undefined}
-      aria-label={label}
-      onPointerDown={onTap ? (e) => e.stopPropagation() : undefined}
-      onClick={onTap ? (e) => { e.stopPropagation(); onTap(); } : undefined}
-      style={{
-        position: 'absolute', ...pos, width: 19, height: 19, borderRadius: '50%',
-        background: '#171207',
-        border: `1.5px solid ${border}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 2px 0 rgba(0,0,0,0.5)', zIndex: 6,
-        cursor: onTap ? 'pointer' : undefined,
-      }}
-    >
-      <span style={{ fontFamily: PIXEL, fontSize: 6.5, lineHeight: 1, color: valueColor, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
-    </span>
-  );
-}
-
 function PitchCard({
-  spot, side, accent, dim, glow, onStatTap,
+  spot, side, competence, dim, glow, onStatTap,
 }: {
   spot: PitchSpot;
   side: 'you' | 'opp';
-  accent: string;        // rarity ring / top rail colour (fallback for id-less tokens)
+  competence: Competence;
   dim?: boolean;         // dragged-from card fades
   glow?: boolean;        // carrier glow during resolve
-  /** Tap the ATK/DEF bubbles → open this card's modifier receipt. */
+  /** Tap the power row → open this card's modifier receipt. */
   onStatTap?: () => void;
 }) {
-  const youKit = side === 'you';
-  // ── Pixel-Hero foil frame is the rarity axis (§6). Misfit reddens the frame. ──
-  const frameSpec = rarityFrame(spot.rarity);
-  const showStats = youKit; // rivals carry no live per-match stats
-  const misfit = showStats && spot.posFit === false && !spot.isGK;
-  const frameBg = misfit
-    ? 'linear-gradient(135deg, #e0332d, #7a1f1c)'
-    : frameSpec.frame;
-  // FIT bubble reads the live 0–100 condition directly, coloured by band.
-  const fitPct = typeof spot.fitness === 'number' ? Math.round(Math.max(0, Math.min(100, spot.fitness))) : null;
-  const goals = spot.goals ?? 0;
+  const isOpp = side === 'opp';
+  const card = spot.card;
+  // Every rendered spot carries a card (the pitch loop skips empty ones). A
+  // defensive placeholder keeps the geometry if a spot ever lacks one.
+  if (!card) return <div style={{ width: CARD_W }} />;
+  const atk = spot.atkEff ?? 0;
+  const def = spot.defEff ?? 0;
   return (
-    <div style={{ width: CARD_W, position: 'relative', opacity: dim ? 0.3 : 1 }} className={glow ? 'carrier-glow' : undefined}>
-      {/* Event chips centred ABOVE the card (§6): goal chip / yellow-card rect. */}
-      {showStats && (goals > 0 || (spot.booked && !spot.sentOff)) && (
-        <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 3, alignItems: 'center', zIndex: 7, pointerEvents: 'none' }}>
-          {goals > 0 && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: PIXEL, fontSize: 6, color: HERO.cream, background: 'rgba(11,7,3,0.92)', border: `1px solid ${HERO.gold}66`, borderRadius: 3, padding: '1px 4px', whiteSpace: 'nowrap', lineHeight: 1 }}>
-              <BallGlyph size={7} />{goals > 1 ? goals : ''}
-            </span>
-          )}
-          {spot.booked && !spot.sentOff && (
-            <span aria-label="Booked" style={{ width: 6, height: 9, background: '#f5c542', border: `1px solid ${HERO.ink}`, borderRadius: 1 }} />
-          )}
-        </div>
-      )}
-      {/* Foil frame → clipped pixel interior (portrait + name). */}
-      <div style={{ borderRadius: 7, padding: 2, background: frameBg, boxShadow: spot.isStar ? '0 2px 0 0 #0b0703, 0 4px 8px rgba(0,0,0,0.45), 0 0 12px rgba(232,178,60,0.5)' : '0 2px 0 0 #0b0703, 0 4px 8px rgba(0,0,0,0.45)' }}>
-        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 5, border: `1.5px solid ${HERO.ink}`, background: 'linear-gradient(165deg, #2f2415, #191309)' }}>
-          {/* Position badge — top-left inside the face (the corner bubbles overhang
-              OUTSIDE the card, so this stays clear). Coloured by position family. */}
-          {spot.position && (
-            <span style={{ position: 'absolute', top: 2, left: 2, zIndex: 2, background: POSITION_COLOR[spot.position] ?? 'var(--dust)', color: HERO.badgeText, fontFamily: PIXEL, fontSize: 6, lineHeight: 1, padding: '2px 3px', borderRadius: 2, border: `1px solid ${HERO.ink}` }}>
-              {spot.position}
-            </span>
-          )}
-          {/* Portrait window (36px) — same seeded face as gallery/pack cards. */}
-          <div style={{ height: 36, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'radial-gradient(90% 80% at 50% 30%, rgba(232,178,60,0.16), transparent 72%)' }}>
-            {spot.cardId !== undefined ? (
-              <div className="pixelated" aria-hidden style={{ ...portraitBackgroundStyle(spot.cardId), width: '62%', height: '100%' }} />
-            ) : (
-              <MiniSprite side={side} isGK={spot.isGK} accent={accent} />
-            )}
-            {spot.sentOff && (
-              <span aria-label="Sent off" style={{ position: 'absolute', inset: 0, background: 'rgba(20,4,4,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
-                <span style={{ width: 9, height: 13, background: '#e0332d', border: `1px solid ${HERO.ink}`, borderRadius: 1.5, transform: 'rotate(8deg)', boxShadow: '0 1px 0 0 #0b0703' }} />
-              </span>
-            )}
-          </div>
-          {/* Name + role over the gold hairline top border. */}
-          <div style={{ padding: '2px 3px 3px', borderTop: `1px solid ${HERO.gold}66` }}>
-            <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 5, color: HERO.cream, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center', lineHeight: 1.3 }}>
-              {spot.name ?? '—'}
-            </span>
-            {(spot.card?.tacticalRole || spot.archetype) && (
-              <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 4, color: HERO.gold, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center', lineHeight: 1.3, opacity: 0.9 }}>
-                {(spot.card?.tacticalRole ?? spot.archetype ?? '').toUpperCase()}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-      {/* Four corner bubbles (yours only) — ATK · DEF · FIT · RTG (§6 semantics). */}
-      {showStats && typeof spot.atkEff === 'number' && (
-        <CornerBubble corner="tl" border={HERO.atk} valueColor={typeof spot.baseAtk === 'number' && spot.atkEff !== spot.baseAtk ? (spot.atkEff > spot.baseAtk ? '#5fd08a' : '#f0928c') : HERO.cream} value={spot.atkEff} onTap={onStatTap} label="Attack, tap for modifiers" />
-      )}
-      {showStats && typeof spot.defEff === 'number' && (
-        <CornerBubble corner="tr" border={HERO.def} valueColor={typeof spot.baseDef === 'number' && spot.defEff !== spot.baseDef ? (spot.defEff > spot.baseDef ? '#5fd08a' : '#f0928c') : HERO.cream} value={spot.defEff} onTap={onStatTap} label="Defence, tap for modifiers" />
-      )}
-      {showStats && fitPct !== null && (
-        <CornerBubble corner="bl" border={heroFitnessColor(fitPct)} valueColor={heroFitnessColor(fitPct)} value={fitPct} label={`Fitness ${fitPct}%`} />
-      )}
-      {showStats && typeof spot.matchRating === 'number' && (
-        <CornerBubble corner="br" border={HERO.gold} valueColor={HERO.goldHi} value={spot.matchRating.toFixed(1)} label={`Rating ${spot.matchRating.toFixed(1)}`} />
-      )}
-    </div>
+    <PitchToken
+      card={card}
+      competence={competence}
+      atk={atk}
+      def={def}
+      baseAtk={spot.baseAtk ?? atk}
+      baseDef={spot.baseDef ?? def}
+      fitness={typeof spot.fitness === 'number' ? spot.fitness : 100}
+      injured={!isOpp && !!spot.injured}
+      width={CARD_W}
+      dim={dim}
+      glow={glow}
+      goals={!isOpp ? spot.goals ?? 0 : 0}
+      booked={!isOpp ? !!spot.booked : false}
+      sentOff={!isOpp ? !!spot.sentOff : false}
+      isStar={isOpp && !!spot.isStar}
+      onStatTap={onStatTap}
+    />
   );
 }
 
@@ -552,28 +469,6 @@ function FlagGlyph({ size = 30 }: { size?: number }) {
 }
 
 /** A tiny flat pixel kit sprite for the pitch card, tinted to the side. */
-function MiniSprite({ side, isGK, accent }: { side: 'you' | 'opp'; isGK: boolean; accent: string }) {
-  const kit = isGK ? '#5a6b5f' : side === 'you' ? 'var(--kit-blue)' : 'var(--kit-red)';
-  const kitDark = isGK ? '#36433a' : side === 'you' ? '#1f5bb0' : '#9e1f1a';
-  return (
-    <svg className="pixelated" viewBox="0 0 24 24" shapeRendering="crispEdges" style={{ width: 30, height: 30, display: 'block' }}>
-      {/* head */}
-      <rect x="9" y="3" width="6" height="6" fill="#e8c9a0" />
-      <rect x="9" y="3" width="6" height="2" fill="#3a2a1e" />
-      {/* shirt */}
-      <rect x="6" y="10" width="12" height="9" fill={kit} />
-      <rect x="6" y="10" width="12" height="2" fill={kitDark} />
-      {/* sleeves */}
-      <rect x="4" y="11" width="2" height="5" fill={kitDark} />
-      <rect x="18" y="11" width="2" height="5" fill={kitDark} />
-      {/* collar */}
-      <rect x="10" y="9" width="4" height="2" fill="var(--line-white)" />
-      {/* crest */}
-      <rect x="11" y="13" width="2" height="2" fill={accent} />
-    </svg>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // TraitFiringLayer — the on-pitch beat for a defining trait that FIRED.
 //
@@ -1434,6 +1329,9 @@ export default function PitchMatchView({
   onToggleTactic, onSub, onReassign, onFormationChange, onAutoSelect, onIntentChange, onContinue,
 }: PitchMatchViewProps) {
   const [trayOpen, setTrayOpen] = useState(false);
+  // v4 match bench: a handle that expands an inline drawer. Opening it hides the
+  // TACTICS section and pushes the pitch up (not an overlay).
+  const [benchDrawerOpen, setBenchDrawerOpen] = useState(false);
   const [oppView, setOppView] = useState(false);
   const [tickerOpen, setTickerOpen] = useState(false);
   const [formSheet, setFormSheet] = useState(false);
@@ -1676,12 +1574,6 @@ export default function PitchMatchView({
   // later advance (resolve-done, then later plans) reads CONTINUE.
   const isFirstKickoff = mode === 'plan' && matchState.currentIncrement === 0 && matchState.scores.length === 0;
   const badge = opponentBuild.name.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'OPP';
-  // Opponent PWR for the scoreboard (§6) — the average printed power of the rival XI.
-  const oppPwr = (() => {
-    const live = matchState.opponentXI.filter(Boolean) as Card[];
-    if (live.length === 0) return null;
-    return Math.round(live.reduce((a, c) => a + c.power, 0) / live.length);
-  })();
   // The period marker word for the scoreboard bar.
   const scoreMarker = resolving ? 'LIVE'
     : breakMoment === 'halftime' ? 'HALFTIME'
@@ -1945,34 +1837,15 @@ export default function PitchMatchView({
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end', minWidth: 0 }}>
           <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: HERO.def, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 72 }}>{oppStyleLabel.toUpperCase()}</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 9, color: HERO.creamMuted, whiteSpace: 'nowrap' }}>{oppPwr !== null ? `PWR ${oppPwr}` : badge}</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 9, color: HERO.creamMuted, whiteSpace: 'nowrap' }}>{badge}</span>
         </div>
       </div>
 
-      {/* SCORING_V2 FORECAST — the sums that drive the result, kept as a slim strip
-          under the scoreboard: your ATTACK v their DEFENCE (+edge), their ATTACK v
-          your DEFENCE (+edge), and the NET. Tap a pitch card's bubble for the receipt. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px 4px', flexShrink: 0, fontVariantNumeric: 'tabular-nums', overflowX: 'auto', scrollbarWidth: 'none' }}>
-        {([
-          { tag: 'ATK', yours: forecast.yourAttack, theirs: forecast.oppDefence, edge: forecast.attackEdge, bg: HERO.atk },
-          { tag: 'DEF', yours: forecast.yourDefence, theirs: forecast.oppAttack, edge: forecast.defendEdge, bg: HERO.def },
-        ] as const).map((row) => (
-          <div key={row.tag} style={{ display: 'flex', alignItems: 'baseline', gap: 4, whiteSpace: 'nowrap', flexShrink: 0 }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.4, color: HERO.ink, background: row.bg, borderRadius: 2, padding: '1.5px 3px', lineHeight: 1, width: 22, textAlign: 'center' }}>{row.tag}</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 10, color: HERO.cream, lineHeight: 1 }}>{row.yours}</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 7, color: HERO.creamMuted, lineHeight: 1 }}>v</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 10, color: HERO.creamBody, lineHeight: 1 }}>{row.theirs}</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 9, lineHeight: 1, color: row.edge > 0 ? 'var(--success)' : row.edge < 0 ? 'var(--danger)' : HERO.creamMuted }}>
-              {row.edge > 0 ? `+${row.edge}` : row.edge}
-            </span>
-          </div>
-        ))}
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, whiteSpace: 'nowrap', marginLeft: 'auto', flexShrink: 0 }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 0.4, color: HERO.ink, background: HERO.gold, borderRadius: 2, padding: '1.5px 3px', lineHeight: 1, width: 22, textAlign: 'center' }}>NET</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 10, lineHeight: 1, color: forecast.net > 0 ? 'var(--success)' : forecast.net < 0 ? 'var(--danger)' : HERO.creamMuted }}>
-            {forecast.net > 0 ? `+${forecast.net}` : forecast.net} {forecast.net > 0 ? '▲ YOU' : forecast.net < 0 ? '▼ THEM' : '· LEVEL'}
-          </span>
-        </div>
+      {/* SCORING_V2 FORECAST (v4) — the same live sums as dual meters, condensed,
+          NET in a bordered column at the right end. Tap a pitch card's power row
+          for the per-card receipt. */}
+      <div style={{ padding: '6px 16px 4px', flexShrink: 0 }}>
+        <ContestMatch forecast={forecast} />
       </div>
 
       {/* Ticker — three lines, tap to expand. Pre-kickoff shows a coach prompt.
@@ -2047,12 +1920,12 @@ export default function PitchMatchView({
             this spell, tap the called play again = clear, no charges = disabled.
           Shown at every planning break (the pre-kickoff talk shows the first
           telegraph, rolled at init); the hand hides while scouting the rival. */}
-      {mode === 'plan' && !oppView && (
+      {mode === 'plan' && !oppView && !benchDrawerOpen && (
         <div className="glass-surface sheen" style={{ margin: '0 16px 8px', borderRadius: 'var(--radius)', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 10px 8px', position: 'relative', zIndex: 2 }}>
             <span className={showCallNudge ? 'carrier-glow' : undefined}
               style={{ flexShrink: 0, fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: showCallNudge ? 'var(--ink-black)' : 'var(--dust)', background: showCallNudge ? 'var(--amber)' : 'rgba(0,0,0,0.3)', border: '1px solid var(--ink-black)', borderRadius: 3, padding: '3px 4px', lineHeight: 1.35, width: 36, textAlign: 'center' }}>
-              CALL A PLAY
+              TACTICS
             </span>
             <div className="kc-call-row" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden', flex: 1, minWidth: 0 }}>
               {equipHand.length === 0 && <span style={{ fontSize: 10, color: 'var(--dust)' }}>No tactic cards owned — buy them in the store.</span>}
@@ -2174,26 +2047,17 @@ export default function PitchMatchView({
           const carrier = !!(resolving && beat && ((beat.side === 'you' && !oppView && spearhead) || (beat.side === 'opp' && oppView && spot.band === 'ATT')));
           // The sub prompt points at the flagged player (pulsing amber).
           const isFlagged = !oppView && showSubPrompt && spot.cardId !== undefined && spot.cardId === flaggedPlayer?.cardId;
-          // Fitness/injury status drives a clear corner indicator (yours only).
-          const condition: 'injured' | 'tired' | null = !oppView
-            ? (spot.injured ? 'injured' : spot.lowFitness ? 'tired' : null)
-            : null;
-          // Wave E (req 3) — a wrong-position starter. Reuses the Team Talk vocabulary:
-          // a red ring on the card + a red position tab/rail (in PitchCard).
-          const misfit = !oppView && spot.posFit === false && !spot.isGK;
-          // The card's accent rail / ring: hover & drop targets take gold; a flagged
-          // or injured/misfit card takes its status colour; otherwise the rarity colour.
-          const rarityAccent = spot.rarity ? RARITY_COLOR[spot.rarity] ?? RARITY_COLOR.Common : 'var(--dust)';
+          // Competence in this slot — colours the token's position pill (a misfit
+          // reddens the pill + frame inside PitchToken). Opponents read theirs too.
+          const competence: Competence = spot.card ? competenceOf(spot.card.position, spot.slot) : 'primary';
+          // The wrapper ring: hover / drop targets take gold; a sub-flagged card amber.
+          // Injury / misfit / star all read on the token itself now (frame + flags).
           const ringColor = isHover || isDropTarget ? 'var(--gold)'
             : isFlagged ? 'var(--amber)'
-            : condition === 'injured' ? 'var(--danger)'
-            : misfit ? 'var(--danger)'
-            : spot.isStar ? 'var(--gold)'
             : null;
           return (
             <div key={`${oppView ? 'o' : 'y'}-${i}`} className="move-pop"
               style={{ position: 'absolute', left: `${spot.slot.x}%`, top: `${spot.slot.y}%`, transform: 'translate(-50%,-50%)', display: 'grid', justifyItems: 'center', width: CARD_W, zIndex: isHover || carrier || isFlagged ? 6 : attacking ? 4 : 3 }}>
-              {oppView && spot.isStar && <span style={{ position: 'absolute', top: -13, fontFamily: PIXEL, fontSize: 7, color: 'var(--ink-black)', background: 'var(--gold)', padding: '2px 4px', borderRadius: 3, whiteSpace: 'nowrap', zIndex: 8, boxShadow: '0 1px 0 0 var(--ink-black)' }}>{'★'} DANGER</span>}
               <button
                 onPointerDown={(e) => { if (spot.cardId !== undefined) beginPointer('pitch', spot.cardId, e); }}
                 onPointerMove={drag ? undefined : movePointer}
@@ -2213,7 +2077,7 @@ export default function PitchMatchView({
                 <PitchCard
                   spot={spot}
                   side={oppView ? 'opp' : 'you'}
-                  accent={rarityAccent}
+                  competence={competence}
                   dim={isDragging}
                   glow={carrier}
                   onStatTap={!oppView && spot.cardId !== undefined ? () => setReceiptId(spot.cardId!) : undefined}
@@ -2348,11 +2212,7 @@ export default function PitchMatchView({
         {/* Drag ghost following the finger — a lifted mini card. */}
         {drag && dragPos && dragCard && (
           <div style={{ position: 'absolute', left: `${dragPos.x}%`, top: `${dragPos.y}%`, transform: 'translate(-50%,-50%) scale(1.14)', zIndex: 12, pointerEvents: 'none', boxShadow: '0 0 0 2px var(--gold), 0 6px 12px rgba(0,0,0,0.5)', borderRadius: 'var(--radius-sm)' }}>
-            <PitchCard
-              spot={dragGhostSpot}
-              side="you"
-              accent={dragCard.rarity ? RARITY_COLOR[dragCard.rarity] ?? RARITY_COLOR.Common : 'var(--dust)'}
-            />
+            <PitchCard spot={dragGhostSpot} side="you" competence="primary" />
           </div>
         )}
       </div>
@@ -2368,45 +2228,51 @@ export default function PitchMatchView({
         </div>
       )}
 
-      {/* Subs bench — now identity cards. Tap to inspect, drag onto a player to
-          sub in. Each sub shows surname + position + rating via the card face. */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '8px 16px 4px', flexShrink: 0, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', flexShrink: 0, width: 30, paddingTop: 2 }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 8, color: showSubPrompt ? 'var(--amber)' : 'var(--dust)', lineHeight: 1.2 }}>SUBS</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 13, color: showSubPrompt ? 'var(--amber)' : 'var(--cream)', lineHeight: 1 }}>{subsRemaining}</span>
+      {/* ── v4 BENCH DRAWER (inline) — opening the handle below HIDES the TACTICS
+          section and pushes the pitch up (not an overlay). At a planning break the
+          subs stay draggable onto a player (mid-match subs preserved); it reads
+          VIEW ONLY while resolving. Wraps so every sub stays reachable. ── */}
+      {benchDrawerOpen && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7, margin: '8px 16px 8px', background: 'linear-gradient(180deg, #16261b, #0d1a12)', border: '1px solid rgba(232,178,60,0.25)', borderRadius: 'var(--radius)', padding: '10px 12px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--cream)' }}>BENCH · {subsRemaining} SUBS</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: moving ? 'var(--gold)' : 'var(--dust)' }}>
+              {mode === 'plan' && !oppView ? (moving ? '→ DROP ON A PLAYER' : 'DRAG A SUB ONTO A PLAYER') : 'VIEW ONLY'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {bench.length === 0 && <span style={{ fontSize: 10, color: 'var(--dust)', alignSelf: 'center' }}>No subs on the bench.</span>}
+            {bench.slice(0, 7).map((card) => {
+              const isDragging = drag?.kind === 'bench' && drag.id === card.id;
+              return (
+                <button
+                  key={card.id}
+                  onPointerDown={(e) => beginPointer('bench', card.id, e)}
+                  onPointerMove={drag ? undefined : movePointer}
+                  onPointerUp={drag ? undefined : endPointer}
+                  disabled={mode !== 'plan' || oppView}
+                  title={card.name}
+                  aria-label={`Substitute ${card.name}`}
+                  style={{ width: 56, flexShrink: 0, padding: 0, background: 'none', border: 'none', borderRadius: 'var(--radius-sm)', cursor: mode === 'plan' && !oppView ? 'grab' : 'default', touchAction: 'none', boxShadow: showSubPrompt ? '0 0 0 2px var(--amber)' : undefined }}>
+                  <SubCard card={card} dim={isDragging} />
+                </button>
+              );
+            })}
+          </div>
         </div>
-        {/* FIX (subs reachability) — the bench WRAPS to rows instead of a single
-            horizontal-scroll strip. The drag handler captures the pointer on
-            pointerdown (8px threshold), so a horizontal swipe becomes a sub-drag,
-            never a scroll — the old overflow-x strip left subs 6–7 unreachable on a
-            phone. Wrapping keeps every sub (up to 7) visible and tappable/draggable. */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1, paddingBottom: 2 }}>
-          {bench.length === 0 && <span style={{ fontSize: 10, color: 'var(--dust)', alignSelf: 'center' }}>No subs on the bench.</span>}
-          {bench.slice(0, 7).map((card) => {
-            const isDragging = drag?.kind === 'bench' && drag.id === card.id;
-            return (
-              <button
-                key={card.id}
-                // FIX 4 — the bench drag works again. The pointer handlers live on
-                // THIS button; SubCard below is a pure div (pointerEvents:none), so
-                // pointerdown/move/up always fire on the button and pointer capture
-                // is never swallowed by an inner interactive element (the GameCard
-                // button was the culprit). move/up stay live until `drag` is set,
-                // after which the root container owns them.
-                onPointerDown={(e) => beginPointer('bench', card.id, e)}
-                onPointerMove={drag ? undefined : movePointer}
-                onPointerUp={drag ? undefined : endPointer}
-                disabled={mode !== 'plan' || oppView}
-                title={card.name}
-                aria-label={`Substitute ${card.name}`}
-                style={{ width: 56, flexShrink: 0, padding: 0, background: 'none', border: 'none', borderRadius: 'var(--radius-sm)', cursor: mode === 'plan' && !oppView ? 'grab' : 'default', touchAction: 'none', boxShadow: showSubPrompt ? '0 0 0 2px var(--amber)' : undefined }}>
-                <SubCard card={card} dim={isDragging} />
-              </button>
-            );
-          })}
-        </div>
-        {moving && <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--gold)', alignSelf: 'center', flexShrink: 0 }}>→ DROP ON A PLAYER</span>}
-      </div>
+      )}
+
+      {/* Bench handle — the v4 collapse affordance; toggles the inline drawer. Only
+          at a planning break (the bench is never re-opened mid-resolve). */}
+      {mode === 'plan' && !oppView && (
+        <button onClick={() => setBenchDrawerOpen((v) => !v)}
+          className={showSubPrompt && !benchDrawerOpen ? 'carrier-glow' : undefined}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, margin: '4px 16px 0', padding: '7px 0', flexShrink: 0, background: '#14100a', border: `1px solid ${showSubPrompt ? 'var(--amber)' : 'rgba(154,139,115,0.2)'}`, borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+          <span style={{ width: 26, height: 3, borderRadius: 2, background: '#6f6552' }} />
+          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: showSubPrompt ? 'var(--amber)' : 'var(--cream-soft)' }}>BENCH · {subsRemaining} SUBS</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 9, color: 'var(--gold)' }}>{benchDrawerOpen ? '▾' : '▸'}</span>
+        </button>
+      )}
 
       {/* Controls — ISSUE 2: clear View Opposition / View Team toggle + advance CTA */}
       <div style={{ display: 'flex', gap: 10, padding: '8px 16px 14px', flexShrink: 0 }}>

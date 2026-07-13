@@ -23,6 +23,8 @@ import type { Formation } from '../../lib/formations';
 import { PIXEL, POSITION_COLOR, lastName } from '../cards/cardTokens';
 import { deriveStats } from '../../lib/funnel';
 import { portraitBackgroundStyle, rarityFrame, HERO, fitnessColor as fitnessColorForPct } from '../cards/portrait';
+import { PitchToken } from '../PitchToken';
+import { competenceOf, type Competence } from '../../lib/team-select';
 
 // ---------------------------------------------------------------------------
 // Condition glyph (§7) — the 5-grade wear read shown on the selection tile
@@ -163,9 +165,9 @@ export function LineupSlot({
   justPlaced,
   onClick,
   onInspect,
-  showFitness = false,
-  showMisfit = false,
-  misfit = false,
+  competence,
+  stats,
+  misfitReveal = false,
   dim = false,
   dropHint = false,
   onPointerDown,
@@ -178,15 +180,18 @@ export function LineupSlot({
   justPlaced: boolean;
   onClick?: () => void;
   onInspect?: () => void;
-  showFitness?: boolean;
-  showMisfit?: boolean;
-  misfit?: boolean;
+  /** Competence in this slot — colours the token's position pill. Defaults from
+   *  the card's position vs the slot when not supplied. */
+  competence?: Competence;
+  /** Live effective + printed ATK/DEF (previewSplit.cardStats). Falls back to the
+   *  printed stats (deriveStats) when the projection isn't available yet. */
+  stats?: { atk: number; def: number; baseAtk: number; baseDef: number };
+  /** MISFIT-chip reveal → an amber outline on an incompetent token. */
+  misfitReveal?: boolean;
   dim?: boolean;
   dropHint?: boolean;
 } & DragPointerHandlers) {
-  const activeMisfit = showMisfit && misfit;
-  const frameSpec = card ? rarityFrame(card.rarity) : null;
-  const posColor = card ? POSITION_COLOR[card.position] ?? 'var(--dust)' : 'var(--dust)';
+  const comp: Competence = competence ?? (card ? competenceOf(card.position, slot) : 'primary');
 
   return (
     <button
@@ -200,59 +205,36 @@ export function LineupSlot({
         left: `${slot.x}%`,
         top: `${slot.y}%`,
         transform: `translate(-50%, -50%)${dropHint ? ' scale(1.12)' : ''}`,
-        width: 58,
+        width: 64,
         transition: 'transform 0.1s ease',
         touchAction: onPointerDown ? 'none' : undefined,
         opacity: dim ? 0.3 : 1,
         zIndex: dropHint ? 6 : undefined,
       }}
     >
-      {card && frameSpec ? (
-        // §7 selection tile — foil frame → pixel interior (pos + ATK/DEF, portrait,
-        // name + condition glyph, fitness bar). A problem slot (misfit / dropHint)
-        // gets a coloured outline; injured keeps a small corner flag.
+      {card ? (
+        // v4 shared pitch token. A drop target rings it gold via the wrapper below.
         <div
           className={`relative ${justPlaced ? 'chip-place' : ''}`}
-          style={{
-            width: 58,
-            borderRadius: 7,
-            padding: 2,
-            background: activeMisfit ? 'linear-gradient(135deg, #e0332d, #7a1f1c)' : frameSpec.frame,
-            boxShadow: dropHint
-              ? `0 0 0 3px var(--gold-glow), 0 2px 0 0 ${HERO.ink}`
-              : `0 2px 0 0 ${HERO.ink}, 0 4px 8px rgba(0,0,0,0.45)`,
-            outline: dropHint ? '2px solid var(--gold)' : activeMisfit ? '2px solid #e0332d' : 'none',
-            outlineOffset: 1,
-          }}
+          style={{ borderRadius: 8, boxShadow: dropHint ? '0 0 0 3px var(--gold-glow)' : undefined, outline: dropHint ? '2px solid var(--gold)' : 'none', outlineOffset: 1 }}
         >
-          <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 5, border: `1.5px solid ${HERO.ink}`, background: 'linear-gradient(165deg, #2f2415, #191309)' }}>
-            {/* header: position chip + printed ATK/DEF */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 3px 0' }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1, color: HERO.badgeText, background: activeMisfit ? '#e0332d' : posColor, padding: '1.5px 2.5px', borderRadius: 2 }}>{card.position}</span>
-              {(() => { const st = deriveStats(card); return (
-                <span style={{ fontFamily: PIXEL, fontSize: 7, lineHeight: 1, color: HERO.cream, fontVariantNumeric: 'tabular-nums' }}>{st.atk}/{st.def}</span>
-              ); })()}
-            </div>
-            {/* portrait window (26px) — the seeded pixel bust */}
-            <div style={{ height: 26, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'radial-gradient(90% 80% at 50% 30%, rgba(232,178,60,0.14), transparent 72%)' }}>
-              <div className="pixelated" aria-hidden style={{ ...portraitBackgroundStyle(card.id), width: '58%', height: '100%' }} />
-            </div>
-            {/* footer: name + condition glyph */}
-            <div style={{ padding: '1px 3px 2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1.2, color: HERO.cream, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lastName(card.name)}</span>
-              {(() => { const g = conditionGlyph(card); return (
-                <span aria-label={`Condition ${card.condition ?? 'MINT'}`} style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1, color: g.color, flexShrink: 0 }}>{g.glyph}</span>
-              ); })()}
-            </div>
-            {/* fitness bar (3px) */}
-            <div style={{ height: 3, background: 'rgba(0,0,0,0.5)' }}>
-              <div style={{ height: '100%', width: `${Math.max(0, Math.min(1, fitnessOf(card) / 100)) * 100}%`, background: fitnessColor(card) }} />
-            </div>
-          </div>
-          {/* injured corner flag */}
-          {showFitness && card.injured && (
-            <span className="absolute" style={{ top: -5, left: -5, width: 13, height: 13, borderRadius: '50%', background: 'var(--danger)', border: `1.5px solid ${HERO.ink}`, color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 8, lineHeight: '10px', textAlign: 'center', zIndex: 3 }}>+</span>
-          )}
+          {(() => {
+            const s = stats ?? (() => { const d = deriveStats(card); return { atk: d.atk, def: d.def, baseAtk: d.atk, baseDef: d.def }; })();
+            return (
+              <PitchToken
+                card={card}
+                competence={comp}
+                atk={s.atk}
+                def={s.def}
+                baseAtk={s.baseAtk}
+                baseDef={s.baseDef}
+                fitness={fitnessOf(card)}
+                injured={card.injured}
+                misfitReveal={misfitReveal}
+                width={64}
+              />
+            );
+          })()}
           {/* inspect pip — tap the tile = assign sheet; this = inspect the card. */}
           {onInspect && (
             <span
@@ -261,7 +243,7 @@ export function LineupSlot({
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); onInspect(); }}
               className="absolute flex items-center justify-center"
-              style={{ bottom: -7, right: -7, width: 14, height: 14, borderRadius: '50%', background: HERO.ink, border: '1.5px solid var(--line-white)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 8, lineHeight: 1, zIndex: 3 }}
+              style={{ bottom: -7, right: -7, width: 14, height: 14, borderRadius: '50%', background: HERO.ink, border: '1.5px solid var(--line-white)', color: 'var(--line-white)', fontFamily: PIXEL, fontSize: 8, lineHeight: 1, zIndex: 5 }}
             >i</span>
           )}
         </div>
