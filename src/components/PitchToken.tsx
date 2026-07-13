@@ -52,8 +52,9 @@ export interface PitchTokenProps {
   /** 0–100 condition; the thin bottom bar. */
   fitness: number;
   injured?: boolean;
-  /** Token width (px). ~64 on team-select, larger on the match pitch. */
-  width?: number;
+  /** Token width. A number (px) on the pitch (~62–64), or '100%' so a bench tile
+   *  fills its grid cell as a smaller instance of the same token. */
+  width?: number | string;
   /** MISFIT reveal (team-select): an amber outline on an incompetent token. */
   misfitReveal?: boolean;
   /** Fade the drag source. */
