@@ -41,25 +41,22 @@ import {
   formatCash,
   lastName,
   eligiblePositions,
-  fitnessMeter,
   tacticMedallion,
   MANAGER_MEDALLION,
-  DURABILITY_META,
+  playerActions,
+  matchFitColor,
   type ClassMedallion,
 } from './cardTokens';
 import { ChargePips, ClassGem } from './ContestIcons';
-import { classOfCard, PLAYER_CLASS_META } from '../../lib/contest-map';
+import { classOfCard } from '../../lib/contest-map';
 import {
   portraitArtStyle,
   rarityFrame,
-  conditionRecipe,
-  WEAR_GLYPH,
   PLAYER_PITCH_BG,
   MANAGER_LEATHER_BG,
   TACTIC_BOARD_BG,
   GROUND_SHADOW_BG,
   NAME_BAND_BG,
-  META_STRIP_BG,
   EFFECT_BLOCK_BG,
   INNER_INK,
 } from './portrait';
@@ -78,11 +75,6 @@ const CREAM = '#f2ead6';
 const CREAM_SOFT = '#c9bb95';
 const DUST = '#9a8b6a';
 const STAT_CREAM = '#fbf7ec';
-
-// ATK/DEF accent tints (warm attack / cool defence) — values stay STAT_CREAM
-// (the contrast law: a rating is always near-white); only the label is tinted.
-const ATK_TINT = '#ff8f6a';
-const DEF_TINT = '#8fb6ff';
 
 /**
  * Length-aware font sizing so a name/role NEVER truncates: we scale the type down
@@ -229,12 +221,16 @@ export default function GameCard({
     cursor: onClick ? 'pointer' : 'default',
     transition: 'transform 0.12s ease',
     minWidth: 0,
+    // The Turn-9 player card's corner GEMS overhang the frame top/bottom — a
+    // vertical margin gives them room (vertical only, so width:100% is untouched
+    // and no horizontal page-scroll is introduced). Manager/tactic keep no margin.
+    margin: model.variant === 'player' ? `${full ? 12 : 7}px 0` : undefined,
     animationDelay: delay != null ? `${delay}ms` : undefined,
   };
 
   content =
     model.variant === 'player' ? (
-      <PlayerFace card={model.card} full={full} frameLabel={fr.label} labelColor={fr.lc} foil={fr.foil} />
+      <PlayerFace card={model.card} full={full} foil={fr.foil} />
     ) : model.variant === 'manager' ? (
       <ManagerFace manager={model.manager} full={full} foil={fr.foil} />
     ) : (
@@ -522,229 +518,299 @@ function EffectBlock({ effect, flavour, full }: { effect: string; flavour: strin
 }
 
 // ===========================================================================
-// PLAYER face (#7a)
+// PLAYER face (Turn 9) — glassy foil frame, pixel interior, overhanging gems.
+//   Four stacked regions in a fixed-height inner card:
+//     1. Art (stadium horizon + pix5c bust, position group top-right)
+//     2. Name plate (name + role under, centered)
+//     3. Actions (real defining traits, class-coloured keyword + effect)
+//     4. Fitness bar (MATCH FIT · NN%)
+//   Corner gems overhang the frame: CLASS top-left, ATK bottom-left, DEF bottom-right.
 // ===========================================================================
 
-function PlayerFace({ card, full, frameLabel, labelColor, foil }: { card: Card; full: boolean; frameLabel: string; labelColor: string; foil: boolean }) {
+function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boolean }) {
   const stats = deriveStats(card);
   const name = lastName(card.name).toUpperCase();
   const role = card.tacticalRole ?? card.archetype;
-  // The card's "class picture" is its CLASS — Creator/Finisher/Destroyer/
-  // Controller/Engine/Wall, derived from archetype and each tied 1:1 to the
-  // contest it serves (not personality — that's not a game concept). Sits next
-  // to the role below the portrait.
   const cls = classOfCard(card);
-  const clsMeta = PLAYER_CLASS_META[cls];
-  const cond = conditionRecipe(card.condition);
-  const dura = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
-  const hasFitness = typeof card.fitness === 'number';
-  const fit = hasFitness ? fitnessMeter(card.fitness as number) : null;
+  const fitPct = Math.max(0, Math.min(100, Math.round(card.fitness ?? 100)));
+  const fitColor = matchFitColor(fitPct);
+  const actions = playerActions(card);
 
   const primaryPos = card.position;
-  // Secondary "can operate" slots sit left of the primary; only at full — the grid
-  // card keeps just the primary pill so the surname has room to read.
+  // Secondary "can operate" slots stack BELOW the primary (Turn-9). Grid keeps
+  // just the primary pill so the small art stays readable.
   const secondary = full ? eligiblePositions(card.position).slice(1, 3) : [];
 
-  return (
-    <Inner background="#0f1510" full={full} foil={foil}>
-      {/* NAME — ABOVE the picture (owner). Name left, position pills right. */}
-      <div
-        style={{
-          background: NAME_BAND_BG,
-          borderBottom: `2px solid ${INNER_INK}`,
-          padding: full ? '7px 10px' : '4px 6px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: full ? 8 : 4,
-          flexShrink: 0,
-          zIndex: 2,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: PIXEL,
-            color: CREAM,
-            fontSize: fitFontSize(name, full ? 15 : 9),
-            lineHeight: 1.1,
-            letterSpacing: 0.3,
-            overflowWrap: 'anywhere',
-            minWidth: 0,
-            textShadow: `0 2px 0 ${INNER_INK}`,
-          }}
-        >
-          {name}
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: full ? 4 : 2, flexShrink: 0 }}>
-          {secondary.map((p) => (
-            <PositionPill key={p} pos={p} primary={false} full={full} />
-          ))}
-          <PositionPill pos={primaryPos} primary full={full} />
-        </div>
-      </div>
+  // The card is FIXED-HEIGHT: as the action count climbs (a Legendary can carry
+  // up to 4), the actions region tightens (fewer lines/action, a hair smaller,
+  // a slightly shorter art window) so every action fits cleanly and nothing
+  // clips. The region also scrolls internally as a final safety net.
+  // Fixed-height budgeting: the more actions, the tighter the actions region and
+  // the shorter the art window, so every line fits and nothing clips (the region
+  // also scrolls internally as a last resort). Full has room for a couple of
+  // wrapped lines; the small grid token clamps each action to one line and steps
+  // the type/spacing/art down as the count climbs (a 4-action Legendary is the
+  // tightest case).
+  const nActions = actions.length;
+  const busy = nActions >= 3;
+  const clamp = full ? (busy ? 1 : 3) : 1;
+  const artBasis = full
+    ? nActions >= 4 ? '44%' : '47%'
+    : nActions >= 4 ? '40%' : nActions === 3 ? '43%' : '47%';
+  const actFont = full ? (busy ? 9.5 : 10.5) : nActions >= 4 ? 5 : nActions === 3 ? 5.5 : 6.5;
+  const actLineH = !full && busy ? 1.3 : 1.35;
+  const kwFont = full ? (busy ? 7.5 : 8) : nActions >= 4 ? 5 : 5.5;
+  const actGap = full ? (busy ? 5 : 6) : busy ? 2 : 3;
+  const nameThin = !full && busy;
 
-      {/* ART REGION — stadium horizon + bust ONLY. NOTHING overlays the person so the
-          face reads fully clear (owner note). Only the ground shadow, fitness bar +
-          wear share the turf. */}
-      <div style={{ position: 'relative', flex: 1, minHeight: full ? 84 : 34, background: PLAYER_PITCH_BG, overflow: 'hidden' }}>
-        {/* ground shadow ellipse */}
+  return (
+    <>
+      <Inner background="#0f1510" full={full} foil={foil}>
+        {/* 1 — ART REGION: stadium horizon, ground shadow, bust, position group. */}
         <div
           style={{
-            position: 'absolute',
-            left: '50%',
-            bottom: full ? 8 : 5,
-            transform: 'translateX(-50%)',
-            width: '52%',
-            height: full ? 22 : 12,
-            borderRadius: '50%',
-            background: GROUND_SHADOW_BG,
+            position: 'relative',
+            flex: `0 0 ${artBasis}`,
+            minHeight: 0,
+            background: PLAYER_PITCH_BG,
+            overflow: 'hidden',
           }}
-        />
-        {/* the seeded face-first bust (shared club kit) — unobstructed */}
-        <div className="pixelated" aria-hidden style={portraitArtStyle(card.id)} />
+        >
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              bottom: full ? 6 : 4,
+              transform: 'translateX(-50%)',
+              width: '50%',
+              height: full ? 18 : 10,
+              borderRadius: '50%',
+              background: GROUND_SHADOW_BG,
+            }}
+          />
+          <div className="pixelated" aria-hidden style={portraitArtStyle(card.id)} />
 
-        {/* fitness bar (folded-in game data) — a thin banded bar on the turf line. */}
-        {fit && (
-          <div style={{ position: 'absolute', left: full ? 10 : 6, right: full ? 10 : 6, bottom: 0, height: full ? 3 : 2, background: 'rgba(11,7,3,0.55)', borderRadius: 1, zIndex: 3, overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${Math.round(((fit.filled / fit.total) * 100))}%`, background: fit.color }} />
+          {/* Position group — primary pill on top, secondaries stacked below. */}
+          <div
+            style={{
+              position: 'absolute',
+              top: full ? 8 : 4,
+              right: full ? 8 : 4,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              gap: full ? 5 : 3,
+              zIndex: 2,
+            }}
+          >
+            <PositionPill pos={primaryPos} primary full={full} />
+            {secondary.map((p) => (
+              <PositionPill key={p} pos={p} primary={false} full={full} />
+            ))}
           </div>
-        )}
+        </div>
 
-        {/* wear overlay + DESTROYED stamp (condition tell) */}
-        {cond.wearBg !== 'none' && <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: cond.wearBg, zIndex: 3 }} />}
-        {cond.stampDisp === 'flex' && (
-          <div aria-hidden style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 4 }}>
-            <span style={{ fontFamily: PIXEL, fontSize: full ? 9 : 7, color: '#e0332d', border: '2px solid #e0332d', borderRadius: 4, padding: '3px 6px', background: 'rgba(11,7,3,0.75)', transform: 'rotate(-12deg)' }}>
-              DESTROYED
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* ROLE + CONTEST ICONS then ATK/DEF — stacked so the role gets a full line
-          (it never squeezes into a thin column). Row 1: role + the contest badges
-          it plays in beside it (the "class picture", owner note). Row 2: ATK/DEF. */}
-      <div
-        style={{
-          background: NAME_BAND_BG,
-          borderTop: `2px solid ${INNER_INK}`,
-          padding: full ? '6px 10px' : '4px 6px 5px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: full ? 5 : 3,
-          flexShrink: 0,
-          zIndex: 2,
-        }}
-      >
-        {/* role (fills the width) + the class gem right beside it */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: full ? 6 : 4 }}>
+        {/* 2 — NAME PLATE: name + role directly under, centered. */}
+        <div
+          style={{
+            flexShrink: 0,
+            background: 'linear-gradient(180deg, #2a2113, #171207)',
+            borderTop: `2px solid ${INNER_INK}`,
+            borderBottom: '1px solid rgba(232,178,60,0.4)',
+            padding: full ? '6px 12px' : nameThin ? '3px 7px' : '4px 7px',
+            textAlign: 'center',
+            zIndex: 2,
+          }}
+        >
           <span
             style={{
+              display: 'block',
+              fontFamily: PIXEL,
+              fontSize: fitFontSize(name, full ? 15 : 9),
+              color: CREAM,
+              textShadow: `0 ${full ? 2 : 1}px 0 ${INNER_INK}`,
+              lineHeight: 1.12,
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {name}
+          </span>
+          <span
+            style={{
+              display: 'block',
               fontFamily: BODY_FONT,
-              fontWeight: 500,
-              color: CREAM_SOFT,
-              fontSize: fitFontSize(role, full ? 11 : 7.5),
+              fontSize: fitFontSize(role, full ? 9.5 : 6.5),
+              color: DUST,
+              marginTop: full ? 3 : 1.5,
               lineHeight: 1.2,
               overflowWrap: 'break-word',
-              wordBreak: 'normal',
-              minWidth: 0,
-              flex: 1,
             }}
           >
             {role}
           </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: full ? 4 : 3, flexShrink: 0 }}>
-            {full && (
-              <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: clsMeta.color, whiteSpace: 'nowrap' }}>
-                {clsMeta.label}
-              </span>
-            )}
-            <ClassGem cls={cls} size={full ? 20 : 14} />
-          </span>
         </div>
-        {/* ATK / DEF — compact inline chips, warm/cool label, near-white value. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: full ? 6 : 4 }}>
-          <StatPill value={stats.atk} label="ATK" tint={ATK_TINT} full={full} />
-          <StatPill value={stats.def} label="DEF" tint={DEF_TINT} full={full} />
-        </div>
-      </div>
 
-      {/* META STRIP — rarity foil label (left, its own roomy row) · condition +
-          durability (right). Full only; grid keeps just the compact stat strip. */}
-      {full && (
+        {/* 3 — ACTIONS: one line per real defining trait (class-coloured keyword
+            + effect text). Bonus (★ gold) for signature / high-rarity extras. */}
         <div
           style={{
-            background: META_STRIP_BG,
-            borderTop: '1px solid rgba(232,178,60,0.14)',
-            padding: '4px 10px 7px',
+            flex: '1 1 auto',
+            minHeight: 0,
+            background: 'linear-gradient(180deg, #14100a, #0f0b06)',
+            padding: full ? '9px 13px 10px' : '5px 7px 6px',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '3px 8px',
-            flexShrink: 0,
+            flexDirection: 'column',
+            gap: actGap,
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
             zIndex: 2,
           }}
         >
-          <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1.2, color: labelColor, whiteSpace: 'nowrap' }}>
-            {frameLabel}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            {cond.label !== 'MINT' && (
-              <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: cond.cc, whiteSpace: 'nowrap' }}>
-                {WEAR_GLYPH} {cond.label}
-              </span>
-            )}
-            {/* Only surface a NOTABLE durability (Glass/Iron/Phoenix…) — 'standard'
-                is the quiet default, hidden like MINT so the row never crowds. */}
-            {card.durability !== 'standard' && (
-              <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: dura.color, whiteSpace: 'nowrap' }}>
-                {dura.label.toUpperCase()}
-              </span>
-            )}
-          </div>
+          {actions.map((a) => (
+            <span
+              key={a.key}
+              style={{
+                fontFamily: BODY_FONT,
+                fontSize: actFont,
+                lineHeight: actLineH,
+                color: '#e6dcc6',
+                display: '-webkit-box',
+                WebkitBoxOrient: 'vertical',
+                WebkitLineClamp: clamp,
+                overflow: 'hidden',
+              }}
+            >
+              <b
+                style={{
+                  fontFamily: PIXEL,
+                  fontSize: kwFont,
+                  letterSpacing: 0.5,
+                  color: a.color,
+                }}
+              >
+                {a.bonus ? '★ ' : ''}
+                {a.label}:
+              </b>{' '}
+              {a.text}
+            </span>
+          ))}
         </div>
-      )}
-    </Inner>
+
+        {/* 4 — FITNESS BAR: slim meter (fill = fitness %, colour = fitColor) with a
+            centered MATCH FIT · NN% micro-label. */}
+        <div
+          style={{
+            position: 'relative',
+            flexShrink: 0,
+            background: '#0f0b06',
+            borderTop: '1px solid rgba(232,178,60,0.2)',
+            padding: full ? '7px 34px 8px' : '4px 16px 5px',
+            zIndex: 2,
+          }}
+        >
+          <div
+            style={{
+              height: full ? 9 : 6,
+              borderRadius: 5,
+              background: '#241c10',
+              border: `1px solid ${INNER_INK}`,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${fitPct}%`,
+                background: `linear-gradient(180deg, ${fitColor}, #0b0703)`,
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25)',
+              }}
+            />
+          </div>
+          <span
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              textAlign: 'center',
+              fontFamily: PIXEL,
+              fontSize: full ? 5.5 : 4.5,
+              letterSpacing: 1,
+              color: '#fbf7ec',
+              textShadow: '0 1px 1px #000',
+              pointerEvents: 'none',
+            }}
+          >
+            MATCH FIT {'·'} {fitPct}%
+          </span>
+        </div>
+      </Inner>
+
+      {/* CORNER GEMS — overhang the frame. CLASS top-left, ATK bottom-left,
+          DEF bottom-right (per Turn-9). */}
+      <div style={{ position: 'absolute', left: full ? -6 : -4, top: full ? -9 : -6, zIndex: 6 }}>
+        <ClassGem cls={cls} size={full ? 34 : 20} border={3} />
+      </div>
+      <StatGem value={stats.atk} label="ATK" side="atk" full={full} pos="left" />
+      <StatGem value={stats.def} label="DEF" side="def" full={full} pos="right" />
+    </>
   );
 }
 
-/** A compact inline ATK/DEF stat pill for the meta strip — tinted label + a
- *  near-white value (the contrast law: a rating stays STAT_CREAM). Lives in a
- *  card band, never over the portrait. */
-function StatPill({ value, label, tint, full }: { value: number; label: string; tint: string; full: boolean }) {
+/** An overhanging ATK/DEF corner gem — a dark radial disc with a red (ATK) or
+ *  blue (DEF) ring, the value in near-white Silkscreen + a tiny tinted label.
+ *  Sits over the frame's bottom corner (per Turn-9). */
+function StatGem({ value, label, side, full, pos }: { value: number; label: string; side: 'atk' | 'def'; full: boolean; pos: 'left' | 'right' }) {
+  const size = full ? 38 : 21;
+  const ring = side === 'atk' ? '#e23b35' : '#3d7bd6';
+  const bg = side === 'atk'
+    ? 'radial-gradient(circle at 38% 30%, #46281a, #150b06 72%)'
+    : 'radial-gradient(circle at 38% 30%, #1c3247, #0a1119 72%)';
+  const labelColor = side === 'atk' ? '#ff8f6a' : '#8fb6ff';
   return (
-    <span
+    <div
       style={{
-        display: 'inline-flex',
+        position: 'absolute',
+        [pos]: full ? -6 : -4,
+        bottom: full ? -10 : -6,
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        background: bg,
+        border: `3px solid ${ring}`,
+        boxShadow: '0 3px 8px rgba(0,0,0,0.65), inset 0 2px 3px rgba(255,255,255,0.18)',
+        display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
-        gap: full ? 4 : 2,
-        background: 'rgba(11,7,3,0.55)',
-        border: `1px solid ${tint}55`,
-        borderRadius: full ? 5 : 3,
-        padding: full ? '2px 6px' : '1px 4px',
+        justifyContent: 'center',
+        zIndex: 6,
       }}
     >
-      <span style={{ fontFamily: PIXEL, fontSize: full ? 6 : 5, letterSpacing: full ? 1 : 0.5, color: tint, lineHeight: 1 }}>{label}</span>
-      <span style={{ fontFamily: PIXEL, fontSize: full ? 13 : 9, lineHeight: 1, color: STAT_CREAM, textShadow: `0 1px 0 ${INNER_INK}` }}>{value}</span>
-    </span>
+      <span style={{ fontFamily: PIXEL, fontSize: full ? 15 : 9, lineHeight: 0.85, color: '#fbf7ec', textShadow: `0 2px 0 ${INNER_INK}` }}>
+        {value}
+      </span>
+      <span style={{ fontFamily: PIXEL, fontSize: full ? 4.5 : 3.5, letterSpacing: 1, color: labelColor, lineHeight: 1 }}>
+        {label}
+      </span>
+    </div>
   );
 }
 
-/** A position pill — the primary slot is a larger filled pill; secondaries smaller,
- *  placed to its left. Both filled in the position colour with cream text. */
+/** A Turn-9 position pill — primary is a larger filled pill in the position
+ *  colour; secondaries are smaller filled pills stacked below it. */
 function PositionPill({ pos, primary, full }: { pos: string; primary: boolean; full: boolean }) {
   const color = POSITION_COLOR[pos] ?? '#9aa0a8';
   return (
     <span
       style={{
         fontFamily: PIXEL,
-        fontSize: primary ? (full ? 13 : 8) : full ? 7 : 6,
+        fontSize: primary ? (full ? 12 : 8) : full ? 7 : 5.5,
         lineHeight: 1,
-        color: STAT_CREAM,
+        color: '#fbf7ec',
         background: color,
-        padding: primary ? (full ? '5px 8px' : '3px 4px') : full ? '3px 4px' : '2px 3px',
-        borderRadius: primary ? (full ? 5 : 3) : 3,
+        padding: primary ? (full ? '4px 7px' : '3px 4px') : full ? '3px 5px' : '2px 3px',
+        borderRadius: primary ? 5 : 3,
         border: `1px solid ${INNER_INK}`,
         boxShadow: primary ? 'inset 0 1px 0 rgba(255,255,255,0.35)' : undefined,
         whiteSpace: 'nowrap',
