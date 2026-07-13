@@ -742,7 +742,7 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
               pointerEvents: 'none',
             }}
           >
-            MATCH FIT {'·'} {fitPct}%
+            {fitPct}%
           </span>
         </div>
       </Inner>

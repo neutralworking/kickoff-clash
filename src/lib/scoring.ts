@@ -45,6 +45,11 @@ export interface Card {
   /** Fixtures this card has actually featured in this run (drives `condition`).
    *  Monotonic — wear never heals; a TORN card retires from the deck. */
   matchesPlayed?: number;
+  /** Career goals / assists accrued across this run's fixtures (the inspector's
+   *  RECORD). Accumulated post-match from the played beats (run.ts
+   *  applyMatchScoring). Apps = matchesPlayed. */
+  goals?: number;
+  assists?: number;
   // Extended fields from kc_characters
   bio?: string;
   tags?: string[];

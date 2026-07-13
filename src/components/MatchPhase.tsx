@@ -37,6 +37,9 @@ interface MatchPhaseProps {
     verdict: MatchVerdict;
     /** Red-carded this match (your card ids) — suspended for the next fixture. */
     sentOffIds: number[];
+    /** Per-card goals/assists this match (your side) — accrued to the deck's
+     *  RECORD post-match. Keyed by card id. */
+    scored: Record<number, { goals: number; assists: number }>;
   }) => void;
 }
 
@@ -200,12 +203,25 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
   const handleMatchFinished = useCallback(() => {
     const result = getMatchResult(matchState);
     const yourIds = new Set([...matchState.xi, ...matchState.bench].map((c) => c.id));
+    // Per-card goals/assists this match: tally YOUR side's goal beats by scorer +
+    // assister across every increment (subs and subbed-off players both credited,
+    // since it reads the beats, not the final XI). Opponent ids never match a deck
+    // card, so accrual (run.ts applyMatchScoring) ignores them.
+    const scored: Record<number, { goals: number; assists: number }> = {};
+    for (const inc of matchState.scores) {
+      for (const b of inc.beats) {
+        if (b.side !== 'you' || b.outcome !== 'goal') continue;
+        if (b.scorerId != null) (scored[b.scorerId] ??= { goals: 0, assists: 0 }).goals += 1;
+        if (b.assisterId != null) (scored[b.assisterId] ??= { goals: 0, assists: 0 }).assists += 1;
+      }
+    }
     onMatchComplete({
       yourGoals: result.yourGoals,
       opponentGoals: result.opponentGoals,
       result: result.result,
       verdict: result.verdict,
       sentOffIds: matchState.sentOffIds.filter((id) => yourIds.has(id)),
+      scored,
       // Bridge to HandState shape for backward compatibility
       handState: {
         xi: matchState.xi,

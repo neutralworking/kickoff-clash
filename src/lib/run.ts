@@ -264,6 +264,21 @@ export function applyMatchWear(
   return { deck: next.filter((c) => !tornIds.has(c.id)), torn, strained };
 }
 
+/** Accrue this match's goals/assists onto the deck cards (the inspector RECORD).
+ *  `scored` is cardId → {goals, assists} from the played beats (MatchPhase). Only
+ *  your own cards appear (opponent ids aren't in the deck), so this is a safe
+ *  per-id add. Monotonic across the run, like matchesPlayed. */
+export function applyMatchScoring(
+  deck: Card[],
+  scored: Record<number, { goals: number; assists: number }>,
+): Card[] {
+  return deck.map((c) => {
+    const s = scored[c.id];
+    if (!s || (s.goals === 0 && s.assists === 0)) return c;
+    return { ...c, goals: (c.goals ?? 0) + s.goals, assists: (c.assists ?? 0) + s.assists };
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Formation Slots (5-slot prototype)
 // ---------------------------------------------------------------------------
