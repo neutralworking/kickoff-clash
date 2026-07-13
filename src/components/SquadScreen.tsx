@@ -39,13 +39,16 @@ import { findConnections } from '../lib/chemistry';
 import { SCOUT_COST } from '../lib/economy';
 import {
   type XISelection,
+  type Competence,
   emptySelection,
   startersFilled,
   autoFill,
   autoFillXI,
   effectiveStrength,
+  competenceOf,
   BENCH_SIZE,
 } from '../lib/team-select';
+import { initMatch, evaluateSplit } from '../lib/match-v5';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import SquadGallery from './SquadGallery';
@@ -81,6 +84,16 @@ interface SquadScreenProps {
   contextLabel?: string;
   /** Next opponent — the deterministic engine build behind the Scout Report. */
   opponent: OpponentBuild;
+  /** Match seed + cup round + the opponent's power dial for THIS fixture — feeds
+   *  the live projected-contest preview (buildMatchSeed / cupMatchPower at the
+   *  call site). Optional so a caller that doesn't need the preview can omit them
+   *  (the preview is simply not computed). */
+  seed?: number;
+  round?: number;
+  opponentPower?: number;
+  /** The equipped manager (talk mode — draft mode uses its own live picker
+   *  selection instead, see `managers`/`initialManagerId`). Feeds the preview. */
+  jokers?: JokerCard[];
   cash: number;
   scoutUnlocked: boolean;
   onUnlockScout?: () => void;
@@ -228,6 +241,10 @@ export default function SquadScreen({
   initialManagerId,
   contextLabel,
   opponent,
+  seed,
+  round,
+  opponentPower,
+  jokers,
   cash,
   scoutUnlocked,
   onUnlockScout,
@@ -297,14 +314,39 @@ export default function SquadScreen({
   // Squad status counts (chips only when nonzero; injuries/fitness only exist in talk).
   const injuredCount = xiCards.filter((c) => c.injured).length;
   const tiredCount = xiCards.filter((c) => !c.injured && fitnessOf(c) < 50).length;
-  const misfitCount = useMemo(
+
+  // Competence per starter slot — primary/secondary/incompetent (team-select v4:
+  // the token's competence-coloured pill). MISFIT = the incompetent count, the
+  // real "can't actually play there" number (not the looser positionFitsSlot).
+  const competenceByIndex = useMemo<Competence[]>(
     () =>
-      sel.starters.reduce<number>((n, id, i) => {
+      sel.starters.map((id, i) => {
         const c = id != null ? byId.get(id) : undefined;
-        return c && !positionFitsSlot(c.position, formation.slots[i]) ? n + 1 : n;
-      }, 0),
+        return c ? competenceOf(c.position, formation.slots[i]) : 'primary';
+      }),
     [sel.starters, byId, formation],
   );
+  const misfitCount = competenceByIndex.filter((c) => c === 'incompetent').length;
+
+  // ── Projected Contest preview (v4 hero) — the real match forecast (evaluateSplit),
+  // not a reimplemented weight table. Only computed once the XI is full (a real
+  // match can't kick off short-handed either); recomputes live on every squad /
+  // formation / intent / manager change, exactly like MatchPhase's previewSplit.
+  const previewJokers = useMemo<JokerCard[]>(
+    () => (mode === 'draft' ? (manager ? [manager] : []) : (jokers ?? [])),
+    [mode, manager, jokers],
+  );
+  const previewSplit = useMemo(() => {
+    if (filled !== slotCount || seed == null || round == null) return null;
+    const xi = sel.starters.map((id) => byId.get(id as number)!);
+    const bench = sel.bench.map((id) => byId.get(id)).filter((c): c is Card => !!c);
+    const state = initMatch(
+      xi, bench, [], formation, 'total-football', previewJokers,
+      seed, round, opponent.style, opponent.weaknessArchetype,
+      {}, intent, opponentPower,
+    );
+    return evaluateSplit(state, previewJokers);
+  }, [filled, slotCount, sel.starters, sel.bench, byId, formation, previewJokers, seed, round, opponent, intent, opponentPower]);
 
   // ── Lineup operations ────────────────────────────────────────────────────
   function switchFormation(id: string) {
@@ -684,7 +726,9 @@ export default function SquadScreen({
           {formation.slots.map((slot, i) => {
             const cardId = sel.starters[i];
             const card = cardId != null ? byId.get(cardId) : undefined;
-            const misfit = !!card && !positionFitsSlot(card.position, slot);
+            // The real MISFIT definition (competenceByIndex): incompetent only —
+            // a "secondary" fit (playable, not ideal) no longer flags red.
+            const misfit = competenceByIndex[i] === 'incompetent';
             return (
               <LineupSlot
                 key={i}

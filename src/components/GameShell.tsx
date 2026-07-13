@@ -30,6 +30,7 @@ import {
 import { getShopItem, SCOUT_COST } from '../lib/economy';
 import type { InvestmentCard } from '../lib/economy';
 import { getFormation } from '../lib/formations';
+import { cupMatchPower } from '../lib/opponent';
 import type { HandState } from '../lib/hand';
 import { INCREMENT_MINUTES } from '../lib/hand';
 import type { JokerCard } from '../lib/jokers';
@@ -600,6 +601,9 @@ export default function GameShell() {
             managers={contents.managers}
             initialManagerId={pickedManagerId}
             opponent={nextOpponentBuild}
+            seed={pendingSeed}
+            round={1}
+            opponentPower={cupMatchPower(1, 1, cupSize(1))}
             cash={0}
             scoutUnlocked={false}
             onConfirm={(out) =>
@@ -647,6 +651,10 @@ export default function GameShell() {
             initialSelection={{ startingXI: runState.startingXI ?? [], benchIds: runState.benchIds ?? [] }}
             contextLabel={`CUP ${runState.round} · ${tieLabel}`}
             opponent={nextOpponentBuild}
+            seed={buildMatchSeed(runState.seed, runState.round, runState.matchInCup)}
+            round={runState.round}
+            opponentPower={cupMatchPower(runState.round, runState.matchInCup, cupSize(runState.round))}
+            jokers={runState.jokers}
             cash={runState.cash}
             scoutUnlocked={scoutUnlocked}
             onUnlockScout={handleScoutCurrentTie}
