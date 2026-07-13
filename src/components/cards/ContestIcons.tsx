@@ -91,18 +91,21 @@ function ContestBadge({ contest, box }: { contest: ContestKey; box: number }) {
   );
 }
 
+// The class glyphs are emoji (🪄 🎯 🗡️ …) — they fall outside the Silkscreen /
+// pixel glyph set, so render them in a Unicode-complete fallback stack (the same
+// stack the rest of the card uses for symbol glyphs) rather than as tofu boxes.
+const GLYPH_FONT = "'DejaVu Sans', 'Noto Color Emoji', 'Noto Sans Symbols', 'Segoe UI Symbol', sans-serif";
+
 /**
- * ClassGem — the v4 "class gem": a circular, class-coloured ring badge (the
+ * ClassGem — the Turn-9 "class gem": a circular, class-coloured ring badge (the
  * player-class taxonomy: Creator / Finisher / Destroyer / Controller / Engine /
- * Wall — see contest-map.ts PLAYER_CLASS_META). The glyph inside is BORROWED
- * from CONTEST_ICON at the class's tied contest (recoloured to the class's own
- * hex), so the class gem and the six-contest icon system share one pixel-art
- * glyph vocabulary rather than inventing a second one.
+ * Wall — see contest-map.ts PLAYER_CLASS_META). The glyph inside is the class's
+ * Turn-9 EMOJI (`meta.glyph`), rendered in the Unicode-fallback stack; the ring
+ * border carries the class colour. This is the single at-a-glance class tell on
+ * the card face (corner gem) and echoed in the inspector.
  */
-export function ClassGem({ cls, size = 22 }: { cls: PlayerClass; size?: number }) {
+export function ClassGem({ cls, size = 22, border = 2 }: { cls: PlayerClass; size?: number; border?: number }) {
   const meta = PLAYER_CLASS_META[cls];
-  const glyph = CONTEST_ICON[meta.contest].glyph;
-  const inner = Math.round(size * 0.5);
   return (
     <span
       role="img"
@@ -113,27 +116,25 @@ export function ClassGem({ cls, size = 22 }: { cls: PlayerClass; size?: number }
         height: size,
         flexShrink: 0,
         borderRadius: '50%',
-        background: 'rgba(11,7,3,0.8)',
-        border: `2px solid ${meta.color}`,
+        background: 'radial-gradient(circle at 38% 30%, #2a2114, #120b06 72%)',
+        border: `${border}px solid ${meta.color}`,
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        boxShadow: '0 2px 5px rgba(0,0,0,0.5)',
+        boxShadow: '0 2px 6px rgba(0,0,0,0.55), inset 0 2px 3px rgba(255,255,255,0.14)',
       }}
     >
-      <svg
-        className="pixelated"
-        viewBox="0 0 7 7"
-        width={inner}
-        height={inner}
-        shapeRendering="crispEdges"
+      <span
         aria-hidden
-        style={{ display: 'block' }}
+        style={{
+          fontFamily: GLYPH_FONT,
+          fontSize: Math.round(size * 0.46),
+          lineHeight: 1,
+          color: meta.color,
+        }}
       >
-        {glyph.map((r, i) => (
-          <rect key={i} x={r.x} y={r.y} width={r.w} height={r.h} fill={meta.color} />
-        ))}
-      </svg>
+        {meta.glyph}
+      </span>
     </span>
   );
 }

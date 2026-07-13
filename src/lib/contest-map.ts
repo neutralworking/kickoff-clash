@@ -152,19 +152,24 @@ export interface PlayerClassMeta {
   label: string;
   /** The handoff's exact class colour. */
   color: string;
-  /** The contest this class most directly serves — the glyph is borrowed from
-   *  CONTEST_ICON[contest] at the render layer, so the class badge and the
-   *  contest icon system share one pixel-art vocabulary, not two. */
+  /** The Turn-9 class glyph (emoji). Falls outside the Silkscreen set, so it is
+   *  rendered in the card's Unicode-fallback font stack (see ClassGem). This is
+   *  the single at-a-glance tell for a player's class (top-left corner gem). */
+  glyph: string;
+  /** The Turn-9 one-liner shown beside the class in the legend / inspector. */
+  blurb: string;
+  /** The contest this class most directly serves — retained so the class badge
+   *  and the six-contest system still agree (used for the gem's aria/title). */
   contest: ContestKey;
 }
 
 export const PLAYER_CLASS_META: Record<PlayerClass, PlayerClassMeta> = {
-  Creator:    { key: 'Creator',    label: 'CREATOR',    color: '#a855f7', contest: 'create' },
-  Finisher:   { key: 'Finisher',   label: 'FINISHER',   color: '#f2c14e', contest: 'finish' },
-  Destroyer:  { key: 'Destroyer',  label: 'DESTROYER',  color: '#e23b35', contest: 'break' },
-  Controller: { key: 'Controller', label: 'CONTROLLER', color: '#4a9eff', contest: 'keep' },
-  Engine:     { key: 'Engine',     label: 'ENGINE',     color: '#e8621a', contest: 'press' },
-  Wall:       { key: 'Wall',       label: 'WALL',       color: '#4a8f6b', contest: 'stop' },
+  Creator:    { key: 'Creator',    label: 'CREATOR',    color: '#a855f7', glyph: '\u{1FA84}',       blurb: 'Makes the chances',    contest: 'create' },
+  Finisher:   { key: 'Finisher',   label: 'FINISHER',   color: '#f2c14e', glyph: '\u{1F3AF}',       blurb: 'Puts them away',       contest: 'finish' },
+  Destroyer:  { key: 'Destroyer',  label: 'DESTROYER',  color: '#e23b35', glyph: '\u{1F5E1}\u{FE0F}', blurb: 'Wins the ball back',  contest: 'break' },
+  Controller: { key: 'Controller', label: 'CONTROLLER', color: '#4a9eff', glyph: '\u{1F39B}\u{FE0F}', blurb: 'Dictates the tempo',  contest: 'keep' },
+  Engine:     { key: 'Engine',     label: 'ENGINE',     color: '#e8621a', glyph: '\u{2699}\u{FE0F}',  blurb: 'Covers every blade',  contest: 'press' },
+  Wall:       { key: 'Wall',       label: 'WALL',       color: '#4a8f6b', glyph: '\u{1F9F1}',       blurb: 'Nothing gets through', contest: 'stop' },
 };
 
 /** A card's class — every real archetype is covered; Controller is the sane

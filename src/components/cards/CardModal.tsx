@@ -17,34 +17,31 @@
  *   • Investment — ladder, tier, cost, Boardroom effect, flavour.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import type { Card } from '../../lib/scoring';
 import type { JokerCard } from '../../lib/jokers';
 import type { TacticCard } from '../../lib/tactics';
 import type { InvestmentCard } from '../../lib/economy';
 import { getTacticById, tacticCapacity } from '../../lib/tactics';
-import { contestsForCard, contestsForManager, contestsForTactic, CONTEST_META, type ContestKey } from '../../lib/contest-map';
+import { contestsForManager, contestsForTactic, CONTEST_META, classOfCard, PLAYER_CLASS_META, type ContestKey } from '../../lib/contest-map';
 import GameCard, { type GameCardModel } from './GameCard';
-import { ContestIcons } from './ContestIcons';
+import { ContestIcons, ClassGem } from './ContestIcons';
 import {
   PIXEL,
   RARITY_COLOR,
-  POSITION_LABEL,
-  DURABILITY_META,
   TACTIC_CAT_COLOR,
   INVESTMENT_META,
   eligiblePositions,
-  positionChipVisual,
-  fitnessMeter,
   formatCash,
   nationFlag,
   nationCode,
   managerTraitStyle,
-  definingTraitsFor,
-  roleBlurb,
-  type ResolvedTrait,
+  playerActions,
+  matchFitColor,
+  matchFitLabel,
+  POSITION_COLOR,
 } from './cardTokens';
-import { conditionRecipe } from './portrait';
+import { conditionRecipe, rarityFrame } from './portrait';
 
 // Trait glyphs (✦ ➴ ⚑ …) sit outside the Silkscreen glyph set; render them in a
 // Unicode-complete fallback stack so a symbol never renders as a blank tofu box.
@@ -158,7 +155,7 @@ export default function CardModal({ model, onClose }: CardModalProps) {
             style={{ maxWidth: 360, overscrollBehavior: 'contain', pointerEvents: 'auto' }}
           >
             {model.variant === 'player' ? (
-              <PlayerDetail card={model.card} accent={accent} />
+              <PlayerDetail card={model.card} />
             ) : model.variant === 'manager' ? (
               <ManagerDetail manager={model.manager} />
             ) : model.variant === 'tactic' ? (
@@ -224,110 +221,6 @@ function StatCell({ label, value, color }: { label: string; value: string; color
   );
 }
 
-/** The little "i" affordance — same visual language as the inspect pips on the
- *  team-select sheets / match pitch, so "this is tappable for info" reads as one
- *  vocabulary across the app. Inverts to the accent while its tip is open. */
-function InfoPip({ active }: { active: boolean }) {
-  return (
-    <span
-      aria-hidden
-      style={{
-        width: 14,
-        height: 14,
-        borderRadius: '50%',
-        background: active ? 'var(--gold)' : 'var(--ink-black)',
-        border: `1.5px solid ${active ? 'var(--ink-black)' : 'var(--line-white)'}`,
-        color: active ? 'var(--ink-black)' : 'var(--line-white)',
-        fontFamily: PIXEL,
-        fontSize: 7,
-        lineHeight: 1,
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-      }}
-    >
-      i
-    </span>
-  );
-}
-
-/** The inline explainer box a tapped ROLE/DURABILITY cell expands into — same
- *  pixel/glass language as the rest of the panel (hard dark fill, 1px tinted
- *  border, PIXEL kicker). Inline (not floating) so it can never be clipped or
- *  mis-anchored inside the modal's internal scroll. */
-function TipBox({ heading, body, color }: { heading: string; body: string; color: string }) {
-  return (
-    <div
-      className="chip-reveal"
-      style={{
-        background: 'rgba(0,0,0,0.45)',
-        border: `1px solid ${color}`,
-        borderRadius: 'var(--radius-sm)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
-        padding: '7px 9px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-        textAlign: 'left',
-      }}
-    >
-      <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.8, color, lineHeight: 1 }}>{heading}</span>
-      <span style={{ fontSize: 11, lineHeight: 1.45, color: 'var(--cream-soft)' }}>{body}</span>
-    </div>
-  );
-}
-
-/** A StatCell that taps open an inline explainer. Spans the full stat-grid row so
- *  the value + the "i" pip + the expanded tip all have room. Tapping the cell (or
- *  its open tip) toggles; the parent's document listener closes on any other tap. */
-function TapStatCell({
-  label,
-  value,
-  color,
-  open,
-  onToggle,
-  tipBody,
-}: {
-  label: string;
-  value: string;
-  color: string;
-  open: boolean;
-  onToggle: (e: React.MouseEvent) => void;
-  tipBody: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      aria-label={`${label}: ${value}. Tap for explanation.`}
-      style={{
-        gridColumn: '1 / -1',
-        background: 'rgba(0,0,0,0.25)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-sm)',
-        padding: '6px 8px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 3,
-        minWidth: 0,
-        textAlign: 'left',
-        cursor: 'pointer',
-      }}
-    >
-      <span className="flex items-center justify-between" style={{ gap: 6 }}>
-        <Label>{label}</Label>
-        <InfoPip active={open} />
-      </span>
-      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 11, color, lineHeight: 1.1 }}>
-        {value}
-      </span>
-      {open && <TipBox heading={value.toUpperCase()} body={tipBody} color={color} />}
-    </button>
-  );
-}
-
 /** A labelled contest row for the detail panel — the pixel badges plus a readable
  *  label list, so the modal teaches which of the six contests the card touches.
  *  Renders nothing for an empty list (identity managers / neutral tactics). */
@@ -346,411 +239,179 @@ function ContestRow({ heading, keys }: { heading: string; keys: ContestKey[] }) 
   );
 }
 
-function TagRow({ items, color, bg }: { items: string[]; color: string; bg: string }) {
-  return (
-    <div className="flex flex-wrap" style={{ gap: 5 }}>
-      {items.map((t) => (
-        <span
-          key={t}
-          style={{
-            fontFamily: PIXEL,
-            fontSize: 8.5,
-            letterSpacing: 0.3,
-            color,
-            background: bg,
-            border: `1px solid ${color}`,
-            borderRadius: 'var(--radius-lg)',
-            padding: '4px 7px',
-            lineHeight: 1,
-          }}
-        >
-          {t.toUpperCase()}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// PLAYER detail
+// PLAYER detail (Turn-9 inspector)
 // ---------------------------------------------------------------------------
 
-function PlayerDetail({ card, accent }: { card: Card; accent: string }) {
-  // The ROLE (a real, evocative on-pitch identity — Inverted Winger, Regista) is
-  // what the player reads; the scoring-internal `archetype`/`secondaryArchetype`
-  // are engine plumbing and no longer surfaced on the expanded card.
+function PlayerDetail({ card }: { card: Card }) {
   const role = card.tacticalRole ?? card.archetype;
-  // Defining traits — the marquee "what this card DOES" list. Signature/legend
-  // loadouts surface first; otherwise the seeded rarity-count pick.
-  const traits = definingTraitsFor(card);
+  const cls = classOfCard(card);
+  const clsMeta = PLAYER_CLASS_META[cls];
+  const actions = playerActions(card);
+  const grade = card.rarity.toUpperCase();
+  const lc = rarityFrame(card.rarity).lc;
+  const nation = nationCode(card.nation) || (card.nation ?? '').toUpperCase();
+  const flag = nationFlag(card.nation);
 
-  // Tap-to-open explainers (mobile-first: no hover). Tapping a cell toggles its
-  // tip; tapping ANYWHERE else closes it via a document-level listener that never
-  // preventDefault/stopPropagation's — so a backdrop tap still closes the whole
-  // modal and Escape stays untouched. Each trigger stopPropagation's its opening
-  // tap so the same click doesn't instantly self-close. ROLE and DURABILITY both
-  // carry an explainer, so the open-tip is a small union rather than a boolean.
-  const [openTip, setOpenTip] = useState<'role' | 'durability' | null>(null);
-  useEffect(() => {
-    if (!openTip) return;
-    const close = () => setOpenTip(null);
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
-  }, [openTip]);
-  const toggleTip = (tip: 'role' | 'durability') => (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setOpenTip((cur) => (cur === tip ? null : tip));
-  };
+  const fitPct = Math.max(0, Math.min(100, Math.round(card.fitness ?? 100)));
+  const fitColor = matchFitColor(fitPct);
+  const fitLabel = matchFitLabel(fitPct);
+  const condition = conditionRecipe(card.condition).label;
 
-  const dura = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
+  const primaryColor = POSITION_COLOR[card.position] ?? '#9aa0a8';
+  const secondary = eligiblePositions(card.position).slice(1);
+
+  const HAIRLINE = '1px solid rgba(154,139,115,0.15)';
+  const CHIP_BG = 'linear-gradient(180deg, #1c1610, #120d07)';
 
   return (
-    <div className="flex flex-col" style={{ gap: 10 }}>
-      {/* ── IDENTITY: name + grade, position, where they operate, role, contests ── */}
-      <Panel>
-        <div className="flex items-center justify-between" style={{ gap: 8 }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 14, color: 'var(--cream)', lineHeight: 1.15 }}>{card.name}</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 9, color: accent, letterSpacing: 0.5, flexShrink: 0 }}>
-            {card.rarity.toUpperCase()}
+    <div
+      style={{
+        background: 'linear-gradient(180deg, #17130d, #100c07)',
+        border: '1px solid rgba(232,178,60,0.28)',
+        borderRadius: 14,
+        overflow: 'hidden',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+      }}
+    >
+      {/* ── HEADER: full name + nation (left), rarity grade (right) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '14px 16px 12px', borderBottom: HAIRLINE }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, minWidth: 0, flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 15, color: '#f2ead6', textShadow: '0 2px 0 #0b0703', lineHeight: 1.15 }}>
+            {card.name.toUpperCase()}
           </span>
-        </div>
-
-        {/* Primary position + its long label — the headline "what he is". */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 7,
-            background: 'rgba(0,0,0,0.28)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '6px 8px',
-            minWidth: 0,
-          }}
-        >
-          <PositionChip pos={card.position} primary />
-          <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 10, color: accent, letterSpacing: 0.3, lineHeight: 1.1 }}>
-            {POSITION_LABEL[card.position] ?? card.position}
-          </span>
-        </div>
-
-        {/* Where they can operate — eligible pitch positions as pixel chips. */}
-        <div className="flex flex-col" style={{ gap: 6 }}>
-          <Label>CAN OPERATE</Label>
-          <div className="flex flex-wrap" style={{ gap: 5 }}>
-            {eligiblePositions(card.position).map((p, i) => (
-              <PositionChip key={p} pos={p} primary={i === 0} />
-            ))}
-          </div>
-        </div>
-
-        {/* ROLE — the prominent, accent-coloured on-pitch identity; taps open a
-            one-line explainer (Regista/Trequartista/etc. are real football roles). */}
-        <TapStatCell
-          label="ROLE"
-          value={role}
-          color={accent}
-          open={openTip === 'role'}
-          onToggle={toggleTip('role')}
-          tipBody={roleBlurb(role)}
-        />
-
-        {/* HELPS WITH — which of the six contests this card feeds. */}
-        <ContestRow heading="HELPS WITH" keys={contestsForCard(card)} />
-      </Panel>
-
-      {/* ── BIO: the identity ledger — nation, character, nickname, grade ── */}
-      <Panel>
-        <Label>BIO</Label>
-        <div className="flex flex-col" style={{ gap: 3 }}>
-          <BioRow label="NATION" value={nationValue(card.nation)} alt />
-          <BioRow label="CHARACTER" value={(card.personalityTheme ?? '—').toUpperCase()} color={accent} />
-          <BioRow label="AKA" value={card.nickname ? `“${card.nickname}”` : '—'} alt />
-          <BioRow label="GRADE" value={card.rarity.toUpperCase()} color={accent} />
-        </div>
-      </Panel>
-
-      {/* ── AVAILABILITY: the "100% MATCH FIT" analogue — legs, wear, apps, and the
-          durability grade (all the "can this card play, and for how long" reads) ── */}
-      <Panel>
-        <Label>AVAILABILITY</Label>
-        {typeof card.fitness === 'number' && <AvailabilityBar fitness={card.fitness} />}
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-          <ConditionCell condition={card.condition} />
-          <StatCell label="APPS (RUN)" value={String(card.matchesPlayed ?? 0)} color="var(--line-white)" />
-        </div>
-        <TapStatCell
-          label="DURABILITY"
-          value={dura.label}
-          color={dura.color}
-          open={openTip === 'durability'}
-          onToggle={toggleTip('durability')}
-          tipBody={dura.blurb}
-        />
-      </Panel>
-
-      {traits.length > 0 && <TraitsSection traits={traits} rarity={card.rarity} accent={accent} />}
-
-      {card.abilityText && (
-        <Panel>
-          <Label>{(card.abilityName ?? 'Ability').toUpperCase()}</Label>
-          <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--cream-soft)' }}>{card.abilityText}</span>
-        </Panel>
-      )}
-
-      {(card.strengths?.length || card.weaknesses?.length) && (
-        <Panel>
-          {card.strengths && card.strengths.length > 0 && (
-            <div className="flex flex-col" style={{ gap: 6 }}>
-              <Label>STRENGTHS</Label>
-              <TagRow items={card.strengths} color="var(--success)" bg="rgba(52,196,106,0.12)" />
-            </div>
-          )}
-          {card.weaknesses && card.weaknesses.length > 0 && (
-            <div className="flex flex-col" style={{ gap: 6 }}>
-              <Label>WEAKNESSES</Label>
-              <TagRow items={card.weaknesses} color="var(--danger)" bg="rgba(232,54,47,0.12)" />
-            </div>
-          )}
-        </Panel>
-      )}
-
-      {card.tags && card.tags.length > 0 && (
-        <Panel>
-          <Label>TAGS</Label>
-          <TagRow items={card.tags} color="var(--gold)" bg="rgba(245,197,66,0.1)" />
-        </Panel>
-      )}
-
-      {card.bio && (
-        <Panel>
-          <p style={{ fontSize: 11.5, lineHeight: 1.45, color: 'var(--cream-soft)', margin: 0 }}>{card.bio}</p>
-        </Panel>
-      )}
-    </div>
-  );
-}
-
-/**
- * The marquee Traits section — the place a player reads what a card actually DOES.
- * Each defining trait is glyph + label + one-line blurb, coloured by its kind.
- * Rarity lands as identity here: a Legendary fills this panel with 4 actions, a
- * Common with 1. Signature/legend traits sort first and carry a SIGNATURE badge.
- */
-function TraitsSection({ traits, rarity, accent }: { traits: ResolvedTrait[]; rarity: string; accent: string }) {
-  // Signature traits first, original order preserved within each group.
-  const ordered = [...traits].sort((a, b) => Number(b.signature) - Number(a.signature));
-  return (
-    <Panel>
-      <div className="flex items-center justify-between" style={{ gap: 8 }}>
-        <Label>{ordered.length > 1 ? 'ACTIONS' : 'ACTION'}</Label>
-        <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.5, color: accent, lineHeight: 1 }}>
-          {rarity.toUpperCase()} · {ordered.length}
-        </span>
-      </div>
-      <div className="flex flex-col" style={{ gap: 8 }}>
-        {ordered.map((t, i) => (
-          <TraitRow key={`${t.name}-${i}`} trait={t} />
-        ))}
-      </div>
-    </Panel>
-  );
-}
-
-/** One defining-trait row: a coloured pixel glyph badge, the label (+ signature
- *  marker), and the Marvel-Snap-voice blurb of what the action does. */
-function TraitRow({ trait }: { trait: ResolvedTrait }) {
-  const { color, bg } = trait.style;
-  return (
-    <div className="flex" style={{ gap: 9, alignItems: 'flex-start' }}>
-      {/* Kind glyph badge — a hard chip in the trait's kind colour. The glyph is
-          drawn in a Unicode-complete face (it falls outside the pixel font's set,
-          which is why the on-card chips used to read blank). */}
-      <span
-        aria-hidden
-        style={{
-          flexShrink: 0,
-          width: 26,
-          height: 26,
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontFamily: GLYPH_FONT,
-          fontSize: 14,
-          lineHeight: 1,
-          color,
-          background: bg,
-          border: `1px solid ${color}`,
-          borderRadius: 4,
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.28)',
-        }}
-      >
-        {trait.copy.glyph}
-      </span>
-      <div className="flex flex-col" style={{ gap: 2, minWidth: 0, flex: 1 }}>
-        <div className="flex items-center" style={{ gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 10.5, color, letterSpacing: 0.3, lineHeight: 1.1 }}>
-            {trait.copy.label.toUpperCase()}
-          </span>
-          {trait.signature && (
-            <span
-              style={{
-                fontFamily: PIXEL,
-                fontSize: 6.5,
-                letterSpacing: 0.6,
-                lineHeight: 1,
-                color: 'var(--gold)',
-                background: 'rgba(245,197,66,0.12)',
-                border: '1px solid var(--gold)',
-                borderRadius: 3,
-                padding: '2px 4px',
-              }}
-            >
-              SIGNATURE
+          {nation && (
+            <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: '#9a8b6a', border: '1px solid rgba(154,139,115,0.3)', borderRadius: 3, padding: '2px 4px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {flag && <span style={{ fontSize: 10 }}>{flag}</span>}
+              {nation}
             </span>
           )}
         </div>
-        <span style={{ fontSize: 11, lineHeight: 1.4, color: 'var(--cream-soft)' }}>{trait.copy.blurb}</span>
+        <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: lc, flexShrink: 0 }}>{grade}</span>
+      </div>
+
+      {/* ── IDENTITY + RECORD ── */}
+      <div style={{ display: 'flex', gap: 16, padding: '14px 16px', borderBottom: HAIRLINE }}>
+        {/* LEFT — class gem + label + role, then POSITIONS */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <ClassGem cls={cls} size={46} border={3} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 12, letterSpacing: 1, color: clsMeta.color, lineHeight: 1.1 }}>{clsMeta.label}</span>
+              <span style={{ fontSize: 11, color: '#c9bb95', lineHeight: 1.2 }}>{role}</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 2, color: '#9a8b6a' }}>POSITIONS</span>
+            <span
+              style={{
+                fontFamily: PIXEL,
+                fontSize: 13,
+                color: '#fbf7ec',
+                background: primaryColor,
+                padding: '5px 10px',
+                borderRadius: 5,
+                border: '1px solid #0b0703',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35)',
+                alignSelf: 'flex-start',
+              }}
+            >
+              {card.position}
+            </span>
+            {secondary.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 9, color: '#6f6552' }}>also</span>
+                {secondary.map((p) => (
+                  <span
+                    key={p}
+                    style={{
+                      fontFamily: PIXEL,
+                      fontSize: 8,
+                      color: '#f2ead6',
+                      background: 'rgba(255,255,255,0.05)',
+                      padding: '3px 5px',
+                      borderRadius: 3,
+                      border: `1px solid ${POSITION_COLOR[p] ?? '#9aa0a8'}`,
+                    }}
+                  >
+                    {p}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT — RECORD: Apps / Goals / Assists */}
+        <div style={{ width: 108, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 2, color: '#9a8b6a' }}>RECORD</span>
+          <RecordChip value={card.matchesPlayed ?? 0} label="APPS" color="#f2ead6" bg={CHIP_BG} />
+          <RecordChip value={0} label="GOALS" color="#e8b23a" bg={CHIP_BG} />
+          <RecordChip value={0} label="AST" color="#4a9eff" bg={CHIP_BG} />
+        </div>
+      </div>
+
+      {/* ── MATCH FITNESS ── */}
+      <div style={{ padding: '13px 16px', borderBottom: HAIRLINE }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 2, color: '#9a8b6a' }}>MATCH FITNESS</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: fitColor }}>{fitLabel}</span>
+        </div>
+        <div style={{ height: 12, borderRadius: 6, background: '#241c10', border: '1px solid #0b0703', overflow: 'hidden', marginTop: 9 }}>
+          <div style={{ height: '100%', width: `${fitPct}%`, background: `linear-gradient(180deg, ${fitColor}, #0b0703)`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25)' }} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+          <span style={{ fontSize: 10, color: '#9a8b6a' }}>Condition</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 8, color: '#c9bb95' }}>{condition}</span>
+        </div>
+      </div>
+
+      {/* ── ACTIONS ── */}
+      <div style={{ padding: '13px 16px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 2, color: '#9a8b6a' }}>ACTIONS</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: lc }}>{grade} {'·'} {actions.length}</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 11 }}>
+          {actions.map((a) => (
+            <div key={a.key} style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+              <div
+                style={{
+                  width: 30,
+                  height: 30,
+                  flexShrink: 0,
+                  borderRadius: 7,
+                  background: 'linear-gradient(180deg, #241c10, #120d07)',
+                  border: `1.5px solid ${a.color}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 5px rgba(0,0,0,0.5)',
+                }}
+              >
+                <span aria-hidden style={{ fontFamily: GLYPH_FONT, fontSize: 14, lineHeight: 1, color: a.classColor }}>{a.glyph}</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: a.color, lineHeight: 1.15 }}>
+                  {a.bonus ? '★ ' : ''}{a.label}
+                </span>
+                <span style={{ fontSize: 11, lineHeight: 1.42, color: '#e6dcc6' }}>{a.text}</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-/** A small pixel position chip — the player's own slot is filled (primary).
- *  Uses the same `positionChipVisual` resolver as the on-card face, so the
- *  grid/full card and this detail panel read as one visual language. */
-function PositionChip({ pos, primary }: { pos: string; primary: boolean }) {
-  const v = positionChipVisual(pos, primary);
+/** One RECORD stat chip — value left-aligned against its label (Turn-9). */
+function RecordChip({ value, label, color, bg }: { value: number; label: string; color: string; bg: string }) {
   return (
-    <span
-      style={{
-        fontFamily: PIXEL,
-        fontSize: 9,
-        letterSpacing: 0.4,
-        lineHeight: 1,
-        color: v.text,
-        background: v.bg,
-        border: `1px solid ${v.border}`,
-        borderRadius: 3,
-        padding: '4px 6px',
-        boxShadow: primary ? 'inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -1px 0 rgba(0,0,0,0.3)' : undefined,
-      }}
-    >
-      {pos}
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// PLAYER stat-screen primitives (the FM-style dossier). Every value derives from
-// a real Card field — no invented numbers.
-// ---------------------------------------------------------------------------
-
-/** Nation display: real flag emoji where we have one, else the short code. */
-function nationValue(nation?: string): string {
-  const flag = nationFlag(nation);
-  const code = nationCode(nation);
-  if (flag) return code ? `${flag} ${code}` : flag;
-  return code || '—';
-}
-
-/** One BIO ledger row — a label:value pair, alternating fill for the dense table. */
-function BioRow({ label, value, color, alt }: { label: string; value: string; color?: string; alt?: boolean }) {
-  return (
-    <div
-      className="flex items-baseline justify-between"
-      style={{
-        gap: 6,
-        background: alt ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.03)',
-        border: '1px solid var(--border)',
-        borderRadius: 4,
-        padding: '4px 6px',
-        minWidth: 0,
-      }}
-    >
-      <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.5, color: 'var(--dust)', flexShrink: 0 }}>{label}</span>
-      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 8.5, color: color ?? 'var(--cream)', lineHeight: 1.2, textAlign: 'right' }}>
-        {value}
-      </span>
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', background: bg, border: '1px solid rgba(154,139,115,0.15)', borderRadius: 7, padding: '6px 9px' }}>
+      <span style={{ fontFamily: PIXEL, fontSize: 16, color, textShadow: '0 2px 0 #0b0703' }}>{value}</span>
+      <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: '#9a8b6a' }}>{label}</span>
     </div>
-  );
-}
-
-/** The "100% MATCH FIT" analogue — a bold match-fitness bar with a status word,
- *  banded by the fitness percentage. */
-function AvailabilityBar({ fitness }: { fitness: number }) {
-  const pct = Math.max(0, Math.min(100, Math.round(fitness)));
-  const { color } = fitnessMeter(fitness);
-  const status = pct >= 75 ? 'MATCH FIT' : pct >= 50 ? 'TIRING' : 'JADED';
-  return (
-    <div className="flex flex-col" style={{ gap: 5 }}>
-      <div className="flex items-baseline justify-between" style={{ gap: 6 }}>
-        <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.6, color }}>{`${pct}% ${status}`}</span>
-        <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--dust)' }}>MATCH FITNESS</span>
-      </div>
-      <div
-        style={{
-          position: 'relative',
-          height: 12,
-          background: 'rgba(0,0,0,0.4)',
-          border: '1.5px solid var(--ink-black)',
-          borderRadius: 3,
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            inset: '0 auto 0 0',
-            width: `${pct}%`,
-            background: color,
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -2px 0 rgba(0,0,0,0.3)',
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-/** The wear-condition chip cell — reuses the card face's `conditionRecipe` so the
- *  wear grade reads the same word/colour here as the stamp on the card. */
-function ConditionCell({ condition }: { condition?: string }) {
-  const rec = conditionRecipe(condition);
-  return (
-    <div
-      style={{
-        background: 'rgba(0,0,0,0.25)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-sm)',
-        padding: '6px 8px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 3,
-        minWidth: 0,
-      }}
-    >
-      <Label>CONDITION</Label>
-      <span style={{ fontFamily: PIXEL, fontSize: 10.5, color: rec.cc, lineHeight: 1.1 }}>{rec.label}</span>
-    </div>
-  );
-}
-
-function Chip({ label, value }: { label: string; value: string }) {
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 5,
-        background: 'rgba(0,0,0,0.25)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-lg)',
-        padding: '4px 8px',
-      }}
-    >
-      <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--dust)' }}>{label}</span>
-      <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--cream)', lineHeight: 1 }}>{value}</span>
-    </span>
   );
 }
 

@@ -10,7 +10,7 @@
 
 import type { Card } from '../../lib/scoring';
 import type { TacticRarity } from '../../lib/tactics';
-import type { ContestKey } from '../../lib/contest-map';
+import { type ContestKey, classOfCard, PLAYER_CLASS_META } from '../../lib/contest-map';
 import { pickDefiningTraits, SIGNATURE_OVERRIDES } from '../../lib/defining-traits';
 import { traitCopy, type TraitCopy } from '../../lib/trait-copy';
 
@@ -218,6 +218,69 @@ export function definingTraitsFor(card: Card): ResolvedTrait[] {
     const copy = traitCopy(r.name);
     return { name: r.name, copy, style: traitPillStyle(copy.kind), signature: isSignature };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Turn-9 player ACTIONS (the on-card / inspector ability rows). One source of
+// truth so the card face and the inspector render the SAME list off the SAME
+// data — the card's real defining traits (`definingTraitsFor`).
+//
+// Mapping (the handoff's "★ bonus gold action" rule, wired to our data):
+//   • The FIRST action is the primary — always the player's CLASS COLOUR.
+//   • A later action is a BONUS (gold ★ + gold #f5d97a) when it is a
+//     signature/legend trait, OR the card is high-rarity (Epic/Legendary) and
+//     so earns extra "bonus" abilities beyond the first. Rare/Common extras (if
+//     any) stay quiet in the class colour — bonus is a premium tell.
+// A Legendary can carry up to 4 traits; every one is surfaced (never dropped),
+// the extras reading as gold bonus lines — exactly the Turn-9 escalation.
+// ---------------------------------------------------------------------------
+
+/** The Turn-9 gold used for a bonus (★) action keyword. */
+export const ACTION_BONUS_GOLD = '#f5d97a';
+
+export interface PlayerActionDisplay {
+  /** Stable React key. */
+  key: string;
+  /** The keyword (trait label). */
+  label: string;
+  /** The effect text (trait blurb). */
+  text: string;
+  /** True for a bonus (gold ★) action. */
+  bonus: boolean;
+  /** Keyword colour — class colour, or gold for a bonus. */
+  color: string;
+  /** The player's class colour (the action-tile border in the inspector). */
+  classColor: string;
+  /** The class glyph (emoji) for the inspector action tile. */
+  glyph: string;
+}
+
+export function playerActions(card: Card): PlayerActionDisplay[] {
+  const traits = definingTraitsFor(card);
+  const meta = PLAYER_CLASS_META[classOfCard(card)];
+  const highRarity = card.rarity === 'Epic' || card.rarity === 'Legendary';
+  return traits.map((t, i) => {
+    const bonus = i > 0 && (t.signature || highRarity);
+    return {
+      key: `${t.name}-${i}`,
+      label: t.copy.label,
+      text: t.copy.blurb,
+      bonus,
+      color: bonus ? ACTION_BONUS_GOLD : meta.color,
+      classColor: meta.color,
+      glyph: meta.glyph,
+    };
+  });
+}
+
+/** Turn-9 match-fitness band colour: ≥85 green, 50–84 amber, <50 red. */
+export function matchFitColor(f: number): string {
+  return f >= 85 ? '#3ba55d' : f >= 50 ? '#f59e0b' : '#c0392b';
+}
+
+/** Turn-9 match-fitness condition word (paired with matchFitColor). */
+export function matchFitLabel(f: number): string {
+  return f >= 85 ? 'MATCH SHARP' : f >= 50 ? 'MANAGED LOAD' : 'AT RISK';
 }
 
 // Position family → accent colour, shared by every card surface.
