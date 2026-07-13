@@ -346,8 +346,8 @@ function PlayerDetail({ card }: { card: Card }) {
         <div style={{ width: 108, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 7 }}>
           <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 2, color: '#9a8b6a' }}>RECORD</span>
           <RecordChip value={card.matchesPlayed ?? 0} label="APPS" color="#f2ead6" bg={CHIP_BG} />
-          <RecordChip value={0} label="GOALS" color="#e8b23a" bg={CHIP_BG} />
-          <RecordChip value={0} label="AST" color="#4a9eff" bg={CHIP_BG} />
+          <RecordChip value={card.goals ?? 0} label="GOALS" color="#e8b23a" bg={CHIP_BG} />
+          <RecordChip value={card.assists ?? 0} label="AST" color="#4a9eff" bg={CHIP_BG} />
         </div>
       </div>
 

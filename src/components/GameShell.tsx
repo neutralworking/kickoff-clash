@@ -25,6 +25,7 @@ import {
   interestOn,
   applyMatchFitness,
   applyMatchWear,
+  applyMatchScoring,
   buildMatchSeed,
 } from '../lib/run';
 import { getShopItem, SCOUT_COST } from '../lib/economy';
@@ -222,7 +223,7 @@ export default function GameShell() {
   }, [pendingSeed]);
 
   // --- Match Complete ---
-  const handleMatchComplete = useCallback((result: { yourGoals: number; opponentGoals: number; result: 'win' | 'draw' | 'loss'; handState: HandState; verdict: MatchVerdict; sentOffIds: number[] }) => {
+  const handleMatchComplete = useCallback((result: { yourGoals: number; opponentGoals: number; result: 'win' | 'draw' | 'loss'; handState: HandState; verdict: MatchVerdict; sentOffIds: number[]; scored: Record<number, { goals: number; assists: number }> }) => {
     if (!runState) return;
 
     // Calculate attendance from hand's final XI
@@ -291,7 +292,8 @@ export default function GameShell() {
       result.handState.xi,
       buildMatchSeed(runState.seed, runState.round, runState.matchInCup),
     );
-    const updatedDeck = wear.deck;
+    // Accrue this match's goals/assists onto the surviving deck (the inspector RECORD).
+    const updatedDeck = applyMatchScoring(wear.deck, result.scored ?? {});
     const tornIds = new Set(wear.torn.map((c) => c.id));
     for (const c of wear.torn) {
       durResult.worn.push(c);
