@@ -47,8 +47,8 @@ import {
   DURABILITY_META,
   type ClassMedallion,
 } from './cardTokens';
-import { ChargePips, ContestIcons } from './ContestIcons';
-import { contestsForCard } from '../../lib/contest-map';
+import { ChargePips, ClassGem } from './ContestIcons';
+import { classOfCard, PLAYER_CLASS_META } from '../../lib/contest-map';
 import {
   portraitArtStyle,
   rarityFrame,
@@ -529,9 +529,12 @@ function PlayerFace({ card, full, frameLabel, labelColor, foil }: { card: Card; 
   const stats = deriveStats(card);
   const name = lastName(card.name).toUpperCase();
   const role = card.tacticalRole ?? card.archetype;
-  // The card's "class picture" is the CONTEST(S) it plays in (not personality —
-  // that's not a game concept). Sits next to the role below the portrait.
-  const contests = contestsForCard(card);
+  // The card's "class picture" is its CLASS — Creator/Finisher/Destroyer/
+  // Controller/Engine/Wall, derived from archetype and each tied 1:1 to the
+  // contest it serves (not personality — that's not a game concept). Sits next
+  // to the role below the portrait.
+  const cls = classOfCard(card);
+  const clsMeta = PLAYER_CLASS_META[cls];
   const cond = conditionRecipe(card.condition);
   const dura = DURABILITY_META[card.durability] ?? DURABILITY_META.standard;
   const hasFitness = typeof card.fitness === 'number';
@@ -633,8 +636,8 @@ function PlayerFace({ card, full, frameLabel, labelColor, foil }: { card: Card; 
           zIndex: 2,
         }}
       >
-        {/* role (fills the width) + contest badges right beside it */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: full ? 6 : 4 }}>
+        {/* role (fills the width) + the class gem right beside it */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: full ? 6 : 4 }}>
           <span
             style={{
               fontFamily: BODY_FONT,
@@ -650,7 +653,14 @@ function PlayerFace({ card, full, frameLabel, labelColor, foil }: { card: Card; 
           >
             {role}
           </span>
-          <ContestIcons keys={contests} full={full} align="end" />
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: full ? 4 : 3, flexShrink: 0 }}>
+            {full && (
+              <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 0.5, color: clsMeta.color, whiteSpace: 'nowrap' }}>
+                {clsMeta.label}
+              </span>
+            )}
+            <ClassGem cls={cls} size={full ? 20 : 14} />
+          </span>
         </div>
         {/* ATK / DEF — compact inline chips, warm/cool label, near-white value. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: full ? 6 : 4 }}>

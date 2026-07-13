@@ -43,6 +43,15 @@ export function competenceOf(cardPosition: string, slot: { accepts: string[] }):
   return 'incompetent';
 }
 
+/** v4 squad-management handoff: the competence pill colours (bg + legible text),
+ *  the single source of truth for the token's position-pill background on both
+ *  the team-select and match pitches. */
+export const COMPETENCE_COLOR: Record<Competence, { bg: string; text: string }> = {
+  primary: { bg: '#2f8f4e', text: '#eafaef' },
+  secondary: { bg: '#d99a2b', text: '#1a1206' },
+  incompetent: { bg: '#b23b2f', text: '#ffe8e6' },
+};
+
 /**
  * Auto-fill the selection. `mode: 'all'` clears first and picks a full XI+bench;
  * `mode: 'empty'` keeps current placements and only fills the gaps. Eligible

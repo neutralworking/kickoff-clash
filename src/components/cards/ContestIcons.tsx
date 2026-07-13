@@ -18,7 +18,7 @@
  */
 
 import { CONTEST_ICON } from './cardTokens';
-import { CONTEST_META, type ContestKey } from '../../lib/contest-map';
+import { CONTEST_META, PLAYER_CLASS_META, type ContestKey, type PlayerClass } from '../../lib/contest-map';
 
 /** A row of contest badges. Keys are expected pre-ordered (contestsForX returns
  *  them in CONTEST_ORDER); renders nothing for an empty list. */
@@ -85,6 +85,53 @@ function ContestBadge({ contest, box }: { contest: ContestKey; box: number }) {
       >
         {st.glyph.map((r, i) => (
           <rect key={i} x={r.x} y={r.y} width={r.w} height={r.h} fill={st.color} />
+        ))}
+      </svg>
+    </span>
+  );
+}
+
+/**
+ * ClassGem — the v4 "class gem": a circular, class-coloured ring badge (the
+ * player-class taxonomy: Creator / Finisher / Destroyer / Controller / Engine /
+ * Wall — see contest-map.ts PLAYER_CLASS_META). The glyph inside is BORROWED
+ * from CONTEST_ICON at the class's tied contest (recoloured to the class's own
+ * hex), so the class gem and the six-contest icon system share one pixel-art
+ * glyph vocabulary rather than inventing a second one.
+ */
+export function ClassGem({ cls, size = 22 }: { cls: PlayerClass; size?: number }) {
+  const meta = PLAYER_CLASS_META[cls];
+  const glyph = CONTEST_ICON[meta.contest].glyph;
+  const inner = Math.round(size * 0.5);
+  return (
+    <span
+      role="img"
+      aria-label={meta.label}
+      title={`${meta.label} — feeds ${CONTEST_META[meta.contest].label}`}
+      style={{
+        width: size,
+        height: size,
+        flexShrink: 0,
+        borderRadius: '50%',
+        background: 'rgba(11,7,3,0.8)',
+        border: `2px solid ${meta.color}`,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        boxShadow: '0 2px 5px rgba(0,0,0,0.5)',
+      }}
+    >
+      <svg
+        className="pixelated"
+        viewBox="0 0 7 7"
+        width={inner}
+        height={inner}
+        shapeRendering="crispEdges"
+        aria-hidden
+        style={{ display: 'block' }}
+      >
+        {glyph.map((r, i) => (
+          <rect key={i} x={r.x} y={r.y} width={r.w} height={r.h} fill={meta.color} />
         ))}
       </svg>
     </span>
