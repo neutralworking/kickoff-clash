@@ -113,6 +113,10 @@ const DEFAULT_TARGET = 3;
 const DAMPEN_FLOOR = 0.12; // dampen-variance lifts poor chances (consistency axis)
 const SAVE_P = 0.5; // a firing keeper/stopper deny cancels one chance with this prob
 const DEFAULT_ENERGY = 5;
+const CHASE_DRAIN = 2; // chasing the ball is exhausting: per batch a KEEP-committed
+// holder makes the OTHER side run, their fitness drains by this (the possession
+// win-con's teeth — the KEEP lever, owner direction 2026-07). Commitment-gated
+// like every payoff: an uncommitted side holding a batch tires nobody.
 
 /** Tired legs create/finish less — a mild throttle on a side's own dials. */
 const fitnessFactor = (f: number) => clamp(0.85 + 0.015 * f, 0.85, 1);
@@ -193,6 +197,13 @@ interface SideCtx {
   defensiveCommit: boolean;
   /** True if the build commits to an attacking contest — unlocks pressure-batch points. */
   attackCommit: boolean;
+  /** Every contest the build's card tilts commit to (COMMIT_MIN) — gates the
+   *  chase drain (KEEP) and which tactic dialBoost entries actually apply. */
+  committed: Set<Contest>;
+  /** An open tactical window's dial buff (commitment-filtered at play time)
+   *  and the last batch it covers. */
+  windowBoost: Partial<Record<Contest, number>> | null;
+  windowBoostUntil: number;
   band: AdherenceBand;
   energy: number;
   fitness: number;
@@ -214,8 +225,11 @@ function makeCtx(sq: Squad): SideCtx {
   // (deck quality) rides on top, un-throttled (the manager reweight, a trait, is
   // added later in effectiveDials).
   const rawDials = contestDials(sq.cards); // card tilts only (the build's commitment)
-  const defensiveCommit = DEFENSIVE_COMMIT.some((c) => rawDials[c] >= COMMIT_MIN[c]);
-  const attackCommit = ATTACK_COMMIT.some((c) => rawDials[c] >= COMMIT_MIN[c]);
+  const committed = new Set<Contest>(
+    (Object.keys(rawDials) as Contest[]).filter((c) => rawDials[c] >= COMMIT_MIN[c])
+  );
+  const defensiveCommit = DEFENSIVE_COMMIT.some((c) => committed.has(c));
+  const attackCommit = ATTACK_COMMIT.some((c) => committed.has(c));
   const baseDials = throttleDials({ ...rawDials }, band);
   if (sq.dialBonus) for (const k of Object.keys(baseDials) as Contest[]) baseDials[k] += sq.dialBonus[k] ?? 0;
   // planning dials fold in the manager's reweight, but only if the build actually
@@ -238,6 +252,9 @@ function makeCtx(sq: Squad): SideCtx {
     aerialDef: topDef(sq.cards),
     defensiveCommit,
     attackCommit,
+    committed,
+    windowBoost: null,
+    windowBoostUntil: 0,
     band,
     energy: sq.energy ?? DEFAULT_ENERGY,
     fitness: 10,
@@ -277,7 +294,9 @@ function effectiveDials(me: SideCtx, meSnap: GateSnapshot, foe: SideCtx, foeSnap
   const theirs = dialDeltas(foe.traits, foeSnap);
   const ff = fitnessFactor(me.fitness);
   const out = { ...me.baseDials };
-  for (const k of Object.keys(out) as Contest[]) out[k] = out[k] * ff + mine.own[k] - theirs.opp[k];
+  for (const k of Object.keys(out) as Contest[]) {
+    out[k] = out[k] * ff + mine.own[k] - theirs.opp[k] + (me.windowBoost?.[k] ?? 0);
+  }
   return out;
 }
 
@@ -372,12 +391,15 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
 
   for (let b = 1; b <= batches; b++) {
     const band = clockBand(b, batches);
+    const holder = schedule[b - 1];
+    const defender: Side = holder === 0 ? 1 : 0;
     chancesInBatch[0] = chancesInBatch[1] = 0; // territory resets each batch
-    // posture tick: expire any due tactical window and revert to the default.
+    // posture tick: expire any due tactical window (and its dial buff) and revert.
     for (const s of [0, 1] as Side[]) {
       const { state, reverted } = tickPosture(ctx[s].postureState, b);
       ctx[s].postureState = state;
       if (reverted) events.push({ type: 'posture-shift', side: s, to: reverted, reason: 'revert', batch: b });
+      if (ctx[s].windowBoost && b > ctx[s].windowBoostUntil) ctx[s].windowBoost = null;
     }
     // tactical plays (between-batch): open a timed posture window if affordable.
     for (const s of [0, 1] as Side[]) {
@@ -386,6 +408,13 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
         if (ctx[s].energy < play.tactic.energyCost) continue;
         ctx[s].energy -= play.tactic.energyCost;
         ctx[s].postureState = applyPostureWindow(ctx[s].postureState, play.tactic.posture, b, play.tactic.durationBatches);
+        // the card's class buff, filtered by the build's commitments (the
+        // no-unconditional law) — an unearned boost entry simply never applies.
+        if (play.tactic.dialBoost) {
+          const earned = Object.entries(play.tactic.dialBoost).filter(([c]) => ctx[s].committed.has(c as Contest));
+          ctx[s].windowBoost = earned.length ? Object.fromEntries(earned) : null;
+          ctx[s].windowBoostUntil = b + play.tactic.durationBatches - 1;
+        }
         events.push({
           type: 'tactic-played',
           side: s,
@@ -406,10 +435,13 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
       events.push({ type: 'substitution', side: s, batch: b, subsLeft: ctx[s].subsLeft });
     }
     // fitness drain (Taskmaster): a committed press chips the opponent's legs.
+    // Plus the chase: a KEEP-committed holder makes the defender run this batch
+    // — possession's teeth. Both are commitment-gated, both land the same way.
     for (const s of [0, 1] as Side[]) {
       const other: Side = s === 0 ? 1 : 0;
       const drainSnap = snapshot(ctx[s], activePosture(ctx[s].postureState), scorelines()[s], band, new Set());
-      const amount = fitnessDrain(ctx[s].traits, drainSnap);
+      let amount = fitnessDrain(ctx[s].traits, drainSnap);
+      if (s === holder && ctx[s].committed.has('KEEP')) amount += CHASE_DRAIN;
       if (amount > 0) {
         ctx[other].fitness = Math.max(0, ctx[other].fitness - amount);
         events.push({ type: 'fitness-drained', side: other, amount, fitness: ctx[other].fitness, batch: b });
@@ -421,8 +453,6 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
       band,
       postures: [activePosture(ctx[0].postureState), activePosture(ctx[1].postureState)],
     });
-    const holder = schedule[b - 1];
-    const defender: Side = holder === 0 ? 1 : 0;
     const H = ctx[holder];
     const D = ctx[defender];
     const cleanBefore: [number, number] = [score[0], score[1]];

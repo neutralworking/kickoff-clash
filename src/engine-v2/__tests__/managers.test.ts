@@ -277,3 +277,80 @@ describe('determinism holds with managers + tactics', () => {
     expect(JSON.stringify(a.events)).toBe(JSON.stringify(b.events));
   });
 });
+
+describe('the KEEP levers — Keep Ball class buff + the chase drain (owner direction, 2026-07)', () => {
+  const batchOf = (e: { [k: string]: unknown }): number => {
+    if ('clock' in e && e.clock) return (e.clock as { batch: number }).batch;
+    if ('batch' in e && typeof e.batch === 'number') return e.batch;
+    return 0;
+  };
+  const firstKeepRollP = (events: ReturnType<typeof simulateMatch>['events'], lastBatch: number): number | null => {
+    for (const e of events) {
+      if (e.type === 'retain-roll' && e.side === 0 && e.clock.batch <= lastBatch) return e.p;
+    }
+    return null;
+  };
+
+  it('Keep Ball raises a KEEP-committed side\'s retain roll during its window', () => {
+    const mk = (plays: boolean): Squad => ({
+      cards: buildXI(new RngStream(21), 'mono:KEEP'),
+      posture: 'balanced',
+      tacticalPlays: plays ? [{ atBatch: 1, tactic: TACTICS_BY_ID['keep-ball'] }] : [],
+    });
+    // a pressing opponent keeps the retain roll under the RETAIN_HI cap, where
+    // the buff is visible (vs a soft side the roll is already at the ceiling)
+    const away = (): Squad => ({ cards: buildXI(new RngStream(22), 'mono:PRESS'), posture: 'balanced' });
+    const withCard = simulateMatch(mk(true), away(), { seed: 301 });
+    const without = simulateMatch(mk(false), away(), { seed: 301 });
+    const pWith = firstKeepRollP(withCard.events, 2);
+    const pWithout = firstKeepRollP(without.events, 2);
+    expect(pWith).not.toBeNull();
+    expect(pWithout).not.toBeNull();
+    expect(pWith!).toBeGreaterThan(pWithout!);
+  });
+
+  it('an uncommitted side playing Keep Ball gets the posture window, NOT the buff (the law)', () => {
+    const mk = (plays: boolean): Squad => ({
+      cards: buildXI(new RngStream(23), 'random'),
+      posture: 'balanced',
+      tacticalPlays: plays ? [{ atBatch: 1, tactic: TACTICS_BY_ID['keep-ball'] }] : [],
+    });
+    const away = (): Squad => ({ cards: buildXI(new RngStream(24), 'random'), posture: 'balanced' });
+    const withCard = simulateMatch(mk(true), away(), { seed: 302 });
+    const without = simulateMatch(mk(false), away(), { seed: 302 });
+    expect(withCard.events.some((e) => e.type === 'tactic-played')).toBe(true);
+    const pWith = firstKeepRollP(withCard.events, 2);
+    const pWithout = firstKeepRollP(without.events, 2);
+    expect(pWith).not.toBeNull();
+    expect(pWith).toBe(pWithout);
+  });
+
+  it('a KEEP-committed holder drains the chasing side\'s legs; uncommitted sides tire nobody', () => {
+    const keeper: Squad = { cards: buildXI(new RngStream(25), 'mono:KEEP'), posture: 'balanced' };
+    const chaser: Squad = { cards: buildXI(new RngStream(26), 'random'), posture: 'balanced' };
+    const res = simulateMatch(keeper, chaser, { seed: 303 });
+    const drains = res.events.filter((e) => e.type === 'fitness-drained');
+    expect(drains.length).toBeGreaterThan(0);
+    for (const d of drains) if (d.type === 'fitness-drained') expect(d.side).toBe(1); // only the chaser tires
+    // and two uncommitted randoms never chase-drain (no Taskmaster in play either)
+    const a: Squad = { cards: buildXI(new RngStream(27), 'random'), posture: 'balanced' };
+    const b: Squad = { cards: buildXI(new RngStream(28), 'random'), posture: 'balanced' };
+    const none = simulateMatch(a, b, { seed: 304 });
+    expect(none.events.some((e) => e.type === 'fitness-drained')).toBe(false);
+  });
+
+  it('amending the play schedule preserves the already-played prefix (the UI re-resolve contract)', () => {
+    const mk = (plays: boolean): Squad => ({
+      cards: buildXI(new RngStream(29), 'mono:KEEP'),
+      posture: 'balanced',
+      tacticalPlays: plays ? [{ atBatch: 4, tactic: TACTICS_BY_ID['keep-ball'] }] : [],
+    });
+    const away = (): Squad => ({ cards: buildXI(new RngStream(30), 'random'), posture: 'balanced' });
+    const a = simulateMatch(mk(false), away(), { seed: 305 });
+    const b = simulateMatch(mk(true), away(), { seed: 305 });
+    const prefix = (events: typeof a.events) =>
+      JSON.stringify(events.filter((e) => e.type !== 'full-time' && batchOf(e) < 4));
+    expect(prefix(a.events)).toBe(prefix(b.events));
+    expect(JSON.stringify(a.events)).not.toBe(JSON.stringify(b.events)); // the future re-rolled
+  });
+});

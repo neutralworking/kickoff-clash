@@ -25,12 +25,17 @@ import {
   serializeRun,
   deserializeRun,
   MANAGERS_BY_ID,
+  contestDials,
+  COMMIT_MIN,
+  type Contest,
   type KCCard,
   type KCCardJSON,
   type Manager,
   type RunState,
   type FixtureSetup,
   type MatchResult,
+  type TacticalCard,
+  type TacticalPlay,
 } from '../../engine-v2';
 import { PIXEL } from './ui';
 import ManagerPick from './ManagerPick';
@@ -61,6 +66,10 @@ export default function PlayShell() {
   const [phase, setPhase] = useState<Phase>('title');
   const [seed, setSeed] = useState<number>(() => (Date.now() & 0x7fffffff) | 1);
   const [pending, setPending] = useState<{ run: RunState; result: MatchResult; setup: FixtureSetup } | null>(null);
+  // The kicked-off XI + the tactical plays called so far — held so a play can
+  // RE-RESOLVE the fixture (same seed → the revealed batches replay identically).
+  const [matchXi, setMatchXi] = useState<KCCard[] | null>(null);
+  const [plays, setPlays] = useState<TacticalPlay[]>([]);
 
   // load the card pool at first client render (async — the rest is lazy-init'd).
   // Derive the deploy basePath from our own path (we mount at `<basePath>/play`)
@@ -108,13 +117,35 @@ export default function PlayShell() {
 
   const kickoff = (pickedXi: KCCard[]) => {
     if (!run || !setup) return;
+    setMatchXi(pickedXi);
+    setPlays([]);
     setPending({ ...resolveFixture(run, pickedXi, setup), setup }); // engine resolves; we replay its log
     setPhase('match');
   };
 
+  // Call a tactical play at batch `atBatch`: amend the schedule and re-resolve.
+  // Determinism keeps every already-revealed batch byte-identical; only the
+  // unrevealed future re-rolls under the new posture window / class buff.
+  const playTactic = (atBatch: number, tactic: TacticalCard) => {
+    if (!run || !pending || !matchXi) return;
+    const next = [...plays, { atBatch, tactic }];
+    setPlays(next);
+    setPending({ ...resolveFixture(run, matchXi, pending.setup, next), setup: pending.setup });
+  };
+
+  // Which contests the kicked-off XI is committed to (card tilts alone) — the
+  // UI hint for tactic class buffs; the engine applies the same gate itself.
+  const committed = useMemo(() => {
+    if (!matchXi) return new Set<Contest>();
+    const dials = contestDials(matchXi);
+    return new Set<Contest>((Object.keys(dials) as Contest[]).filter((c) => dials[c] >= COMMIT_MIN[c]));
+  }, [matchXi]);
+
   const fullTime = () => {
     if (!pending) return;
     persist(pending.run);
+    setMatchXi(null);
+    setPlays([]);
     setPhase('postmatch');
   };
 
@@ -161,7 +192,15 @@ export default function PlayShell() {
         )}
 
         {!loading && phase === 'match' && manager && pending && (
-          <MatchScreen manager={manager} setup={pending.setup} result={pending.result} onFullTime={fullTime} />
+          <MatchScreen
+            manager={manager}
+            setup={pending.setup}
+            result={pending.result}
+            committed={committed}
+            plays={plays}
+            onPlayTactic={playTactic}
+            onFullTime={fullTime}
+          />
         )}
 
         {!loading && phase === 'postmatch' && manager && pending && (

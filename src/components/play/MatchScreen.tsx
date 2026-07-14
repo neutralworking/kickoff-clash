@@ -12,7 +12,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import type { Contest, Manager, FixtureSetup, MatchResult } from '../../engine-v2';
+import type { Contest, Manager, FixtureSetup, MatchResult, TacticalCard, TacticalPlay } from '../../engine-v2';
+import { TACTICS, DEFAULT_ENERGY } from '../../engine-v2';
 import type { MatchEvent } from '../../engine-v2';
 import { PPanel, PButton, Chip, Eyebrow, Meter, PIXEL } from './ui';
 
@@ -46,17 +47,28 @@ export default function MatchScreen({
   manager,
   setup,
   result,
+  committed,
+  plays,
+  onPlayTactic,
   onFullTime,
 }: {
   manager: Manager;
   setup: FixtureSetup;
   result: MatchResult;
+  /** Contests the kicked-off XI is committed to (lights up tactic class buffs). */
+  committed: Set<Contest>;
+  /** Plays already called this match (spent energy). */
+  plays: TacticalPlay[];
+  /** Call a play at the given batch — the shell re-resolves the fixture. */
+  onPlayTactic: (atBatch: number, tactic: TacticalCard) => void;
   onFullTime: () => void;
 }) {
   const [batch, setBatch] = useState(0); // batches revealed so far
+  const [handOpen, setHandOpen] = useState(false);
   const target = setup.target;
   const snap = useMemo(() => snapshot(result.events, batch), [result.events, batch]);
   const done = batch >= BATCHES;
+  const energyLeft = DEFAULT_ENERGY - plays.reduce((s, p) => s + p.tactic.energyCost, 0);
 
   // telegraph: does the opponent shift posture in the NEXT batch?
   const telegraph = useMemo(() => {
@@ -110,6 +122,65 @@ export default function MatchScreen({
       <PPanel style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 10 }}>
         <Ticker events={result.events} throughBatch={batch} />
       </PPanel>
+
+      {/* The tactical hand — plays are called BETWEEN batches; the engine
+          re-resolves under the new window (past batches replay identically). */}
+      {!done && (
+        <PPanel style={{ padding: 8 }}>
+          <button
+            onClick={() => setHandOpen((o) => !o)}
+            style={{ all: 'unset', cursor: 'pointer', display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}
+          >
+            <Eyebrow color="var(--kit-blue)">TACTICS · ENERGY {energyLeft}/{DEFAULT_ENERGY}</Eyebrow>
+            <span style={{ fontFamily: PIXEL, fontSize: 9, color: 'var(--dust)' }}>{handOpen ? '▾' : '▸'}</span>
+          </button>
+          {handOpen && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+              {TACTICS.map((t) => {
+                const boostEntries = Object.entries(t.dialBoost ?? {}) as [Contest, number][];
+                const boostLive = boostEntries.every(([c]) => committed.has(c));
+                const affordable = energyLeft >= t.energyCost;
+                return (
+                  <button
+                    key={t.id}
+                    disabled={!affordable}
+                    onClick={() => {
+                      onPlayTactic(batch + 1, t);
+                      setHandOpen(false);
+                    }}
+                    style={{
+                      all: 'unset',
+                      cursor: affordable ? 'pointer' : 'default',
+                      opacity: affordable ? 1 : 0.35,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 8px',
+                      border: '1px solid var(--ink)',
+                      borderRadius: 4,
+                    }}
+                  >
+                    <span style={{ fontFamily: PIXEL, fontSize: 9, color: 'var(--cream)' }}>{t.name}</span>
+                    <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      {boostEntries.map(([c, v]) => (
+                        <Chip key={c} color={boostLive ? 'var(--gold)' : 'var(--dust)'}>
+                          {boostLive ? `${c} +${v}` : `NEEDS ${c}`}
+                        </Chip>
+                      ))}
+                      <Chip color="var(--kit-blue)">{t.posture.toUpperCase()} ×{t.durationBatches}</Chip>
+                      <span style={{ fontFamily: PIXEL, fontSize: 9, color: 'var(--gold)' }}>⚡{t.energyCost}</span>
+                    </span>
+                  </button>
+                );
+              })}
+              <div style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)' }}>
+                CALLED AT THE NEXT BATCH · CLASS BUFFS NEED THE COMMITTED BUILD
+              </div>
+            </div>
+          )}
+        </PPanel>
+      )}
 
       {/* Advance control. */}
       {!done ? (

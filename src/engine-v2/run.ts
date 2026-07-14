@@ -19,6 +19,7 @@
 
 import { type Position, type Contest, contestDials } from './contests';
 import { simulateMatch, type Squad, type MatchResult } from './match';
+import type { TacticalPlay } from './tactics';
 import { type Manager, MANAGERS, COMMIT_MIN } from './managers';
 import { FORMATIONS, type FormationId } from './adherence';
 import { type KCCard, squadTraits } from './cards';
@@ -320,7 +321,16 @@ export function fixtureSetup(run: RunState, pool: KCCard[]): FixtureSetup {
  * AND the match result (its event log is what the match/post-match screens render).
  * NB: the settlement tail is kept in sync with applyFixture by hand.
  */
-export function resolveFixture(run: RunState, playerXI: KCCard[], setup: FixtureSetup): { run: RunState; result: MatchResult } {
+export function resolveFixture(
+  run: RunState,
+  playerXI: KCCard[],
+  setup: FixtureSetup,
+  /** Tactical plays scheduled so far. The match UI re-resolves with an amended
+   *  schedule when the player calls a play between batches — same seed, so the
+   *  already-revealed batches replay byte-identically and only the future
+   *  re-rolls (determinism is the interactivity mechanism). */
+  plays: TacticalPlay[] = []
+): { run: RunState; result: MatchResult } {
   const manager = MANAGERS.find((m) => m.id === run.managerId)!;
   const f = setup.fixture;
   const setPieces = !setup.challenge?.noSetPieces && hasKit(playerXI);
@@ -332,6 +342,7 @@ export function resolveFixture(run: RunState, playerXI: KCCard[], setup: Fixture
     hasTaker: setPieces,
     hasCarrier: setPieces,
     dialBonus: qualityBonus(run.quality),
+    tacticalPlays: plays,
   };
   const res = simulateMatch(ps, setup.opponent, { seed: run.seed + f, target: setup.target });
   const points = round1(res.points[0]);
