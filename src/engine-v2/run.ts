@@ -24,6 +24,7 @@ import { FORMATIONS, type FormationId } from './adherence';
 import { type KCCard, squadTraits } from './cards';
 import { draftForManager } from './draft';
 import { type ChallengeRule, challengeForFixture } from './data/challenges';
+import type { Rarity } from './data/actions';
 
 export const RUN_FIXTURES = 9;
 
@@ -313,7 +314,11 @@ export function fixtureSetup(run: RunState, pool: KCCard[]): FixtureSetup {
   const manager = MANAGERS.find((m) => m.id === run.managerId)!;
   const f = run.fixture + 1;
   const challenge = challengeForFixture(run.seed, f);
-  const stream = sample(pool, run.seed + f * 101, 200);
+  // Owned cards (shop purchases) lead the draft stream — a bought card is a
+  // guaranteed XI option every fixture for the rest of the run.
+  const owned = run.collection.length ? pool.filter((c) => run.collection.includes(c.id)) : [];
+  const ownedIds = new Set(run.collection);
+  const stream = [...owned, ...sample(pool, run.seed + f * 101, 200).filter((c) => !ownedIds.has(c.id))];
   const suggestedXI =
     draftViable(stream, manager, run.seed + f * 101) ??
     fillBalanced(stream, FORMATIONS[manager.formation], run.seed + f * 101) ??
@@ -383,6 +388,58 @@ export function resolveFixture(
  *  preview shows what a purchase buys on the pitch). Mirrors playerSquad. */
 export function deckDialBonus(quality: number): Partial<Record<Contest, number>> {
   return qualityBonus(quality);
+}
+
+// ---- the pack shop (player cards as purchases) ------------------------------
+// Between fixtures the shop opens a PACK: nine seeded cards, rarity-shaped
+// (mostly Common, ~one Rare, ~one Epic, ~one Legendary — the pack-opening
+// handoff's distribution). Buying a card adds it to the run's permanent
+// `collection`; owned cards are injected at the FRONT of every future fixture's
+// draft stream, so a purchase is a guaranteed XI option for the rest of the run.
+// Quality investment (investCash) remains the other cash sink.
+
+export const CARD_PRICE: Record<Rarity, number> = { Common: 2, Rare: 4, Epic: 7, Legendary: 12 };
+
+const PACK_SIZE = 9;
+const PACK_SHAPE: [Rarity, number][] = [['Legendary', 1], ['Epic', 1], ['Rare', 1], ['Common', 6]];
+
+/** The shop's nine-card pack for the CURRENT visit (after fixture `run.fixture`).
+ *  Deterministic in (run seed, fixture); never offers already-owned cards. */
+export function packOffer(run: RunState, pool: KCCard[]): KCCard[] {
+  const owned = new Set(run.collection);
+  const stream = sample(pool, (run.seed ^ 0x9e3779b1) + run.fixture * 313, pool.length).filter((c) => !owned.has(c.id));
+  const pack: KCCard[] = [];
+  const taken = new Set<string>();
+  for (const [rarity, want] of PACK_SHAPE) {
+    let got = 0;
+    for (const c of stream) {
+      if (got >= want) break;
+      if (c.rarity !== rarity || taken.has(c.id)) continue;
+      pack.push(c);
+      taken.add(c.id);
+      got++;
+    }
+  }
+  // top up from anything left if a rarity bucket ran dry (tiny pools)
+  for (const c of stream) {
+    if (pack.length >= PACK_SIZE) break;
+    if (!taken.has(c.id)) {
+      pack.push(c);
+      taken.add(c.id);
+    }
+  }
+  // present commons-first ordering? No — reveal order is rarity-ascending so the
+  // pack's tail carries the flare (Common → Rare → Epic → Legendary).
+  const rank: Record<Rarity, number> = { Common: 0, Rare: 1, Epic: 2, Legendary: 3 };
+  return pack.sort((a, b) => rank[a.rarity] - rank[b.rarity]);
+}
+
+/** Buy a card from the pack: spend its rarity price, add it to the collection.
+ *  No-op if already owned or unaffordable. Pure — returns the updated run. */
+export function buyCard(run: RunState, card: KCCard): RunState {
+  const price = CARD_PRICE[card.rarity];
+  if (run.collection.includes(card.id) || run.cash < price) return run;
+  return { ...run, cash: round1(run.cash - price), collection: [...run.collection, card.id] };
 }
 
 /** Invest cash into the deck (shop): spend `amount`, gain quality at the run's

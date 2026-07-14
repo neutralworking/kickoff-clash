@@ -27,6 +27,10 @@ import {
   serializeRun,
   deserializeRun,
   challengeForFixture,
+  packOffer,
+  buyCard,
+  CARD_PRICE,
+  fixtureSetup,
   RUN_FIXTURES,
   MANAGERS,
   MANAGERS_BY_ID,
@@ -158,5 +162,44 @@ describe('the permadeath curve — committed survives deeper than uncommitted (S
     let f1deaths = 0;
     for (let i = 0; i < 40; i++) if (deathFixture(simulateRun(9000 + i, MANAGERS[i % MANAGERS.length], pool, true)) === 1) f1deaths++;
     expect(f1deaths / 40).toBeLessThan(0.15);
+  });
+});
+
+describe('the pack shop — nine seeded cards, purchases join the draft stream', () => {
+  it('packOffer is deterministic, rarity-shaped, and never offers owned cards', () => {
+    const run = { ...createRun(77, MANAGERS_BY_ID['metronome']), cash: 50 };
+    const a = packOffer(run, pool);
+    const b = packOffer(run, pool);
+    expect(a.map((c) => c.id)).toEqual(b.map((c) => c.id));
+    expect(a).toHaveLength(9);
+    const count = (r: string) => a.filter((c) => c.rarity === r).length;
+    expect(count('Common')).toBe(6);
+    expect(count('Rare')).toBe(1);
+    expect(count('Epic')).toBe(1);
+    expect(count('Legendary')).toBe(1);
+    // buy one → the next visit's offer never contains it
+    const bought = buyCard(run, a[0]);
+    const next = packOffer(bought, pool);
+    expect(next.some((c) => c.id === a[0].id)).toBe(false);
+  });
+
+  it('buyCard spends the rarity price and adds to the collection; unaffordable is a no-op', () => {
+    const run = { ...createRun(78, MANAGERS_BY_ID['gambler']), cash: 5 };
+    const offer = packOffer(run, pool);
+    const common = offer.find((c) => c.rarity === 'Common')!;
+    const legendary = offer.find((c) => c.rarity === 'Legendary')!;
+    const after = buyCard(run, common);
+    expect(after.cash).toBe(5 - CARD_PRICE.Common);
+    expect(after.collection).toContain(common.id);
+    expect(buyCard(after, legendary)).toBe(after); // 12 > remaining cash → no-op
+    expect(buyCard(after, common)).toBe(after); // already owned → no-op
+  });
+
+  it('owned cards lead the next fixture\'s draft stream', () => {
+    let run = { ...createRun(79, MANAGERS_BY_ID['fortress']), cash: 30 };
+    const offer = packOffer(run, pool);
+    run = buyCard(run, offer[offer.length - 1]); // the Legendary
+    const setup = fixtureSetup(run, pool);
+    expect(setup.pool[0].id).toBe(offer[offer.length - 1].id);
   });
 });

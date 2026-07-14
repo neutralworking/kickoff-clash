@@ -207,8 +207,8 @@ export default function PlayShell() {
           <PostMatch manager={manager} setup={pending.setup} result={pending.result} run={pending.run} onContinue={afterPostMatch} />
         )}
 
-        {!loading && phase === 'shop' && run && manager && (
-          <Shop run={run} manager={manager} onDone={(next) => { persist(next); setPhase('fixture'); }} />
+        {!loading && phase === 'shop' && run && manager && pool && (
+          <Shop run={run} manager={manager} pool={pool} onDone={(next) => { persist(next); setPhase('fixture'); }} />
         )}
 
         {!loading && phase === 'summary' && run && manager && <RunSummary run={run} manager={manager} onNewRun={newRun} />}
