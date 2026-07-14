@@ -70,6 +70,89 @@ export const RARITY_SHEEN: Record<string, number> = {
 };
 
 // ---------------------------------------------------------------------------
+// FOIL TIER ladder (pack-opening handoff, direction 1C "Foil Premium").
+// The WHOLE card is the tier colour — fill, border, glow, inks — so rarity
+// reads instantly from card colour, not a badge: Common→BRONZE, Rare→SILVER,
+// Epic→GOLD, Legendary→ONYX. Exact values from the handoff's `tier()`.
+// Additive: RARITY_COLOR / RARITY_FRAME stay for the other card surfaces.
+// ---------------------------------------------------------------------------
+
+export interface FoilTier {
+  /** Tier name (Bronze / Silver / Gold / Onyx). */
+  name: string;
+  /** Whole-card fill (165° gradient). */
+  fill: string;
+  /** Border + metallic inset-rim colour. */
+  edge: string;
+  /** The tier glow colour in the shadow stack. */
+  glow: string;
+  /** Primary text ink. */
+  ink: string;
+  /** Secondary text (role, labels). */
+  sub: string;
+  /** Light tiers take dark ink + a dark fitness track / recessed window. */
+  light: boolean;
+}
+
+export const FOIL_TIER: Record<string, FoilTier> = {
+  Common: {
+    name: 'Bronze',
+    fill: 'linear-gradient(165deg, #8a5220 0%, #5c3413 60%, #3d220c 100%)',
+    edge: '#d68b3c',
+    glow: 'rgba(198,125,55,0.6)',
+    ink: '#fbe9d2',
+    sub: '#e4b184',
+    light: false,
+  },
+  Rare: {
+    name: 'Silver',
+    fill: 'linear-gradient(165deg, #d3dae3 0%, #9aa5b4 58%, #737e8c 100%)',
+    edge: '#ffffff',
+    glow: 'rgba(210,220,235,0.75)',
+    ink: '#1b2029',
+    sub: '#3f4854',
+    light: true,
+  },
+  Epic: {
+    name: 'Gold',
+    fill: 'linear-gradient(165deg, #ffd85c 0%, #eab21f 55%, #b47d10 100%)',
+    edge: '#fff2b0',
+    glow: 'rgba(245,197,66,0.85)',
+    ink: '#3a2604',
+    sub: '#6b4a0c',
+    light: true,
+  },
+  Legendary: {
+    name: 'Onyx',
+    fill: 'linear-gradient(165deg, #26262f 0%, #131319 55%, #050506 100%)',
+    edge: '#f5c542',
+    glow: 'rgba(245,197,66,0.95)',
+    ink: '#fdf3d4',
+    sub: '#e0bd63',
+    light: false,
+  },
+};
+
+/** Resolve the foil tier for a rarity, defaulting to Common/Bronze. */
+export function foilTier(rarity: string | undefined): FoilTier {
+  return FOIL_TIER[rarity ?? 'Common'] ?? FOIL_TIER.Common;
+}
+
+/** One-shot reveal-flare colour per rarity (handoff `rarityColor()` — NOT the
+ *  tier edge; the flare is the pull's "what did I just get" colour burst). */
+export const FOIL_FLARE: Record<string, string> = {
+  Common: '#b6a68a',
+  Rare: '#3aa0ff',
+  Epic: '#b06cff',
+  Legendary: '#ff9a00',
+};
+
+/** Handoff fitness value colour (`fitColor()`): ≥95 green, ≥80 amber, else red. */
+export function foilFitColor(f: number): string {
+  return f >= 95 ? '#22c55e' : f >= 80 ? '#f59e0b' : '#ef4444';
+}
+
+// ---------------------------------------------------------------------------
 // v3 CLASS MEDALLION system (Turn-7 handoff). The top-left medallion is the
 // single at-a-glance tell for a card's CLASS. Same slot, glyph + border swap:
 //   • player  → personality-theme glyph/colour + PLAYER label

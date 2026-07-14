@@ -1,48 +1,58 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+/**
+ * Pack opening — the design-handoff pack screen (1C "Foil Premium"), CLASSIC game.
+ *
+ * Three packs in sequence (players → managers → tactics), each: a sealed
+ * foil-shimmering pack (packPulse loop, TAP TO OPEN) → a white flash → the cards
+ * cascade in (dealIn stagger 70ms/card, one-shot rarity flare, Legendary ✦
+ * spark — the per-card animation lives in FoilCard). Player cards render as the
+ * handoff's whole-card-colour foil cards (Bronze/Silver/Gold/Onyx) in a 3-column
+ * grid, rows as needed (the classic player pack is 16 cards, not the handoff's
+ * 9 — the grid scrolls internally; the page itself never scrolls). Tapping any
+ * card opens the EXISTING CardModal for inspection.
+ *
+ * Manager / tactic stages keep their pick-one flow (GameCard tiles + PICK
+ * buttons) under the same screen chrome: step dots, title, PACK n/3, the
+ * one-line info pill, and the amber NEXT CTA.
+ *
+ * Props contract with GameShell is unchanged: `contents` (PackContents) in,
+ * `onContinue(managerId, tacticId)` out after the tactic pick.
+ */
+
+import { useMemo, useState } from 'react';
 import type { PackContents } from '../lib/packs';
 import type { Card } from '../lib/scoring';
 import type { JokerCard } from '../lib/jokers';
 import type { TacticCard } from '../lib/tactics';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
+import FoilCard from './cards/FoilCard';
+import { PIXEL } from './cards/cardTokens';
 
 // ---------------------------------------------------------------------------
-// Props — three stages happen internally. onContinue now surfaces the picked
-// manager so GameShell can carry it into TeamSelect (pre-filled gaffer chip).
+// Screen tokens (handoff values, mapped onto the game's palette where a token
+// exists). The phone screen stays dark: a pitch-green-tinted radial over near-
+// black — the foil cards are the light source.
 // ---------------------------------------------------------------------------
 
-interface PackRevealProps {
-  contents: PackContents;
-  onContinue: (managerId: string | null, tacticId: string | null) => void;
-}
-
-// ---------------------------------------------------------------------------
-// Constants / helpers
-// ---------------------------------------------------------------------------
-
-const RARITY_FLASH: Record<string, string> = {
-  Epic: 'rgba(168,85,247,0.55)',
-  Legendary: 'rgba(232,162,58,0.6)',
-};
-
-const PIXEL = 'var(--font-pixel, monospace)';
+const SCREEN_BG = 'radial-gradient(ellipse at 50% 18%, #14281a 0%, #0a0f0b 60%, #070907 100%)';
+const GOLD_HI = '#f5c542';
+const DOT_OFF = 'rgba(244,236,216,0.22)';
+const INFO_BORDER = 'rgba(212,160,53,0.28)';
+const INFO_BG = 'rgba(212,160,53,0.06)';
 
 type Stage = 'players' | 'managers' | 'tactics';
-type SubPhase = 'sealed' | 'ripping' | 'reveal';
+type Phase = 'sealed' | 'open';
 
 interface StageMeta {
   key: Stage;
   index: number;
   packLabel: string;
-  /** The named tagline shown under the title (was the generic category "The squad"). */
-  packSub: string;
-  packAccent: string;
-  /** Short header above the revealed cards, framing the pick (fills the dead zone). */
-  cardsHeader: string;
-  /** Bottom teach pill — the tactile "tap to …" instruction. */
-  teach: string;
+  /** Sealed-pack + step-dot accent. */
+  accent: string;
+  /** The one-line info pill under the header (handoff: one line only). */
+  info: string;
 }
 
 const STAGE_META: Record<Stage, StageMeta> = {
@@ -50,293 +60,205 @@ const STAGE_META: Record<Stage, StageMeta> = {
     key: 'players',
     index: 1,
     packLabel: 'PLAYER PACK',
-    packSub: 'The squad',
-    packAccent: 'var(--gold)',
-    cardsHeader: 'YOUR SQUAD',
-    teach: 'Tap any card to inspect it. Next up: the manager pack.',
+    accent: GOLD_HI,
+    info: 'Your starting squad — tap any card to inspect.',
   },
   managers: {
     key: 'managers',
     index: 2,
     packLabel: 'MANAGER PACK',
-    packSub: 'The managers',
-    packAccent: 'var(--kit-red)',
-    cardsHeader: 'PICK 1 OF 2',
-    teach: 'A manager shapes the whole team through their effect. Tap to inspect, then pick one.',
+    accent: '#3aa0ff',
+    info: 'Tap to inspect, then pick ONE gaffer to lead the run.',
   },
   tactics: {
     key: 'tactics',
     index: 3,
     packLabel: 'TACTICAL PACK',
-    packSub: 'The playbook',
-    packAccent: 'var(--kit-blue)',
-    cardsHeader: 'PICK 1 OF 3',
-    teach: 'Your tactic is played in-match as the game unfolds. Tap to inspect, then pick one.',
+    accent: '#b06cff',
+    info: 'Tap to inspect, then pick ONE play to carry into the run.',
   },
 };
 
+// Screen-level one-shot animations (kcfcp-prefixed; FoilCard owns the per-card
+// kcfc* keyframes). Reduced motion kills everything under the shell.
+const KCFCP_CSS = `
+@keyframes kcfcpPackPulse {
+  0%, 100% { transform: scale(1) rotate(-1.5deg); }
+  50%      { transform: scale(1.035) rotate(-1.5deg); }
+}
+@keyframes kcfcpHint {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+@keyframes kcfcpFlash {
+  0%   { opacity: 0; }
+  18%  { opacity: .85; }
+  100% { opacity: 0; }
+}
+@keyframes kcfcpShimmer {
+  0%   { background-position: -160% 0; }
+  100% { background-position: 260% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kcfcp, .kcfcp * { animation: none !important; }
+}
+`;
+
 // ===========================================================================
-// Sealed pack — tap to rip
+// Sealed pack — foil-shimmering pack card, TAP TO OPEN
 // ===========================================================================
 
-function SealedPack({
-  meta,
-  count,
-  countNoun,
-  ripping,
-  onRip,
-}: {
-  meta: StageMeta;
-  count: number;
-  countNoun: string;
-  ripping: boolean;
-  onRip: () => void;
-}) {
+function SealedPack({ meta, count, countNoun, onOpen }: { meta: StageMeta; count: number; countNoun: string; onOpen: () => void }) {
   return (
-    <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-6">
-      <div className="relative flex items-center justify-center" style={{ width: 200, height: 264 }}>
-        {/* tear flash */}
-        {ripping && (
-          <div
-            className="pack-flash absolute"
-            style={{
-              width: 220,
-              height: 220,
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, var(--line-white) 0%, rgba(255,250,240,0.4) 40%, transparent 70%)',
-              pointerEvents: 'none',
-            }}
-          />
-        )}
-
-        <button
-          onClick={onRip}
-          disabled={ripping}
-          aria-label={`Open ${meta.packLabel}`}
-          className={ripping ? 'pack-rip' : 'pack-idle'}
-          style={{
-            position: 'relative',
-            width: 168,
-            height: 232,
-            border: '3px solid var(--ink-black)',
-            borderRadius: 'var(--radius-lg)',
-            background: `linear-gradient(160deg, var(--surface-raised) 0%, var(--surface) 55%, var(--felt) 100%)`,
-            boxShadow: `0 0 0 2px ${meta.packAccent}, 0 14px 30px rgba(0,0,0,0.55)`,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 14,
-            cursor: ripping ? 'default' : 'pointer',
-            padding: 12,
-          }}
-        >
-          {/* perforation strip */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 30,
-              left: 8,
-              right: 8,
-              height: 0,
-              borderTop: '2px dashed rgba(251,247,236,0.25)',
-            }}
-          />
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: '50%',
-              border: `3px solid ${meta.packAccent}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontFamily: PIXEL,
-              fontSize: 16,
-              fontWeight: 700,
-              color: meta.packAccent,
-              boxShadow: `inset 0 0 12px ${meta.packAccent}33`,
-            }}
-          >
-            KC
-          </div>
-          <div
-            style={{
-              fontFamily: PIXEL,
-              fontSize: 12,
-              lineHeight: 1.5,
-              letterSpacing: 0.5,
-              color: 'var(--cream)',
-              textAlign: 'center',
-              textShadow: '0 2px 0 var(--ink-black)',
-              padding: '0 4px',
-            }}
-          >
-            {meta.packLabel}
-          </div>
-          <div
-            style={{
-              fontFamily: PIXEL,
-              fontSize: 9,
-              color: meta.packAccent,
-              letterSpacing: 0.5,
-            }}
-          >
-            {count} {countNoun}
-          </div>
-        </button>
-      </div>
-
-      {!ripping && (
+    <div className="flex-1 min-h-0 flex flex-col items-center justify-center" style={{ gap: 22 }}>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Open ${meta.packLabel}`}
+        style={{
+          width: 196,
+          height: 288,
+          borderRadius: 16,
+          cursor: 'pointer',
+          background: 'linear-gradient(160deg, #2a1a10 0%, #140b06 100%)',
+          border: `3px solid ${meta.accent}`,
+          position: 'relative',
+          overflow: 'hidden',
+          boxShadow: `0 10px 26px rgba(0,0,0,0.6), 0 0 30px ${meta.accent}66`,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 10,
+          animation: 'kcfcpPackPulse 1.7s ease-in-out infinite',
+        }}
+      >
+        {/* travelling foil shimmer */}
         <div
-          className="chip-reveal"
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            mixBlendMode: 'overlay',
+            opacity: 0.45,
+            background: 'linear-gradient(115deg, transparent 30%, rgba(255,255,255,.6) 48%, transparent 66%)',
+            backgroundSize: '250% 100%',
+            animation: 'kcfcpShimmer 3.5s linear infinite',
+          }}
+        />
+        {/* accent inner glow */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            background: `radial-gradient(circle at 50% 40%, ${meta.accent}33 0%, transparent 65%)`,
+          }}
+        />
+        <span
           style={{
             fontFamily: PIXEL,
-            fontSize: 10,
-            letterSpacing: 1,
-            color: 'var(--dust)',
-            animationDelay: '120ms',
+            fontSize: 52,
+            lineHeight: 0.9,
+            color: 'var(--cream)',
+            transform: 'rotate(-11deg)',
+            textShadow: '3px 3px 0 rgba(0,0,0,0.55)',
+            zIndex: 2,
           }}
         >
-          TAP TO TEAR OPEN
-        </div>
-      )}
+          KC
+        </span>
+        <span style={{ fontFamily: PIXEL, fontSize: 11, letterSpacing: '.16em', color: meta.accent, zIndex: 2, marginTop: 8 }}>
+          {meta.packLabel}
+        </span>
+        <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: '.12em', color: 'var(--cream-soft)', zIndex: 2 }}>
+          {count} {countNoun.toUpperCase()}
+        </span>
+      </button>
+
+      <span
+        style={{
+          fontFamily: PIXEL,
+          fontSize: 11,
+          letterSpacing: '.2em',
+          color: 'var(--cream)',
+          animation: 'kcfcpHint 1.3s ease-in-out infinite',
+        }}
+      >
+        TAP TO OPEN
+      </span>
     </div>
   );
 }
 
 // ===========================================================================
-// Player stage reveal — paginated grid of player GameCards.
-//
-// PHONE READABILITY (the owner call): 3 columns, not 4 — each card gets ~115px
-// at a 390 viewport so the on-card type actually reads. Max 6 per page keeps
-// every page to ≤2 rows (fits a 390×844 screen with no scroll, and survives
-// shorter phones). Pages are BALANCED, not naive slices: a 16-card pack splits
-// 6/5/5 (rows of 3+3 / 3+2 / 3+2) so no page ever ends on a lone orphan card.
+// Stage bodies
 // ===========================================================================
 
-const MAX_PLAYERS_PER_PAGE = 6;
-
-function PlayerReveal({ players, onOpen }: { players: Card[]; onOpen: (c: Card) => void }) {
-  const [page, setPage] = useState(0);
-  const pageCount = Math.max(1, Math.ceil(players.length / MAX_PLAYERS_PER_PAGE));
-  // Balanced page sizes: base cards per page, the remainder spread over the
-  // first pages (16 → [6,5,5]).
-  const base = Math.floor(players.length / pageCount);
-  const extra = players.length % pageCount;
-  const start = page * base + Math.min(page, extra);
-  const size = base + (page < extra ? 1 : 0);
-  const pageCards = players.slice(start, start + size);
-
-  // Rarity flash on first paint if the page holds an Epic/Legendary.
-  const [flash, setFlash] = useState<string | null>(null);
-  useEffect(() => {
-    const best = pageCards.find((c) => c.rarity === 'Legendary') ?? pageCards.find((c) => c.rarity === 'Epic');
-    if (best && page === 0) {
-      setFlash(RARITY_FLASH[best.rarity] ?? null);
-      const t = setTimeout(() => setFlash(null), 450);
-      return () => clearTimeout(t);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
-
+/** Player stage — the handoff grid: 3 columns, gap 7, rows as needed. The
+ *  classic pack is 16 cards (not 9), so the grid scrolls internally; every card
+ *  is a fixed-height 234 foil card and the cascade staggers 70ms per card. */
+function PlayerGrid({ players, onOpen }: { players: Card[]; onOpen: (c: Card) => void }) {
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      {flash && (
-        <div
-          className="pack-rarity-flash"
-          style={{ position: 'absolute', inset: 0, background: flash, zIndex: 30, pointerEvents: 'none' }}
-        />
-      )}
-
-      {/* Grid + pager sit directly under the run-context strip (top-aligned), so the
-          squad reads as one block from the top and leftover space falls to the bottom
-          above the CTA — no floating island / dead zone. */}
-      <div className="flex-1 min-h-0 flex flex-col justify-start" style={{ gap: 12, paddingTop: 4 }}>
-        <div
-          key={page}
-          className="grid shrink-0"
-          style={{
-            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gridAutoRows: 'min-content',
-            gap: 8,
-          }}
-        >
-          {pageCards.map((c, i) => (
-            <GameCard
-              key={c.id}
-              model={{ variant: 'player', card: c }}
-              delay={i * 28}
-              onClick={() => onOpen(c)}
-              ariaLabel={`Inspect ${c.name}`}
-            />
-          ))}
-        </div>
-
-        {/* Pager */}
-        <div className="flex items-center justify-center gap-3 shrink-0">
-        <PagerBtn dir="prev" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))} />
-        <div className="flex items-center gap-2">
-          {Array.from({ length: pageCount }).map((_, i) => (
-            <span
-              key={i}
-              style={{
-                width: i === page ? 22 : 8,
-                height: 8,
-                borderRadius: 4,
-                background: i === page ? 'var(--gold)' : 'rgba(251,247,236,0.22)',
-                transition: 'all 0.25s ease',
-              }}
-            />
-          ))}
-        </div>
-        <PagerBtn dir="next" disabled={page >= pageCount - 1} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} />
-        </div>
+    <div
+      className="flex-1 min-h-0 overflow-y-auto"
+      style={{ overscrollBehavior: 'contain', padding: '8px 0 12px' }}
+    >
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', alignItems: 'start', gap: 7 }}
+      >
+        {players.map((c, i) => (
+          <FoilCard key={c.id} card={c} revealDelayMs={i * 70} onClick={() => onOpen(c)} />
+        ))}
       </div>
     </div>
   );
 }
 
-function PagerBtn({ dir, disabled, onClick }: { dir: 'prev' | 'next'; disabled: boolean; onClick: () => void }) {
+/** A PICK button under a manager/tactic tile. */
+function PickBtn({ picked, accent, small, onClick, label }: { picked: boolean; accent: string; small?: boolean; onClick: () => void; label: string }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      disabled={disabled}
-      aria-label={dir === 'prev' ? 'Previous page' : 'Next page'}
+      className="active:scale-95"
       style={{
-        width: 40,
-        height: 40,
-        borderRadius: 'var(--radius-sm)',
-        border: '2px solid var(--ink-black)',
-        background: disabled ? 'rgba(255,255,255,0.05)' : 'var(--surface-raised)',
-        color: disabled ? 'var(--ink)' : 'var(--cream)',
         fontFamily: PIXEL,
-        fontSize: 14,
-        cursor: disabled ? 'default' : 'pointer',
+        fontSize: small ? 9 : 11,
+        letterSpacing: 0.4,
+        color: picked ? '#0b0703' : 'var(--cream)',
+        padding: small ? '7px 0' : '10px 0',
+        borderRadius: 'var(--radius-sm)',
+        border: picked ? `2px solid ${accent}` : '2px solid var(--ink-black)',
+        background: picked ? accent : 'var(--surface)',
+        boxShadow: picked ? `0 3px 0 0 var(--ink-black), 0 0 16px ${accent}55` : '0 3px 0 0 var(--ink-black)',
+        transition: 'transform 0.12s ease',
+        cursor: 'pointer',
       }}
     >
-      {dir === 'prev' ? '‹' : '›'}
+      {picked ? 'PICKED ✓' : label}
     </button>
   );
 }
 
-// ===========================================================================
-// Manager stage reveal — two gaffer GameCards, tap to inspect, pick one
-// ===========================================================================
-
-function ManagerReveal({
+function ManagerGrid({
   managers,
   pickedId,
+  accent,
   onOpen,
   onPick,
 }: {
   managers: JokerCard[];
   pickedId: string | null;
+  accent: string;
   onOpen: (m: JokerCard) => void;
   onPick: (id: string) => void;
 }) {
   return (
-    <div className="flex-1 min-h-0 flex flex-col justify-start" style={{ paddingTop: 4 }}>
+    <div className="flex-1 min-h-0 overflow-y-auto" style={{ overscrollBehavior: 'contain', padding: '8px 0 12px' }}>
       <div
         className="grid mx-auto w-full"
         style={{ gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12, alignContent: 'start', maxWidth: 340 }}
@@ -352,29 +274,47 @@ function ManagerReveal({
                 onClick={() => onOpen(m)}
                 ariaLabel={`Inspect ${m.name}`}
               />
-              <button
-                onClick={() => onPick(m.id)}
-                className="active:scale-95"
-                style={{
-                  fontFamily: PIXEL,
-                  fontSize: 11,
-                  letterSpacing: 0.5,
-                  color: picked ? 'var(--ink-black)' : 'var(--cream)',
-                  padding: '10px 0',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '2px solid var(--ink-black)',
-                  background: picked
-                    ? 'linear-gradient(135deg, var(--kit-red), #b62520)'
-                    : 'var(--surface)',
-                  boxShadow: picked
-                    ? '0 3px 0 0 var(--ink-black), 0 5px 14px rgba(232,54,47,0.4)'
-                    : '0 3px 0 0 var(--ink-black)',
-                  transition: 'transform 0.12s ease',
-                  cursor: 'pointer',
-                }}
-              >
-                {picked ? 'PICKED ✓' : 'PICK MANAGER'}
-              </button>
+              <PickBtn picked={picked} accent={accent} onClick={() => onPick(m.id)} label="PICK MANAGER" />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TacticGrid({
+  tactics,
+  pickedId,
+  accent,
+  onOpen,
+  onPick,
+}: {
+  tactics: TacticCard[];
+  pickedId: string | null;
+  accent: string;
+  onOpen: (t: TacticCard) => void;
+  onPick: (id: string) => void;
+}) {
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto" style={{ overscrollBehavior: 'contain', padding: '8px 0 12px' }}>
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 7, alignContent: 'start' }}
+      >
+        {tactics.map((t, i) => {
+          const picked = pickedId === t.id;
+          return (
+            <div key={t.id} className="flex flex-col" style={{ gap: 6, minWidth: 0 }}>
+              <GameCard
+                // A freshly-ripped tactic arrives with a single charge (see tactics.ts).
+                model={{ variant: 'tactic', tactic: t, charges: 1 }}
+                delay={i * 70}
+                selected={picked}
+                onClick={() => onOpen(t)}
+                ariaLabel={`Inspect ${t.name}`}
+              />
+              <PickBtn picked={picked} accent={accent} small onClick={() => onPick(t.id)} label="PICK" />
             </div>
           );
         })}
@@ -384,78 +324,20 @@ function ManagerReveal({
 }
 
 // ===========================================================================
-// Tactics stage reveal — grid of tactic GameCards
+// Main component — props contract with GameShell preserved exactly.
 // ===========================================================================
 
-function TacticReveal({
-  tactics,
-  pickedId,
-  onOpen,
-  onPick,
-}: {
-  tactics: TacticCard[];
-  pickedId: string | null;
-  onOpen: (t: TacticCard) => void;
-  onPick: (id: string) => void;
-}) {
-  return (
-    <div
-      className="flex-1 min-h-0 grid overflow-y-auto"
-      style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gridAutoRows: 'min-content', gap: 8, alignContent: 'start', paddingTop: 4, overscrollBehavior: 'contain' }}
-    >
-      {tactics.map((t, i) => {
-        const picked = pickedId === t.id;
-        return (
-          <div key={t.id} className="flex flex-col" style={{ gap: 6, minWidth: 0 }}>
-            <GameCard
-              // A freshly-ripped tactic arrives with a single charge (see tactics.ts).
-              model={{ variant: 'tactic', tactic: t, charges: 1 }}
-              delay={i * 35}
-              selected={picked}
-              onClick={() => onOpen(t)}
-              ariaLabel={`Inspect ${t.name}`}
-            />
-            <button
-              onClick={() => onPick(t.id)}
-              className="active:scale-95"
-              style={{
-                fontFamily: PIXEL,
-                fontSize: 9,
-                letterSpacing: 0.4,
-                color: picked ? 'var(--ink-black)' : 'var(--cream)',
-                padding: '7px 0',
-                borderRadius: 'var(--radius-sm)',
-                border: '2px solid var(--ink-black)',
-                background: picked
-                  ? 'linear-gradient(135deg, var(--kit-blue), #2c6db0)'
-                  : 'var(--surface)',
-                boxShadow: picked
-                  ? '0 3px 0 0 var(--ink-black), 0 5px 14px rgba(44,109,176,0.4)'
-                  : '0 3px 0 0 var(--ink-black)',
-                transition: 'transform 0.12s ease',
-                cursor: 'pointer',
-              }}
-            >
-              {picked ? 'PICKED ✓' : 'PICK'}
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
+interface PackRevealProps {
+  contents: PackContents;
+  onContinue: (managerId: string | null, tacticId: string | null) => void;
 }
-
-// ===========================================================================
-// Main component
-// ===========================================================================
 
 export default function PackReveal({ contents, onContinue }: PackRevealProps) {
   const [stage, setStage] = useState<Stage>('players');
-  const [phase, setPhase] = useState<SubPhase>('sealed');
+  const [phase, setPhase] = useState<Phase>('sealed');
   const [pickedManagerId, setPickedManagerId] = useState<string | null>(null);
   const [pickedTacticId, setPickedTacticId] = useState<string | null>(null);
   const [modal, setModal] = useState<GameCardModel | null>(null);
-  const ripTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Players sorted strongest-first so pulls feel rewarding (display only).
   const sortedPlayers = useMemo(
@@ -464,14 +346,20 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
   );
 
   const meta = STAGE_META[stage];
+  const count =
+    stage === 'players' ? contents.players.length : stage === 'managers' ? contents.managers.length : contents.tactics.length;
+  const countNoun = stage === 'players' ? 'players' : stage === 'managers' ? 'managers' : 'tactics';
 
-  useEffect(() => () => { if (ripTimer.current) clearTimeout(ripTimer.current); }, []);
-
-  function rip() {
-    if (phase !== 'sealed') return;
-    setPhase('ripping');
-    ripTimer.current = setTimeout(() => setPhase('reveal'), 560);
-  }
+  // The manager and tactic stages each gate the continue button on a pick.
+  const managerGated = stage === 'managers' && pickedManagerId === null;
+  const tacticGated = stage === 'tactics' && pickedTacticId === null;
+  const gated = managerGated || tacticGated;
+  const continueLabel =
+    stage === 'tactics'
+      ? tacticGated ? 'PICK A TACTIC' : 'PICK YOUR TEAM →'
+      : stage === 'managers'
+        ? managerGated ? 'PICK A MANAGER' : 'NEXT PACK →'
+        : 'NEXT PACK →';
 
   function advanceStage() {
     if (stage === 'players') {
@@ -485,45 +373,42 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
     }
   }
 
-  const count =
-    stage === 'players' ? contents.players.length : stage === 'managers' ? contents.managers.length : contents.tactics.length;
-  const countNoun = stage === 'players' ? 'players' : stage === 'managers' ? 'managers' : 'tactics';
-
-  // The manager and tactic stages each gate the continue button on a pick.
-  const managerGated = stage === 'managers' && pickedManagerId === null;
-  const tacticGated = stage === 'tactics' && pickedTacticId === null;
-  const gated = managerGated || tacticGated;
-  const continueLabel =
-    stage === 'tactics'
-      ? tacticGated ? 'Pick a Tactic' : 'Pick Your Team →'
-      : stage === 'managers'
-        ? managerGated ? 'Pick a Manager' : 'Next Pack →'
-        : 'Next Pack →';
-
   return (
     <div
-      className="flex flex-col overflow-hidden relative"
+      className="kcfcp flex flex-col overflow-hidden relative"
       style={{
         height: '100dvh',
-        background: 'var(--felt)',
+        background: SCREEN_BG,
         paddingTop: 'max(env(safe-area-inset-top), 14px)',
         paddingBottom: 'max(env(safe-area-inset-bottom), 14px)',
-        paddingLeft: 14,
-        paddingRight: 14,
+        paddingLeft: 16,
+        paddingRight: 16,
       }}
     >
-      {/* Subtle mown-pitch wash */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            'radial-gradient(ellipse at 50% 22%, rgba(31,157,79,0.10) 0%, transparent 55%)',
-        }}
-      />
+      <style href="kcfcp-styles" precedence="medium">
+        {KCFCP_CSS}
+      </style>
 
-      {/* Header: stage progress + title */}
+      {/* open flash — a one-shot white burst as the pack tears (keyed per stage) */}
+      {phase === 'open' && (
+        <div
+          key={`flash-${stage}`}
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 40,
+            pointerEvents: 'none',
+            background: '#fff',
+            opacity: 0,
+            animation: 'kcfcpFlash .6s ease-out both',
+          }}
+        />
+      )}
+
+      {/* Header — step dots (active = wide pill), title, PACK n / 3 */}
       <div className="shrink-0 relative" style={{ zIndex: 2 }}>
-        <div className="flex items-center justify-center gap-2" style={{ marginBottom: 8 }}>
+        <div className="flex items-center justify-center" style={{ gap: 6, marginBottom: 10 }}>
           {(['players', 'managers', 'tactics'] as Stage[]).map((s) => {
             const active = STAGE_META[s].index === meta.index;
             const done = STAGE_META[s].index < meta.index;
@@ -531,14 +416,10 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
               <span
                 key={s}
                 style={{
-                  width: active ? 26 : 9,
-                  height: 9,
-                  borderRadius: 5,
-                  background: active
-                    ? STAGE_META[s].packAccent
-                    : done
-                      ? 'rgba(251,247,236,0.5)'
-                      : 'rgba(251,247,236,0.18)',
+                  width: active ? 22 : 8,
+                  height: 8,
+                  borderRadius: 99,
+                  background: active ? GOLD_HI : done ? 'rgba(244,236,216,0.5)' : DOT_OFF,
                   transition: 'all 0.3s ease',
                 }}
               />
@@ -549,11 +430,12 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
           className="text-center"
           style={{
             fontFamily: PIXEL,
-            fontSize: 17,
-            letterSpacing: 0.5,
-            color: 'var(--cream)',
-            textShadow: '0 2px 0 var(--ink-black)',
+            fontSize: 19,
+            letterSpacing: '.08em',
+            color: GOLD_HI,
+            textShadow: '0 2px 0 rgba(0,0,0,0.6), 0 0 18px rgba(245,197,66,0.35)',
             margin: 0,
+            lineHeight: 1.1,
           }}
         >
           {meta.packLabel}
@@ -563,89 +445,57 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
           style={{
             fontFamily: PIXEL,
             fontSize: 9,
-            letterSpacing: 1,
-            color: meta.packAccent,
+            letterSpacing: '.16em',
+            color: 'var(--amber)',
             marginTop: 4,
           }}
         >
           PACK {meta.index} / 3
         </p>
-        <p
-          className="text-center"
-          style={{
-            fontFamily: 'var(--font-flavour)',
-            fontStyle: 'italic',
-            fontSize: 12,
-            letterSpacing: 0.2,
-            color: 'var(--cream)',
-            opacity: 0.62,
-            marginTop: 3,
-          }}
-        >
-          {meta.packSub}
-        </p>
       </div>
 
       {/* Body */}
-      <div className="flex-1 min-h-0 flex flex-col relative" style={{ zIndex: 2, marginTop: 10, marginBottom: 10 }}>
-        {phase !== 'reveal' ? (
-          <SealedPack meta={meta} count={count} countNoun={countNoun} ripping={phase === 'ripping'} onRip={rip} />
+      <div className="flex-1 min-h-0 flex flex-col relative" style={{ zIndex: 2, marginTop: 4 }}>
+        {phase === 'sealed' ? (
+          <SealedPack meta={meta} count={count} countNoun={countNoun} onOpen={() => setPhase('open')} />
         ) : (
           <>
-            {/* Run-context strip — PLAYER pack only. Pinned above the grid, matching
-                the bottom hint pill: the starting draft is random and the lineup is
-                improved in the shop (players can be bought and sold). */}
-            {stage === 'players' && (
-              <div
-                className="chip-reveal glass-surface shrink-0 relative overflow-hidden"
-                style={{
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid rgba(245,197,66,0.35)',
-                  boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), 0 0 10px rgba(245,197,66,0.14), var(--depth-1)',
-                  padding: '8px 11px',
-                  marginBottom: 8,
-                  display: 'flex',
-                  gap: 8,
-                  alignItems: 'center',
-                }}
-              >
-                <span className="relative" style={{ fontSize: 15, flexShrink: 0, zIndex: 2 }}>{'\u{1F4A1}'}</span>
-                <span className="relative flex flex-col" style={{ zIndex: 2, minWidth: 0 }}>
-                  <span style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.3, color: 'var(--gold)', lineHeight: 1.35 }}>
-                    {count} players, drawn at random.
-                  </span>
-                  <span style={{ fontSize: 10.5, lineHeight: 1.3, color: 'var(--cream-soft)', marginTop: 2 }}>
-                    Pick your team from them — and buy, sell or improve your lineup in the store.
-                  </span>
-                </span>
-              </div>
-            )}
-
-            {/* Card header — a small pixel kicker so managers/tactics stop looking
-                empty and the pick is framed. */}
-            {stage !== 'players' && (
-              <div className="chip-reveal shrink-0 flex items-center justify-center gap-2" style={{ marginBottom: 8 }}>
-                <span style={{ width: 16, height: 2, borderRadius: 1, background: meta.packAccent, opacity: 0.55 }} />
-                <span style={{ fontFamily: PIXEL, fontSize: 10, letterSpacing: 1.5, color: meta.packAccent }}>
-                  {meta.cardsHeader}
-                </span>
-                <span style={{ width: 16, height: 2, borderRadius: 1, background: meta.packAccent, opacity: 0.55 }} />
-              </div>
-            )}
+            {/* Info line — ONE line, hairline gold-tinted pill (handoff spec). */}
+            <div
+              className="shrink-0"
+              style={{
+                border: `1px solid ${INFO_BORDER}`,
+                background: INFO_BG,
+                borderRadius: 8,
+                padding: '8px 12px',
+                margin: '12px 0 0',
+                fontSize: 11.5,
+                lineHeight: 1.3,
+                color: 'var(--cream-soft)',
+                textAlign: 'center',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {meta.info}
+            </div>
 
             {stage === 'players' ? (
-              <PlayerReveal players={sortedPlayers} onOpen={(c) => setModal({ variant: 'player', card: c })} />
+              <PlayerGrid players={sortedPlayers} onOpen={(c) => setModal({ variant: 'player', card: c })} />
             ) : stage === 'managers' ? (
-              <ManagerReveal
+              <ManagerGrid
                 managers={contents.managers}
                 pickedId={pickedManagerId}
+                accent={meta.accent}
                 onOpen={(m) => setModal({ variant: 'manager', manager: m })}
                 onPick={(id) => setPickedManagerId(id)}
               />
             ) : (
-              <TacticReveal
+              <TacticGrid
                 tactics={contents.tactics}
                 pickedId={pickedTacticId}
+                accent={meta.accent}
                 onOpen={(t) => setModal({ variant: 'tactic', tactic: t, charges: 1 })}
                 onPick={(id) => setPickedTacticId(id)}
               />
@@ -654,56 +504,39 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
         )}
       </div>
 
-      {/* Teaching line + continue (only after reveal) */}
-      <div className="shrink-0 relative" style={{ zIndex: 2 }}>
-        {phase === 'reveal' && (
-          <>
-            <div
-              className="chip-reveal"
-              style={{
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(251,247,236,0.14)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '9px 12px',
-                marginBottom: 10,
-                display: 'flex',
-                gap: 8,
-                alignItems: 'center',
-              }}
-            >
-              <span style={{ fontSize: 15, flexShrink: 0 }}>{'\u{1F4A1}'}</span>
-              <span style={{ fontSize: 11.5, lineHeight: 1.35, color: 'var(--cream-soft)' }}>{meta.teach}</span>
-            </div>
-            <button
-              onClick={advanceStage}
-              disabled={gated}
-              className={gated ? '' : 'w-full active:scale-95'}
-              style={{
-                width: '100%',
-                fontFamily: PIXEL,
-                fontSize: 14,
-                letterSpacing: 0.5,
-                color: gated ? 'var(--ink)' : 'var(--cream)',
-                padding: '15px 0',
-                borderRadius: 'var(--radius)',
-                border: '2px solid var(--ink-black)',
-                background: gated
-                  ? 'var(--surface)'
-                  : 'linear-gradient(135deg, var(--amber), var(--amber-soft))',
-                boxShadow: gated
-                  ? '0 4px 0 0 var(--ink-black)'
-                  : '0 4px 0 0 var(--ink-black), 0 6px 18px var(--amber-glow)',
-                transition: 'transform 0.12s ease',
-                cursor: gated ? 'default' : 'pointer',
-              }}
-            >
-              {continueLabel}
-            </button>
-          </>
-        )}
-      </div>
+      {/* Footer CTA (only after reveal) */}
+      {phase === 'open' && (
+        <div className="shrink-0 relative" style={{ zIndex: 2, paddingTop: 8 }}>
+          <button
+            type="button"
+            onClick={advanceStage}
+            disabled={gated}
+            className={gated ? '' : 'active:scale-95'}
+            style={{
+              width: '100%',
+              fontFamily: PIXEL,
+              fontSize: 14,
+              letterSpacing: '.06em',
+              color: gated ? 'var(--dust)' : '#1a0f08',
+              padding: '14px 0',
+              borderRadius: 10,
+              border: 'none',
+              background: gated
+                ? 'var(--surface)'
+                : 'linear-gradient(180deg, var(--amber), var(--amber-soft))',
+              boxShadow: gated
+                ? '0 4px 0 0 var(--ink-black)'
+                : '0 5px 0 #a3560a, 0 0 24px var(--amber-glow)',
+              transition: 'transform 0.12s ease',
+              cursor: gated ? 'default' : 'pointer',
+            }}
+          >
+            {continueLabel}
+          </button>
+        </div>
+      )}
 
-      {/* Full-card overlay */}
+      {/* Full-card overlay — the EXISTING inspect modal */}
       <CardModal model={modal} onClose={() => setModal(null)} />
     </div>
   );
