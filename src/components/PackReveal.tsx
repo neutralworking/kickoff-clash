@@ -206,16 +206,27 @@ function SealedPack({
 }
 
 // ===========================================================================
-// Player stage reveal — paginated grid of player GameCards (8/page → 4 pages)
+// Player stage reveal — paginated grid of player GameCards.
+//
+// PHONE READABILITY (the owner call): 3 columns, not 4 — each card gets ~115px
+// at a 390 viewport so the on-card type actually reads. Max 6 per page keeps
+// every page to ≤2 rows (fits a 390×844 screen with no scroll, and survives
+// shorter phones). Pages are BALANCED, not naive slices: a 16-card pack splits
+// 6/5/5 (rows of 3+3 / 3+2 / 3+2) so no page ever ends on a lone orphan card.
 // ===========================================================================
 
-const PLAYERS_PER_PAGE = 8;
+const MAX_PLAYERS_PER_PAGE = 6;
 
 function PlayerReveal({ players, onOpen }: { players: Card[]; onOpen: (c: Card) => void }) {
   const [page, setPage] = useState(0);
-  const pageCount = Math.ceil(players.length / PLAYERS_PER_PAGE);
-  const start = page * PLAYERS_PER_PAGE;
-  const pageCards = players.slice(start, start + PLAYERS_PER_PAGE);
+  const pageCount = Math.max(1, Math.ceil(players.length / MAX_PLAYERS_PER_PAGE));
+  // Balanced page sizes: base cards per page, the remainder spread over the
+  // first pages (16 → [6,5,5]).
+  const base = Math.floor(players.length / pageCount);
+  const extra = players.length % pageCount;
+  const start = page * base + Math.min(page, extra);
+  const size = base + (page < extra ? 1 : 0);
+  const pageCards = players.slice(start, start + size);
 
   // Rarity flash on first paint if the page holds an Epic/Legendary.
   const [flash, setFlash] = useState<string | null>(null);
@@ -246,7 +257,7 @@ function PlayerReveal({ players, onOpen }: { players: Card[]; onOpen: (c: Card) 
           key={page}
           className="grid shrink-0"
           style={{
-            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
             gridAutoRows: 'min-content',
             gap: 8,
           }}

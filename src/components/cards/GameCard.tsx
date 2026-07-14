@@ -93,6 +93,21 @@ function fitFontSize(text: string, base: number): number {
   return base * 0.5;
 }
 
+/**
+ * Gentler, grid-only sizing for the short meta lines on the small token (the
+ * role under the name, the action titles). These strings are bounded (~20 chars
+ * max — "Commander of the Box", "Half-Space Creator"), so the aggressive
+ * fitFontSize curve (built for arbitrary names) over-shrinks them below phone
+ * legibility. Whole/half-pixel steps keep the type crisp; anything that still
+ * doesn't fit one line WRAPS instead of truncating.
+ */
+function gridMetaFont(text: string, base: number): number {
+  const len = text.trim().length;
+  if (len <= 10) return base;
+  if (len <= 16) return base - 1;
+  return base - 1.5;
+}
+
 export type CardSize = 'grid' | 'full';
 
 export type GameCardModel =
@@ -561,25 +576,23 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
   // tightest case).
   const nActions = actions.length;
   const busy = nActions >= 3;
-  // GRID (small token): TITLE ONLY — no effect text. Keywords are short, so the
-  // count can climb (a 4-action Legendary) without truncation; a rare long
-  // keyword steps its own font down. FULL (the blow-up): the WHOLE effect text,
-  // NO clamp/truncation. The full card is NOT aspect-locked (see frameStyle) —
-  // its art window is a FIXED height and the actions region grows to fit every
-  // row, so the frame itself grows taller as the action count climbs. Nothing
-  // scrolls and nothing clips.
-  const artBasis = full
-    ? '0 0 132px'
-    : `0 0 ${nActions >= 4 ? '40%' : nActions === 3 ? '43%' : '47%'}`;
+  // GRID (small token): TITLE ONLY — no effect text. Cards carry 1 action
+  // (Legendary: 2, never more), so the name plate + actions + fitness bar take
+  // their NATURAL height and the ART window is the flexible region — it fills
+  // the slack on a quiet card and yields on a busy one, so the type never has
+  // to shrink below phone legibility to make room. FULL (the blow-up): the
+  // WHOLE effect text, NO clamp/truncation. The full card is NOT aspect-locked
+  // (see frameStyle) — its art window is a FIXED height and the actions region
+  // grows to fit every row, so the frame itself grows taller as the action
+  // count climbs. Nothing scrolls and nothing clips.
+  const artBasis = full ? '0 0 132px' : '1 1 auto';
   // Full effect (supplementary) text — small, smaller still when busy.
   const fullEffFont = nActions >= 4 ? 8 : busy ? 8.5 : 9.5;
   const fullKwFont = nActions >= 4 ? 7 : 7.5;
-  // Grid keyword — a touch larger since it's alone; length-aware so a long
-  // keyword ("POACHER'S INSTINCT") still fits one line.
-  const gridKwFont = (label: string) => {
-    const base = nActions >= 4 ? 6 : nActions === 3 ? 6.5 : 7.5;
-    return label.length > 12 ? base * 0.78 : label.length > 9 ? base * 0.9 : base;
-  };
+  // Grid keyword — sized to read at the 3-across phone width (~115px card);
+  // length-aware ("POACHER'S INSTINCT" steps down and wraps rather than
+  // truncating). The ≥3-action guard only fires if the rarity knob ever lifts.
+  const gridKwFont = (label: string) => gridMetaFont(label, busy ? 8 : 9);
   const actGap = full ? (busy ? 4 : 6) : nActions >= 4 ? 3 : 4;
   const nameThin = !full && busy;
 
@@ -591,7 +604,9 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
           style={{
             position: 'relative',
             flex: artBasis,
-            minHeight: 0,
+            // Grid: the art yields to the text rows but never below a head-and-
+            // shoulders window, so the bust stays the card's anchor.
+            minHeight: full ? 0 : 30,
             background: PLAYER_PITCH_BG,
             overflow: 'hidden',
           }}
@@ -646,7 +661,7 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
             style={{
               display: 'block',
               fontFamily: PIXEL,
-              fontSize: fitFontSize(name, full ? 15 : 9),
+              fontSize: fitFontSize(name, full ? 15 : 10),
               color: CREAM,
               textShadow: `0 ${full ? 2 : 1}px 0 ${INNER_INK}`,
               lineHeight: 1.12,
@@ -659,7 +674,9 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
             style={{
               display: 'block',
               fontFamily: BODY_FONT,
-              fontSize: fitFontSize(role, full ? 9.5 : 6.5),
+              // Grid: gentler length curve than the name — roles are bounded
+              // strings, so they step 8 → 7 → 6.5 instead of collapsing to ~5px.
+              fontSize: full ? fitFontSize(role, 9.5) : gridMetaFont(role, 8),
               color: DUST,
               marginTop: full ? 3 : 1.5,
               lineHeight: 1.2,
@@ -677,9 +694,10 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
           style={{
             // FULL: grow-no-shrink off content height — this is what forces the
             // (non-aspect-locked) frame taller so every action row shows in full,
-            // and fills any slack on a sparse card. GRID: aspect-locked, so it
-            // flexes/scrolls within the fixed height.
-            flex: full ? '1 0 auto' : '1 1 auto',
+            // and fills any slack on a sparse card. GRID: content-sized (1–2
+            // title lines, bounded) — the flexible ART window above absorbs the
+            // difference, so nothing here ever shrinks or scrolls.
+            flex: full ? '1 0 auto' : '0 0 auto',
             minHeight: 0,
             background: 'linear-gradient(180deg, #14100a, #0f0b06)',
             padding: full ? '9px 13px 10px' : '5px 7px 6px',
@@ -687,7 +705,6 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
             flexDirection: 'column',
             justifyContent: full ? 'flex-start' : 'center',
             gap: actGap,
-            overflowY: full ? 'visible' : 'auto',
             overscrollBehavior: 'contain',
             zIndex: 2,
           }}
@@ -711,17 +728,17 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
                 {a.text}
               </span>
             ) : (
+              // Grid title: WRAPS (max ~2 short lines) rather than truncating —
+              // "POACHER'S INSTINCT" reads on two 7.5px lines, never ellipsized.
               <span
                 key={a.key}
                 style={{
                   fontFamily: PIXEL,
                   fontSize: gridKwFont(a.label),
                   letterSpacing: 0.4,
-                  lineHeight: 1.3,
+                  lineHeight: 1.25,
                   color: a.color,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
+                  overflowWrap: 'break-word',
                 }}
               >
                 {a.bonus ? '★ ' : ''}
@@ -739,7 +756,7 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
             flexShrink: 0,
             background: '#0f0b06',
             borderTop: '1px solid rgba(232,178,60,0.2)',
-            padding: full ? '7px 34px 8px' : '4px 16px 5px',
+            padding: full ? '7px 34px 8px' : '4px 19px 5px',
             zIndex: 2,
           }}
         >
@@ -770,7 +787,9 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
               transform: 'translateY(-50%)',
               textAlign: 'center',
               fontFamily: PIXEL,
-              fontSize: full ? 5.5 : 4.5,
+              // Grid reads BIGGER than full here: the full card's meter is
+              // physically long, the grid one is the tell at a glance.
+              fontSize: full ? 5.5 : 6,
               letterSpacing: 1,
               color: '#fbf7ec',
               textShadow: '0 1px 1px #000',
@@ -785,7 +804,7 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
       {/* CORNER GEMS — overhang the frame. CLASS top-left, ATK bottom-left,
           DEF bottom-right (per Turn-9). */}
       <div style={{ position: 'absolute', left: full ? -6 : -4, top: full ? -9 : -6, zIndex: 6 }}>
-        <ClassGem cls={cls} size={full ? 34 : 20} border={3} />
+        <ClassGem cls={cls} size={full ? 34 : 22} border={3} />
       </div>
       <StatGem value={stats.atk} label="ATK" side="atk" full={full} pos="left" />
       <StatGem value={stats.def} label="DEF" side="def" full={full} pos="right" />
@@ -797,7 +816,7 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
  *  blue (DEF) ring, the value in near-white Silkscreen + a tiny tinted label.
  *  Sits over the frame's bottom corner (per Turn-9). */
 function StatGem({ value, label, side, full, pos }: { value: number; label: string; side: 'atk' | 'def'; full: boolean; pos: 'left' | 'right' }) {
-  const size = full ? 38 : 21;
+  const size = full ? 38 : 25;
   const ring = side === 'atk' ? '#e23b35' : '#3d7bd6';
   const bg = side === 'atk'
     ? 'radial-gradient(circle at 38% 30%, #46281a, #150b06 72%)'
@@ -822,10 +841,10 @@ function StatGem({ value, label, side, full, pos }: { value: number; label: stri
         zIndex: 6,
       }}
     >
-      <span style={{ fontFamily: PIXEL, fontSize: full ? 15 : 9, lineHeight: 0.85, color: '#fbf7ec', textShadow: `0 2px 0 ${INNER_INK}` }}>
+      <span style={{ fontFamily: PIXEL, fontSize: full ? 15 : 11, lineHeight: 0.85, color: '#fbf7ec', textShadow: `0 2px 0 ${INNER_INK}` }}>
         {value}
       </span>
-      <span style={{ fontFamily: PIXEL, fontSize: full ? 4.5 : 3.5, letterSpacing: 1, color: labelColor, lineHeight: 1 }}>
+      <span style={{ fontFamily: PIXEL, fontSize: 4.5, letterSpacing: 1, color: labelColor, lineHeight: 1 }}>
         {label}
       </span>
     </div>
@@ -840,11 +859,11 @@ function PositionPill({ pos, primary, full }: { pos: string; primary: boolean; f
     <span
       style={{
         fontFamily: PIXEL,
-        fontSize: primary ? (full ? 12 : 8) : full ? 7 : 5.5,
+        fontSize: primary ? (full ? 12 : 9) : full ? 7 : 5.5,
         lineHeight: 1,
         color: '#fbf7ec',
         background: color,
-        padding: primary ? (full ? '4px 7px' : '3px 4px') : full ? '3px 5px' : '2px 3px',
+        padding: primary ? (full ? '4px 7px' : '3px 5px') : full ? '3px 5px' : '2px 3px',
         borderRadius: primary ? 5 : 3,
         border: `1px solid ${INNER_INK}`,
         boxShadow: primary ? 'inset 0 1px 0 rgba(255,255,255,0.35)' : undefined,
