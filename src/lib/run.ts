@@ -48,7 +48,7 @@ export interface RunState {
   playingStyle: string;
   intent: TeamIntent;            // pre-match attacking/balanced/defensive lean
   startingXI: number[];          // 11 cardIds in formation-slot order (xi[i] ↔ slots[i])
-  benchIds: number[];            // up to 7 cardIds available as subs
+  benchIds: number[];            // up to 5 cardIds available as subs
   deck: Card[];
   bench: Card[];
   jokers: JokerCard[];           // active jokers (max 3)
@@ -856,11 +856,11 @@ export function generateStarterActionDeck(seed: number): ActionCard[] {
 
 /** The player's pre-match team selection (from the TeamSelect screen). */
 export interface TeamSelection {
-  players: Card[];        // the full 24-player rip → the run deck
+  players: Card[];        // the 16-card starter rip → the run deck
   startingXI: number[];   // 11 cardIds in formation-slot order
-  benchIds: number[];     // up to 7 cardIds available as subs
+  benchIds: number[];     // up to 5 cardIds available as subs
   manager: JokerCard | null;
-  tactics: TacticCard[];  // 10 tactic cards
+  tactics: TacticCard[];  // the picked tactic(s) — one from the pack of three
   formationId: string;    // chosen formation
   intent: TeamIntent;     // attacking / balanced / defensive
 }

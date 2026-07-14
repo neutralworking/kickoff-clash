@@ -48,19 +48,19 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 
 // ---------------------------------------------------------------------------
 // Starter rip (current flow): three fixed packs opened at New Season.
-//   - Player pack:  24 players (full pool; a 3-col gallery fills 8 clean rows, no lone card)
-//   - Manager pack: 2 managers (pick 1 before the match)
-//   - Tactical pack: 10 tactics (5 opening hand + 1 per turn)
+//   - Player pack:  16 players — the starting squad (field 11 + 5 subs, all used)
+//   - Manager pack: 2 managers (pick 1; the other is discarded)
+//   - Tactical pack: 3 tactics (pick 1 to carry into the run)
 // All formations are made available so the manager can pick a shape.
 // ---------------------------------------------------------------------------
 
-export const RIP_COUNTS = { players: 24, managers: 2, tactics: 5 } as const;
+export const RIP_COUNTS = { players: 16, managers: 2, tactics: 3 } as const;
 // The starter rip is deliberately SCRAPPY: Common-heavy with only a few Rare anchors and
 // NO Epic/Legendary. A full-pool rip starts the player ~maxed (XI avg ~74, can roll a
 // Legendary) so there's nothing to chase; capping at Common+Rare drops the opening XI to a
 // winnable-but-thin ~70 (still clears cup 1 ~80%+) and makes the shop's Epics/Legendaries
 // the real upgrade path. Tuned on scripts/starter-probe.ts.
-const RIP_RARES = 6; // of 24; the remainder are Common
+const RIP_RARES = 4; // of 16; the remainder are Common
 
 // ---------------------------------------------------------------------------
 // Shop card packs — the SEALED acquisition (economy.ts SCOUT_PACK / ELITE_PACK).
@@ -115,9 +115,15 @@ export function ripCardPack(tier: PackTier, seed: number): Card[] {
 }
 
 export function ripStarterPacks(seed: number): PackContents {
-  const rares = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Rare'), seed + 11).slice(0, RIP_RARES);
-  const commons = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Common'), seed).slice(0, RIP_COUNTS.players - rares.length);
-  const players = seededShuffle([...commons, ...rares], seed + 7);
+  const scrappy = (c: Card) => c.rarity === 'Common' || c.rarity === 'Rare';
+  // Guarantee a keeper: a legal XI needs a GK, and a 16-card random rip lands
+  // ZERO GKs ~28% of the time. Reserve one Common/Rare GK, then fill the rest
+  // normally (more GKs can still surface at random for a backup).
+  const gk = seededShuffle(ALL_CARDS.filter((c) => c.position === 'GK' && scrappy(c)), seed + 21).slice(0, 1);
+  const rares = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Rare' && !gk.includes(c)), seed + 11).slice(0, RIP_RARES);
+  const need = RIP_COUNTS.players - rares.length - gk.length;
+  const commons = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Common' && !gk.includes(c)), seed).slice(0, need);
+  const players = seededShuffle([...gk, ...commons, ...rares], seed + 7);
   const tactics = seededShuffle(ALL_TACTICS, seed + 100).slice(0, RIP_COUNTS.tactics);
   const managers = seededShuffle(ALL_JOKERS, seed + 300).slice(0, RIP_COUNTS.managers);
   // Lead with 4-3-3, then the rest — every formation is selectable.
