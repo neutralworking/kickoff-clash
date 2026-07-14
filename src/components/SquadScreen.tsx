@@ -106,10 +106,12 @@ interface SquadScreenProps {
   suspendedCards?: Card[];
 }
 
+// Handoff order (README + 1a mock): DEF / BAL / ATT — defence reads left,
+// attack right, matching the push direction of the contest bars above.
 const INTENTS: { id: TeamIntent; label: string; accent: string }[] = [
-  { id: 'attacking', label: 'ATT', accent: 'var(--kit-red)' },
-  { id: 'balanced', label: 'BAL', accent: 'var(--gold)' },
   { id: 'defensive', label: 'DEF', accent: 'var(--kit-blue)' },
+  { id: 'balanced', label: 'BAL', accent: 'var(--gold)' },
+  { id: 'attacking', label: 'ATT', accent: 'var(--kit-red)' },
 ];
 
 type Overlay =
