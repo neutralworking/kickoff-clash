@@ -42,15 +42,15 @@ export default function FixtureScreen({
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {/* The stakes: the scoreline decides everything. */}
+        {/* The blind. */}
         <PPanel glow style={{ padding: 12 }}>
-          <Eyebrow color="var(--gold)">WIN OR DRAW — A LOSS ENDS THE RUN</Eyebrow>
+          <Eyebrow color="var(--gold)">THE BLIND — BANK OR BUST</Eyebrow>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-            <div style={{ fontFamily: PIXEL, fontSize: 26, color: 'var(--gold)' }}>W · D</div>
-            <div style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)' }}>JUDGED ON GOALS, NOTHING ELSE</div>
+            <div style={{ fontFamily: PIXEL, fontSize: 26, color: 'var(--gold)' }}>{setup.target.toFixed(1)}</div>
+            <div style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)' }}>POINTS TO CLEAR THIS FIXTURE</div>
           </div>
           <div style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--cream-soft)', marginTop: 6, lineHeight: 1.5 }}>
-            A win banks the full purse (plus a bonus per goal); a draw survives on half. Cash buys deck quality — {manager.name}&apos;s win-con has to put goals on the board.
+            Bank ≥ {setup.target.toFixed(1)} via {manager.name}&apos;s win-con or the run ends. Beat it by more → more cash → a stronger deck.
           </div>
         </PPanel>
 

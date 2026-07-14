@@ -10,13 +10,10 @@
 import { type Manager, type RunState, RUN_FIXTURES } from '../../engine-v2';
 import { PPanel, PButton, Chip, Eyebrow, PIXEL } from './ui';
 
-const V = { win: 'W', draw: 'D', loss: 'L' } as const;
-const VCOLOR = { win: 'var(--success)', draw: 'var(--gold)', loss: 'var(--kit-red)' } as const;
-
 export default function RunSummary({ run, manager, onNewRun }: { run: RunState; manager: Manager; onNewRun: () => void }) {
-  const cleared = run.log.filter((r) => r.survived).length;
+  const cleared = run.log.filter((r) => r.beaten).length;
   const won = run.completed;
-  const goals = run.log.reduce((s, r) => s + r.score[0], 0);
+  const totalPoints = run.log.reduce((s, r) => s + r.points, 0);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: 16, gap: 12 }}>
@@ -34,8 +31,8 @@ export default function RunSummary({ run, manager, onNewRun }: { run: RunState; 
             <Eyebrow>CLEARED</Eyebrow>
           </PPanel>
           <PPanel style={{ flex: 1, padding: 12, textAlign: 'center' }}>
-            <div style={{ fontFamily: PIXEL, fontSize: 20, color: 'var(--cream)' }}>{goals}</div>
-            <Eyebrow>GOALS</Eyebrow>
+            <div style={{ fontFamily: PIXEL, fontSize: 20, color: 'var(--cream)' }}>{totalPoints.toFixed(0)}</div>
+            <Eyebrow>TOTAL PTS</Eyebrow>
           </PPanel>
           <PPanel style={{ flex: 1, padding: 12, textAlign: 'center' }}>
             <div style={{ fontFamily: PIXEL, fontSize: 20, color: 'var(--gold)' }}>£{Math.floor(run.cash)}</div>
@@ -49,10 +46,10 @@ export default function RunSummary({ run, manager, onNewRun }: { run: RunState; 
             {run.log.map((r) => (
               <div key={r.fixture} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--dust)', width: 44 }}>FIX {r.fixture}{r.boss ? '★' : ''}</span>
-                <span style={{ fontFamily: PIXEL, fontSize: 8, color: VCOLOR[r.verdict], flex: 1 }}>
-                  {r.score[0]}–{r.score[1]}{r.cashEarned ? ` · £${r.cashEarned}` : ''}
+                <span style={{ fontFamily: PIXEL, fontSize: 8, color: r.beaten ? 'var(--success)' : 'var(--kit-red)', flex: 1 }}>
+                  {r.points.toFixed(1)} / {r.target.toFixed(1)} · {r.score[0]}–{r.score[1]}
                 </span>
-                <Chip color={VCOLOR[r.verdict]}>{V[r.verdict]}</Chip>
+                <Chip color={r.beaten ? 'var(--success)' : 'var(--kit-red)'}>{r.beaten ? 'CLEARED' : 'FAILED'}</Chip>
               </div>
             ))}
           </div>

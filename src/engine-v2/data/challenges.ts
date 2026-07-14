@@ -7,9 +7,8 @@
  * reviewed catalogue is a separate design ticket (NW-147) — this is a starter
  * set of 8 with a merge hook (`CHALLENGE_RULES` = starter ∪ authored).
  *
- * Kept mechanism-first: with the match judged on the scoreline (owner call,
- * 2026-07 — no points bar), every rule expresses difficulty as opponent quality
- * and/or a themed restriction, so the run-distribution harness can exercise the
+ * Kept mechanism-first: a rule scales the fixture's points target and/or nudges
+ * the opponent, so the run-distribution harness can exercise the difficulty
  * lever without waiting on the authored copy.
  */
 
@@ -17,6 +16,8 @@ export interface ChallengeRule {
   id: string;
   name: string;
   blurb: string;
+  /** Multiplier on the fixture's points target (the blind). */
+  targetMult?: number;
   /** Flat boost to the opponent's squad quality this fixture. */
   oppQuality?: number;
   /** Halve the player's set-piece output (a themed restriction). */
@@ -25,14 +26,14 @@ export interface ChallengeRule {
 
 /** The reviewed starter set (NW-147 merges the full catalogue over this). */
 export const STARTER_CHALLENGES: ChallengeRule[] = [
-  { id: 'high-bar', name: 'High Bar', blurb: 'A side in form — beat them at their best.', oppQuality: 3 },
+  { id: 'high-bar', name: 'High Bar', blurb: 'The target is raised — outscore it.', targetMult: 1.2 },
   { id: 'title-race', name: 'Title Race', blurb: 'A stronger opponent stands in the way.', oppQuality: 6 },
-  { id: 'open-game', name: 'Open Game', blurb: 'They come to play — end-to-end stuff.', oppQuality: 2 },
+  { id: 'open-game', name: 'Open Game', blurb: 'Goals flow — the bar rises with them.', targetMult: 1.15 },
   { id: 'dead-rubber', name: 'Dead Rubber', blurb: 'Dead balls are ruled out — win it in open play.', noSetPieces: true },
-  { id: 'giant-killers', name: 'Giant-Killers', blurb: 'The minnows are fired up.', oppQuality: 4 },
-  { id: 'must-win', name: 'Must-Win', blurb: 'Nerves bite — no room for a slip.', oppQuality: 5 },
+  { id: 'giant-killers', name: 'Giant-Killers', blurb: 'The minnows are fired up.', oppQuality: 4, targetMult: 1.05 },
+  { id: 'must-win', name: 'Must-Win', blurb: 'Nerves bite — the bar is unforgiving.', targetMult: 1.25 },
   { id: 'derby-day', name: 'Derby Day', blurb: 'A committed, hostile opponent.', oppQuality: 5 },
-  { id: 'grind', name: 'The Grind', blurb: 'A war of attrition.', oppQuality: 3 },
+  { id: 'grind', name: 'The Grind', blurb: 'A war of attrition; a modestly higher bar.', targetMult: 1.1, oppQuality: 2 },
 ];
 
 /** Authored-catalogue merge hook (NW-147). Empty until that lands. */

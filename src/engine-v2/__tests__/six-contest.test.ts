@@ -20,8 +20,6 @@ import {
   simulateMatch,
   type Squad,
   RngStream,
-  MANAGERS_BY_ID,
-  COMMIT_MIN,
   buildXI,
   buildStopbus,
   tiltCensus,
@@ -345,61 +343,41 @@ describe('balance shape matches kc_sim (round-robin spread, no runaway)', () => 
   });
 });
 
-describe('the verdict is the scoreline — win / draw / loss, nothing else', () => {
+describe('the two commitment-gated scoring floors (goals + pressure | clean batches)', () => {
   const builder = new RngStream(20260709);
-
-  it('verdict matches the goals, every match', () => {
-    for (let s = 0; s < 120; s++) {
-      const h: Squad = { cards: buildXI(builder, 'random'), posture: 'balanced' };
-      const a: Squad = { cards: buildXI(builder, 'random'), posture: 'balanced' };
-      const r = simulateMatch(h, a, { seed: 4200 + s });
-      const expected = r.score[0] > r.score[1] ? 'win' : r.score[0] < r.score[1] ? 'loss' : 'draw';
-      expect(r.verdict).toBe(expected);
-    }
-  });
-
-  it('Build Pressure: a committed possession manager banks stacks and sharper chances', () => {
-    const metronome = MANAGERS_BY_ID['metronome'];
-    let stacks = 0;
-    let bigWith = 0, chancesWith = 0, bigWithout = 0, chancesWithout = 0;
-    for (let s = 0; s < 200; s++) {
-      const cards = buildXI(new RngStream(50 + s), 'mono:KEEP');
-      const managed: Squad = { cards, manager: metronome, formation: metronome.formation };
-      const bare: Squad = { cards, posture: 'balanced' };
-      const foe = (): Squad => ({ cards: buildXI(new RngStream(9000 + s), 'random'), posture: 'balanced' });
-      for (const e of simulateMatch(managed, foe(), { seed: 7000 + s }).events) {
-        if (e.type === 'pressure-built' && e.side === 0) stacks = Math.max(stacks, e.stacks);
-        if (e.type === 'chance' && e.side === 0) {
-          chancesWith++;
-          if (e.quality === 'big') bigWith++;
-        }
-      }
-      for (const e of simulateMatch(bare, foe(), { seed: 7000 + s }).events) {
-        if (e.type === 'chance' && e.side === 0) {
-          chancesWithout++;
-          if (e.quality === 'big') bigWithout++;
-        }
+  // collect points-banked events by source over a run of matches for a given pairing
+  function banked(home: Parameters<typeof buildXI>[1], away: Parameters<typeof buildXI>[1], seeds: number): Record<string, number> {
+    const acc: Record<string, number> = { goal: 0, 'clean-batch': 0, 'pressure-batch': 0 };
+    for (let s = 0; s < seeds; s++) {
+      const h: Squad = { cards: buildXI(builder, home), posture: 'balanced' };
+      const a: Squad = { cards: buildXI(builder, away), posture: 'balanced' };
+      for (const e of simulateMatch(h, a, { seed: 100 + s }).events) {
+        if (e.type === 'points-banked' && e.side === 0) acc[e.source] += 1;
       }
     }
-    expect(stacks).toBeGreaterThanOrEqual(2); // consecutive held periods stack
-    // the managed possession side's chances are SHARPER (reweight + Build Pressure)
-    expect(bigWith / chancesWith).toBeGreaterThan(bigWithout / chancesWithout);
+    return acc;
+  }
+
+  it('an ATTACK-committed build (mono:FINISH) is floored by pressure, not clean sheets', () => {
+    const a = banked('mono:FINISH', 'mono:STOP', 60);
+    // the attacker's floor exists — pressure is banked on dominant-but-barren batches
+    expect(a['pressure-batch']).toBeGreaterThan(0);
+    // and it is the DOMINANT floor: an attacker wins via goals + pressure, not clean
+    // sheets (incidental cross-commitment can leak a few, but the channel is attacking)
+    expect(a['pressure-batch']).toBeGreaterThan(a['clean-batch']);
   });
 
-  it('an uncommitted squad under a possession manager builds no pressure (the law)', () => {
-    const metronome = MANAGERS_BY_ID['metronome'];
-    let checked = 0;
-    for (let s = 0; s < 40; s++) {
-      const cards = buildXI(new RngStream(300 + s), 'random');
-      // a random XI can luck into KEEP commitment — the law only speaks to
-      // squads that genuinely haven't committed, so skip the lucky ones
-      if (contestDials(cards).KEEP >= COMMIT_MIN.KEEP) continue;
-      checked++;
-      const uncommitted: Squad = { cards, manager: metronome, formation: metronome.formation };
-      const foe: Squad = { cards: buildXI(new RngStream(600 + s), 'random'), posture: 'balanced' };
-      const r = simulateMatch(uncommitted, foe, { seed: 8000 + s });
-      expect(r.events.some((e) => e.type === 'pressure-built' && e.side === 0)).toBe(false);
-    }
-    expect(checked).toBeGreaterThan(10); // the guard didn't hollow the test out
+  it('a DEFENSE-committed build (mono:STOP) is floored by clean batches, not pressure', () => {
+    const d = banked('mono:STOP', 'mono:FINISH', 60);
+    expect(d['clean-batch']).toBeGreaterThan(0);
+    expect(d['clean-batch']).toBeGreaterThan(d['pressure-batch']); // defensive floor dominates
+  });
+
+  it('an UNCOMMITTED build (random) is floored by neither channel', () => {
+    // a random squad rarely clears any commitment gate, so it lives on goals alone —
+    // the no-unconditional law applied to the scoring floors (this is why an
+    // incoherent build dies early under the run's blind).
+    const r = banked('random', 'random', 60);
+    expect(r['clean-batch'] + r['pressure-batch']).toBeLessThan(r['goal'] + 1);
   });
 });
