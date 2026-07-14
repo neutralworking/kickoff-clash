@@ -52,8 +52,9 @@ export interface PitchTokenProps {
   /** 0–100 condition; the thin bottom bar. */
   fitness: number;
   injured?: boolean;
-  /** Token width (px). ~64 on team-select, larger on the match pitch. */
-  width?: number;
+  /** Token width. A number (px) on the pitch (~62–64), or '100%' so a bench tile
+   *  fills its grid cell as a smaller instance of the same token. */
+  width?: number | string;
   /** MISFIT reveal (team-select): an amber outline on an incompetent token. */
   misfitReveal?: boolean;
   /** Fade the drag source. */
@@ -139,24 +140,28 @@ export function PitchToken({
           {/* Top row: class gem + competence-coloured position pill. */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 3px 2px', background: 'rgba(11,7,3,0.5)' }}>
             <ClassGem cls={classOfCard(card)} size={16} />
-            <span style={{ fontFamily: PIXEL, fontSize: 7, lineHeight: 1, color: comp.text, background: comp.bg, padding: '2px 4px', borderRadius: 3, border: '1px solid rgba(0,0,0,0.4)' }}>
+            {/* Position pill — bumped for at-a-glance legibility: larger pixel type,
+                tighter tracking, a hard ink edge for contrast on the competence fill. */}
+            <span style={{ fontFamily: PIXEL, fontSize: 9.5, lineHeight: 1, letterSpacing: 0.4, fontWeight: 700, color: comp.text, background: comp.bg, padding: '3px 5px', borderRadius: 3, border: '1px solid var(--ink-black)', boxShadow: '0 1px 0 0 rgba(0,0,0,0.35)' }}>
               {card.position}
             </span>
           </div>
 
-          {/* Power row: half ATT / half DEF + signed buff/debuff over each half. */}
+          {/* Power row: half ATT / half DEF + signed buff/debuff over each half.
+              No ATT/DEF captions — the orange/blue split already reads attack vs
+              defence, so the two numbers get all the room and print big. */}
           <div
             role={onStatTap ? 'button' : undefined}
             aria-label={onStatTap ? 'Power — tap for modifiers' : undefined}
             onPointerDown={onStatTap ? (e) => e.stopPropagation() : undefined}
             onClick={onStatTap ? (e) => { e.stopPropagation(); onStatTap(); } : undefined}
-            style={{ position: 'relative', display: 'flex', height: 17, cursor: onStatTap ? 'pointer' : undefined }}
+            style={{ position: 'relative', display: 'flex', height: 21, cursor: onStatTap ? 'pointer' : undefined }}
           >
             <div style={{ flex: 1, background: ATT_FILL, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: `1px solid ${HERO.ink}` }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 9, color: '#fff', textShadow: '0 1px 1px #000' }}>{atk}</span>
+              <span style={{ fontFamily: PIXEL, fontSize: 13, color: '#fff', textShadow: '0 1px 1px #000' }}>{atk}</span>
             </div>
             <div style={{ flex: 1, background: DEF_FILL, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 9, color: '#fff', textShadow: '0 1px 1px #000' }}>{def}</span>
+              <span style={{ fontFamily: PIXEL, fontSize: 13, color: '#fff', textShadow: '0 1px 1px #000' }}>{def}</span>
             </div>
             {aDelta !== 0 && (
               <span style={{ position: 'absolute', left: 2, top: -2, fontFamily: PIXEL, fontSize: 7, color: dcol(aDelta), textShadow: '0 1px 2px #000' }}>{dstr(aDelta)}</span>

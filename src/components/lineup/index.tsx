@@ -22,26 +22,21 @@ import type { Card } from '../../lib/scoring';
 import type { Formation } from '../../lib/formations';
 import { PIXEL, POSITION_COLOR, lastName } from '../cards/cardTokens';
 import { deriveStats } from '../../lib/funnel';
-import { portraitBackgroundStyle, rarityFrame, HERO, fitnessColor as fitnessColorForPct } from '../cards/portrait';
+import { HERO, fitnessColor as fitnessColorForPct } from '../cards/portrait';
 import { PitchToken } from '../PitchToken';
 import { competenceOf, type Competence } from '../../lib/team-select';
+import { pitchAxis } from '../../lib/pitch-layout';
 
-// ---------------------------------------------------------------------------
-// Condition glyph (§7) — the 5-grade wear read shown on the selection tile
-// footer: ◆ for the intact grades (mint/played), ◢ for the worn grades
-// (worn/creased/torn), tinted by grade. Mirrors the CONDG map in the handoff.
-// ---------------------------------------------------------------------------
-
-const CONDITION_GLYPH: Record<string, { glyph: string; color: string }> = {
-  MINT: { glyph: '◆', color: '#1f9d4f' },
-  PLAYED: { glyph: '◆', color: '#c9bb95' },
-  WORN: { glyph: '◢', color: '#e8b23a' },
-  CREASED: { glyph: '◢', color: '#e0332d' },
-  TORN: { glyph: '◢', color: '#e0332d' },
-};
-function conditionGlyph(card: Card): { glyph: string; color: string } {
-  return CONDITION_GLYPH[card.condition ?? 'MINT'] ?? CONDITION_GLYPH.MINT;
-}
+// FIX 2 — token-fit insets for the team-select pitch. A LineupSlot token is
+// SLOT_TOKEN_W wide, so a raw slot x at the formation extremes (wing-backs at
+// x≈8, wingers at x≈92) spills half the token off the green. The slot's x/y is
+// remapped into a safe interior band inset by half a token (+edge pad), so the
+// FULL token stays inside the pitch. Exported so SquadScreen's drag hit-testing
+// uses the identical maths and the drop targets never drift from the render.
+const SLOT_TOKEN_W = 64;
+export const SLOT_INSET_X = SLOT_TOKEN_W / 2 + 7; // 39px
+export const SLOT_INSET_Y = SLOT_TOKEN_W / 2 + 2; // 34px — just past half the token; avoids
+                                                  // over-compressing the shape onto the middle band
 
 // ---------------------------------------------------------------------------
 // Pointer pass-through — the SquadScreen drag layer disambiguates tap (inspect/
@@ -202,8 +197,8 @@ export function LineupSlot({
       onPointerCancel={onPointerCancel}
       className="absolute flex flex-col items-center active:scale-95"
       style={{
-        left: `${slot.x}%`,
-        top: `${slot.y}%`,
+        left: pitchAxis(slot.x, SLOT_INSET_X),
+        top: pitchAxis(slot.y, SLOT_INSET_Y),
         transform: `translate(-50%, -50%)${dropHint ? ' scale(1.12)' : ''}`,
         width: 64,
         transition: 'transform 0.1s ease',
@@ -293,8 +288,13 @@ export function BenchTile({
   dropHint?: boolean;
   touchAction?: 'none' | 'pan-x';
 } & DragPointerHandlers) {
-  const frameSpec = rarityFrame(card.rarity);
-  const posColor = POSITION_COLOR[card.position] ?? 'var(--dust)';
+  // FIX 3 — the bench sub reads as a SMALLER, pictureless PitchToken: the same
+  // class gem + competence-coloured position pill + ATT/DEF split bar + fitness
+  // bar + name, with NO portrait — so the bench and the pitch are one visual
+  // language ("the same player tokens, smaller"). A bench player is shown at his
+  // own natural position, so competence is 'primary'. Injured reads through the
+  // token's own red frame + corner flag (PitchToken owns that).
+  const st = deriveStats(card);
   return (
     <button
       onPointerDown={onPointerDown}
@@ -302,69 +302,33 @@ export function BenchTile({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
       aria-label={lastName(card.name)}
-      className="relative flex flex-col active:scale-95"
+      className="relative flex active:scale-95"
       style={{
         width: '100%',
-        borderRadius: 5,
-        padding: 2,
-        background: frameSpec.frame,
-        boxShadow: dropHint
-          ? `0 0 0 2px var(--gold-glow), 0 2px 0 0 ${HERO.ink}`
-          : `0 2px 0 0 ${HERO.ink}, 0 3px 6px rgba(0,0,0,0.4)`,
+        borderRadius: 8,
+        boxShadow: dropHint ? '0 0 0 2px var(--gold-glow)' : undefined,
         outline: dropHint ? '2px solid var(--gold)' : 'none',
+        outlineOffset: 1,
         transition: 'transform 0.12s ease',
         minWidth: 0,
-        opacity: dim ? 0.3 : 1,
+        padding: 0,
+        background: 'none',
+        border: 'none',
         touchAction: touchAction ?? (onPointerDown ? 'none' : undefined),
       }}
     >
-      <div style={{ overflow: 'hidden', borderRadius: 3, border: `1px solid ${HERO.ink}`, background: 'linear-gradient(165deg, #2f2415, #191309)', width: '100%' }}>
-        {/* header: position chip + ATK/DEF */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 3px 0' }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1, color: HERO.badgeText, background: posColor, padding: '1px 2px', borderRadius: 2 }}>{card.position}</span>
-          {(() => { const st = deriveStats(card); return (
-            <span style={{ fontFamily: PIXEL, fontSize: 6.5, lineHeight: 1, color: HERO.cream, fontVariantNumeric: 'tabular-nums' }}>{st.atk}/{st.def}</span>
-          ); })()}
-        </div>
-        {/* portrait window (24px) */}
-        <div style={{ height: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-          <div className="pixelated" aria-hidden style={{ ...portraitBackgroundStyle(card.id), width: '60%', height: '100%' }} />
-        </div>
-        {/* surname + condition glyph */}
-        <div style={{ padding: '0 3px 1px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1.2, color: HERO.cream, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lastName(card.name)}</span>
-          {(() => { const g = conditionGlyph(card); return (
-            <span style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1, color: g.color, flexShrink: 0 }}>{g.glyph}</span>
-          ); })()}
-        </div>
-        {/* fitness bar (2px) */}
-        <div style={{ height: 2, background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ height: '100%', width: `${Math.max(0, Math.min(1, fitnessOf(card) / 100)) * 100}%`, background: fitnessColor(card) }} />
-        </div>
-      </div>
-      {/* injured marker */}
-      {card.injured && (
-        <span
-          className="absolute"
-          style={{
-            top: -4,
-            left: -4,
-            width: 11,
-            height: 11,
-            borderRadius: '50%',
-            background: 'var(--danger)',
-            border: `1px solid ${HERO.ink}`,
-            color: 'var(--line-white)',
-            fontFamily: PIXEL,
-            fontSize: 7,
-            lineHeight: '9px',
-            textAlign: 'center',
-            zIndex: 3,
-          }}
-        >
-          +
-        </span>
-      )}
+      <PitchToken
+        card={card}
+        competence="primary"
+        atk={st.atk}
+        def={st.def}
+        baseAtk={st.atk}
+        baseDef={st.def}
+        fitness={fitnessOf(card)}
+        injured={card.injured}
+        dim={dim}
+        width="100%"
+      />
       {/* remove — pointerdown is stopped so the × never begins a drag. */}
       {onRemove && (
         <span

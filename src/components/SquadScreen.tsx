@@ -56,7 +56,7 @@ import { ClassGem } from './cards/ContestIcons';
 import { classOfCard } from '../lib/contest-map';
 import { PIXEL, RARITY_COLOR, POSITION_COLOR, lastName } from './cards/cardTokens';
 import { COMPETENCE_COLOR } from '../lib/team-select';
-import { PosTag, FitnessBar, BenchTile, BenchCover, LineupSlot, fitnessOf } from './lineup';
+import { PosTag, FitnessBar, BenchTile, BenchCover, LineupSlot, fitnessOf, SLOT_INSET_X, SLOT_INSET_Y } from './lineup';
 import { deriveStats } from '../lib/funnel';
 
 // ---------------------------------------------------------------------------
@@ -446,8 +446,10 @@ export default function SquadScreen({
       let best = -1;
       let bestD = 48;
       formation.slots.forEach((s, i) => {
-        const sx = pr.left + (s.x / 100) * pr.width;
-        const sy = pr.top + (s.y / 100) * pr.height;
+        // Mirror the token-fit remap (pitchAxis) so a slot's hit-target sits under
+        // the token as RENDERED, not at its raw formation %.
+        const sx = pr.left + SLOT_INSET_X + (s.x / 100) * (pr.width - 2 * SLOT_INSET_X);
+        const sy = pr.top + SLOT_INSET_Y + (s.y / 100) * (pr.height - 2 * SLOT_INSET_Y);
         const d = Math.hypot(cx - sx, cy - sy);
         if (d < bestD) {
           bestD = d;

@@ -15,7 +15,7 @@ import CardModal from './cards/CardModal';
 
 interface PackRevealProps {
   contents: PackContents;
-  onContinue: (managerId: string | null) => void;
+  onContinue: (managerId: string | null, tacticId: string | null) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,8 +70,8 @@ const STAGE_META: Record<Stage, StageMeta> = {
     packLabel: 'TACTICAL PACK',
     packSub: 'The playbook',
     packAccent: 'var(--kit-blue)',
-    cardsHeader: 'YOUR IN-MATCH HAND',
-    teach: 'Tactics are your in-match hand — drawn and played as the game unfolds. Tap to inspect.',
+    cardsHeader: 'PICK 1 OF 3',
+    teach: 'Your tactic is played in-match as the game unfolds. Tap to inspect, then pick one.',
   },
 };
 
@@ -376,22 +376,60 @@ function ManagerReveal({
 // Tactics stage reveal — grid of tactic GameCards
 // ===========================================================================
 
-function TacticReveal({ tactics, onOpen }: { tactics: TacticCard[]; onOpen: (t: TacticCard) => void }) {
+function TacticReveal({
+  tactics,
+  pickedId,
+  onOpen,
+  onPick,
+}: {
+  tactics: TacticCard[];
+  pickedId: string | null;
+  onOpen: (t: TacticCard) => void;
+  onPick: (id: string) => void;
+}) {
   return (
     <div
       className="flex-1 min-h-0 grid overflow-y-auto"
       style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gridAutoRows: 'min-content', gap: 8, alignContent: 'start', paddingTop: 4, overscrollBehavior: 'contain' }}
     >
-      {tactics.map((t, i) => (
-        <GameCard
-          key={t.id}
-          // A freshly-ripped tactic arrives with a single charge (see tactics.ts).
-          model={{ variant: 'tactic', tactic: t, charges: 1 }}
-          delay={i * 35}
-          onClick={() => onOpen(t)}
-          ariaLabel={`Inspect ${t.name}`}
-        />
-      ))}
+      {tactics.map((t, i) => {
+        const picked = pickedId === t.id;
+        return (
+          <div key={t.id} className="flex flex-col" style={{ gap: 6, minWidth: 0 }}>
+            <GameCard
+              // A freshly-ripped tactic arrives with a single charge (see tactics.ts).
+              model={{ variant: 'tactic', tactic: t, charges: 1 }}
+              delay={i * 35}
+              selected={picked}
+              onClick={() => onOpen(t)}
+              ariaLabel={`Inspect ${t.name}`}
+            />
+            <button
+              onClick={() => onPick(t.id)}
+              className="active:scale-95"
+              style={{
+                fontFamily: PIXEL,
+                fontSize: 9,
+                letterSpacing: 0.4,
+                color: picked ? 'var(--ink-black)' : 'var(--cream)',
+                padding: '7px 0',
+                borderRadius: 'var(--radius-sm)',
+                border: '2px solid var(--ink-black)',
+                background: picked
+                  ? 'linear-gradient(135deg, var(--kit-blue), #2c6db0)'
+                  : 'var(--surface)',
+                boxShadow: picked
+                  ? '0 3px 0 0 var(--ink-black), 0 5px 14px rgba(44,109,176,0.4)'
+                  : '0 3px 0 0 var(--ink-black)',
+                transition: 'transform 0.12s ease',
+                cursor: 'pointer',
+              }}
+            >
+              {picked ? 'PICKED ✓' : 'PICK'}
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -404,6 +442,7 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
   const [stage, setStage] = useState<Stage>('players');
   const [phase, setPhase] = useState<SubPhase>('sealed');
   const [pickedManagerId, setPickedManagerId] = useState<string | null>(null);
+  const [pickedTacticId, setPickedTacticId] = useState<string | null>(null);
   const [modal, setModal] = useState<GameCardModel | null>(null);
   const ripTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -431,7 +470,7 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
       setStage('tactics');
       setPhase('sealed');
     } else {
-      onContinue(pickedManagerId);
+      onContinue(pickedManagerId, pickedTacticId);
     }
   }
 
@@ -439,10 +478,16 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
     stage === 'players' ? contents.players.length : stage === 'managers' ? contents.managers.length : contents.tactics.length;
   const countNoun = stage === 'players' ? 'players' : stage === 'managers' ? 'managers' : 'tactics';
 
-  // On the manager stage the continue button is gated on a pick.
+  // The manager and tactic stages each gate the continue button on a pick.
   const managerGated = stage === 'managers' && pickedManagerId === null;
+  const tacticGated = stage === 'tactics' && pickedTacticId === null;
+  const gated = managerGated || tacticGated;
   const continueLabel =
-    stage === 'tactics' ? 'Pick Your Team →' : stage === 'managers' ? (managerGated ? 'Pick a Manager' : 'Next Pack →') : 'Next Pack →';
+    stage === 'tactics'
+      ? tacticGated ? 'Pick a Tactic' : 'Pick Your Team →'
+      : stage === 'managers'
+        ? managerGated ? 'Pick a Manager' : 'Next Pack →'
+        : 'Next Pack →';
 
   return (
     <div
@@ -587,7 +632,12 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
                 onPick={(id) => setPickedManagerId(id)}
               />
             ) : (
-              <TacticReveal tactics={contents.tactics} onOpen={(t) => setModal({ variant: 'tactic', tactic: t, charges: 1 })} />
+              <TacticReveal
+                tactics={contents.tactics}
+                pickedId={pickedTacticId}
+                onOpen={(t) => setModal({ variant: 'tactic', tactic: t, charges: 1 })}
+                onPick={(id) => setPickedTacticId(id)}
+              />
             )}
           </>
         )}
@@ -615,25 +665,25 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
             </div>
             <button
               onClick={advanceStage}
-              disabled={managerGated}
-              className={managerGated ? '' : 'w-full active:scale-95'}
+              disabled={gated}
+              className={gated ? '' : 'w-full active:scale-95'}
               style={{
                 width: '100%',
                 fontFamily: PIXEL,
                 fontSize: 14,
                 letterSpacing: 0.5,
-                color: managerGated ? 'var(--ink)' : 'var(--cream)',
+                color: gated ? 'var(--ink)' : 'var(--cream)',
                 padding: '15px 0',
                 borderRadius: 'var(--radius)',
                 border: '2px solid var(--ink-black)',
-                background: managerGated
+                background: gated
                   ? 'var(--surface)'
                   : 'linear-gradient(135deg, var(--amber), var(--amber-soft))',
-                boxShadow: managerGated
+                boxShadow: gated
                   ? '0 4px 0 0 var(--ink-black)'
                   : '0 4px 0 0 var(--ink-black), 0 6px 18px var(--amber-glow)',
                 transition: 'transform 0.12s ease',
-                cursor: managerGated ? 'default' : 'pointer',
+                cursor: gated ? 'default' : 'pointer',
               }}
             >
               {continueLabel}

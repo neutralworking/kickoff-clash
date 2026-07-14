@@ -206,10 +206,18 @@ export default function GameCard({
         : TACTIC_RARITY_TO_FRAME[model.tactic.rarity];
   const fr = rarityFrame(frameRarity);
   const ring = selected ? '0 0 0 2px var(--gold), ' : '';
+  // The blown-up PLAYER card is content-driven, not aspect-locked: a Legendary
+  // can carry up to 4 full-text actions, and those must ALL show without a clip
+  // or a scroll. So drop the fixed aspect ratio and let height flow from the
+  // rows (the actions region is grow-no-shrink — see PlayerFace); a minHeight
+  // keeps the classic card shape for a sparse (1–2 action) card. Grid tokens and
+  // manager/tactic/investment cards stay aspect-locked.
+  const growPlayer = full && model.variant === 'player';
   frameStyle = {
     position: 'relative',
     width: '100%',
-    aspectRatio: `${ASPECT}`,
+    aspectRatio: growPlayer ? undefined : `${ASPECT}`,
+    minHeight: growPlayer ? 290 : undefined,
     borderRadius: full ? 15 : 9,
     padding: full ? 5 : 3,
     background: fr.frame,
@@ -553,14 +561,26 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
   // tightest case).
   const nActions = actions.length;
   const busy = nActions >= 3;
-  const clamp = full ? (busy ? 1 : 3) : 1;
+  // GRID (small token): TITLE ONLY — no effect text. Keywords are short, so the
+  // count can climb (a 4-action Legendary) without truncation; a rare long
+  // keyword steps its own font down. FULL (the blow-up): the WHOLE effect text,
+  // NO clamp/truncation. The full card is NOT aspect-locked (see frameStyle) —
+  // its art window is a FIXED height and the actions region grows to fit every
+  // row, so the frame itself grows taller as the action count climbs. Nothing
+  // scrolls and nothing clips.
   const artBasis = full
-    ? nActions >= 4 ? '44%' : '47%'
-    : nActions >= 4 ? '40%' : nActions === 3 ? '43%' : '47%';
-  const actFont = full ? (busy ? 9.5 : 10.5) : nActions >= 4 ? 5 : nActions === 3 ? 5.5 : 6.5;
-  const actLineH = !full && busy ? 1.3 : 1.35;
-  const kwFont = full ? (busy ? 7.5 : 8) : nActions >= 4 ? 5 : 5.5;
-  const actGap = full ? (busy ? 5 : 6) : busy ? 2 : 3;
+    ? '0 0 132px'
+    : `0 0 ${nActions >= 4 ? '40%' : nActions === 3 ? '43%' : '47%'}`;
+  // Full effect (supplementary) text — small, smaller still when busy.
+  const fullEffFont = nActions >= 4 ? 8 : busy ? 8.5 : 9.5;
+  const fullKwFont = nActions >= 4 ? 7 : 7.5;
+  // Grid keyword — a touch larger since it's alone; length-aware so a long
+  // keyword ("POACHER'S INSTINCT") still fits one line.
+  const gridKwFont = (label: string) => {
+    const base = nActions >= 4 ? 6 : nActions === 3 ? 6.5 : 7.5;
+    return label.length > 12 ? base * 0.78 : label.length > 9 ? base * 0.9 : base;
+  };
+  const actGap = full ? (busy ? 4 : 6) : nActions >= 4 ? 3 : 4;
   const nameThin = !full && busy;
 
   return (
@@ -570,7 +590,7 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
         <div
           style={{
             position: 'relative',
-            flex: `0 0 ${artBasis}`,
+            flex: artBasis,
             minHeight: 0,
             background: PLAYER_PITCH_BG,
             overflow: 'hidden',
@@ -650,50 +670,65 @@ function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boo
           </span>
         </div>
 
-        {/* 3 — ACTIONS: one line per real defining trait (class-coloured keyword
-            + effect text). Bonus (★ gold) for signature / high-rarity extras. */}
+        {/* 3 — ACTIONS. GRID: keyword title only (no effect text). FULL: the
+            class-coloured keyword + the WHOLE effect text, wrapped, no clamp.
+            Bonus (★ gold) for signature / high-rarity extras. */}
         <div
           style={{
-            flex: '1 1 auto',
+            // FULL: grow-no-shrink off content height — this is what forces the
+            // (non-aspect-locked) frame taller so every action row shows in full,
+            // and fills any slack on a sparse card. GRID: aspect-locked, so it
+            // flexes/scrolls within the fixed height.
+            flex: full ? '1 0 auto' : '1 1 auto',
             minHeight: 0,
             background: 'linear-gradient(180deg, #14100a, #0f0b06)',
             padding: full ? '9px 13px 10px' : '5px 7px 6px',
             display: 'flex',
             flexDirection: 'column',
+            justifyContent: full ? 'flex-start' : 'center',
             gap: actGap,
-            overflowY: 'auto',
+            overflowY: full ? 'visible' : 'auto',
             overscrollBehavior: 'contain',
             zIndex: 2,
           }}
         >
-          {actions.map((a) => (
-            <span
-              key={a.key}
-              style={{
-                fontFamily: BODY_FONT,
-                fontSize: actFont,
-                lineHeight: actLineH,
-                color: '#e6dcc6',
-                display: '-webkit-box',
-                WebkitBoxOrient: 'vertical',
-                WebkitLineClamp: clamp,
-                overflow: 'hidden',
-              }}
-            >
-              <b
+          {actions.map((a) =>
+            full ? (
+              <span
+                key={a.key}
+                style={{
+                  fontFamily: BODY_FONT,
+                  fontSize: fullEffFont,
+                  lineHeight: 1.3,
+                  color: '#e6dcc6',
+                  overflowWrap: 'break-word',
+                }}
+              >
+                <b style={{ fontFamily: PIXEL, fontSize: fullKwFont, letterSpacing: 0.5, color: a.color }}>
+                  {a.bonus ? '★ ' : ''}
+                  {a.label}:
+                </b>{' '}
+                {a.text}
+              </span>
+            ) : (
+              <span
+                key={a.key}
                 style={{
                   fontFamily: PIXEL,
-                  fontSize: kwFont,
-                  letterSpacing: 0.5,
+                  fontSize: gridKwFont(a.label),
+                  letterSpacing: 0.4,
+                  lineHeight: 1.3,
                   color: a.color,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                 }}
               >
                 {a.bonus ? '★ ' : ''}
-                {a.label}:
-              </b>{' '}
-              {a.text}
-            </span>
-          ))}
+                {a.label}
+              </span>
+            ),
+          )}
         </div>
 
         {/* 4 — FITNESS BAR: slim meter (fill = fitness %, colour = fitColor) with a

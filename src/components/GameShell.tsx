@@ -169,8 +169,9 @@ export default function GameShell() {
   const [lastMatchResult, setLastMatchResult] = useState<MatchResult | null>(null);
   const [pendingContents, setPendingContents] = useState<PackContents | null>(null);
   const [pendingSeed, setPendingSeed] = useState<number>(0);
-  // Manager chosen during the manager-pack reveal; carried into TeamSelect.
+  // Manager + tactic chosen during the pack reveal; carried into TeamSelect.
   const [pickedManagerId, setPickedManagerId] = useState<string | null>(null);
+  const [pickedTacticId, setPickedTacticId] = useState<string | null>(null);
 
   // Check for existing run on mount without reading localStorage during render.
   useEffect(() => {
@@ -200,8 +201,9 @@ export default function GameShell() {
     setPhase('packOpen');
   }, []);
 
-  const handlePacksOpened = useCallback((managerId: string | null) => {
+  const handlePacksOpened = useCallback((managerId: string | null, tacticId: string | null) => {
     setPickedManagerId(managerId);
+    setPickedTacticId(tacticId);
     setPhase('teamSelect');
   }, []);
 
@@ -593,6 +595,15 @@ export default function GameShell() {
         // handleTeamConfirm → createRun expects (unchanged).
         if (!pendingContents || !nextOpponentBuild) return null;
         const contents = pendingContents;
+        // The player picked ONE manager and ONE tactic in the pack reveal — the
+        // rest are discarded (owner rule). Only the picked manager is offered to
+        // the draft, and only the picked tactic carries into the run.
+        const chosenManagers = pickedManagerId
+          ? contents.managers.filter((m) => m.id === pickedManagerId)
+          : contents.managers;
+        const chosenTactics = pickedTacticId
+          ? contents.tactics.filter((t) => t.id === pickedTacticId)
+          : contents.tactics;
         return (
           <SquadScreen
             mode="draft"
@@ -600,7 +611,7 @@ export default function GameShell() {
             formations={contents.formations}
             initialFormationId={contents.formations[0]?.id ?? '4-3-3'}
             initialIntent="balanced"
-            managers={contents.managers}
+            managers={chosenManagers}
             initialManagerId={pickedManagerId}
             opponent={nextOpponentBuild}
             seed={pendingSeed}
@@ -613,8 +624,8 @@ export default function GameShell() {
                 players: contents.players,
                 startingXI: out.startingXI,
                 benchIds: out.benchIds,
-                manager: contents.managers.find((m) => m.id === out.managerId) ?? null,
-                tactics: contents.tactics,
+                manager: chosenManagers.find((m) => m.id === out.managerId) ?? null,
+                tactics: chosenTactics,
                 formationId: out.formationId,
                 intent: out.intent,
               })

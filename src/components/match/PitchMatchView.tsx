@@ -21,11 +21,12 @@ import { traitCopy } from '../../lib/trait-copy';
 import type { TraitKind } from '../../lib/trait-copy';
 import CardModal from '../cards/CardModal';
 import type { GameCardModel } from '../cards/GameCard';
-import { PIXEL, lastName, POSITION_COLOR, RARITY_COLOR } from '../cards/cardTokens';
-import { portraitBackgroundStyle, rarityFrame, HERO, fitnessColor as heroFitnessColor } from '../cards/portrait';
+import { PIXEL, lastName, POSITION_COLOR } from '../cards/cardTokens';
+import { HERO, fitnessColor as heroFitnessColor } from '../cards/portrait';
 import { PitchToken } from '../PitchToken';
 import { ContestMatch } from '../ContestMeters';
 import { competenceOf, type Competence } from '../../lib/team-select';
+import { pitchAxis } from '../../lib/pitch-layout';
 
 interface PitchMatchViewProps {
   matchState: MatchV5State;
@@ -147,6 +148,15 @@ const INCREMENT_MINUTES_LEN = INCREMENT_MINUTES_LIST.length; // 5 (last index 4 
 // leaving comfortable gutters; rating/surname/position all read at arm's length.
 const CARD_W = 62;   // v4 shared pitch token — larger/taller on the match pitch
 const CARD_H = 64;   // token height (for the trait-aura ring geometry)
+// FIX 2 — token-fit insets. A token is CARD_W wide, so a raw slot x at the
+// formation extremes (x≈8 wing-back, x≈92 winger) spills half the token off the
+// green. Remap the [0,100] slot range into a safe interior band inset by half a
+// token (+edge pad) so the FULL token stays inside the pitch. pitchAxis mixes the
+// px inset with the pitch's own 100%, so it stays correct at any viewport width.
+const PITCH_INSET_X = CARD_W / 2 + 7;  // 38px — half the token + a little air
+const PITCH_INSET_Y = CARD_H / 2 + 2;  // 34px — just past half the token; keeps the
+                                       // FULL token inside top/bottom without over-compressing
+                                       // the formation onto the pitch's middle third
 
 // ── Wave E rating colour band (req 5): red <6, neutral 6–7.5, green >7.5. ──
 // Returned as a {fill, ink} pair so the badge always carries a legible foreground.
@@ -220,37 +230,31 @@ function PitchCard({
 }
 
 // ---------------------------------------------------------------------------
-// SubCard — the trimmed bench card (FIX 4).
+// SubCard — the match bench sub (FIX 3).
 //
-// Just NAME · POSITION · LEVEL (+ a compact role line where it fits). No
-// nationality flag, no sprite clutter — a clean identity chip the size of a
-// thumb, tuned to drag reliably. It is a pure <div> with no nested interactive
-// elements, so the wrapping <button>'s pointer capture (begin/move/end) is never
-// swallowed — the cause of the previous GameCard bench drag failure.
+// The SAME pictureless PitchToken as the pitch, smaller: class gem + position
+// pill + ATT/DEF split + fitness bar + name, NO portrait — so the subs drawer
+// and the pitch are one visual language. Wrapped in a pointerEvents:none div so
+// the enclosing <button> owns the drag (no nested interactive elements to
+// swallow the pointer capture — the old GameCard bench-drag failure mode).
 // ---------------------------------------------------------------------------
 function SubCard({ card, dim }: { card: Card; dim?: boolean }) {
-  const posColor = POSITION_COLOR[card.position] ?? 'var(--dust)';
-  const frameSpec = rarityFrame(card.rarity);
   const st = deriveStats(card);
+  const fit = card.fitness ?? (card.injured ? 33 : 100);
   return (
-    // §6 bench micro card — foil frame → pixel interior (pos + ATK/DEF, portrait,
-    // name). A pure <div> (pointerEvents:none) so the wrapping button owns the drag.
-    <div style={{ width: '100%', borderRadius: 5, padding: 2, background: frameSpec.frame, boxShadow: `0 2px 0 0 ${HERO.ink}, 0 3px 6px rgba(0,0,0,0.4)`, opacity: dim ? 0.3 : 1, pointerEvents: 'none' }}>
-      <div style={{ overflow: 'hidden', borderRadius: 3, border: `1px solid ${HERO.ink}`, background: 'linear-gradient(165deg, #2f2415, #191309)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 3px 0' }}>
-          <span style={{ background: posColor, color: HERO.badgeText, fontFamily: PIXEL, fontSize: 6, lineHeight: 1, padding: '2px 3px', borderRadius: 2, border: `1px solid ${HERO.ink}` }}>{card.position}</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 6.5, lineHeight: 1, color: HERO.cream, fontVariantNumeric: 'tabular-nums' }}>{st.atk}/{st.def}</span>
-        </div>
-        <div style={{ height: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-          <div className="pixelated" aria-hidden style={{ ...portraitBackgroundStyle(card.id), width: '60%', height: '100%' }} />
-        </div>
-        <div style={{ padding: '0 3px 2px' }}>
-          <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 4.5, color: HERO.cream, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3 }}>{lastName(card.name)}</span>
-          {(card.tacticalRole || card.archetype) && (
-            <span style={{ display: 'block', fontFamily: PIXEL, fontSize: 4, color: HERO.gold, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3, opacity: 0.9 }}>{(card.tacticalRole ?? card.archetype ?? '').toUpperCase()}</span>
-          )}
-        </div>
-      </div>
+    <div style={{ pointerEvents: 'none' }}>
+      <PitchToken
+        card={card}
+        competence="primary"
+        atk={st.atk}
+        def={st.def}
+        baseAtk={st.atk}
+        baseDef={st.def}
+        fitness={fit}
+        injured={card.injured}
+        dim={dim}
+        width="100%"
+      />
     </div>
   );
 }
@@ -523,13 +527,13 @@ function TraitMarker({ firing, dur }: { firing: TraitFiring; dur: (ms: number) =
   if (!moment) {
     // AURA — a held, breathing glow ring on the card. Glow only, no label chip.
     return (
-      <div style={{ position: 'absolute', left: `${firing.x}%`, top: `${firing.y}%`, zIndex: 8, pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', left: pitchAxis(firing.x, PITCH_INSET_X), top: pitchAxis(firing.y, PITCH_INSET_Y), zIndex: 8, pointerEvents: 'none' }}>
         <div className="trait-aura" style={{ position: 'absolute', left: 0, top: 0, width: CARD_W + 18, height: CARD_H + 18, transform: 'translate(-50%,-50%)', borderRadius: 'var(--radius)', border: `3px solid ${accent}`, boxShadow: `0 0 18px ${accent}, inset 0 0 10px ${accent}`, opacity: 0.85 }} />
       </div>
     );
   }
 
-  const wrap: React.CSSProperties = { position: 'absolute', left: `${firing.x}%`, top: `${firing.y}%`, zIndex: 9, pointerEvents: 'none' };
+  const wrap: React.CSSProperties = { position: 'absolute', left: pitchAxis(firing.x, PITCH_INSET_X), top: pitchAxis(firing.y, PITCH_INSET_Y), zIndex: 9, pointerEvents: 'none' };
 
   // TACKLE — an impact explosion: a tight flash then the full starburst.
   if (firing.kind === 'tackle') {
@@ -1326,7 +1330,7 @@ function CoachPanel({ notes, style }: { notes: CoachNote[]; style?: React.CSSPro
 export default function PitchMatchView({
   matchState, formation, jokers, availableTactics, ownedFormations,
   opponentBuild, nextMinute, mode, breakMoment, currentResult, playerStats, cardStats, cardMods, forecast,
-  onToggleTactic, onSub, onReassign, onFormationChange, onAutoSelect, onIntentChange, onContinue,
+  onToggleTactic, onSub, onReassign, onFormationChange, onIntentChange, onContinue,
 }: PitchMatchViewProps) {
   const [trayOpen, setTrayOpen] = useState(false);
   // v4 match bench: a handle that expands an inline drawer. Opening it hides the
@@ -1642,10 +1646,6 @@ export default function PitchMatchView({
   // FIX 3 — match-to-date totals for the stats screen (cumulativeStats over scores).
   const cumulative = useMemo<CumulativeStats>(() => cumulativeStats(matchState.scores), [matchState.scores]);
 
-  // FIX 1 — auto-select is only legal at the pre-kickoff team talk (no period
-  // played yet); pulling bench players on mid-match would be a free sub.
-  const canAutoSelect = !!onAutoSelect && breakMoment === 'kickoff'
-    && matchState.currentIncrement === 0 && matchState.scores.length === 0;
   // `drag` is only set once movement crosses the threshold, so its presence
   // already means a real drag is underway (taps never set it).
   const moving = !oppView && mode === 'plan' && drag !== null;
@@ -1818,7 +1818,7 @@ export default function PitchMatchView({
       {/* ── §6 SCOREBOARD BAR — period/clock · your XI · boxed score · rival ·
           play-style/PWR. All the same live values (displayGoals + shake, clock,
           opponent identity/style); just the Pixel-Hero chrome. ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 10px', background: 'linear-gradient(180deg, #221a0f, #171207)', borderBottom: `2px solid ${HERO.ink}`, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px 6px', background: 'linear-gradient(180deg, #221a0f, #171207)', borderBottom: `2px solid ${HERO.ink}`, flexShrink: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
           <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: HERO.gold, whiteSpace: 'nowrap' }}>{scoreMarker}</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -1844,7 +1844,7 @@ export default function PitchMatchView({
       {/* SCORING_V2 FORECAST (v4) — the same live sums as dual meters, condensed,
           NET in a bordered column at the right end. Tap a pitch card's power row
           for the per-card receipt. */}
-      <div style={{ padding: '6px 16px 4px', flexShrink: 0 }}>
+      <div style={{ padding: '4px 16px 2px', flexShrink: 0 }}>
         <ContestMatch forecast={forecast} />
       </div>
 
@@ -1854,10 +1854,10 @@ export default function PitchMatchView({
          team-talk COACH panel no longer lives here — it was relocated to the
          between-period stats overlay (StatsScreen). */}
       {(
-      <button onClick={() => setTickerOpen(true)} style={{ textAlign: 'left', margin: '0 16px 10px', padding: '8px 12px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', border: `1px solid ${HERO.gold}4d`, flexShrink: 0, minWidth: 0, overflow: 'hidden', cursor: 'pointer', display: 'grid', gap: 3 }}>
+      <button onClick={() => setTickerOpen(true)} style={{ textAlign: 'left', margin: '0 16px 6px', padding: '6px 10px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', border: `1px solid ${HERO.gold}4d`, flexShrink: 0, minWidth: 0, overflow: 'hidden', cursor: 'pointer', display: 'grid', gap: 3 }}>
         {preKickoff ? (
           // ISSUE 6 — guidance, not a fake match event (no minute stamp).
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 51 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 34 }}>
             <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--amber)', borderRadius: 3, padding: '3px 5px', lineHeight: 1, flexShrink: 0 }}>COACH</span>
             <span style={{ fontSize: 12, color: 'var(--cream-soft)', lineHeight: 1.35 }}>Set your XI and shape, then kick off. Drag a player to swap; tap to inspect.</span>
           </div>
@@ -1865,7 +1865,7 @@ export default function PitchMatchView({
           // THIS SPELL — ONE panel for "your plan paid off": the cascade's
           // tactic / manager / chemistry lines (label + attack points, straight
           // off the engine), then the trait firings beneath.
-          <div data-this-spell style={{ display: 'grid', gap: 3, minHeight: 51, minWidth: 0 }}>
+          <div data-this-spell style={{ display: 'grid', gap: 3, minHeight: 44, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--ink-black)', background: 'var(--gold)', borderRadius: 3, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>THIS SPELL</span>
               {traitCallouts.length > 2 && (
@@ -1921,7 +1921,7 @@ export default function PitchMatchView({
           Shown at every planning break (the pre-kickoff talk shows the first
           telegraph, rolled at init); the hand hides while scouting the rival. */}
       {mode === 'plan' && !oppView && !benchDrawerOpen && (
-        <div className="glass-surface sheen" style={{ margin: '0 16px 8px', borderRadius: 'var(--radius)', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
+        <div className="glass-surface sheen" style={{ margin: '0 16px 6px', borderRadius: 'var(--radius)', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 10px 8px', position: 'relative', zIndex: 2 }}>
             <span className={showCallNudge ? 'carrier-glow' : undefined}
               style={{ flexShrink: 0, fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.4, color: showCallNudge ? 'var(--ink-black)' : 'var(--dust)', background: showCallNudge ? 'var(--amber)' : 'rgba(0,0,0,0.3)', border: '1px solid var(--ink-black)', borderRadius: 3, padding: '3px 4px', lineHeight: 1.35, width: 36, textAlign: 'center' }}>
@@ -1944,69 +1944,53 @@ export default function PitchMatchView({
       )}
 
 
-      {/* INTENT — the attacking lean (DEF/BAL/ATT). Surfaced in the team talk so the
-          player can change it between periods; the engine reads state.intent fresh each
-          increment, so it bites from the next period. A change mid-talk also refreshes
-          the coach's momentum read. */}
-      {isBreak && onIntentChange && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 16px 6px', flexShrink: 0 }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: 'var(--dust)', flexShrink: 0 }}>INTENT</span>
-          <div className="flex" style={{ flex: 1, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}>
-            {INTENT_OPTIONS.map((it) => {
-              const on = matchState.intent === it.id;
-              return (
-                <button
-                  key={it.id}
-                  onClick={() => onIntentChange(it.id)}
-                  className="active:scale-95"
-                  style={{
-                    flex: 1,
-                    padding: '6px 0',
-                    fontFamily: PIXEL,
-                    fontSize: 10,
-                    letterSpacing: 0.5,
-                    background: on ? it.accent : 'var(--surface)',
-                    color: on ? 'var(--ink-black)' : 'var(--cream-soft)',
-                    transition: 'background 0.15s ease',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {it.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* FIX 1 + FIX 4 — the TEAM-TALK action row. At a break the player's levers
-          are surfaced together as proper buttons rather than buried in a side rail:
-          change SHAPE, read RATINGS (once a period's played), and (pre-kickoff only)
-          AUTO-PICK the strongest fitness-aware XI. TACTICS is NOT repeated here —
-          the plan strip's trigger above is the one entry. Only shown at a real
-          break, not while scouting the opposition or mid-resolve. */}
+      {/* TEAM-TALK levers — ONE row: SHAPE · INTENT (DEF/BAL/ATT) · RATINGS.
+          INTENT was merged in from its own row to reclaim vertical space for the
+          pitch; the AUTO XI button was removed. Every handler is unchanged: SHAPE
+          opens the formation sheet, INTENT writes state.intent (read fresh each
+          increment), RATINGS opens the per-player marks. Only at a real break. */}
       {isBreak && (
-        <div style={{ display: 'flex', gap: 6, margin: '0 16px 8px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 6, margin: '0 16px 6px', flexShrink: 0, alignItems: 'stretch' }}>
           <button onClick={() => setFormSheet(true)}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: 'var(--surface)', cursor: 'pointer' }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: 'var(--kit-blue)', lineHeight: 1 }}>SHAPE</span>
-            <span style={{ fontSize: 9.5, color: 'var(--cream-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{formation.name}</span>
+            style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, padding: '7px 6px', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: 'var(--surface)', cursor: 'pointer' }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.4, color: 'var(--kit-blue)', lineHeight: 1 }}>SHAPE</span>
+            <span style={{ fontSize: 10, color: 'var(--cream-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{formation.name}</span>
           </button>
+          {onIntentChange && (
+            <div className="flex" style={{ flex: '1.7 1 0', minWidth: 0, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}>
+              {INTENT_OPTIONS.map((it) => {
+                const on = matchState.intent === it.id;
+                return (
+                  <button
+                    key={it.id}
+                    onClick={() => onIntentChange(it.id)}
+                    className="active:scale-95"
+                    style={{
+                      flex: 1,
+                      padding: '6px 0',
+                      fontFamily: PIXEL,
+                      fontSize: 11,
+                      letterSpacing: 0.5,
+                      background: on ? it.accent : 'var(--surface)',
+                      color: on ? 'var(--ink-black)' : 'var(--cream-soft)',
+                      transition: 'background 0.15s ease',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {it.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {/* RATINGS (req 5) — open the per-player ratings sheet to decide who to hook.
               Shown once a period's been played; pulses if anyone's rating is poor. */}
           {hasPlayed && (
             <button onClick={() => setRatingsOpen(true)}
               className={hasPoorRating ? 'carrier-glow' : undefined}
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: `2px solid ${hasPoorRating ? 'var(--danger)' : 'var(--ink-black)'}`, boxShadow: '0 3px 0 0 var(--ink-black)', background: hasPoorRating ? 'rgba(232,54,47,0.12)' : 'var(--surface)', cursor: 'pointer' }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: hasPoorRating ? 'var(--danger)' : 'var(--gold)', lineHeight: 1 }}>RATINGS</span>
-              <span style={{ fontSize: 9.5, color: 'var(--cream-soft)', lineHeight: 1 }}>{hasPoorRating ? 'check the XI' : 'player marks'}</span>
-            </button>
-          )}
-          {canAutoSelect && (
-            <button onClick={onAutoSelect}
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))', cursor: 'pointer' }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: 'var(--cream)', lineHeight: 1 }}>AUTO XI</span>
-              <span style={{ fontSize: 9.5, color: 'rgba(242,246,239,0.85)', lineHeight: 1 }}>best legs</span>
+              style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, padding: '7px 6px', borderRadius: 'var(--radius)', border: `2px solid ${hasPoorRating ? 'var(--danger)' : 'var(--ink-black)'}`, boxShadow: '0 3px 0 0 var(--ink-black)', background: hasPoorRating ? 'rgba(232,54,47,0.12)' : 'var(--surface)', cursor: 'pointer' }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.4, color: hasPoorRating ? 'var(--danger)' : 'var(--gold)', lineHeight: 1 }}>RATINGS</span>
+              <span style={{ fontSize: 9, color: 'var(--cream-soft)', lineHeight: 1 }}>{hasPoorRating ? 'check XI' : 'marks'}</span>
             </button>
           )}
         </div>
@@ -2057,7 +2041,7 @@ export default function PitchMatchView({
             : null;
           return (
             <div key={`${oppView ? 'o' : 'y'}-${i}`} className="move-pop"
-              style={{ position: 'absolute', left: `${spot.slot.x}%`, top: `${spot.slot.y}%`, transform: 'translate(-50%,-50%)', display: 'grid', justifyItems: 'center', width: CARD_W, zIndex: isHover || carrier || isFlagged ? 6 : attacking ? 4 : 3 }}>
+              style={{ position: 'absolute', left: pitchAxis(spot.slot.x, PITCH_INSET_X), top: pitchAxis(spot.slot.y, PITCH_INSET_Y), transform: 'translate(-50%,-50%)', display: 'grid', justifyItems: 'center', width: CARD_W, zIndex: isHover || carrier || isFlagged ? 6 : attacking ? 4 : 3 }}>
               <button
                 onPointerDown={(e) => { if (spot.cardId !== undefined) beginPointer('pitch', spot.cardId, e); }}
                 onPointerMove={drag ? undefined : movePointer}
@@ -2275,7 +2259,7 @@ export default function PitchMatchView({
       )}
 
       {/* Controls — ISSUE 2: clear View Opposition / View Team toggle + advance CTA */}
-      <div style={{ display: 'flex', gap: 10, padding: '8px 16px 14px', flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 10, padding: '7px 16px 9px', flexShrink: 0 }}>
         <button onClick={() => setOppView((v) => !v)} style={{ flex: '0 0 104px', padding: '11px 0', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: oppView ? 'var(--surface-raised)' : 'var(--surface)', color: 'var(--cream)', fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.3, cursor: 'pointer', lineHeight: 1.3 }}>{oppView ? 'VIEW TEAM' : 'VIEW OPP'}</button>
         {/* ONE consistent advance verb. KICK OFF only at the very first kickoff;
             CONTINUE for every later advance. While resolving, this is the SINGLE

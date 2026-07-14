@@ -11,7 +11,8 @@ import type { Card } from './scoring';
 import type { Formation } from './formations';
 import { positionFitsSlot } from './formations';
 
-export const BENCH_SIZE = 7;
+// 5 subs → an 11 XI + 5 bench = the 16-card starting squad (owner direction).
+export const BENCH_SIZE = 5;
 
 export interface XISelection {
   starters: (number | null)[]; // length === formation.slots.length; cardId per slot
