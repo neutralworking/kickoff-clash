@@ -19,9 +19,12 @@
  *                (Stopper's tackle, Offside Trap's flag; `save` flavours it as a
  *                keeper's stop).
  *
- * Rarity = trait depth (CARDS_V1 §4): Common 1 / Rare 2 / Epic 3 / Legendary 4,
- * assigned deterministically by card.id. Display copy lives in `trait-copy.ts`,
- * keyed by the exact trait names below.
+ * Rarity = trait depth: MOST cards carry ONE action; only a Legendary carries
+ * TWO. (Owner direction, NW-139: a card is mainly a single action — Legendary is
+ * the one tier that doubles up. The hard ceiling is THREE and it is never 4;
+ * a future balancing pass may lift Rare→2 / Legendary→3, so `RARITY_TRAIT_COUNT`
+ * is the single knob.) Assigned deterministically by card.id. Display copy lives
+ * in `trait-copy.ts`, keyed by the exact trait names below.
  */
 
 import type { Card } from './scoring';
@@ -148,7 +151,11 @@ const DEFINING_TRAITS: Record<string, PointTrait[]> = {
   GK: [SHOT_STOPPER, SWEEPER_KEEPER, COMMANDER_OF_BOX, DISTRIBUTION, BIG_GAME_KEEPER],
 };
 
-const RARITY_TRAIT_COUNT: Record<string, number> = { Common: 1, Rare: 2, Epic: 3, Legendary: 4 };
+// One action per card is the baseline; Legendary is the single tier that gets a
+// second. NEVER four (owner rule); the ceiling if balancing ever escalates is
+// three (Rare→2 / Legendary→3). Retune HERE — everything downstream (the card
+// face, the inspector) reads the resulting trait count 1:1.
+const RARITY_TRAIT_COUNT: Record<string, number> = { Common: 1, Rare: 1, Epic: 1, Legendary: 2 };
 
 /**
  * Deterministic, seeded ROTATION of an archetype's candidate list keyed on card.id,
@@ -168,31 +175,34 @@ export function pickDefiningTraits(card: Card): PointTrait[] {
 // Bespoke showcase legends — hand-authored dense loadouts, keyed by card id.
 // ---------------------------------------------------------------------------
 
+// Bespoke Legends still hand-pick WHICH two actions define them (vs the seeded
+// pick) and mark them signature — but they obey the same Legendary cap of TWO
+// (owner rule: never 4). Keep the two most identity-defining, most-prominent first.
 export const SIGNATURE_OVERRIDES: Record<number, PointTrait[]> = {
   // 466 Florian Drobny (Creator / WF / Legendary, BRS 95) — the wide-creation maestro.
-  466: [
-    POSTMAN,
-    SNIPER,
-    DEADEYE,
-    { name: 'Right Flank', kind: 'buff', who: 'self', atk: 2 },
-  ],
+  466: [POSTMAN, DEADEYE],
   // 422 Mateo Belmonte (Striker / Legendary, BRS 92) — the fox in the box.
   422: [
     POACHERS_INSTINCT,
     { name: 'Box Presence', kind: 'chance', quality: 'big', p: 0.35, asShooter: true },
-    SNIPER,
-    { name: 'Big Game', kind: 'buff', who: 'self', atk: 3, late: true },
   ],
-  // 314 Theo Roux (Cover / CD, BRS 80) — the marshal (dense bespoke defender).
-  314: [
-    LEADERSHIP,
-    { name: 'Stopper', kind: 'stop', p: 0.4 },
-    OFFSIDE_TRAP,
-    { name: 'Organiser', kind: 'buff', who: 'backline', def: 1 },
-  ],
+  // 314 Theo Roux (Cover / CD, BRS 80) — the marshal.
+  314: [LEADERSHIP, { name: 'Stopper', kind: 'stop', p: 0.4 }],
 };
 
-/** A card's full defining loadout: bespoke showcase override, else the seeded picker. */
+/** How many defining actions this card's rarity earns (the cap a signature honours too). */
+export function traitCountFor(card: Card): number {
+  return RARITY_TRAIT_COUNT[card.rarity] ?? 1;
+}
+
+/**
+ * A card's defining loadout: a bespoke showcase override (hand-picked, most
+ * prominent first) else the seeded picker — either way CLAMPED to the rarity
+ * count, so a signature never exceeds the cap (owner rule: mainly 1, Legendary 2,
+ * never 4).
+ */
 export function definingTraitsFor(card: Card): PointTrait[] {
-  return SIGNATURE_OVERRIDES[card.id] ?? pickDefiningTraits(card);
+  const override = SIGNATURE_OVERRIDES[card.id];
+  if (override) return override.slice(0, traitCountFor(card));
+  return pickDefiningTraits(card);
 }

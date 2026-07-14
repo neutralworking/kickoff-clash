@@ -11,7 +11,7 @@
 import type { Card } from '../../lib/scoring';
 import type { TacticRarity } from '../../lib/tactics';
 import { type ContestKey, classOfCard, PLAYER_CLASS_META } from '../../lib/contest-map';
-import { pickDefiningTraits, SIGNATURE_OVERRIDES } from '../../lib/defining-traits';
+import { definingTraitsFor as resolveDefiningTraits, SIGNATURE_OVERRIDES } from '../../lib/defining-traits';
 import { traitCopy, type TraitCopy } from '../../lib/trait-copy';
 
 export const PIXEL = 'var(--font-pixel, monospace)';
@@ -205,15 +205,15 @@ export function shortTraitLabel(name: string, fallbackLabel: string): string {
 }
 
 /**
- * The card's DEFINING traits, resolved for display. Signature-override cards keep
- * their bespoke loadout (rarity count intentionally overridden) and their traits
- * are surfaced first as the marquee identity; everyone else gets the seeded pick.
- * Pure render selection — the magnitudes/order come straight from the trait layer.
+ * The card's DEFINING traits, resolved for display. Reuses the trait layer's
+ * clamped resolver (`resolveDefiningTraits`) so the card face / inspector show
+ * the SAME loadout the match plays — signature cards keep their hand-picked
+ * marquee identity, capped to the rarity count; everyone else gets the seeded
+ * pick. Pure render selection — the magnitudes/order come from the trait layer.
  */
 export function definingTraitsFor(card: Card): ResolvedTrait[] {
-  const override = SIGNATURE_OVERRIDES[card.id];
-  const records = override ?? pickDefiningTraits(card);
-  const isSignature = override != null;
+  const records = resolveDefiningTraits(card);
+  const isSignature = SIGNATURE_OVERRIDES[card.id] != null;
   return records.map((r) => {
     const copy = traitCopy(r.name);
     return { name: r.name, copy, style: traitPillStyle(copy.kind), signature: isSignature };
