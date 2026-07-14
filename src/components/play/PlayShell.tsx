@@ -8,11 +8,14 @@
  * — every transition calls an engine function (managerOffer, fixtureSetup,
  * resolveFixture, investCash) and stores what it returns.
  *
- * Phases: manager → fixture → squad → match → post-match → shop → (next | summary).
- * The run autosaves to localStorage at each boundary and resumes on reload.
+ * Phases: title → manager → fixture → squad → match → post-match → shop →
+ * (next | summary). The run autosaves to localStorage at each boundary and
+ * resumes on reload. This shell is the LIVE game (mounted at `/`); the
+ * SCORING_V2 game is parked at `/classic`.
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import TitleScreen from '../TitleScreen';
 import {
   loadCards,
   createRun,
@@ -22,12 +25,17 @@ import {
   serializeRun,
   deserializeRun,
   MANAGERS_BY_ID,
+  contestDials,
+  COMMIT_MIN,
+  type Contest,
   type KCCard,
   type KCCardJSON,
   type Manager,
   type RunState,
   type FixtureSetup,
   type MatchResult,
+  type TacticalCard,
+  type TacticalPlay,
 } from '../../engine-v2';
 import { PIXEL } from './ui';
 import ManagerPick from './ManagerPick';
@@ -40,7 +48,7 @@ import RunSummary from './RunSummary';
 
 const RUN_KEY = 'kc-v2-run';
 
-type Phase = 'manager' | 'fixture' | 'squad' | 'match' | 'postmatch' | 'shop' | 'summary';
+type Phase = 'title' | 'manager' | 'fixture' | 'squad' | 'match' | 'postmatch' | 'shop' | 'summary';
 
 function restore(): RunState | null {
   try {
@@ -55,19 +63,22 @@ function restore(): RunState | null {
 export default function PlayShell() {
   const [pool, setPool] = useState<KCCard[] | null>(null);
   const [run, setRun] = useState<RunState | null>(() => restore());
-  const [phase, setPhase] = useState<Phase>(() => {
-    const saved = restore();
-    return saved ? (saved.completed || !saved.alive ? 'summary' : 'fixture') : 'manager';
-  });
+  const [phase, setPhase] = useState<Phase>('title');
   const [seed, setSeed] = useState<number>(() => (Date.now() & 0x7fffffff) | 1);
   const [pending, setPending] = useState<{ run: RunState; result: MatchResult; setup: FixtureSetup } | null>(null);
+  // The kicked-off XI + the tactical plays called so far — held so a play can
+  // RE-RESOLVE the fixture (same seed → the revealed batches replay identically).
+  const [matchXi, setMatchXi] = useState<KCCard[] | null>(null);
+  const [plays, setPlays] = useState<TacticalPlay[]>([]);
 
   // load the card pool at first client render (async — the rest is lazy-init'd).
   // Derive the deploy basePath from our own path (we mount at `<basePath>/play`)
   // so the fetch is correct whether served at root or under /kickoff-clash.
   useEffect(() => {
     let live = true;
-    const base = window.location.pathname.replace(/\/play\/?$/, '');
+    // Mounted at `<basePath>/` or `<basePath>/play` — strip the route segment
+    // and any trailing slash so the data fetch works at either mount point.
+    const base = window.location.pathname.replace(/\/play\/?$/, '').replace(/\/$/, '');
     fetch(`${base}/data/kc_v2_cards.json`)
       .then((r) => r.json())
       .then((rows: KCCardJSON[]) => live && setPool(loadCards(rows)))
@@ -106,13 +117,35 @@ export default function PlayShell() {
 
   const kickoff = (pickedXi: KCCard[]) => {
     if (!run || !setup) return;
+    setMatchXi(pickedXi);
+    setPlays([]);
     setPending({ ...resolveFixture(run, pickedXi, setup), setup }); // engine resolves; we replay its log
     setPhase('match');
   };
 
+  // Call a tactical play at batch `atBatch`: amend the schedule and re-resolve.
+  // Determinism keeps every already-revealed batch byte-identical; only the
+  // unrevealed future re-rolls under the new posture window / class buff.
+  const playTactic = (atBatch: number, tactic: TacticalCard) => {
+    if (!run || !pending || !matchXi) return;
+    const next = [...plays, { atBatch, tactic }];
+    setPlays(next);
+    setPending({ ...resolveFixture(run, matchXi, pending.setup, next), setup: pending.setup });
+  };
+
+  // Which contests the kicked-off XI is committed to (card tilts alone) — the
+  // UI hint for tactic class buffs; the engine applies the same gate itself.
+  const committed = useMemo(() => {
+    if (!matchXi) return new Set<Contest>();
+    const dials = contestDials(matchXi);
+    return new Set<Contest>((Object.keys(dials) as Contest[]).filter((c) => dials[c] >= COMMIT_MIN[c]));
+  }, [matchXi]);
+
   const fullTime = () => {
     if (!pending) return;
     persist(pending.run);
+    setMatchXi(null);
+    setPlays([]);
     setPhase('postmatch');
   };
 
@@ -123,6 +156,19 @@ export default function PlayShell() {
   };
 
   const loading = pool === null;
+
+  // The title gate (mirrors the classic shell): a saved run — alive or ended —
+  // can be re-entered; New Season always starts clean.
+  if (phase === 'title') {
+    return (
+      <TitleScreen
+        onNewRun={newRun}
+        onContinue={() => setPhase(run && (run.completed || !run.alive) ? 'summary' : 'fixture')}
+        hasExistingRun={!!run}
+        altLink={{ href: '/classic', label: '▸ Classic Engine (Scoring V2)' }}
+      />
+    );
+  }
 
   return (
     <div className="kc-app-bg" style={{ minHeight: '100dvh', color: 'var(--cream)' }}>
@@ -146,15 +192,23 @@ export default function PlayShell() {
         )}
 
         {!loading && phase === 'match' && manager && pending && (
-          <MatchScreen manager={manager} setup={pending.setup} result={pending.result} onFullTime={fullTime} />
+          <MatchScreen
+            manager={manager}
+            setup={pending.setup}
+            result={pending.result}
+            committed={committed}
+            plays={plays}
+            onPlayTactic={playTactic}
+            onFullTime={fullTime}
+          />
         )}
 
         {!loading && phase === 'postmatch' && manager && pending && (
           <PostMatch manager={manager} setup={pending.setup} result={pending.result} run={pending.run} onContinue={afterPostMatch} />
         )}
 
-        {!loading && phase === 'shop' && run && manager && (
-          <Shop run={run} manager={manager} onDone={(next) => { persist(next); setPhase('fixture'); }} />
+        {!loading && phase === 'shop' && run && manager && pool && (
+          <Shop run={run} manager={manager} pool={pool} onDone={(next) => { persist(next); setPhase('fixture'); }} />
         )}
 
         {!loading && phase === 'summary' && run && manager && <RunSummary run={run} manager={manager} onNewRun={newRun} />}

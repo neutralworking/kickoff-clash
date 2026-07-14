@@ -277,3 +277,125 @@ describe('determinism holds with managers + tactics', () => {
     expect(JSON.stringify(a.events)).toBe(JSON.stringify(b.events));
   });
 });
+
+describe('the KEEP levers — Keep Ball class buff + the chase drain (owner direction, 2026-07)', () => {
+  const batchOf = (e: { [k: string]: unknown }): number => {
+    if ('clock' in e && e.clock) return (e.clock as { batch: number }).batch;
+    if ('batch' in e && typeof e.batch === 'number') return e.batch;
+    return 0;
+  };
+  const firstKeepRollP = (events: ReturnType<typeof simulateMatch>['events'], lastBatch: number): number | null => {
+    for (const e of events) {
+      if (e.type === 'retain-roll' && e.side === 0 && e.clock.batch <= lastBatch) return e.p;
+    }
+    return null;
+  };
+
+  it('Keep Ball raises a KEEP-committed side\'s retain roll during its window', () => {
+    const mk = (plays: boolean): Squad => ({
+      cards: buildXI(new RngStream(21), 'mono:KEEP'),
+      posture: 'balanced',
+      tacticalPlays: plays ? [{ atBatch: 1, tactic: TACTICS_BY_ID['keep-ball'] }] : [],
+    });
+    // a pressing opponent keeps the retain roll under the RETAIN_HI cap, where
+    // the buff is visible (vs a soft side the roll is already at the ceiling)
+    const away = (): Squad => ({ cards: buildXI(new RngStream(22), 'mono:PRESS'), posture: 'balanced' });
+    const withCard = simulateMatch(mk(true), away(), { seed: 301 });
+    const without = simulateMatch(mk(false), away(), { seed: 301 });
+    const pWith = firstKeepRollP(withCard.events, 2);
+    const pWithout = firstKeepRollP(without.events, 2);
+    expect(pWith).not.toBeNull();
+    expect(pWithout).not.toBeNull();
+    expect(pWith!).toBeGreaterThan(pWithout!);
+  });
+
+  it('an uncommitted side playing Keep Ball gets the posture window, NOT the buff (the law)', () => {
+    const mk = (plays: boolean): Squad => ({
+      cards: buildXI(new RngStream(23), 'random'),
+      posture: 'balanced',
+      tacticalPlays: plays ? [{ atBatch: 1, tactic: TACTICS_BY_ID['keep-ball'] }] : [],
+    });
+    const away = (): Squad => ({ cards: buildXI(new RngStream(24), 'random'), posture: 'balanced' });
+    const withCard = simulateMatch(mk(true), away(), { seed: 302 });
+    const without = simulateMatch(mk(false), away(), { seed: 302 });
+    expect(withCard.events.some((e) => e.type === 'tactic-played')).toBe(true);
+    const pWith = firstKeepRollP(withCard.events, 2);
+    const pWithout = firstKeepRollP(without.events, 2);
+    expect(pWith).not.toBeNull();
+    expect(pWith).toBe(pWithout);
+  });
+
+  it('a KEEP-committed holder drains the chasing side\'s legs; uncommitted sides tire nobody', () => {
+    const keeper: Squad = { cards: buildXI(new RngStream(25), 'mono:KEEP'), posture: 'balanced' };
+    const chaser: Squad = { cards: buildXI(new RngStream(26), 'random'), posture: 'balanced' };
+    const res = simulateMatch(keeper, chaser, { seed: 303 });
+    const drains = res.events.filter((e) => e.type === 'fitness-drained');
+    expect(drains.length).toBeGreaterThan(0);
+    for (const d of drains) if (d.type === 'fitness-drained') expect(d.side).toBe(1); // only the chaser tires
+    // and two uncommitted randoms never chase-drain (no Taskmaster in play either)
+    const a: Squad = { cards: buildXI(new RngStream(27), 'random'), posture: 'balanced' };
+    const b: Squad = { cards: buildXI(new RngStream(28), 'random'), posture: 'balanced' };
+    const none = simulateMatch(a, b, { seed: 304 });
+    expect(none.events.some((e) => e.type === 'fitness-drained')).toBe(false);
+  });
+
+  it('amending the play schedule preserves the already-played prefix (the UI re-resolve contract)', () => {
+    const mk = (plays: boolean): Squad => ({
+      cards: buildXI(new RngStream(29), 'mono:KEEP'),
+      posture: 'balanced',
+      tacticalPlays: plays ? [{ atBatch: 4, tactic: TACTICS_BY_ID['keep-ball'] }] : [],
+    });
+    const away = (): Squad => ({ cards: buildXI(new RngStream(30), 'random'), posture: 'balanced' });
+    const a = simulateMatch(mk(false), away(), { seed: 305 });
+    const b = simulateMatch(mk(true), away(), { seed: 305 });
+    const prefix = (events: typeof a.events) =>
+      JSON.stringify(events.filter((e) => e.type !== 'full-time' && batchOf(e) < 4));
+    expect(prefix(a.events)).toBe(prefix(b.events));
+    expect(JSON.stringify(a.events)).not.toBe(JSON.stringify(b.events)); // the future re-rolled
+  });
+});
+
+describe('the boss tactical brain (autoTactics) — modelled opponents play the deck', () => {
+  it('a trailing auto side chases; a leading auto side shuts the door; silent sides stay silent', () => {
+    const CHASE = new Set(['All-Out Attack', 'High Press']);
+    const DOOR = new Set(['Park the Bus', 'Keep Ball']);
+    let sawChase = false;
+    let sawDoor = false;
+    for (let s = 1; s <= 20; s++) {
+      const strong: Squad = { cards: buildXI(new RngStream(s), 'mono:FINISH'), posture: 'attack' };
+      const weakAuto: Squad = { cards: buildXI(new RngStream(s + 100), 'random'), posture: 'balanced', autoTactics: true };
+      const res = simulateMatch(strong, weakAuto, { seed: 400 + s });
+      for (const e of res.events) {
+        if (e.type !== 'tactic-played') continue;
+        expect(e.side).toBe(1); // the non-auto side scheduled no plays — it must stay silent
+        // the pick matches the scoreline story: chasing cards OR door-shutting cards only
+        expect(CHASE.has(e.card) || DOOR.has(e.card)).toBe(true);
+        if (CHASE.has(e.card)) sawChase = true;
+        if (DOOR.has(e.card)) sawDoor = true;
+      }
+    }
+    expect(sawChase).toBe(true); // the outgunned auto side trails and chases somewhere in 20 seeds
+    // door-shutting needs the auto side to LEAD vs a mono:FINISH squad — flip the strength for that
+    for (let s = 1; s <= 20 && !sawDoor; s++) {
+      const weak: Squad = { cards: buildXI(new RngStream(s + 200), 'random'), posture: 'balanced' };
+      const strongAuto: Squad = { cards: buildXI(new RngStream(s + 300), 'mono:FINISH'), posture: 'attack', autoTactics: true };
+      const res = simulateMatch(weak, strongAuto, { seed: 500 + s });
+      for (const e of res.events) {
+        if (e.type === 'tactic-played' && DOOR.has(e.card)) sawDoor = true;
+      }
+    }
+    expect(sawDoor).toBe(true);
+  });
+
+  it('the brain is deterministic: same seed, same plays', () => {
+    const mk = (): [Squad, Squad] => [
+      { cards: buildXI(new RngStream(41), 'mono:FINISH'), posture: 'attack' },
+      { cards: buildXI(new RngStream(42), 'random'), posture: 'balanced', autoTactics: true },
+    ];
+    const [h1, a1] = mk();
+    const [h2, a2] = mk();
+    const a = simulateMatch(h1, a1, { seed: 909 });
+    const b = simulateMatch(h2, a2, { seed: 909 });
+    expect(JSON.stringify(a.events)).toBe(JSON.stringify(b.events));
+  });
+});

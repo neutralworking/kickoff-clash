@@ -26,8 +26,11 @@ import {
   deathFixture,
   serializeRun,
   deserializeRun,
-  fixtureTarget,
   challengeForFixture,
+  packOffer,
+  buyCard,
+  CARD_PRICE,
+  fixtureSetup,
   RUN_FIXTURES,
   MANAGERS,
   MANAGERS_BY_ID,
@@ -84,16 +87,12 @@ describe('a run resolves end-to-end and is deterministic', () => {
     expect(step.log).toHaveLength(1);
     const full = simulateRun(99, m, pool, true);
     // first fixture is identical whether stepped or run in one shot
-    expect(step.log[0].beaten).toBe(full.log[0].beaten);
+    expect(step.log[0].verdict).toBe(full.log[0].verdict);
     expect(step.log[0].score).toEqual(full.log[0].score);
   });
 });
 
-describe('the target curve and challenge rules', () => {
-  it('the points target grows across the run (1.42^f)', () => {
-    for (let f = 2; f <= RUN_FIXTURES; f++) expect(fixtureTarget(f)).toBeGreaterThan(fixtureTarget(f - 1));
-  });
-
+describe('the challenge rules', () => {
   it('challenge rules bite from fixture 2 (not fixture 1)', () => {
     expect(challengeForFixture(123, 1)).toBeNull();
     let seen = 0;
@@ -132,10 +131,14 @@ describe('the permadeath curve — committed survives deeper than uncommitted (S
   const committed = sweep(true, N);
   const uncommitted = sweep(false, N);
 
-  it('a committed run completes ~40-50% (SM band) and reaches the final fixtures', () => {
-    expect(committed.completion).toBeGreaterThan(0.30);
-    expect(committed.completion).toBeLessThan(0.62);
-    expect(committed.median).toBeGreaterThanOrEqual(8);
+  it('a committed run completes ~25-40% under the scoreline verdict', () => {
+    // Re-based for goals-only survival (owner call, 2026-07): a committed run
+    // completes ~30% at the settled curve (OPP_BASE 4 / GROWTH 2.5 / K_QUALITY
+    // 1.15). The blind-era ~43% band no longer applies; widening the committed
+    // vs uncommitted gap further is the manager-rebalance campaign (next pass).
+    expect(committed.completion).toBeGreaterThan(0.18);
+    expect(committed.completion).toBeLessThan(0.48);
+    expect(committed.median).toBeGreaterThanOrEqual(3);
   });
 
   it('a committed build survives DEEPER than an uncommitted one (the divergence)', () => {
@@ -145,9 +148,9 @@ describe('the permadeath curve — committed survives deeper than uncommitted (S
     expect(committed.completion).toBeGreaterThan(uncommitted.completion - 0.04);
   });
 
-  it('defensive archetypes are viable under the blind (clean-batch scoring channel)', () => {
-    // a STOP/wall manager (Fortress) must be able to complete runs — its points
-    // come from clean sheets, not goals it cannot produce.
+  it('defensive archetypes are viable under the scoreline verdict', () => {
+    // a STOP/wall manager (Fortress) must be able to complete runs — it wins
+    // low-scoring games and survives draws; conceding nothing keeps it alive.
     let fortress = 0;
     const K = 60;
     for (let i = 0; i < K; i++) if (simulateRun(4000 + i, MANAGERS_BY_ID['fortress'], pool, true).completed) fortress++;
@@ -159,5 +162,44 @@ describe('the permadeath curve — committed survives deeper than uncommitted (S
     let f1deaths = 0;
     for (let i = 0; i < 40; i++) if (deathFixture(simulateRun(9000 + i, MANAGERS[i % MANAGERS.length], pool, true)) === 1) f1deaths++;
     expect(f1deaths / 40).toBeLessThan(0.15);
+  });
+});
+
+describe('the pack shop — nine seeded cards, purchases join the draft stream', () => {
+  it('packOffer is deterministic, rarity-shaped, and never offers owned cards', () => {
+    const run = { ...createRun(77, MANAGERS_BY_ID['metronome']), cash: 50 };
+    const a = packOffer(run, pool);
+    const b = packOffer(run, pool);
+    expect(a.map((c) => c.id)).toEqual(b.map((c) => c.id));
+    expect(a).toHaveLength(9);
+    const count = (r: string) => a.filter((c) => c.rarity === r).length;
+    expect(count('Common')).toBe(6);
+    expect(count('Rare')).toBe(1);
+    expect(count('Epic')).toBe(1);
+    expect(count('Legendary')).toBe(1);
+    // buy one → the next visit's offer never contains it
+    const bought = buyCard(run, a[0]);
+    const next = packOffer(bought, pool);
+    expect(next.some((c) => c.id === a[0].id)).toBe(false);
+  });
+
+  it('buyCard spends the rarity price and adds to the collection; unaffordable is a no-op', () => {
+    const run = { ...createRun(78, MANAGERS_BY_ID['gambler']), cash: 5 };
+    const offer = packOffer(run, pool);
+    const common = offer.find((c) => c.rarity === 'Common')!;
+    const legendary = offer.find((c) => c.rarity === 'Legendary')!;
+    const after = buyCard(run, common);
+    expect(after.cash).toBe(5 - CARD_PRICE.Common);
+    expect(after.collection).toContain(common.id);
+    expect(buyCard(after, legendary)).toBe(after); // 12 > remaining cash → no-op
+    expect(buyCard(after, common)).toBe(after); // already owned → no-op
+  });
+
+  it('owned cards lead the next fixture\'s draft stream', () => {
+    let run = { ...createRun(79, MANAGERS_BY_ID['fortress']), cash: 30 };
+    const offer = packOffer(run, pool);
+    run = buyCard(run, offer[offer.length - 1]); // the Legendary
+    const setup = fixtureSetup(run, pool);
+    expect(setup.pool[0].id).toBe(offer[offer.length - 1].id);
   });
 });

@@ -47,7 +47,7 @@ import {
   varianceShift,
   fitnessDrain,
 } from './traits';
-import type { MatchEvent, Side, Clock, ChanceQuality, ChanceOrigin } from './events';
+import type { MatchEvent, MatchVerdict, Side, Clock, ChanceQuality, ChanceOrigin } from './events';
 import { RngStream } from './rng';
 import {
   type PostureState,
@@ -58,7 +58,7 @@ import {
 } from './posture';
 import { type Manager, managerTraits, COMMIT_MIN } from './managers';
 import { type FormationId, type AdherenceBand, adherenceBand, throttleDials } from './adherence';
-import type { TacticalPlay } from './tactics';
+import { TACTICS_BY_ID, type TacticalCard, type TacticalPlay } from './tactics';
 
 // ---- tunables (ported from kc_sim.py; xG-model constants re-calibrated) -----
 const BATCHES = 6;
@@ -94,25 +94,18 @@ const SP_CARRIER = 1.7;
 const SP_XG_BASE = 0.32;
 const K_SPDEF = 0.014; // (topDef − opp backlineDef) → set-piece xG
 
-const GOAL_VALUE = 1.9; // flat points per goal (attacking scoring channel). Goals are
-// HIGHER-VARIANCE than clean batches, so under a permadeath blind the goal channel needs a
-// larger per-event value to give attacking builds the same left-tail margin a wall gets.
-const CLEAN_BATCH_VALUE = 0.85; // flat points per clean batch — the DEFENSIVE scoring
-// channel, banked only by a defensively-committed build (a wall's clean sheets are its
-// goals). Clean batches are common, so this must be gated on commitment or every build
-// would floor on it; an attacker keeps clean batches but scores via goals, not these.
-const PRESSURE_BATCH_VALUE = 0.7; // flat points per PRESSURE batch — the attacking
-// mirror of the clean batch. An attack-committed side that dominates a batch's chances
-// but doesn't convert still banks territory. This is the attacker's FLOOR: without it a
-// pure attacker banks ZERO on any shutout match and dies at F1 as easily as F9 (a
-// defender never scores zero — clean batches are its floor). Small, so a goal (banked
-// separately) is always worth far more than the pressure it converts from.
-const DEFENSIVE_COMMIT: readonly Contest[] = ['STOP', 'BREAK', 'PRESS', 'KEEP'];
-const ATTACK_COMMIT: readonly Contest[] = ['FINISH', 'CREATE'];
-const DEFAULT_TARGET = 3;
+// The match is judged on the SCORELINE — win / draw / loss, nothing else (owner
+// call, 2026-07). The points-blind scoring channels (goal/clean-batch/pressure-
+// batch banking) were removed; a possession side's route to survival is to
+// SCORE, via the chase drain + Build Pressure below.
+const BP_STACK_CAP = 4; // Build Pressure stacks cap (consecutive held batches)
 const DAMPEN_FLOOR = 0.12; // dampen-variance lifts poor chances (consistency axis)
 const SAVE_P = 0.5; // a firing keeper/stopper deny cancels one chance with this prob
 const DEFAULT_ENERGY = 5;
+const CHASE_DRAIN = 2; // chasing the ball is exhausting: per batch a KEEP-committed
+// holder makes the OTHER side run, their fitness drains by this (the possession
+// win-con's teeth — the KEEP lever, owner direction 2026-07). Commitment-gated
+// like every payoff: an uncommitted side holding a batch tires nobody.
 
 /** Tired legs create/finish less — a mild throttle on a side's own dials. */
 const fitnessFactor = (f: number) => clamp(0.85 + 0.015 * f, 0.85, 1);
@@ -133,6 +126,10 @@ export interface Squad {
   formation?: FormationId;
   /** Tactical plays (timed posture windows), played between batches. */
   tacticalPlays?: TacticalPlay[];
+  /** The MANAGER's tactical brain (the modelled opponent / a boss): pick plays
+   *  reactively at batch boundaries — trailing chases, leading shuts the door.
+   *  Deterministic (pure function of match state), so replay/re-resolve holds. */
+  autoTactics?: boolean;
   energy?: number;
   /** Batches at which this side makes a substitution (Tinkerman fuel). */
   subsAtBatch?: number[];
@@ -143,16 +140,15 @@ export interface Squad {
 
 export interface MatchOptions {
   seed: number;
-  target?: number;
   batches?: number;
 }
 
 export interface MatchResult {
   events: MatchEvent[];
   score: [number, number];
-  points: [number, number];
   cash: [number, number];
-  result: 'target-met' | 'target-missed';
+  /** Home-side verdict, judged on the scoreline — nothing else. */
+  verdict: MatchVerdict;
 }
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
@@ -189,16 +185,23 @@ interface SideCtx {
   bldef: number;
   att: number;
   aerialDef: number;
-  /** True if the build commits to a defensive contest — unlocks clean-sheet points. */
-  defensiveCommit: boolean;
-  /** True if the build commits to an attacking contest — unlocks pressure-batch points. */
-  attackCommit: boolean;
+  /** Every contest the build's card tilts commit to (COMMIT_MIN) — gates the
+   *  chase drain (KEEP) and which tactic dialBoost entries actually apply. */
+  committed: Set<Contest>;
+  /** Build Pressure (possession managers): pBig added per consecutive held
+   *  batch. 0 unless the manager carries it AND the build clears its gate. */
+  buildPressure: number;
+  /** An open tactical window's dial buff (commitment-filtered at play time)
+   *  and the last batch it covers. */
+  windowBoost: Partial<Record<Contest, number>> | null;
+  windowBoostUntil: number;
   band: AdherenceBand;
   energy: number;
   fitness: number;
   cashOnGoal: number;
   managerId: string | null;
   tacticalPlays: TacticalPlay[];
+  autoTactics: boolean;
   subsAtBatch: number[];
   subsLeft: number;
 }
@@ -214,8 +217,9 @@ function makeCtx(sq: Squad): SideCtx {
   // (deck quality) rides on top, un-throttled (the manager reweight, a trait, is
   // added later in effectiveDials).
   const rawDials = contestDials(sq.cards); // card tilts only (the build's commitment)
-  const defensiveCommit = DEFENSIVE_COMMIT.some((c) => rawDials[c] >= COMMIT_MIN[c]);
-  const attackCommit = ATTACK_COMMIT.some((c) => rawDials[c] >= COMMIT_MIN[c]);
+  const committed = new Set<Contest>(
+    (Object.keys(rawDials) as Contest[]).filter((c) => rawDials[c] >= COMMIT_MIN[c])
+  );
   const baseDials = throttleDials({ ...rawDials }, band);
   if (sq.dialBonus) for (const k of Object.keys(baseDials) as Contest[]) baseDials[k] += sq.dialBonus[k] ?? 0;
   // planning dials fold in the manager's reweight, but only if the build actually
@@ -236,14 +240,17 @@ function makeCtx(sq: Squad): SideCtx {
     bldef: backlineDef(sq.cards),
     att: topAtt(sq.cards),
     aerialDef: topDef(sq.cards),
-    defensiveCommit,
-    attackCommit,
+    committed,
+    buildPressure: favOpen && mgr?.buildPressure ? mgr.buildPressure : 0,
+    windowBoost: null,
+    windowBoostUntil: 0,
     band,
     energy: sq.energy ?? DEFAULT_ENERGY,
     fitness: 10,
     cashOnGoal: mgr?.cashOnGoal ?? 0,
     managerId: mgr?.id ?? null,
     tacticalPlays: sq.tacticalPlays ?? [],
+    autoTactics: !!sq.autoTactics,
     subsAtBatch: sq.subsAtBatch ?? [],
     subsLeft: 3,
   };
@@ -277,21 +284,38 @@ function effectiveDials(me: SideCtx, meSnap: GateSnapshot, foe: SideCtx, foeSnap
   const theirs = dialDeltas(foe.traits, foeSnap);
   const ff = fitnessFactor(me.fitness);
   const out = { ...me.baseDials };
-  for (const k of Object.keys(out) as Contest[]) out[k] = out[k] * ff + mine.own[k] - theirs.opp[k];
+  for (const k of Object.keys(out) as Contest[]) {
+    out[k] = out[k] * ff + mine.own[k] - theirs.opp[k] + (me.windowBoost?.[k] ?? 0);
+  }
   return out;
+}
+
+/**
+ * The manager's tactical brain — reactive and football-plain: a trailing side
+ * chases (all-out attack, or a high press on short legs); a leading side shuts
+ * the door late (Keep Ball if the build can strangle it, else park the bus).
+ * Pure function of match state → deterministic under the match seed.
+ */
+function aiTactic(me: SideCtx, b: number, scoreDiff: number): TacticalCard | null {
+  if (scoreDiff < 0 && b >= 3) {
+    if (me.energy >= 3) return TACTICS_BY_ID['all-out-attack'];
+    if (me.energy >= 2) return TACTICS_BY_ID['high-press'];
+  }
+  if (scoreDiff > 0 && b >= 4 && me.energy >= 2) {
+    return me.committed.has('KEEP') ? TACTICS_BY_ID['keep-ball'] : TACTICS_BY_ID['park-the-bus'];
+  }
+  return null;
 }
 
 export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): MatchResult {
   const rng = new RngStream(opts.seed);
   const batches = opts.batches ?? BATCHES;
-  const target = opts.target ?? DEFAULT_TARGET;
   const events: MatchEvent[] = [];
 
   const ctx: [SideCtx, SideCtx] = [makeCtx(home), makeCtx(away)];
   const score: [number, number] = [0, 0];
-  const points: [number, number] = [0, 0];
   const cash: [number, number] = [0, 0];
-  const chancesInBatch: [number, number] = [0, 0]; // reset each batch (pressure floor)
+  const holdStreak: [number, number] = [0, 0]; // consecutive held batches (Build Pressure)
 
   // Possession split (batch-level 6 slots, clamp 2–4). Base dials, no per-inc
   // gating on the split itself (posture is a gate on traits, not a resolver).
@@ -306,7 +330,6 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
     seed: opts.seed,
     postures: [activePosture(ctx[0].postureState), activePosture(ctx[1].postureState)],
     dials: [ctx[0].baseDials, ctx[1].baseDials],
-    target,
     managers: [ctx[0].managerId, ctx[1].managerId],
     adherence: [ctx[0].band, ctx[1].band],
   });
@@ -334,7 +357,10 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
     const dDials = effectiveDials(D, dSnap, A, aSnap);
 
     const createEdge = aDials.CREATE - dDials.BREAK;
-    const pBig = clamp(P_BIG_BASE + P_BIG_K * createEdge, P_BIG_LO, P_BIG_HI);
+    // Build Pressure: consecutive periods on the ball sharpen the chance — a
+    // possession manager's route to actually scoring (quality, not volume).
+    const bp = A.buildPressure * Math.min(holdStreak[att], BP_STACK_CAP);
+    const pBig = clamp(P_BIG_BASE + P_BIG_K * createEdge + bp, P_BIG_LO, P_BIG_HI);
     const quality: ChanceQuality = rng.float() < pBig ? 'big' : 'half';
 
     // xG: base tier × exp(FINISH−STOP + stat-margin), aerial paths read DEF.
@@ -352,16 +378,11 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
 
     const roll = rng.float();
     const converted = roll < 1 - Math.exp(-xg);
-    chancesInBatch[att] += 1; // territory this batch (feeds the pressure floor)
     events.push({ type: 'chance', side: att, clock, origin, quality, xg: +xg.toFixed(3), converted, roll: +roll.toFixed(3) });
     if (!converted) return;
 
     score[att] += 1;
     events.push({ type: 'goal', side: att, via, origin, score: [score[0], score[1]], clock });
-
-    // goal points — flat (the attacking scoring channel toward the run's blind).
-    points[att] += GOAL_VALUE;
-    events.push({ type: 'points-banked', side: att, source: 'goal', value: GOAL_VALUE, total: points[att], clock });
 
     // cash on goal (Financier economy hook)
     if (A.cashOnGoal > 0) {
@@ -372,31 +393,57 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
 
   for (let b = 1; b <= batches; b++) {
     const band = clockBand(b, batches);
-    chancesInBatch[0] = chancesInBatch[1] = 0; // territory resets each batch
-    // posture tick: expire any due tactical window and revert to the default.
+    const holder = schedule[b - 1];
+    const defender: Side = holder === 0 ? 1 : 0;
+    // Build Pressure stacks: consecutive periods with the ball; losing it resets.
+    holdStreak[holder] += 1;
+    holdStreak[defender] = 0;
+    if (ctx[holder].buildPressure > 0 && holdStreak[holder] >= 2) {
+      events.push({ type: 'pressure-built', side: holder, batch: b, stacks: Math.min(holdStreak[holder], BP_STACK_CAP) });
+    }
+    // posture tick: expire any due tactical window (and its dial buff) and revert.
     for (const s of [0, 1] as Side[]) {
       const { state, reverted } = tickPosture(ctx[s].postureState, b);
       ctx[s].postureState = state;
       if (reverted) events.push({ type: 'posture-shift', side: s, to: reverted, reason: 'revert', batch: b });
+      if (ctx[s].windowBoost && b > ctx[s].windowBoostUntil) ctx[s].windowBoost = null;
     }
     // tactical plays (between-batch): open a timed posture window if affordable.
+    const openWindow = (s: Side, tactic: TacticalCard): boolean => {
+      if (ctx[s].energy < tactic.energyCost) return false;
+      ctx[s].energy -= tactic.energyCost;
+      ctx[s].postureState = applyPostureWindow(ctx[s].postureState, tactic.posture, b, tactic.durationBatches);
+      // the card's class buff, filtered by the build's commitments (the
+      // no-unconditional law) — an unearned boost entry simply never applies.
+      if (tactic.dialBoost) {
+        const earned = Object.entries(tactic.dialBoost).filter(([c]) => ctx[s].committed.has(c as Contest));
+        ctx[s].windowBoost = earned.length ? Object.fromEntries(earned) : null;
+        ctx[s].windowBoostUntil = b + tactic.durationBatches - 1;
+      }
+      events.push({
+        type: 'tactic-played',
+        side: s,
+        card: tactic.name,
+        posture: tactic.posture,
+        durationBatches: tactic.durationBatches,
+        energyCost: tactic.energyCost,
+        energyLeft: ctx[s].energy,
+        batch: b,
+      });
+      events.push({ type: 'posture-shift', side: s, to: tactic.posture, reason: 'tactic', batch: b });
+      return true;
+    };
     for (const s of [0, 1] as Side[]) {
+      let played = false;
       for (const play of ctx[s].tacticalPlays) {
-        if (play.atBatch !== b) continue;
-        if (ctx[s].energy < play.tactic.energyCost) continue;
-        ctx[s].energy -= play.tactic.energyCost;
-        ctx[s].postureState = applyPostureWindow(ctx[s].postureState, play.tactic.posture, b, play.tactic.durationBatches);
-        events.push({
-          type: 'tactic-played',
-          side: s,
-          card: play.tactic.name,
-          posture: play.tactic.posture,
-          durationBatches: play.tactic.durationBatches,
-          energyCost: play.tactic.energyCost,
-          energyLeft: ctx[s].energy,
-          batch: b,
-        });
-        events.push({ type: 'posture-shift', side: s, to: play.tactic.posture, reason: 'tactic', batch: b });
+        if (play.atBatch === b && openWindow(s, play.tactic)) played = true;
+      }
+      // the manager's tactical brain (a modelled boss): reactive, deterministic,
+      // no RNG — so replay and the UI's re-resolve contract are untouched.
+      if (!played && ctx[s].autoTactics && !ctx[s].postureState.override) {
+        const other: Side = s === 0 ? 1 : 0;
+        const pick = aiTactic(ctx[s], b, score[s] - score[other]);
+        if (pick) openWindow(s, pick);
       }
     }
     // substitutions (fresh legs): emit the event for the log / UI (rotation depth).
@@ -406,10 +453,13 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
       events.push({ type: 'substitution', side: s, batch: b, subsLeft: ctx[s].subsLeft });
     }
     // fitness drain (Taskmaster): a committed press chips the opponent's legs.
+    // Plus the chase: a KEEP-committed holder makes the defender run this batch
+    // — possession's teeth. Both are commitment-gated, both land the same way.
     for (const s of [0, 1] as Side[]) {
       const other: Side = s === 0 ? 1 : 0;
       const drainSnap = snapshot(ctx[s], activePosture(ctx[s].postureState), scorelines()[s], band, new Set());
-      const amount = fitnessDrain(ctx[s].traits, drainSnap);
+      let amount = fitnessDrain(ctx[s].traits, drainSnap);
+      if (s === holder && ctx[s].committed.has('KEEP')) amount += CHASE_DRAIN;
       if (amount > 0) {
         ctx[other].fitness = Math.max(0, ctx[other].fitness - amount);
         events.push({ type: 'fitness-drained', side: other, amount, fitness: ctx[other].fitness, batch: b });
@@ -421,8 +471,6 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
       band,
       postures: [activePosture(ctx[0].postureState), activePosture(ctx[1].postureState)],
     });
-    const holder = schedule[b - 1];
-    const defender: Side = holder === 0 ? 1 : 0;
     const H = ctx[holder];
     const D = ctx[defender];
     const cleanBefore: [number, number] = [score[0], score[1]];
@@ -489,46 +537,12 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
       }
     }
 
-    // ---- batch-end: clean-sheet (defensive) points ----
-    // A build scores through its win-con: goals for attackers (banked at the goal
-    // site), CLEAN SHEETS for defenders (banked here, flat per clean batch). A
-    // wall keeps more clean batches than a leaky attacker, so this is the
-    // defensive scoring channel toward the run's blind — no multiplier, no streak.
     const cleanFor: [boolean, boolean] = [score[1] === cleanBefore[1], score[0] === cleanBefore[0]];
-    const bClock: Clock = { batch: b, increment: INCREMENTS };
-    for (const s of [0, 1] as Side[]) {
-      if (!cleanFor[s] || !ctx[s].defensiveCommit) continue;
-      points[s] += CLEAN_BATCH_VALUE;
-      events.push({ type: 'points-banked', side: s, source: 'clean-batch', value: CLEAN_BATCH_VALUE, total: points[s], clock: bClock });
-    }
-
-    // ---- batch-end: pressure (attacking) points — the attacker's FLOOR ----
-    // The mirror of the clean batch. An attack-committed side that created chances
-    // this batch but did NOT score still banks territory, so a pure attacker never
-    // banks zero on a barren match (which would kill it at F1). Scoring supersedes:
-    // a batch that produced a goal already banked GOAL_VALUE (worth far more), so it
-    // pays no pressure — pressure is strictly the consolation for dominance unconverted.
-    for (const s of [0, 1] as Side[]) {
-      const scored = score[s] > cleanBefore[s];
-      if (scored || !ctx[s].attackCommit || chancesInBatch[s] === 0) continue;
-      points[s] += PRESSURE_BATCH_VALUE;
-      events.push({ type: 'points-banked', side: s, source: 'pressure-batch', value: PRESSURE_BATCH_VALUE, total: points[s], clock: bClock });
-    }
-
     events.push({ type: 'batch-end', batch: b, cleanFor, score: [score[0], score[1]] });
-
-    // early whistle: a side already past target with the lead late in the match
-    if (b >= batches - 1) {
-      for (const s of [0, 1] as Side[]) {
-        const other = s === 0 ? 1 : 0;
-        if (points[s] >= target && score[s] > score[other] && b < batches) {
-          events.push({ type: 'early-whistle', clock: { batch: b, increment: INCREMENTS }, reason: 'target-met-with-lead' });
-        }
-      }
-    }
   }
 
-  const result: 'target-met' | 'target-missed' = points[0] >= target ? 'target-met' : 'target-missed';
-  events.push({ type: 'full-time', score: [score[0], score[1]], points: [points[0], points[1]], target, result });
-  return { events, score, points, cash, result };
+  // The verdict IS the scoreline — win / draw / loss, nothing else.
+  const verdict: MatchVerdict = score[0] > score[1] ? 'win' : score[0] < score[1] ? 'loss' : 'draw';
+  events.push({ type: 'full-time', score: [score[0], score[1]], verdict });
+  return { events, score, cash, verdict };
 }

@@ -6,9 +6,11 @@ interface TitleScreenProps {
   onNewRun: () => void;
   onContinue?: () => void;
   hasExistingRun: boolean;
+  /** Footer cross-link to the other engine's game (omit to render none). */
+  altLink?: { href: string; label: string };
 }
 
-export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: TitleScreenProps) {
+export default function TitleScreen({ onNewRun, onContinue, hasExistingRun, altLink }: TitleScreenProps) {
   return (
     <div
       className="kc-app-bg flex flex-col items-center justify-center text-center px-6 relative overflow-hidden"
@@ -93,23 +95,25 @@ export default function TitleScreen({ onNewRun, onContinue, hasExistingRun }: Ti
           </button>
         )}
 
-        {/* Six-contest rebuild (NW-143, P5) — the engine-v2 run loop. next/link
-            prepends the deploy basePath (/kickoff-clash), which a raw <a> would not. */}
-        <Link
-          href="/play"
-          className="w-full text-center transition-all hover:brightness-125 active:scale-[0.97]"
-          style={{
-            fontFamily: 'var(--font-pixel)',
-            fontSize: 9,
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-            color: 'var(--dust)',
-            padding: '8px 0',
-            marginTop: 2,
-          }}
-        >
-          ▸ Six-Contest Rebuild
-        </Link>
+        {/* Cross-link between the two engines' games. next/link prepends the
+            deploy basePath (/kickoff-clash), which a raw <a> would not. */}
+        {altLink && (
+          <Link
+            href={altLink.href}
+            className="w-full text-center transition-all hover:brightness-125 active:scale-[0.97]"
+            style={{
+              fontFamily: 'var(--font-pixel)',
+              fontSize: 9,
+              letterSpacing: 1,
+              textTransform: 'uppercase',
+              color: 'var(--dust)',
+              padding: '8px 0',
+              marginTop: 2,
+            }}
+          >
+            {altLink.label}
+          </Link>
+        )}
       </div>
     </div>
   );

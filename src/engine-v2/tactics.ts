@@ -12,6 +12,7 @@
  */
 
 import type { Posture } from './gates';
+import type { Contest } from './contests';
 
 export interface TacticalCard {
   id: string;
@@ -19,6 +20,12 @@ export interface TacticalCard {
   posture: Posture;
   durationBatches: number;
   energyCost: number;
+  /** Optional class buff while the window is open: flat dial points, applied
+   *  ONLY to contests the build is COMMITTED to (COMMIT_MIN — the
+   *  no-unconditional law extends to tactics: an uncommitted side playing the
+   *  card gets the posture window, not the buff). The KEEP lever (owner
+   *  direction, 2026-07): tactics buff a committed class harder. */
+  dialBoost?: Partial<Record<Contest, number>>;
 }
 
 export const DEFAULT_ENERGY = 5;
@@ -29,6 +36,10 @@ export const TACTICS: TacticalCard[] = [
   { id: 'high-press', name: 'High Press', posture: 'attack', durationBatches: 1, energyCost: 2 },
   { id: 'all-out-attack', name: 'All-Out Attack', posture: 'attack', durationBatches: 2, energyCost: 3 },
   { id: 'gegenpress', name: 'Gegenpress', posture: 'attack', durationBatches: 1, energyCost: 3 },
+  // The possession play: a KEEP-committed side strangles the game for two
+  // batches — retain rolls climb, turnovers (and the BREAK counters they feed)
+  // dry up. Dead weight for a build that hasn't committed to KEEP, by law.
+  { id: 'keep-ball', name: 'Keep Ball', posture: 'balanced', durationBatches: 2, energyCost: 2, dialBoost: { KEEP: 5 } },
 ];
 
 export const TACTICS_BY_ID: Record<string, TacticalCard> = Object.fromEntries(

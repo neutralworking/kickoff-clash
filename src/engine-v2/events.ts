@@ -8,7 +8,9 @@
  *
  * The six-contest resolution is visible end to end: possession split → per-slot
  * retain roll (with the KEEP↔BREAK coupling flagged) → CREATE chance volume →
- * quality tier + xG → FINISH conversion (goal = 1 − e^(−xG)) → goal + points.
+ * quality tier + xG → FINISH conversion (goal = 1 − e^(−xG)) → goal. The match
+ * is judged on the SCORELINE — win / draw / loss, nothing else (owner call,
+ * 2026-07: the points-blind scoring channels were removed).
  */
 
 import type { Contest } from './contests';
@@ -23,6 +25,7 @@ export interface Clock {
 
 export type ChanceQuality = 'half' | 'big';
 export type ChanceOrigin = 'open-play' | 'transition' | 'set-piece' | 'trait';
+export type MatchVerdict = 'win' | 'draw' | 'loss';
 
 export type MatchEvent =
   | {
@@ -30,7 +33,6 @@ export type MatchEvent =
       seed: number;
       postures: [Posture, Posture];
       dials: [Record<Contest, number>, Record<Contest, number>];
-      target: number;
       managers?: [string | null, string | null];
       adherence?: ['native' | 'adjacent' | 'foreign', 'native' | 'adjacent' | 'foreign'];
     }
@@ -64,20 +66,8 @@ export type MatchEvent =
     }
   | { type: 'trait-proc'; side: Side; clock: Clock; name: string; effect: string; value: number }
   | { type: 'goal'; side: Side; via: Contest; origin: ChanceOrigin; score: [number, number]; clock: Clock }
-  | {
-      type: 'points-banked';
-      side: Side;
-      source: 'goal' | 'clean-batch' | 'pressure-batch';
-      value: number;
-      total: number;
-      clock: Clock;
-    }
+  /** Build Pressure (possession managers): consecutive periods on the ball
+   *  sharpen the chances — `stacks` is the streak feeding the quality bonus. */
+  | { type: 'pressure-built'; side: Side; batch: number; stacks: number }
   | { type: 'batch-end'; batch: number; cleanFor: [boolean, boolean]; score: [number, number] }
-  | { type: 'early-whistle'; clock: Clock; reason: string }
-  | {
-      type: 'full-time';
-      score: [number, number];
-      points: [number, number];
-      target: number;
-      result: 'target-met' | 'target-missed';
-    };
+  | { type: 'full-time'; score: [number, number]; verdict: MatchVerdict };
