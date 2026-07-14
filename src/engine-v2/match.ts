@@ -58,7 +58,7 @@ import {
 } from './posture';
 import { type Manager, managerTraits, COMMIT_MIN } from './managers';
 import { type FormationId, type AdherenceBand, adherenceBand, throttleDials } from './adherence';
-import type { TacticalPlay } from './tactics';
+import { TACTICS_BY_ID, type TacticalCard, type TacticalPlay } from './tactics';
 
 // ---- tunables (ported from kc_sim.py; xG-model constants re-calibrated) -----
 const BATCHES = 6;
@@ -137,6 +137,10 @@ export interface Squad {
   formation?: FormationId;
   /** Tactical plays (timed posture windows), played between batches. */
   tacticalPlays?: TacticalPlay[];
+  /** The MANAGER's tactical brain (the modelled opponent / a boss): pick plays
+   *  reactively at batch boundaries — trailing chases, leading shuts the door.
+   *  Deterministic (pure function of match state), so replay/re-resolve holds. */
+  autoTactics?: boolean;
   energy?: number;
   /** Batches at which this side makes a substitution (Tinkerman fuel). */
   subsAtBatch?: number[];
@@ -210,6 +214,7 @@ interface SideCtx {
   cashOnGoal: number;
   managerId: string | null;
   tacticalPlays: TacticalPlay[];
+  autoTactics: boolean;
   subsAtBatch: number[];
   subsLeft: number;
 }
@@ -261,6 +266,7 @@ function makeCtx(sq: Squad): SideCtx {
     cashOnGoal: mgr?.cashOnGoal ?? 0,
     managerId: mgr?.id ?? null,
     tacticalPlays: sq.tacticalPlays ?? [],
+    autoTactics: !!sq.autoTactics,
     subsAtBatch: sq.subsAtBatch ?? [],
     subsLeft: 3,
   };
@@ -298,6 +304,23 @@ function effectiveDials(me: SideCtx, meSnap: GateSnapshot, foe: SideCtx, foeSnap
     out[k] = out[k] * ff + mine.own[k] - theirs.opp[k] + (me.windowBoost?.[k] ?? 0);
   }
   return out;
+}
+
+/**
+ * The manager's tactical brain — reactive and football-plain: a trailing side
+ * chases (all-out attack, or a high press on short legs); a leading side shuts
+ * the door late (Keep Ball if the build can strangle it, else park the bus).
+ * Pure function of match state → deterministic under the match seed.
+ */
+function aiTactic(me: SideCtx, b: number, scoreDiff: number): TacticalCard | null {
+  if (scoreDiff < 0 && b >= 3) {
+    if (me.energy >= 3) return TACTICS_BY_ID['all-out-attack'];
+    if (me.energy >= 2) return TACTICS_BY_ID['high-press'];
+  }
+  if (scoreDiff > 0 && b >= 4 && me.energy >= 2) {
+    return me.committed.has('KEEP') ? TACTICS_BY_ID['keep-ball'] : TACTICS_BY_ID['park-the-bus'];
+  }
+  return null;
 }
 
 export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): MatchResult {
@@ -402,30 +425,41 @@ export function simulateMatch(home: Squad, away: Squad, opts: MatchOptions): Mat
       if (ctx[s].windowBoost && b > ctx[s].windowBoostUntil) ctx[s].windowBoost = null;
     }
     // tactical plays (between-batch): open a timed posture window if affordable.
+    const openWindow = (s: Side, tactic: TacticalCard): boolean => {
+      if (ctx[s].energy < tactic.energyCost) return false;
+      ctx[s].energy -= tactic.energyCost;
+      ctx[s].postureState = applyPostureWindow(ctx[s].postureState, tactic.posture, b, tactic.durationBatches);
+      // the card's class buff, filtered by the build's commitments (the
+      // no-unconditional law) — an unearned boost entry simply never applies.
+      if (tactic.dialBoost) {
+        const earned = Object.entries(tactic.dialBoost).filter(([c]) => ctx[s].committed.has(c as Contest));
+        ctx[s].windowBoost = earned.length ? Object.fromEntries(earned) : null;
+        ctx[s].windowBoostUntil = b + tactic.durationBatches - 1;
+      }
+      events.push({
+        type: 'tactic-played',
+        side: s,
+        card: tactic.name,
+        posture: tactic.posture,
+        durationBatches: tactic.durationBatches,
+        energyCost: tactic.energyCost,
+        energyLeft: ctx[s].energy,
+        batch: b,
+      });
+      events.push({ type: 'posture-shift', side: s, to: tactic.posture, reason: 'tactic', batch: b });
+      return true;
+    };
     for (const s of [0, 1] as Side[]) {
+      let played = false;
       for (const play of ctx[s].tacticalPlays) {
-        if (play.atBatch !== b) continue;
-        if (ctx[s].energy < play.tactic.energyCost) continue;
-        ctx[s].energy -= play.tactic.energyCost;
-        ctx[s].postureState = applyPostureWindow(ctx[s].postureState, play.tactic.posture, b, play.tactic.durationBatches);
-        // the card's class buff, filtered by the build's commitments (the
-        // no-unconditional law) — an unearned boost entry simply never applies.
-        if (play.tactic.dialBoost) {
-          const earned = Object.entries(play.tactic.dialBoost).filter(([c]) => ctx[s].committed.has(c as Contest));
-          ctx[s].windowBoost = earned.length ? Object.fromEntries(earned) : null;
-          ctx[s].windowBoostUntil = b + play.tactic.durationBatches - 1;
-        }
-        events.push({
-          type: 'tactic-played',
-          side: s,
-          card: play.tactic.name,
-          posture: play.tactic.posture,
-          durationBatches: play.tactic.durationBatches,
-          energyCost: play.tactic.energyCost,
-          energyLeft: ctx[s].energy,
-          batch: b,
-        });
-        events.push({ type: 'posture-shift', side: s, to: play.tactic.posture, reason: 'tactic', batch: b });
+        if (play.atBatch === b && openWindow(s, play.tactic)) played = true;
+      }
+      // the manager's tactical brain (a modelled boss): reactive, deterministic,
+      // no RNG — so replay and the UI's re-resolve contract are untouched.
+      if (!played && ctx[s].autoTactics && !ctx[s].postureState.override) {
+        const other: Side = s === 0 ? 1 : 0;
+        const pick = aiTactic(ctx[s], b, score[s] - score[other]);
+        if (pick) openWindow(s, pick);
       }
     }
     // substitutions (fresh legs): emit the event for the log / UI (rotation depth).

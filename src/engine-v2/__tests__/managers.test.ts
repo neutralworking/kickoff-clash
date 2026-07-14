@@ -354,3 +354,48 @@ describe('the KEEP levers — Keep Ball class buff + the chase drain (owner dire
     expect(JSON.stringify(a.events)).not.toBe(JSON.stringify(b.events)); // the future re-rolled
   });
 });
+
+describe('the boss tactical brain (autoTactics) — modelled opponents play the deck', () => {
+  it('a trailing auto side chases; a leading auto side shuts the door; silent sides stay silent', () => {
+    const CHASE = new Set(['All-Out Attack', 'High Press']);
+    const DOOR = new Set(['Park the Bus', 'Keep Ball']);
+    let sawChase = false;
+    let sawDoor = false;
+    for (let s = 1; s <= 20; s++) {
+      const strong: Squad = { cards: buildXI(new RngStream(s), 'mono:FINISH'), posture: 'attack' };
+      const weakAuto: Squad = { cards: buildXI(new RngStream(s + 100), 'random'), posture: 'balanced', autoTactics: true };
+      const res = simulateMatch(strong, weakAuto, { seed: 400 + s });
+      for (const e of res.events) {
+        if (e.type !== 'tactic-played') continue;
+        expect(e.side).toBe(1); // the non-auto side scheduled no plays — it must stay silent
+        // the pick matches the scoreline story: chasing cards OR door-shutting cards only
+        expect(CHASE.has(e.card) || DOOR.has(e.card)).toBe(true);
+        if (CHASE.has(e.card)) sawChase = true;
+        if (DOOR.has(e.card)) sawDoor = true;
+      }
+    }
+    expect(sawChase).toBe(true); // the outgunned auto side trails and chases somewhere in 20 seeds
+    // door-shutting needs the auto side to LEAD vs a mono:FINISH squad — flip the strength for that
+    for (let s = 1; s <= 20 && !sawDoor; s++) {
+      const weak: Squad = { cards: buildXI(new RngStream(s + 200), 'random'), posture: 'balanced' };
+      const strongAuto: Squad = { cards: buildXI(new RngStream(s + 300), 'mono:FINISH'), posture: 'attack', autoTactics: true };
+      const res = simulateMatch(weak, strongAuto, { seed: 500 + s });
+      for (const e of res.events) {
+        if (e.type === 'tactic-played' && DOOR.has(e.card)) sawDoor = true;
+      }
+    }
+    expect(sawDoor).toBe(true);
+  });
+
+  it('the brain is deterministic: same seed, same plays', () => {
+    const mk = (): [Squad, Squad] => [
+      { cards: buildXI(new RngStream(41), 'mono:FINISH'), posture: 'attack' },
+      { cards: buildXI(new RngStream(42), 'random'), posture: 'balanced', autoTactics: true },
+    ];
+    const [h1, a1] = mk();
+    const [h2, a2] = mk();
+    const a = simulateMatch(h1, a1, { seed: 909 });
+    const b = simulateMatch(h2, a2, { seed: 909 });
+    expect(JSON.stringify(a.events)).toBe(JSON.stringify(b.events));
+  });
+});

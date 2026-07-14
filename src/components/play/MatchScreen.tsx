@@ -231,7 +231,11 @@ function Ticker({ events, throughBatch }: { events: MatchEvent[]; throughBatch: 
         lines.push({ key: i, text: `${e.side === 0 ? 'You' : 'They'} shift to ${e.to}${e.reason === 'revert' ? ' (window over)' : ''}`, color: 'var(--kit-blue)' });
         break;
       case 'tactic-played':
-        lines.push({ key: i, text: `You play ${e.card} (${e.durationBatches} batches)`, color: 'var(--kit-blue)' });
+        lines.push({
+          key: i,
+          text: `${e.side === 0 ? 'You play' : 'THEY play'} ${e.card} (${e.durationBatches} batches)`,
+          color: e.side === 0 ? 'var(--kit-blue)' : 'var(--kit-red)',
+        });
         break;
       case 'fitness-drained':
         lines.push({ key: i, text: `${e.side === 0 ? 'Your' : 'Their'} legs drained (${e.fitness})`, color: 'var(--dust)' });

@@ -200,6 +200,10 @@ function opponentSquad(pool: KCCard[], f: number, seed: number, challenge: Chall
     cards,
     posture: boss ? 'attack' : 'balanced',
     manager: mgr, // a boss also commits under its manager (reweight)
+    // …and PLAYS its manager's tactical deck: the reactive brain chases when
+    // trailing and shuts the door when leading. Tactics are the manager's tool,
+    // so only managed opponents (bosses) carry it.
+    autoTactics: !!mgr,
     formation: form,
     // the opponent is MODELLED with its card actions too (CARD_SYSTEM_V2 §8) —
     // deny-chance actions are bounded saves in the engine, so they defend without
