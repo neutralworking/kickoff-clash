@@ -249,6 +249,10 @@ export default function FoilCard({
   const shown = legendary ? actions.slice(0, 2) : actions.slice(0, 1);
   const two = shown.length > 1;
 
+  // Dataset names are "First Surname"; the spec's card shows ONE display name.
+  // Long full names fall back to the surname (full name stays in the title).
+  const displayName = card.name.length > 10 ? card.name.split(' ').slice(-1)[0] : card.name;
+
   const animate = revealDelayMs != null;
   const delay = revealDelayMs ?? 0;
   const flareDelay = delay + 260;
@@ -411,8 +415,9 @@ export default function FoilCard({
           overflow: 'hidden',
           textOverflow: 'ellipsis',
         }}
+        title={card.name}
       >
-        {card.name}
+        {displayName}
       </div>
 
       {/* role */}
@@ -484,7 +489,7 @@ export default function FoilCard({
           style={{
             position: 'absolute',
             left: '50%',
-            bottom: 10,
+            bottom: 3,
             transform: 'translateX(-50%)',
             zIndex: 3,
             display: 'flex',
