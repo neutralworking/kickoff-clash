@@ -3,7 +3,9 @@ import nextConfig from 'eslint-config-next';
 const config = [
   ...nextConfig,
   {
-    ignores: ['.claude/**', '.design-ref/**'],
+    // design/ holds design references + handoff prototypes (bespoke runtimes,
+    // not app code) — never lint them.
+    ignores: ['.claude/**', '.design-ref/**', 'design/**'],
   },
 ];
 
