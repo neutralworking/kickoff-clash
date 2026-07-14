@@ -1330,7 +1330,7 @@ function CoachPanel({ notes, style }: { notes: CoachNote[]; style?: React.CSSPro
 export default function PitchMatchView({
   matchState, formation, jokers, availableTactics, ownedFormations,
   opponentBuild, nextMinute, mode, breakMoment, currentResult, playerStats, cardStats, cardMods, forecast,
-  onToggleTactic, onSub, onReassign, onFormationChange, onAutoSelect, onIntentChange, onContinue,
+  onToggleTactic, onSub, onReassign, onFormationChange, onIntentChange, onContinue,
 }: PitchMatchViewProps) {
   const [trayOpen, setTrayOpen] = useState(false);
   // v4 match bench: a handle that expands an inline drawer. Opening it hides the
@@ -1646,10 +1646,6 @@ export default function PitchMatchView({
   // FIX 3 — match-to-date totals for the stats screen (cumulativeStats over scores).
   const cumulative = useMemo<CumulativeStats>(() => cumulativeStats(matchState.scores), [matchState.scores]);
 
-  // FIX 1 — auto-select is only legal at the pre-kickoff team talk (no period
-  // played yet); pulling bench players on mid-match would be a free sub.
-  const canAutoSelect = !!onAutoSelect && breakMoment === 'kickoff'
-    && matchState.currentIncrement === 0 && matchState.scores.length === 0;
   // `drag` is only set once movement crosses the threshold, so its presence
   // already means a real drag is underway (taps never set it).
   const moving = !oppView && mode === 'plan' && drag !== null;
@@ -1948,69 +1944,53 @@ export default function PitchMatchView({
       )}
 
 
-      {/* INTENT — the attacking lean (DEF/BAL/ATT). Surfaced in the team talk so the
-          player can change it between periods; the engine reads state.intent fresh each
-          increment, so it bites from the next period. A change mid-talk also refreshes
-          the coach's momentum read. */}
-      {isBreak && onIntentChange && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 16px 4px', flexShrink: 0 }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, color: 'var(--dust)', flexShrink: 0 }}>INTENT</span>
-          <div className="flex" style={{ flex: 1, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}>
-            {INTENT_OPTIONS.map((it) => {
-              const on = matchState.intent === it.id;
-              return (
-                <button
-                  key={it.id}
-                  onClick={() => onIntentChange(it.id)}
-                  className="active:scale-95"
-                  style={{
-                    flex: 1,
-                    padding: '6px 0',
-                    fontFamily: PIXEL,
-                    fontSize: 10,
-                    letterSpacing: 0.5,
-                    background: on ? it.accent : 'var(--surface)',
-                    color: on ? 'var(--ink-black)' : 'var(--cream-soft)',
-                    transition: 'background 0.15s ease',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {it.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* FIX 1 + FIX 4 — the TEAM-TALK action row. At a break the player's levers
-          are surfaced together as proper buttons rather than buried in a side rail:
-          change SHAPE, read RATINGS (once a period's played), and (pre-kickoff only)
-          AUTO-PICK the strongest fitness-aware XI. TACTICS is NOT repeated here —
-          the plan strip's trigger above is the one entry. Only shown at a real
-          break, not while scouting the opposition or mid-resolve. */}
+      {/* TEAM-TALK levers — ONE row: SHAPE · INTENT (DEF/BAL/ATT) · RATINGS.
+          INTENT was merged in from its own row to reclaim vertical space for the
+          pitch; the AUTO XI button was removed. Every handler is unchanged: SHAPE
+          opens the formation sheet, INTENT writes state.intent (read fresh each
+          increment), RATINGS opens the per-player marks. Only at a real break. */}
       {isBreak && (
-        <div style={{ display: 'flex', gap: 6, margin: '0 16px 6px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 6, margin: '0 16px 6px', flexShrink: 0, alignItems: 'stretch' }}>
           <button onClick={() => setFormSheet(true)}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: 'var(--surface)', cursor: 'pointer' }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: 'var(--kit-blue)', lineHeight: 1 }}>SHAPE</span>
-            <span style={{ fontSize: 9.5, color: 'var(--cream-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{formation.name}</span>
+            style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, padding: '7px 6px', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: 'var(--surface)', cursor: 'pointer' }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.4, color: 'var(--kit-blue)', lineHeight: 1 }}>SHAPE</span>
+            <span style={{ fontSize: 10, color: 'var(--cream-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{formation.name}</span>
           </button>
+          {onIntentChange && (
+            <div className="flex" style={{ flex: '1.7 1 0', minWidth: 0, borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}>
+              {INTENT_OPTIONS.map((it) => {
+                const on = matchState.intent === it.id;
+                return (
+                  <button
+                    key={it.id}
+                    onClick={() => onIntentChange(it.id)}
+                    className="active:scale-95"
+                    style={{
+                      flex: 1,
+                      padding: '6px 0',
+                      fontFamily: PIXEL,
+                      fontSize: 11,
+                      letterSpacing: 0.5,
+                      background: on ? it.accent : 'var(--surface)',
+                      color: on ? 'var(--ink-black)' : 'var(--cream-soft)',
+                      transition: 'background 0.15s ease',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {it.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {/* RATINGS (req 5) — open the per-player ratings sheet to decide who to hook.
               Shown once a period's been played; pulses if anyone's rating is poor. */}
           {hasPlayed && (
             <button onClick={() => setRatingsOpen(true)}
               className={hasPoorRating ? 'carrier-glow' : undefined}
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: `2px solid ${hasPoorRating ? 'var(--danger)' : 'var(--ink-black)'}`, boxShadow: '0 3px 0 0 var(--ink-black)', background: hasPoorRating ? 'rgba(232,54,47,0.12)' : 'var(--surface)', cursor: 'pointer' }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: hasPoorRating ? 'var(--danger)' : 'var(--gold)', lineHeight: 1 }}>RATINGS</span>
-              <span style={{ fontSize: 9.5, color: 'var(--cream-soft)', lineHeight: 1 }}>{hasPoorRating ? 'check the XI' : 'player marks'}</span>
-            </button>
-          )}
-          {canAutoSelect && (
-            <button onClick={onAutoSelect}
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 6px', borderRadius: 'var(--radius)', border: '2px solid var(--ink-black)', boxShadow: '0 3px 0 0 var(--ink-black)', background: 'linear-gradient(135deg, var(--amber), var(--amber-soft))', cursor: 'pointer' }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: 'var(--cream)', lineHeight: 1 }}>AUTO XI</span>
-              <span style={{ fontSize: 9.5, color: 'rgba(242,246,239,0.85)', lineHeight: 1 }}>best legs</span>
+              style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, padding: '7px 6px', borderRadius: 'var(--radius)', border: `2px solid ${hasPoorRating ? 'var(--danger)' : 'var(--ink-black)'}`, boxShadow: '0 3px 0 0 var(--ink-black)', background: hasPoorRating ? 'rgba(232,54,47,0.12)' : 'var(--surface)', cursor: 'pointer' }}>
+              <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.4, color: hasPoorRating ? 'var(--danger)' : 'var(--gold)', lineHeight: 1 }}>RATINGS</span>
+              <span style={{ fontSize: 9, color: 'var(--cream-soft)', lineHeight: 1 }}>{hasPoorRating ? 'check XI' : 'marks'}</span>
             </button>
           )}
         </div>
