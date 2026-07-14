@@ -581,7 +581,6 @@ export default function GameShell() {
             onNewRun={handleNewRun}
             onContinue={handleContinue}
             hasExistingRun={hasExistingRun}
-            altLink={{ href: '/', label: '▸ Six-Contest Game' }}
           />
         );
 

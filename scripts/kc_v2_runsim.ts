@@ -12,39 +12,32 @@
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { loadCards, simulateRun, deathFixture, RUN_FIXTURES, MANAGERS, type KCCard, type KCCardJSON } from '../src/engine-v2/index';
+import { loadCards, simulateRun, deathFixture, fixtureTarget, RUN_FIXTURES, MANAGERS, type KCCard, type KCCardJSON } from '../src/engine-v2/index';
 
 const pool: KCCard[] = loadCards(JSON.parse(readFileSync(join(__dirname, '..', 'public/data/kc_v2_cards.json'), 'utf8')) as KCCardJSON[]);
 const N = Number(process.argv[2] ?? 400);
 
-console.log('survival rule: WIN → full purse · DRAW → half · LOSS → dead (scoreline only)');
+console.log('target curve:', Array.from({ length: RUN_FIXTURES }, (_, i) => fixtureTarget(i + 1)).join(' · '));
 
 function sweep(committed: boolean) {
   const deaths: number[] = [];
   let completed = 0;
-  let w = 0, d = 0, l = 0;
   for (let i = 0; i < N; i++) {
     const m = MANAGERS[i % MANAGERS.length];
     const run = simulateRun(1000 + i, m, pool, committed);
     if (run.completed) completed++;
     deaths.push(deathFixture(run));
-    for (const r of run.log) {
-      if (r.verdict === 'win') w++;
-      else if (r.verdict === 'draw') d++;
-      else l++;
-    }
   }
   deaths.sort((a, b) => a - b);
   const median = deaths[Math.floor(deaths.length / 2)];
-  const mid = deaths.filter((dd) => dd >= 5 && dd <= 7).length / N;
-  const total = w + d + l;
-  return { median: Math.min(median, RUN_FIXTURES), completion: completed / N, mid, wdl: [w / total, d / total, l / total] };
+  const mid = deaths.filter((d) => d >= 5 && d <= 7).length / N;
+  return { median: Math.min(median, RUN_FIXTURES), completion: completed / N, mid };
 }
 
 for (const committed of [true, false]) {
   const r = sweep(committed);
   console.log(
-    `${committed ? 'committed' : 'uncommitted'}: median death F${r.median}  completion ${(100 * r.completion).toFixed(0)}%  deaths F5–7 ${(100 * r.mid).toFixed(0)}%  W/D/L ${r.wdl.map((x) => (100 * x).toFixed(0) + '%').join('/')}`
+    `${committed ? 'committed' : 'uncommitted'}: median death F${r.median}  completion ${(100 * r.completion).toFixed(0)}%  deaths F5–7 ${(100 * r.mid).toFixed(0)}%`
   );
 }
 

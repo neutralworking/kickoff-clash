@@ -1,48 +1,44 @@
 /**
  * KC six-contest engine (NW-142) — the run loop, economy, and opponents.
  *
- * A 9-fixture run over the six-contest engine, judged on the SCORELINE (owner
- * call, 2026-07 — the points blind is gone): WIN a fixture and bank the full
- * purse, DRAW and survive on half, LOSE and the run ends (v1 permadeath).
- * Difficulty is carried entirely by opponent quality growth (it overtakes the
- * player late), so a committed build+manager — whose cash compounds into deck
- * quality — outscores the curve while an uncommitted squad draws, starves, and
- * dies. Bosses land every third fixture; challenge rules bite from fixture 2.
+ * A 9-fixture Balatro-style run over the six-contest engine: each fixture you
+ * must BANK ≥ the fixture's points target (the blind, `1.42^f` growth) or the
+ * run ends (v1 permadeath). Beating a fixture pays cash → deck quality, so a
+ * committed build+manager (the reweight compounds) outpaces the rising bar while
+ * an uncommitted squad falls behind and dies mid-run. Bosses land every third
+ * fixture; challenge rules (data/challenges.ts) bite from fixture 2.
  *
- * EVERY opponent is a managed, modelled team (CARD_SYSTEM_V2 §8): a real
- * drafted squad under a seeded manager, playing its tactical deck (autoTactics).
- * Bosses additionally DRAFT COMMITTED to their manager (the reweight fires).
- * Deterministic under the run seed; RunState is serialisable (autosave/resume).
+ * The opponent is MODELLED (CARD_SYSTEM_V2 §8): a real drafted squad + posture,
+ * scaled per fixture, committed under a manager at bosses. Deterministic under
+ * the run seed; RunState is serialisable (autosave/resume).
+ *
+ * Constants are calibrated to the engine-v2 points scale (the SM §8 curve's
+ * 1.42 growth survives; its base is re-based) — the run-distribution harness
+ * (__tests__/run.test.ts) is the gate.
  */
 
 import { type Position, type Contest, contestDials } from './contests';
 import { simulateMatch, type Squad, type MatchResult } from './match';
-import type { MatchVerdict } from './events';
-import type { TacticalPlay } from './tactics';
 import { type Manager, MANAGERS, COMMIT_MIN } from './managers';
 import { FORMATIONS, type FormationId } from './adherence';
 import { type KCCard, squadTraits } from './cards';
 import { draftForManager } from './draft';
 import { type ChallengeRule, challengeForFixture } from './data/challenges';
-import type { Rarity } from './data/actions';
 
 export const RUN_FIXTURES = 9;
 
-// ---- tunables (difficulty = opponent quality growth; no points bar) ---------
-const OPP_BASE = 4; // opponent squad quality at fixture 0 — fixture 1 is a real match
-const OPP_GROWTH = 2.5; // opponent quality + per fixture. Must outpace a DRAW-parker's
-// deck growth (half purse ≈ +1.6 quality/fixture) or "never lose, always draw" becomes
-// free survival — the divergence between committed (wins → full purse → keeps pace)
-// and uncommitted (draws → starves → the curve catches it) lives in this gap.
+// ---- tunables (calibrated to the engine-v2 points scale) -------------------
+const TARGET_BASE = 0.29; // the blind base; grows 1.42^f (SM §8 growth, re-based)
+const TARGET_GROWTH = 1.42;
+const OPP_BASE = 0; // opponent squad quality at fixture 0
+const OPP_GROWTH = 1.8; // opponent quality + per fixture (overtakes the player late)
 const BOSS_BONUS = 2; // extra opponent quality on a boss fixture (every 3rd)
-const PLAYER_BASE_Q = 18; // starting deck quality (ATT/DEF boost) — ahead early
-const CASH_WIN = 3; // flat cash for a WIN
-const CASH_PER_GOAL = 1.0; // each goal scored in a win adds to the purse
-const DRAW_FACTOR = 0.5; // a draw survives on half the purse (classic v1 rule)
-const K_QUALITY = 1.15; // cash → deck-quality growth. High on purpose: winning is the
-// only income that keeps pace with OPP_GROWTH, so the committed build (more wins,
-// bigger purses) compounds away from the draw-parker — the divergence lever.
+const PLAYER_BASE_Q = 15; // starting deck quality (ATT/DEF boost) — ahead early
+const CASH_WIN = 3; // flat cash for clearing a fixture
+const CASH_PER_POINT = 0.45; // over-the-bar margin compounds into deck quality
+const K_QUALITY = 0.85; // cash → deck-quality growth
 
+export const fixtureTarget = (f: number): number => round1(TARGET_BASE * Math.pow(TARGET_GROWTH, f));
 const oppQuality = (f: number): number => OPP_BASE + OPP_GROWTH * f + (f % 3 === 0 ? BOSS_BONUS : 0);
 const isBoss = (f: number): boolean => f % 3 === 0;
 const round1 = (x: number) => Math.round(x * 10) / 10;
@@ -51,11 +47,11 @@ export interface FixtureResult {
   fixture: number;
   boss: boolean;
   challenge: string | null;
+  target: number;
+  points: number;
+  oppPoints: number;
   score: [number, number];
-  /** Judged on the scoreline, nothing else. */
-  verdict: MatchVerdict;
-  /** Win or draw → the run continues; a loss ends it. */
-  survived: boolean;
+  beaten: boolean;
   cashEarned: number;
 }
 
@@ -185,32 +181,24 @@ function playerSquad(pool: KCCard[], manager: Manager, quality: number, committe
   };
 }
 
-/** Deck/opponent quality → a flat dial bonus (possession + creation weighted).
- *  Deliberately MODEST: raw quality must not drown out the committed manager
- *  reweight (+3..10 dials) — synergy, not power level, is the determining
- *  factor (design north star). Quality's other half rides on card stats. */
+/** Deck/opponent quality → a flat dial bonus (possession + creation weighted). */
 function qualityBonus(q: number): Partial<Record<Contest, number>> {
-  return { KEEP: q * 0.22, CREATE: q * 0.22, STOP: q * 0.11, BREAK: q * 0.11 };
+  return { KEEP: q * 0.4, CREATE: q * 0.4, STOP: q * 0.2, BREAK: q * 0.2 };
 }
 
 function opponentSquad(pool: KCCard[], f: number, seed: number, challenge: ChallengeRule | null): Squad {
   const q = oppQuality(f) + (challenge?.oppQuality ?? 0);
   const stream = sample(pool, seed ^ 0x5bd1e995, 200);
-  // EVERY opponent is a managed team with an identity and a tactical deck
-  // (owner call, 2026-07). A regular opponent fields a balanced draft under its
-  // manager (the reweight stays shut without commitment — the law); a BOSS
-  // drafts COMMITTED to its manager, so the reweight fires and it plays its
-  // manager's game at full tilt.
+  // a boss commits to a (seeded) manager; a regular opponent plays a shape blind
   const boss = isBoss(f);
-  const mgr: Manager = MANAGERS[Math.abs(seed + f) % MANAGERS.length];
-  const form: FormationId = mgr.formation;
-  const xi = boss ? draftForManager(stream, mgr)?.xi : fillBalanced(stream, FORMATIONS[form], seed);
+  const mgr: Manager | undefined = boss ? MANAGERS[Math.abs(seed + f) % MANAGERS.length] : undefined;
+  const form: FormationId = mgr?.formation ?? '4-3-3';
+  const xi = mgr ? draftForManager(stream, mgr)?.xi : fillBalanced(stream, FORMATIONS[form], seed);
   const cards = boost(xi ?? fillBalanced(stream, FORMATIONS['4-3-3'], seed)!, q);
   return {
     cards,
-    posture: mgr.posture,
-    manager: mgr,
-    autoTactics: true, // the manager's reactive brain plays the tactical deck
+    posture: boss ? 'attack' : 'balanced',
+    manager: mgr, // a boss also commits under its manager (reweight)
     formation: form,
     // the opponent is MODELLED with its card actions too (CARD_SYSTEM_V2 §8) —
     // deny-chance actions are bounded saves in the engine, so they defend without
@@ -229,42 +217,42 @@ export function playFixture(run: RunState, pool: KCCard[], committed = true): Ru
   return applyFixture(run, pool, run.fixture + 1, manager, committed);
 }
 
-/** The purse for a result: a WIN pays flat + per goal; a DRAW survives on half;
- *  a LOSS pays nothing (and ends the run). */
-function purse(verdict: MatchVerdict, goalsFor: number): number {
-  if (verdict === 'loss') return 0;
-  const winPurse = CASH_WIN + CASH_PER_GOAL * goalsFor;
-  return round1(verdict === 'win' ? winPurse : winPurse * DRAW_FACTOR);
-}
-
 function applyFixture(run: RunState, pool: KCCard[], f: number, manager: Manager, committed: boolean): RunState {
   const challenge = challengeForFixture(run.seed, f);
+  const target = round1(fixtureTarget(f) * (challenge?.targetMult ?? 1));
   const ps = playerSquad(pool, manager, run.quality, committed, run.seed + f * 101);
   const os = opponentSquad(pool, f, run.seed + f * 977, challenge);
   if (!ps) {
     // cannot field a squad → forfeit (attrition death)
-    return { ...run, alive: false, log: [...run.log, deadFixture(f, challenge)] };
+    return { ...run, alive: false, log: [...run.log, deadFixture(f, target, challenge)] };
   }
   if (challenge?.noSetPieces) {
     ps.hasTaker = false;
     ps.hasCarrier = false;
   }
-  const res = simulateMatch(ps, os, { seed: run.seed + f });
-  // Judged on the scoreline, nothing else: win → survive on the full purse,
-  // draw → survive on half, loss → the run ends (v1 permadeath).
-  const survived = res.verdict !== 'loss';
-  const cashEarned = purse(res.verdict, res.score[0]);
+  const res = simulateMatch(ps, os, { seed: run.seed + f, target });
+  const points = round1(res.points[0]);
+  // The blind (Balatro): BANK ≥ the fixture's points target or the run ends (v1
+  // permadeath). Points come from the build's win-con — goals + a pressure floor
+  // for attackers, clean batches for walls (match.ts) — each channel gated on the
+  // matching commitment, so a committed build maxes one channel and clears the
+  // rising bar while an incoherent one maxes none and falls short late. Beating the
+  // bar by more pays more cash.
+  const beaten = points >= target;
+  const cashEarned = beaten ? round1(CASH_WIN + points * CASH_PER_POINT) : 0;
   const fr: FixtureResult = {
     fixture: f,
     boss: isBoss(f),
     challenge: challenge?.id ?? null,
+    target,
+    points,
+    oppPoints: round1(res.points[1]),
     score: res.score,
-    verdict: res.verdict,
-    survived,
+    beaten,
     cashEarned,
   };
   const log = [...run.log, fr];
-  if (!survived) return { ...run, fixture: f - 1, alive: false, log };
+  if (!beaten) return { ...run, fixture: f - 1, alive: false, log };
   return {
     ...run,
     fixture: f,
@@ -276,8 +264,8 @@ function applyFixture(run: RunState, pool: KCCard[], f: number, manager: Manager
   };
 }
 
-function deadFixture(f: number, challenge: ChallengeRule | null): FixtureResult {
-  return { fixture: f, boss: isBoss(f), challenge: challenge?.id ?? null, score: [0, 0], verdict: 'loss', survived: false, cashEarned: 0 };
+function deadFixture(f: number, target: number, challenge: ChallengeRule | null): FixtureResult {
+  return { fixture: f, boss: isBoss(f), challenge: challenge?.id ?? null, target, points: 0, oppPoints: 0, score: [0, 0], beaten: false, cashEarned: 0 };
 }
 
 /** Simulate a full run for a manager; `committed` picks a matched vs random build. */
@@ -300,6 +288,7 @@ export interface FixtureSetup {
   fixture: number;
   boss: boolean;
   challenge: ChallengeRule | null;
+  target: number;
   /** The modelled opponent for this fixture (posture + drafted XI + actions). */
   opponent: Squad;
   /** The shop stream the player drafts their XI from (same sample the bot uses). */
@@ -314,17 +303,14 @@ export function fixtureSetup(run: RunState, pool: KCCard[]): FixtureSetup {
   const manager = MANAGERS.find((m) => m.id === run.managerId)!;
   const f = run.fixture + 1;
   const challenge = challengeForFixture(run.seed, f);
-  // Owned cards (shop purchases) lead the draft stream — a bought card is a
-  // guaranteed XI option every fixture for the rest of the run.
-  const owned = run.collection.length ? pool.filter((c) => run.collection.includes(c.id)) : [];
-  const ownedIds = new Set(run.collection);
-  const stream = [...owned, ...sample(pool, run.seed + f * 101, 200).filter((c) => !ownedIds.has(c.id))];
+  const target = round1(fixtureTarget(f) * (challenge?.targetMult ?? 1));
+  const stream = sample(pool, run.seed + f * 101, 200);
   const suggestedXI =
     draftViable(stream, manager, run.seed + f * 101) ??
     fillBalanced(stream, FORMATIONS[manager.formation], run.seed + f * 101) ??
     [];
   const opponent = opponentSquad(pool, f, run.seed + f * 977, challenge);
-  return { fixture: f, boss: isBoss(f), challenge, opponent, pool: stream, suggestedXI, formation: manager.formation };
+  return { fixture: f, boss: isBoss(f), challenge, target, opponent, pool: stream, suggestedXI, formation: manager.formation };
 }
 
 /**
@@ -334,16 +320,7 @@ export function fixtureSetup(run: RunState, pool: KCCard[]): FixtureSetup {
  * AND the match result (its event log is what the match/post-match screens render).
  * NB: the settlement tail is kept in sync with applyFixture by hand.
  */
-export function resolveFixture(
-  run: RunState,
-  playerXI: KCCard[],
-  setup: FixtureSetup,
-  /** Tactical plays scheduled so far. The match UI re-resolves with an amended
-   *  schedule when the player calls a play between batches — same seed, so the
-   *  already-revealed batches replay byte-identically and only the future
-   *  re-rolls (determinism is the interactivity mechanism). */
-  plays: TacticalPlay[] = []
-): { run: RunState; result: MatchResult } {
+export function resolveFixture(run: RunState, playerXI: KCCard[], setup: FixtureSetup): { run: RunState; result: MatchResult } {
   const manager = MANAGERS.find((m) => m.id === run.managerId)!;
   const f = setup.fixture;
   const setPieces = !setup.challenge?.noSetPieces && hasKit(playerXI);
@@ -355,22 +332,24 @@ export function resolveFixture(
     hasTaker: setPieces,
     hasCarrier: setPieces,
     dialBonus: qualityBonus(run.quality),
-    tacticalPlays: plays,
   };
-  const res = simulateMatch(ps, setup.opponent, { seed: run.seed + f });
-  const survived = res.verdict !== 'loss';
-  const cashEarned = purse(res.verdict, res.score[0]);
+  const res = simulateMatch(ps, setup.opponent, { seed: run.seed + f, target: setup.target });
+  const points = round1(res.points[0]);
+  const beaten = points >= setup.target;
+  const cashEarned = beaten ? round1(CASH_WIN + points * CASH_PER_POINT) : 0;
   const fr: FixtureResult = {
     fixture: f,
     boss: isBoss(f),
     challenge: setup.challenge?.id ?? null,
+    target: setup.target,
+    points,
+    oppPoints: round1(res.points[1]),
     score: res.score,
-    verdict: res.verdict,
-    survived,
+    beaten,
     cashEarned,
   };
   const log = [...run.log, fr];
-  const nextRun: RunState = survived
+  const nextRun: RunState = beaten
     ? {
         ...run,
         fixture: f,
@@ -390,58 +369,6 @@ export function deckDialBonus(quality: number): Partial<Record<Contest, number>>
   return qualityBonus(quality);
 }
 
-// ---- the pack shop (player cards as purchases) ------------------------------
-// Between fixtures the shop opens a PACK: nine seeded cards, rarity-shaped
-// (mostly Common, ~one Rare, ~one Epic, ~one Legendary — the pack-opening
-// handoff's distribution). Buying a card adds it to the run's permanent
-// `collection`; owned cards are injected at the FRONT of every future fixture's
-// draft stream, so a purchase is a guaranteed XI option for the rest of the run.
-// Quality investment (investCash) remains the other cash sink.
-
-export const CARD_PRICE: Record<Rarity, number> = { Common: 2, Rare: 4, Epic: 7, Legendary: 12 };
-
-const PACK_SIZE = 9;
-const PACK_SHAPE: [Rarity, number][] = [['Legendary', 1], ['Epic', 1], ['Rare', 1], ['Common', 6]];
-
-/** The shop's nine-card pack for the CURRENT visit (after fixture `run.fixture`).
- *  Deterministic in (run seed, fixture); never offers already-owned cards. */
-export function packOffer(run: RunState, pool: KCCard[]): KCCard[] {
-  const owned = new Set(run.collection);
-  const stream = sample(pool, (run.seed ^ 0x9e3779b1) + run.fixture * 313, pool.length).filter((c) => !owned.has(c.id));
-  const pack: KCCard[] = [];
-  const taken = new Set<string>();
-  for (const [rarity, want] of PACK_SHAPE) {
-    let got = 0;
-    for (const c of stream) {
-      if (got >= want) break;
-      if (c.rarity !== rarity || taken.has(c.id)) continue;
-      pack.push(c);
-      taken.add(c.id);
-      got++;
-    }
-  }
-  // top up from anything left if a rarity bucket ran dry (tiny pools)
-  for (const c of stream) {
-    if (pack.length >= PACK_SIZE) break;
-    if (!taken.has(c.id)) {
-      pack.push(c);
-      taken.add(c.id);
-    }
-  }
-  // present commons-first ordering? No — reveal order is rarity-ascending so the
-  // pack's tail carries the flare (Common → Rare → Epic → Legendary).
-  const rank: Record<Rarity, number> = { Common: 0, Rare: 1, Epic: 2, Legendary: 3 };
-  return pack.sort((a, b) => rank[a.rarity] - rank[b.rarity]);
-}
-
-/** Buy a card from the pack: spend its rarity price, add it to the collection.
- *  No-op if already owned or unaffordable. Pure — returns the updated run. */
-export function buyCard(run: RunState, card: KCCard): RunState {
-  const price = CARD_PRICE[card.rarity];
-  if (run.collection.includes(card.id) || run.cash < price) return run;
-  return { ...run, cash: round1(run.cash - price), collection: [...run.collection, card.id] };
-}
-
 /** Invest cash into the deck (shop): spend `amount`, gain quality at the run's
  *  rate. Clamped to available cash. Pure — returns the updated run. */
 export function investCash(run: RunState, amount: number): RunState {
@@ -453,7 +380,7 @@ export function investCash(run: RunState, amount: number): RunState {
 /** The fixture a run died at (RUN_FIXTURES+1 if it completed). */
 export function deathFixture(run: RunState): number {
   if (run.completed) return RUN_FIXTURES + 1;
-  const lost = run.log.find((r) => !r.survived);
+  const lost = run.log.find((r) => !r.beaten);
   return lost ? lost.fixture : run.fixture;
 }
 

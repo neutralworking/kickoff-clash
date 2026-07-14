@@ -62,10 +62,6 @@ export interface Manager {
   fitnessDrain?: number;
   /** Financier: cash banked per goal (economy hook). */
   cashOnGoal?: number;
-  /** Build Pressure (possession managers): big-chance probability added per
-   *  consecutive period held (commitment-gated; capped in match.ts). Sustained
-   *  possession + tired chasers → the opening eventually comes. */
-  buildPressure?: number;
 }
 
 /** The 11-manager roster (SM §4 + Heavy Metal, the PRESS/Gegenpress manager). */
@@ -109,12 +105,11 @@ export const MANAGERS: Manager[] = [
   {
     id: 'metronome',
     name: 'Metronome',
-    winCon: 'Keep the ball, build the pressure — the opening comes.',
+    winCon: 'Keep the ball, work an opening — reward KEEP + CREATE.',
     posture: 'balanced',
     formation: '4-3-3',
     favoured: 'KEEP',
     reweight: { KEEP: 5, CREATE: 5, FINISH: 4 },
-    buildPressure: 0.06,
   },
   {
     id: 'chaser',
@@ -158,13 +153,12 @@ export const MANAGERS: Manager[] = [
   {
     id: 'financier',
     name: 'Financier',
-    winCon: 'Control and cash in — build pressure, bank money on goals.',
+    winCon: 'Control and cash in — reward KEEP + create, bank money on goals.',
     posture: 'balanced',
     formation: '4-3-3',
     favoured: 'KEEP',
     reweight: { KEEP: 5, CREATE: 5, FINISH: 4 },
     cashOnGoal: 2,
-    buildPressure: 0.05,
   },
   {
     id: 'heavy-metal',

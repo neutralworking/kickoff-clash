@@ -180,8 +180,7 @@ console.log('— 3. Interactions (flat, targeted, ledgered) —');
   else {
     const base = draftXI(0.4).filter((c) => c.id !== overlap.id);
     // 4-3-3 slot 1 = Left Back (lane L, DEF band) — the overlap runs up lane L.
-    // base may hold 10 or 11 cards (the carrier can be in the draft), so take 0..9.
-    const xi = [base[0], overlap, ...base.slice(1, 10)];
+    const xi = [base[0], overlap, base[2], base[3], base[4], base[5], base[6], base[7], base[8], base[9], base[10]];
     const split = evaluateSplit(initMatch(xi, [], [], F433, 'tiki-taka', [], 5, 1, 'Passive', 'Sprinter'), []);
     const owner = split.youEff.find((c) => c.id === overlap.id);
     const fed = split.youEff.find((c) =>
