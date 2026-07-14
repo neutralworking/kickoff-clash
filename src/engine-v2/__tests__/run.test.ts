@@ -26,7 +26,6 @@ import {
   deathFixture,
   serializeRun,
   deserializeRun,
-  fixtureTarget,
   challengeForFixture,
   RUN_FIXTURES,
   MANAGERS,
@@ -84,16 +83,12 @@ describe('a run resolves end-to-end and is deterministic', () => {
     expect(step.log).toHaveLength(1);
     const full = simulateRun(99, m, pool, true);
     // first fixture is identical whether stepped or run in one shot
-    expect(step.log[0].beaten).toBe(full.log[0].beaten);
+    expect(step.log[0].verdict).toBe(full.log[0].verdict);
     expect(step.log[0].score).toEqual(full.log[0].score);
   });
 });
 
-describe('the target curve and challenge rules', () => {
-  it('the points target grows across the run (1.42^f)', () => {
-    for (let f = 2; f <= RUN_FIXTURES; f++) expect(fixtureTarget(f)).toBeGreaterThan(fixtureTarget(f - 1));
-  });
-
+describe('the challenge rules', () => {
   it('challenge rules bite from fixture 2 (not fixture 1)', () => {
     expect(challengeForFixture(123, 1)).toBeNull();
     let seen = 0;
@@ -132,10 +127,14 @@ describe('the permadeath curve — committed survives deeper than uncommitted (S
   const committed = sweep(true, N);
   const uncommitted = sweep(false, N);
 
-  it('a committed run completes ~40-50% (SM band) and reaches the final fixtures', () => {
-    expect(committed.completion).toBeGreaterThan(0.30);
-    expect(committed.completion).toBeLessThan(0.62);
-    expect(committed.median).toBeGreaterThanOrEqual(8);
+  it('a committed run completes ~25-40% under the scoreline verdict', () => {
+    // Re-based for goals-only survival (owner call, 2026-07): a committed run
+    // completes ~30% at the settled curve (OPP_BASE 4 / GROWTH 2.5 / K_QUALITY
+    // 1.15). The blind-era ~43% band no longer applies; widening the committed
+    // vs uncommitted gap further is the manager-rebalance campaign (next pass).
+    expect(committed.completion).toBeGreaterThan(0.18);
+    expect(committed.completion).toBeLessThan(0.48);
+    expect(committed.median).toBeGreaterThanOrEqual(3);
   });
 
   it('a committed build survives DEEPER than an uncommitted one (the divergence)', () => {
@@ -145,9 +144,9 @@ describe('the permadeath curve — committed survives deeper than uncommitted (S
     expect(committed.completion).toBeGreaterThan(uncommitted.completion - 0.04);
   });
 
-  it('defensive archetypes are viable under the blind (clean-batch scoring channel)', () => {
-    // a STOP/wall manager (Fortress) must be able to complete runs — its points
-    // come from clean sheets, not goals it cannot produce.
+  it('defensive archetypes are viable under the scoreline verdict', () => {
+    // a STOP/wall manager (Fortress) must be able to complete runs — it wins
+    // low-scoring games and survives draws; conceding nothing keeps it alive.
     let fortress = 0;
     const K = 60;
     for (let i = 0; i < K; i++) if (simulateRun(4000 + i, MANAGERS_BY_ID['fortress'], pool, true).completed) fortress++;
