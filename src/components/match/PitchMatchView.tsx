@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { MatchV5State, IncrementResult, MatchBeat, MatchStats, ContestStats, PlayerMatchStat, MatchForecast } from '../../lib/match-v5';
+import type { MatchV5State, IncrementResult, MatchBeat, MatchStats, ContestStats, PlayerMatchStat, AttackDefenceSplit } from '../../lib/match-v5';
 import type { PointMod } from '../../lib/points';
 import type { Formation, FormationSlot } from '../../lib/formations';
 import { getFormation } from '../../lib/formations';
@@ -24,7 +24,8 @@ import type { GameCardModel } from '../cards/GameCard';
 import { PIXEL, lastName, POSITION_COLOR } from '../cards/cardTokens';
 import { HERO, fitnessColor as heroFitnessColor } from '../cards/portrait';
 import { PitchToken } from '../PitchToken';
-import { ContestMatch } from '../ContestMeters';
+import { ContestBreakdown, summariseLedger, panelRowEdges, type PanelState, type RoundLedgerView } from '../ContestBreakdown';
+import { contestPanel, type ContestKey } from '../../lib/contest-panel';
 import { competenceOf, type Competence } from '../../lib/team-select';
 import { pitchAxis } from '../../lib/pitch-layout';
 
@@ -53,8 +54,10 @@ interface PitchMatchViewProps {
   /** The receipt behind each card's live numbers (split.cardMods): every flat
    *  modifier by source. Tap a card's ATK/DEF pair to read it. */
   cardMods: Record<number, PointMod[]>;
-  /** The forecast header (split.forecast): ATTACK v DEFENCE sums, +/- and NET. */
-  forecast: MatchForecast;
+  /** The FULL evaluated split (plan = the live preview, resolve = the resolved
+   *  split) — the CONTEST BREAKDOWN panel reads its six contest totals, both
+   *  effective sides and the forecast NET (demoted to SQUAD EDGE). */
+  split: AttackDefenceSplit;
   onToggleTactic: (tacticId: string) => void;
   onSub: (xiCardId: number, benchCardId: number) => void;
   onReassign: (cardA: number, cardB: number) => void;
@@ -1329,7 +1332,7 @@ function CoachPanel({ notes, style }: { notes: CoachNote[]; style?: React.CSSPro
 
 export default function PitchMatchView({
   matchState, formation, jokers, availableTactics, ownedFormations,
-  opponentBuild, nextMinute, mode, breakMoment, currentResult, playerStats, cardStats, cardMods, forecast,
+  opponentBuild, nextMinute, mode, breakMoment, currentResult, playerStats, cardStats, cardMods, split,
   onToggleTactic, onSub, onReassign, onFormationChange, onIntentChange, onContinue,
 }: PitchMatchViewProps) {
   const [trayOpen, setTrayOpen] = useState(false);
@@ -1481,6 +1484,55 @@ export default function PitchMatchView({
 
   const resolving = mode === 'resolve';
   const sequenceDone = resolving && (resolveDone || (timeline.length > 0 && beatIdx >= timeline.length));
+
+  // ── CONTEST BREAKDOWN (owner directive) — the six engine duels off the SAME
+  // evaluated split the resolver plays (contest-panel selectors; no re-derived
+  // maths). Two states: FORECAST (the live plan) / OUTCOME (the resolved
+  // round's own ledger). Collapsed while the resolve animation plays. ──
+  const panelView = useMemo(
+    () => contestPanel(split.youEff, split.oppEff, split.contest, split.oppContest, split.forecast.net),
+    [split],
+  );
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [panelState, setPanelState] = useState<PanelState>('forecast');
+
+  // OUTCOME source: the just-resolved round while resolving, else the last
+  // played round at a planning break. Aggregated from the round's beats +
+  // possession counts only — nothing the ledger doesn't record.
+  const lastPlayed = matchState.scores.length > 0 ? matchState.scores[matchState.scores.length - 1] : null;
+  const outcomeSrc = resolving ? currentResult : lastPlayed;
+  const outcomeView = useMemo<RoundLedgerView | null>(
+    () => (outcomeSrc ? summariseLedger(outcomeSrc.beats, outcomeSrc.yourPossessions, outcomeSrc.opponentPossessions) : null),
+    [outcomeSrc],
+  );
+
+  // Auto-flip to OUTCOME when the resolve sequence lands; back to FORECAST at
+  // each fresh planning break (the directive's two-state loop).
+  const breakKey = mode === 'plan' && breakMoment !== null ? `${breakMoment}-${matchState.currentIncrement}` : null;
+  useEffect(() => { if (sequenceDone) setPanelState('outcome'); }, [sequenceDone]);
+  useEffect(() => { if (breakKey) setPanelState('forecast'); }, [breakKey]);
+
+  // Per-contest DELTA chips: the panel at break ENTRY is the baseline; any
+  // tactic/intent/shape/XI change this break shows its nonzero EDGE moves
+  // (edges, so a tactic that debuffs THEIR side of a duel registers too).
+  // Cleared when the period resolves (the baseline re-anchors next break).
+  const panelBaseline = useRef<{ key: string; vals: Record<ContestKey, number> } | null>(null);
+  useEffect(() => {
+    if (breakKey && panelBaseline.current?.key !== breakKey) {
+      panelBaseline.current = { key: breakKey, vals: panelRowEdges(panelView) };
+    }
+  }, [breakKey, panelView]);
+  const panelDeltas = useMemo<Partial<Record<ContestKey, number>> | null>(() => {
+    if (!breakKey || panelBaseline.current?.key !== breakKey) return null;
+    const base = panelBaseline.current.vals;
+    const now = panelRowEdges(panelView);
+    const out: Partial<Record<ContestKey, number>> = {};
+    for (const k of Object.keys(base) as ContestKey[]) {
+      const d = now[k] - base[k];
+      if (d !== 0) out[k] = d;
+    }
+    return Object.keys(out).length > 0 ? out : null;
+  }, [breakKey, panelView]);
 
   // The live animated beat's source commentary (null for build-up beats).
   const liveSource = beat?.source ?? null;
@@ -1841,11 +1893,21 @@ export default function PitchMatchView({
         </div>
       </div>
 
-      {/* SCORING_V2 FORECAST (v4) — the same live sums as dual meters, condensed,
-          NET in a bordered column at the right end. Tap a pitch card's power row
-          for the per-card receipt. */}
+      {/* CONTEST BREAKDOWN — the six engine duels (owner directive). Expanded at
+          planning breaks; force-collapsed while the resolve animation plays, then
+          auto-flips to the round's OUTCOME ledger. Delta chips read this break's
+          tactic/intent/shape changes. SQUAD EDGE (the old NET) rides top-right. */}
       <div style={{ padding: '4px 16px 2px', flexShrink: 0 }}>
-        <ContestMatch forecast={forecast} />
+        <ContestBreakdown
+          view={panelView}
+          yourCommit={split.contest.commit}
+          collapsed={resolving && !sequenceDone ? true : panelCollapsed}
+          onToggleCollapsed={() => setPanelCollapsed((v) => !v)}
+          outcome={outcomeView}
+          panelState={outcomeView ? panelState : 'forecast'}
+          onPanelState={outcomeView ? setPanelState : undefined}
+          deltas={panelDeltas}
+        />
       </div>
 
       {/* Ticker — three lines, tap to expand. Pre-kickoff shows a coach prompt.

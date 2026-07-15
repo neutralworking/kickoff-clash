@@ -280,7 +280,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
             currentResult={currentResult}
             cardStats={subPhase === 'resolving' && currentResult ? currentResult.split.cardStats : previewSplit.cardStats}
             cardMods={subPhase === 'resolving' && currentResult ? currentResult.split.cardMods : previewSplit.cardMods}
-            forecast={subPhase === 'resolving' && currentResult ? currentResult.split.forecast : previewSplit.forecast}
+            split={subPhase === 'resolving' && currentResult ? currentResult.split : previewSplit}
             playerStats={playerStats}
             onToggleTactic={handleToggleTactic}
             onSub={handleSub}
