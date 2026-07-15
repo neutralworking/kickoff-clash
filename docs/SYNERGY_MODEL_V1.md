@@ -58,6 +58,12 @@ Inclusion test: (a) engine can detect/declare it unambiguously, (b) ≥2 manager
 
 ## 4. Managers
 
+> **SUPERSEDED (2026-07-15):** the roster below is replaced by
+> `design/handoff/manager-roster-v2.md` (MANAGER_ROSTER_V2, NW-140 rewrite) —
+> 14 famous-style archetypes, implemented on the CLASSIC engine
+> (`src/lib/jokers.ts` + `points.ts managerMods`). This section stays as
+> historical reference only.
+
 A manager defines **how you are allowed to win**: a win-condition engine over contexts, a default posture, a preferred formation.
 
 * **Run start: choice of three.** Identity is known from minute one; every draft decision filters through it.

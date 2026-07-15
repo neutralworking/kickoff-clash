@@ -295,6 +295,9 @@ export interface RoundOutcome {
 export interface RoundSide {
   cards: EffCard[];
   teamChances: TeamChance[];
+  /** Manager shot-quality bonuses (POMO all-shots / Set Pieces FC corners) —
+   *  folded into the shot need INSIDE its clamp, like the FINISH commitment. */
+  needBonus?: { all: number; corner: number };
 }
 
 export interface RoundContext {
@@ -408,6 +411,7 @@ interface LiveSide {
   cards: EffCard[];
   totals: ContestTotals;
   teamChances: TeamChance[];
+  needBonus?: { all: number; corner: number };
   stops: { cardId: number; name: string; save?: boolean }[];
   cornersUsed: number;
   goals: number;
@@ -424,8 +428,8 @@ interface PossessionPlan {
 export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext): RoundOutcome {
   const { seed, increment: inc } = ctx;
   const sides: [LiveSide, LiveSide] = [
-    { label: 'you', idx: 0, cards: [...you.cards], totals: contestTotals(you.cards), teamChances: you.teamChances, stops: [], cornersUsed: 0, goals: 0, xg: 0, shots: 0, onTarget: 0 },
-    { label: 'opp', idx: 1, cards: [...opp.cards], totals: contestTotals(opp.cards), teamChances: opp.teamChances, stops: [], cornersUsed: 0, goals: 0, xg: 0, shots: 0, onTarget: 0 },
+    { label: 'you', idx: 0, cards: [...you.cards], totals: contestTotals(you.cards), teamChances: you.teamChances, needBonus: you.needBonus, stops: [], cornersUsed: 0, goals: 0, xg: 0, shots: 0, onTarget: 0 },
+    { label: 'opp', idx: 1, cards: [...opp.cards], totals: contestTotals(opp.cards), teamChances: opp.teamChances, needBonus: opp.needBonus, stops: [], cornersUsed: 0, goals: 0, xg: 0, shots: 0, onTarget: 0 },
   ];
   const beats: RoundBeat[] = [];
   const bookings: RoundBooking[] = [];
@@ -491,8 +495,13 @@ export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext):
   ): void => {
     const drama = inc === 4 ? LATE_DRAMA : 0;
     // FINISH commitment (a finisher-stacked XI) converts a touch better — the
-    // build-around's payoff, routed into the shot need (finish's only real lever).
-    const finishCommit = att.totals.commit?.finish ?? 0;
+    // build-around's payoff, routed into the shot need (finish's only real
+    // lever). Manager shot-quality bonuses (POMO / Set Pieces FC) ride the
+    // same slot, so they stay inside the need clamp.
+    const finishCommit =
+      (att.totals.commit?.finish ?? 0) +
+      (att.needBonus?.all ?? 0) +
+      (quality === 'corner' ? att.needBonus?.corner ?? 0 : 0);
     const need = shotNeed(quality, shooter.atk, def.totals.stop, finishCommit, drama);
     const roll = d100(seed, inc, att.idx, i, 3);
     att.shots += 1;

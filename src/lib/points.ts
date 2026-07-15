@@ -23,7 +23,8 @@ import { deriveStats } from './funnel';
 import type { Formation } from './formations';
 import type { Band, Lane } from './field';
 import { cellOf, bandOf, laneOf } from './field';
-import type { JokerCard } from './jokers';
+import { type JokerCard, adherenceBand, ADHERENCE_MULT } from './jokers';
+import { contestTotals } from './contests';
 import type { TacticCard } from './tactics';
 import type { TeamIntent } from './run';
 import type { PointTrait } from './defining-traits';
@@ -106,6 +107,10 @@ export interface SideInput {
   sentOffIds?: Set<number>;
   /** Opponent difficulty compensation: +K ATK/+K DEF per card (SCORING_V2). */
   cohesionPts?: number;
+  /** Cards brought on as substitutes this match (Tinkerman's fresh legs). */
+  subbedInIds?: Set<number>;
+  /** Joga Bonito's stretch-conversion trigger fired (a creator scored). */
+  jogaFired?: boolean;
 }
 
 export interface SideBuild {
@@ -122,6 +127,9 @@ export interface SideBuild {
   personalityLabel: string | null;
   perfectDressingRoom: boolean;
   links: ChemLinkView[];
+  /** Manager shot-quality bonuses (POMO / Set Pieces FC): flat additions to the
+   *  shot need, routed INSIDE the resolver's clamp via the commitment slot. */
+  needBonus: { all: number; corner: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -158,41 +166,128 @@ interface Snap { id: number; atk: number; def: number }
 
 type ModSink = (cardId: number, mod: PointMod) => void;
 
+interface ManagerCtx {
+  increment: number;
+  formationId: string;
+  subbedInIds?: Set<number>;
+  jogaFired?: boolean;
+}
+
+interface ManagerOut {
+  drains: Record<number, number>;
+  needBonus: { all: number; corner: number };
+}
+
+const AERIAL = (c: EffCard) => c.archetype === 'Target' || c.archetype === 'Powerhouse';
+const MURDERBALL_DRAIN = 6; // squad fitness per period (the attrition downside)
+
+/**
+ * MANAGER_ROSTER_V2 (design/handoff/manager-roster-v2.md): every buff is a
+ * flat, ledgered PointMod applied to the cards that FEED the named contest
+ * (the contestTotals partition), so a "+2 KEEP" manager genuinely moves KEEP.
+ * THE LAW: buffs pay only behind the gate — contest commitment T1 for most
+ * (the engine's own thresholds via contestTotals().commit), buildCount(aerial)
+ * for Set Pieces FC, results (economy only) for Wheeler-Dealer. ADHERENCE
+ * throttles the whole package by formation band (×1 / ×0.5 / ×0.25, rounded —
+ * ±1 pieces die in foreign shapes, downsides included).
+ */
 function managerMods(
   joker: JokerCard,
   cards: EffCard[],
   snap: Map<number, Snap>,
   linkedIds: Set<number>,
   add: ModSink,
+  ctx: ManagerCtx,
+  out: ManagerOut,
 ): void {
-  const src = joker.name;
-  const each = (pred: (c: EffCard) => boolean, atk: number, def: number) => {
-    for (const c of cards) if (pred(c)) add(c.id, { source: src, kind: 'manager', atk, def });
+  // ---- the gate (no-unconditional law) ----
+  if (joker.gate.kind === 'results') return; // economy-only manager (Wheeler-Dealer)
+  if (joker.gate.kind === 'commit') {
+    // Feeder COUNTS are mod-independent, so the engine's own commitment step
+    // (T1 thresholds inside contestTotals) is the gate: bonus > 0 ⇔ committed.
+    if (contestTotals(cards).commit[joker.gate.key] <= 0) return;
+  } else if (joker.gate.kind === 'buildCount') {
+    if (cards.filter(AERIAL).length < joker.gate.n) return;
+  }
+
+  // ---- adherence throttle (band vs the manager's preferred formation) ----
+  const mult = ADHERENCE_MULT[adherenceBand(joker, ctx.formationId)];
+  const S = (v: number) => Math.round(v * mult);
+  const src = `${joker.archetype} — ${joker.name}`;
+  const each = (pred: (c: EffCard) => boolean, atk: number, def: number, label = src) => {
+    const a = S(atk);
+    const d = S(def);
+    if (a === 0 && d === 0) return;
+    for (const c of cards) if (pred(c)) add(c.id, { source: label, kind: 'manager', atk: a, def: d });
   };
+
   switch (joker.id) {
-    case 'the_dinosaur':
-      each(feedsFinish, 2, 0);        // Direct Play → +FINISH (the forwards)
+    case 'pomo': // all +1 DEF; fewer, better chances → +3 shot need
+      each(() => true, 0, 1);
+      out.needBonus.all += S(3);
       break;
-    case 'the_professor':
-      each(feedsKeep, 2, 0);          // Possession → +KEEP (the ball-players)
+    case 'anti_football': // all +1 DEF; back line a further +1 DEF (STOP)
+      each(() => true, 0, 1);
+      each(feedsStop, 0, 1);
       break;
-    case 'the_mourinho':
-      each(feedsStop, 0, 2);          // Low Block → +STOP (a clean back line)
+    case 'tiki_taka': // ball-players +2 KEEP
+      each(feedsKeep, 2, 0);
       break;
-    case 'the_gambler':
-      each((c) => c.card.durability === 'glass' || c.card.durability === 'phoenix', 1, 1);
+    case 'gegenpress': // forwards +1 PRESS +1 CREATE; finishing forwards +1 FINISH
+      each((c) => c.band === 'ATT', 1, 1);
+      each((c) => c.band === 'ATT' && feedsFinish(c), 1, 0);
       break;
-    case 'youth_developer':
-      each((c) => c.card.rarity === 'Common', 1, 0);
+    case 'box_office': // finishers +1 FINISH (the payout mult lives in economy)
+      each(feedsFinish, 1, 0);
       break;
-    case 'hairdryer':
-      if (cards.some((c) => c.card.personalityTheme === 'Captain')) each(() => true, 1, 1);
+    case 'tinkerman': // every incoming substitute plays at +2/+2
+      if (ctx.subbedInIds?.size) each((c) => ctx.subbedInIds!.has(c.id), 2, 2);
       break;
-    case 'chemistry_set':
-      each((c) => linkedIds.has(c.id), 1, 0);
+    case 'cholismo': // midfield +1 BREAK; back line +1 STOP
+      each(feedsBreak, 0, 1);
+      each(feedsStop, 0, 1);
       break;
-    case 'scouts_eye':
-      each(feedsPress, 0, 2);         // Organised press → +PRESS
+    case 'murderball': { // pressers +1 PRESS, creators +1 CREATE; own squad burns
+      each(feedsPress, 0, 1);
+      each(feedsCreate, 1, 0);
+      const burn = S(MURDERBALL_DRAIN);
+      if (burn > 0) for (const c of cards) out.drains[c.id] = (out.drains[c.id] ?? 0) - burn;
+      break;
+    }
+    case 'fergie_time': { // finishers +1 FINISH, doubled in the final periods
+      const late = ctx.increment >= 3 ? 2 : 1;
+      each(feedsFinish, 1 * late, 0, late === 2 ? `${src} (Fergie Time!)` : src);
+      break;
+    }
+    case 'entertainers': // attackers +2 FINISH; back line −1 STOP (the price)
+      each((c) => c.band === 'ATT', 2, 0);
+      each(feedsStop, 0, -1);
+      break;
+    case 'total_football': { // ball-players + creators +1; position penalties waived
+      each(feedsKeep, 1, 0);
+      each(feedsCreate, 1, 0);
+      for (const c of cards) {
+        let atkPen = 0;
+        let defPen = 0;
+        for (const m of c.mods) {
+          if (m.kind === 'position') {
+            atkPen += Math.min(0, m.atk);
+            defPen += Math.min(0, m.def);
+          }
+        }
+        const a = S(-atkPen);
+        const d = S(-defPen);
+        if (a || d) add(c.id, { source: `${src} (total football)`, kind: 'manager', atk: a, def: d });
+      }
+      break;
+    }
+    case 'set_pieces_fc': // aerial threats +1 CREATE; corners convert far better
+      each(AERIAL, 1, 0);
+      out.needBonus.corner += S(8);
+      break;
+    case 'joga_bonito': // MID+ATT creators +1 CREATE; flair goal unlocks the squad
+      each((c) => (c.band === 'MID' || c.band === 'ATT') && feedsCreate(c), 1, 0);
+      if (ctx.jogaFired) each(feedsCreate, 1, 0, `${src} (flair unlocked)`);
       break;
   }
 }
@@ -481,7 +576,14 @@ export function buildSide(input: SideInput): SideBuild {
   }
 
   // --- Pass B: manager / tactics / intent -------------------------------------
-  for (const joker of jokers) managerMods(joker, cards, snap, linkedIds, add);
+  const needBonus = { all: 0, corner: 0 };
+  const managerCtx: ManagerCtx = {
+    increment,
+    formationId: formation.id,
+    subbedInIds: input.subbedInIds,
+    jogaFired: input.jogaFired,
+  };
+  for (const joker of jokers) managerMods(joker, cards, snap, linkedIds, add, managerCtx, { drains: ownDrains, needBonus });
   const tacticCtx: TacticCtx = { increment, yourGoals, theirGoals };
   for (const tactic of tactics) {
     tacticMods(tactic, tacticCtx, cards, add, { chances: teamChances, drains: ownDrains, enemyMods, enemyDrains });
@@ -527,7 +629,7 @@ export function buildSide(input: SideInput): SideBuild {
 
   return {
     cards, enemyMods, enemyDrains, ownDrains, teamChances, auraTraits,
-    personalityLabel, perfectDressingRoom, links,
+    personalityLabel, perfectDressingRoom, links, needBonus,
   };
 }
 

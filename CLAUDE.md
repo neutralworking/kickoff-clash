@@ -57,7 +57,7 @@ The live engine's validation battery: `npx tsx scripts/verb-dispatcher-harness.t
 | `scoring.ts` | Card types, archetypes, playing styles, seeded RNG |
 | `transform.ts` | `kc_cards.json` → `Card[]` (position map + `MODEL_TO_ARCHETYPE` map) |
 | `formations.ts` | 8 formations, 11 slots each, pitch x/y geometry, max-attacker caps |
-| `jokers.ts` | Manager cards; effects are flat mods (points.ts `managerMods`); `ALL_JOKERS` registry used for rehydration |
+| `jokers.ts` | The 14-manager MANAGER_ROSTER_V2 (`design/handoff/manager-roster-v2.md`) as data: famous-style archetypes, per-manager gate (contest commitment / buildCount(aerial) / results), preferred formation + `adherenceBand`/`ADHERENCE_MULT` (buffs throttle ×1/×0.5/×0.25 by shape), economy hooks (`payoutMult`, `refreshDiscount`). Effects are flat mods (points.ts `managerMods`, gated + adherence-scaled; Fergie clock doubling, Tinkerman sub buffs, Murderball own-drain, Joga trigger, POMO/Set-Pieces shot-need bonuses via `needBonus`); `ALL_JOKERS` registry used for rehydration |
 | `tactics.ts` | 16 tactic cards, EQUIPPED up to 3 pre-kick-off (`equipTactics`/`TACTIC_SLOTS` in match-v5) — flat, situational effects in points.ts `tacticMods` |
 | `run.ts` | Roguelike `RunState`: deck, shop, economy, round progression, `suspendedIds` |
 | `economy.ts` | Attendance, revenue, shop item generation |
