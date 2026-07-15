@@ -48,10 +48,11 @@ import {
   BENCH_SIZE,
 } from '../lib/team-select';
 import { initMatch, evaluateSplit } from '../lib/match-v5';
+import { contestPanel } from '../lib/contest-panel';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import SquadGallery from './SquadGallery';
-import { ContestHero } from './ContestMeters';
+import { ContestBreakdown } from './ContestBreakdown';
 import { ClassGem } from './cards/ContestIcons';
 import { classOfCard } from '../lib/contest-map';
 import { PIXEL, RARITY_COLOR, POSITION_COLOR, lastName } from './cards/cardTokens';
@@ -364,6 +365,16 @@ export default function SquadScreen({
   }, [filled, slotCount, sel.starters, sel.bench, byId, formation, previewJokers, seed, round, opponent, opponentPower]);
   const deltaVsBalanced = previewSplit ? previewSplit.forecast.net - balancedNet : 0;
 
+  // The six-row CONTEST BREAKDOWN view (owner directive) — pure selectors over
+  // the SAME evaluated split, so the rows move with every squad/intent edit.
+  const panelView = useMemo(
+    () => (previewSplit
+      ? contestPanel(previewSplit.youEff, previewSplit.oppEff, previewSplit.contest, previewSplit.oppContest, previewSplit.forecast.net)
+      : null),
+    [previewSplit],
+  );
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
+
   // Live effective stats per starter card (previewSplit.cardStats), for the tokens.
   const statsFor = (cardId: number) => previewSplit?.cardStats[cardId];
 
@@ -607,12 +618,15 @@ export default function SquadScreen({
         </button>
       </div>
 
-      {/* ── Projected Contest (hero) — the live forecast vs the opponent ───── */}
+      {/* ── CONTEST BREAKDOWN (hero) — the six engine duels vs the opponent ── */}
       <div className="shrink-0 px-3 mt-1.5">
-        <ContestHero
-          forecast={previewSplit ? previewSplit.forecast : null}
-          deltaVsBalanced={deltaVsBalanced}
+        <ContestBreakdown
+          view={panelView}
+          yourCommit={previewSplit?.contest.commit ?? null}
           oppName={opponent.name}
+          deltaVsBalanced={deltaVsBalanced}
+          collapsed={panelCollapsed}
+          onToggleCollapsed={() => setPanelCollapsed((v) => !v)}
         />
       </div>
 

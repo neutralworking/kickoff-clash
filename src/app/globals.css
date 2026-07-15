@@ -1032,3 +1032,23 @@ h1, h2, h3,
   .kc-verdict-in,
   .kc-impact-chip { animation: none; opacity: 1; transform: none; }
 }
+
+/* ===========================================================================
+   CONTEST BREAKDOWN (ContestBreakdown.tsx — team selection + match screens)
+   Six engine-native duel bars: width animates expo-out on any plan change
+   (intent/shape/XI/tactic — the impact feedback); the body fades in on expand;
+   delta chips rise like the impact chips. GPU-cheap; reduced-motion parity.
+   =========================================================================== */
+.kc-cb-fill { transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes kcCbBodyIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.kc-cb-body { animation: kcCbBodyIn 0.2s ease-out both; }
+.kc-cb-delta { opacity: 0; animation: kcChipIn 0.24s ease-out forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kc-cb-fill { transition: none; }
+  .kc-cb-body { animation: none; opacity: 1; transform: none; }
+  .kc-cb-delta { animation: none; opacity: 1; transform: none; }
+}
