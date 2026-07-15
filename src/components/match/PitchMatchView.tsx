@@ -26,8 +26,28 @@ import { HERO, fitnessColor as heroFitnessColor } from '../cards/portrait';
 import { PitchToken } from '../PitchToken';
 import { ContestBreakdown, summariseLedger, panelRowEdges, type PanelState, type RoundLedgerView } from '../ContestBreakdown';
 import { contestPanel, type ContestKey } from '../../lib/contest-panel';
+import { MARGIN_PER_POINT } from '../../lib/contests';
 import { competenceOf, type Competence } from '../../lib/team-select';
 import { pitchAxis } from '../../lib/pitch-layout';
+
+// ---------------------------------------------------------------------------
+// MATCH ANIMATION — owner directive (design/handoff/match-animation.md, 2026-07-15)
+//
+// "Animate ONLY the player's intervention and its most important consequence."
+// Three beats per period: (1) the choice's effect on the contest rows + 2-3
+// receiving cards, (2) an honest one-phrase spell summary, (3) the decisive
+// event only, tiered routine/important/major. Causal breadcrumbs are
+// honest-only from exactly three sources — receipts, a pre-dice counterfactual
+// re-evaluation, or THE COUNTER (`beat.counter`) — never invented. No sound in
+// v1; SFX_HOOK below is the deliberate no-op seam for a later audio pass.
+// ---------------------------------------------------------------------------
+
+/** No-op audio seam (owner directive: "No sound in v1 — leave a hook"). Call
+ *  sites below mark exactly where a cue would fire; wiring real audio later
+ *  only means filling this in. */
+function SFX_HOOK(_event: 'beat1' | 'spell' | 'important' | 'major' | 'skip'): void {
+  // Intentionally empty — no audio in v1.
+}
 
 interface PitchMatchViewProps {
   matchState: MatchV5State;
@@ -783,6 +803,117 @@ function buildTimeline(result: IncrementResult): Beat[] {
 // Beat pacing (ms): travel for shots, a touch quicker for idle build-up.
 const BEAT_MS: Record<BeatKind, number> = { goal: 1500, save: 900, miss: 850, idle: 650, card: 1100 };
 
+// ---------------------------------------------------------------------------
+// THE THREE TIERS (owner directive) — Routine / Important / Major. Tier is a
+// pure function of the engine's OWN beat data (quality, traitName, counter,
+// red) — never a guess. Important = a BIG chance either way, a defining-trait
+// firing (a `stop` beat always carries `traitName`), or a sprung counter;
+// Major = a goal or a red card. Everything else plays at the routine pace.
+// The tier only ADDS pacing (TIER_MS_BONUS) on top of the existing per-kind
+// timing, so routine beats are byte-identical to before.
+// ---------------------------------------------------------------------------
+type BeatTier = 'routine' | 'important' | 'major';
+
+function tierOf(beat: Beat): BeatTier {
+  if (beat.kind === 'goal') return 'major';
+  if (beat.kind === 'card' && beat.red) return 'major';
+  const src = beat.source;
+  if ((beat.kind === 'save' || beat.kind === 'miss') && (src?.quality === 'big' || !!src?.traitName || !!src?.counter)) {
+    return 'important';
+  }
+  return 'routine';
+}
+
+const TIER_MS_BONUS: Record<BeatTier, number> = { routine: 0, important: 500, major: 900 };
+
+// BEAT 2's spell phrase reads for this long BEFORE the beat playout starts
+// (the timing sketch's "0.0s tactic → 1.1s spell phrase → 2.4s shooter card
+// rises…" is SEQUENTIAL, not concurrent) — shared by the phrase's own visible
+// timer and PossessionClock's lead-in so the two beats never visually collide.
+const SPELL_LEAD_MS = 950;
+
+// ---------------------------------------------------------------------------
+// CAUSAL BREADCRUMBS — honest-only, exactly three sources (owner directive):
+//   1. THE COUNTER — `beat.source.counter` is a real, mechanically-landed
+//      turnover→chance link (contests.ts `counterChance`). Always this label.
+//   2. A pre-dice COUNTERFACTUAL — for a goal YOUR side scored while a tactic
+//      is equipped and fed the scorer's ATK, algebraically recover the shot's
+//      NEED without that tactic's contribution. Because `shotNeed` is linear
+//      in (shooterAtk − stop) with slope MARGIN_PER_POINT, and the OTHER
+//      inputs (base, stop, finishCommit, drama) are identical either way,
+//      altNeed = need − MARGIN_PER_POINT × tacticAtk — with NO need to touch
+//      the actual die roll. Skipped if the real need sits at the clamp rails
+//      (5 or 80): the algebra can't be un-clamped honestly at the boundary.
+//   3. A RECEIPT — the beat's own traitName (a stop/chance trait IS a named
+//      flat mod — points.ts `kind: 'trait'`), read via trait-copy so the words
+//      never drift from the on-card pill.
+// If none apply, render NOTHING — never manufacture a link.
+// ---------------------------------------------------------------------------
+interface Breadcrumb { text: string; kind: 'counter' | 'counterfactual' | 'receipt' }
+
+function beatBreadcrumb(beat: Beat, split: AttackDefenceSplit, activeTacticCount: number): Breadcrumb | null {
+  const src = beat.source;
+  if (!src) return null;
+  if (src.counter) return { text: 'PRESS EDGE → TURNOVER → CHANCE', kind: 'counter' };
+  if (
+    beat.kind === 'goal' && beat.side === 'you' && activeTacticCount > 0 &&
+    src.scorerId != null && src.quality && typeof src.need === 'number' && src.need > 5 && src.need < 80
+  ) {
+    const mods = split.cardMods[src.scorerId] ?? [];
+    const tacticAtk = mods.filter((m) => m.kind === 'tactic').reduce((s, m) => s + m.atk, 0);
+    if (tacticAtk !== 0) {
+      const altNeed = Math.max(5, Math.min(80, Math.round(src.need - MARGIN_PER_POINT * tacticAtk)));
+      if (altNeed !== src.need) {
+        const names = [...new Set(mods.filter((m) => m.kind === 'tactic' && m.atk !== 0).map((m) => m.source))].join(' + ');
+        return { text: `WITHOUT ${names.toUpperCase()}: NEED ≤${altNeed} (WAS ≤${src.need})`, kind: 'counterfactual' };
+      }
+    }
+  }
+  if (src.traitName) {
+    const copy = traitCopy(src.traitName);
+    return { text: `${copy.label.toUpperCase()} — ${copy.blurb}`, kind: 'receipt' };
+  }
+  return null;
+}
+
+const BREADCRUMB_COLOR: Record<Breadcrumb['kind'], string> = {
+  counter: 'var(--kit-blue)',
+  counterfactual: 'var(--gold)',
+  receipt: 'var(--amber)',
+};
+
+// ---------------------------------------------------------------------------
+// BEAT 2 — "summarise the spell of play" (owner directive). ONE honest phrase
+// per period, chosen from the round's OWN possession split + turnover pattern
+// + chance mix — nothing invented. Mapping (documented so the selection can be
+// audited against the engine data it reads):
+//   |poss margin| >= 2 and you didn't create fewer chances  -> control read
+//   |poss margin| >= 2 the other way                        -> pinned back
+//   turnovers forced > turnovers lost, and poss is close     -> won it high
+//   no chances at all either way                             -> scrappy
+//   your own moves broke down more than theirs did            -> build-up breaks down
+//   otherwise                                                  -> scrappy (fallback)
+// ---------------------------------------------------------------------------
+interface SpellPhrase { text: string; key: ContestKey }
+
+function spellPhrase(result: IncrementResult): SpellPhrase {
+  const { yourPossessions: yp, opponentPossessions: op, beats } = result;
+  let yourTurnoversLost = 0, oppTurnoversLost = 0, yourChances = 0, oppChances = 0;
+  for (const b of beats) {
+    if (b.outcome === 'turnover') { if (b.side === 'you') yourTurnoversLost += 1; else oppTurnoversLost += 1; }
+    if (b.outcome === 'goal' || b.outcome === 'save' || b.outcome === 'miss') {
+      if (b.side === 'you') yourChances += 1; else oppChances += 1;
+    }
+  }
+  const margin = yp - op;
+  if (margin >= 2 && yourChances >= oppChances) return { text: 'YOU TAKE CONTROL', key: 'KEEP' };
+  if (margin <= -2) return { text: 'THEY PIN YOU BACK', key: 'KEEP' };
+  if (oppTurnoversLost > yourTurnoversLost && Math.abs(margin) < 2) return { text: 'YOU WIN IT HIGH', key: 'PRESS' };
+  if (yourChances === 0 && oppChances === 0) return { text: 'A SCRAPPY SPELL', key: 'CREATE' };
+  if (yourTurnoversLost > oppTurnoversLost && yourChances <= oppChances) return { text: 'YOUR BUILD-UP BREAKS DOWN', key: 'CREATE' };
+  return { text: 'A SCRAPPY SPELL', key: 'CREATE' };
+}
+
 // Optional slow-motion multiplier — only ever set by the headless verification
 // harness so each beat is long enough to screenshot. Never set in product.
 function animScale(): number {
@@ -805,24 +936,37 @@ interface PossessionClockProps {
   timeline: Beat[];
   baseYou: number;
   baseOpp: number;
+  /** SKIP (owner directive: "always available, including mid-Major-moment").
+   *  A monotonic counter — any change past the value captured at mount fast-
+   *  forwards straight to the increment's final tally and calls onDone(). */
+  skipToken: number;
   onState: (beatIdx: number, you: number, opp: number, shake: 'you' | 'opp' | null) => void;
   onDone: () => void;
 }
 
-function PossessionClock({ timeline, baseYou, baseOpp, onState, onDone }: PossessionClockProps) {
+function PossessionClock({ timeline, baseYou, baseOpp, skipToken, onState, onDone }: PossessionClockProps) {
   // Stable refs to the latest callbacks so the run-once effect never restarts.
   const cb = useRef({ onState, onDone });
   cb.current = { onState, onDone };
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const doneRef = useRef(false);
+  // Captured once at mount — SKIP fires only on a CHANGE from this baseline, so
+  // a skip token carried over from a previous (already-finished) period never
+  // auto-skips the fresh one.
+  const skipBaseline = useRef(skipToken);
 
   useEffect(() => {
     const scale = animScale();
-    const durs = timeline.map((b) => BEAT_MS[b.kind] * scale);
+    // Tier pacing rides on top of the existing per-kind timing (owner directive:
+    // routine stays fast, important/major periods get room to read).
+    const durs = timeline.map((b) => (BEAT_MS[b.kind] + TIER_MS_BONUS[tierOf(b)]) * scale);
     let you = baseYou;
     let opp = baseOpp;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    let t = 0;
+    const timers = timersRef.current;
+    // BEAT 2 lead-in: hold beatIdx at -1 (nothing on the pitch) while the spell
+    // phrase banner reads, so the two beats never overlap on screen.
+    let t = SPELL_LEAD_MS * scale;
 
-    cb.current.onState(0, you, opp, null);
     timeline.forEach((b, i) => {
       const d = durs[i];
       if (b.kind === 'goal') {
@@ -836,12 +980,31 @@ function PossessionClock({ timeline, baseYou, baseOpp, onState, onDone }: Posses
       timers.push(setTimeout(() => cb.current.onState(i, you, opp, null), t));
       t += d;
     });
-    timers.push(setTimeout(() => { cb.current.onState(timeline.length, you, opp, null); cb.current.onDone(); }, t));
+    timers.push(setTimeout(() => {
+      if (doneRef.current) return;
+      doneRef.current = true;
+      cb.current.onState(timeline.length, you, opp, null);
+      cb.current.onDone();
+    }, t));
 
     return () => timers.forEach(clearTimeout);
     // Run exactly once per mount; the parent remounts via `key` for each increment.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // SKIP — cancel every pending timer and jump straight to the final tally.
+  useEffect(() => {
+    if (skipToken === skipBaseline.current) return;
+    skipBaseline.current = skipToken;
+    if (doneRef.current) return;
+    doneRef.current = true;
+    timersRef.current.forEach(clearTimeout);
+    const you = baseYou + timeline.filter((b) => b.kind === 'goal' && b.side === 'you').length;
+    const opp = baseOpp + timeline.filter((b) => b.kind === 'goal' && b.side === 'opp').length;
+    cb.current.onState(timeline.length, you, opp, null);
+    cb.current.onDone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skipToken]);
 
   return null;
 }
@@ -1534,8 +1697,79 @@ export default function PitchMatchView({
     return Object.keys(out).length > 0 ? out : null;
   }, [breakKey, panelView]);
 
+  // ── BEAT 1 (match-animation.md) — "show what the choice changed." Distinct
+  // from panelDeltas above (which accumulates over the WHOLE break): this is a
+  // one-shot ~1.6s highlight fired by the SPECIFIC tap that just changed the
+  // plan (a tactic call, an intent switch, a shape change, a sub) — the
+  // contest rows it actually moved, plus the 2-3 cards whose named mod ledger
+  // changed, tagged with the real source ("+2 Counter Trap"). `armBeat1()` is
+  // called synchronously inside each action handler (BEFORE the prop callback
+  // mutates state), snapshotting `split`; the effect below fires on the next
+  // `split` change (the parent's recomputed preview) and diffs old v new.
+  const pendingBeat1 = useRef<AttackDefenceSplit | null>(null);
+  const beat1Timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [beat1, setBeat1] = useState<{ rowKeys: ContestKey[]; cards: { cardId: number; source: string; delta: number }[] } | null>(null);
+  const armBeat1 = () => { pendingBeat1.current = split; };
+  useEffect(() => {
+    const before = pendingBeat1.current;
+    if (!before || before === split) return;
+    pendingBeat1.current = null;
+    const beforeView = contestPanel(before.youEff, before.oppEff, before.contest, before.oppContest, before.forecast.net);
+    const rowsBefore = panelRowEdges(beforeView);
+    const rowsAfter = panelRowEdges(panelView);
+    const rowKeys = (Object.keys(rowsAfter) as ContestKey[]).filter((k) => rowsAfter[k] !== rowsBefore[k]);
+    // Sum each card's mods by source, before v after, and keep only the sources
+    // whose contribution actually changed — the receipt behind the highlight.
+    const sumBySource = (mods: PointMod[]) => {
+      const m = new Map<string, number>();
+      for (const mm of mods) m.set(mm.source, (m.get(mm.source) ?? 0) + mm.atk);
+      return m;
+    };
+    const cardDeltas: { cardId: number; source: string; delta: number }[] = [];
+    for (const c of split.youEff) {
+      const b = sumBySource(before.cardMods[c.id] ?? []);
+      const a = sumBySource(split.cardMods[c.id] ?? []);
+      for (const s of new Set([...b.keys(), ...a.keys()])) {
+        const d = (a.get(s) ?? 0) - (b.get(s) ?? 0);
+        if (d !== 0) cardDeltas.push({ cardId: c.id, source: s, delta: d });
+      }
+    }
+    if (rowKeys.length === 0 && cardDeltas.length === 0) return;
+    cardDeltas.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+    SFX_HOOK('beat1');
+    setBeat1({ rowKeys, cards: cardDeltas.slice(0, 3) });
+    if (beat1Timer.current) clearTimeout(beat1Timer.current);
+    beat1Timer.current = setTimeout(() => setBeat1(null), 1600);
+  }, [split, panelView]);
+  useEffect(() => () => { if (beat1Timer.current) clearTimeout(beat1Timer.current); }, []);
+
+  // ── BEAT 2 (match-animation.md) — "summarise the spell of play." A ~1s
+  // honest phrase (spellPhrase, above) shown only at the very start of a
+  // period's resolve, with its contest family briefly glowing on the (force-
+  // collapsed) breakdown panel. Its own short timer — independent of SKIP,
+  // which simply makes sequenceDone true early and so hides it via the guard. ──
+  const [spellVisible, setSpellVisible] = useState(false);
+  const spellTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (mode !== 'resolve') { setSpellVisible(false); return; }
+    setSpellVisible(true);
+    SFX_HOOK('spell');
+    if (spellTimer.current) clearTimeout(spellTimer.current);
+    spellTimer.current = setTimeout(() => setSpellVisible(false), SPELL_LEAD_MS * animScale());
+    return () => { if (spellTimer.current) clearTimeout(spellTimer.current); };
+  }, [mode, matchState.currentIncrement]);
+  const spell = useMemo(() => (currentResult ? spellPhrase(currentResult) : null), [currentResult]);
+
+  // SKIP (owner directive: "always available, including mid-Major-moment").
+  // A monotonic counter handed to PossessionClock; any increment past the
+  // value it captured at mount fast-forwards straight to the final tally.
+  const [skipToken, setSkipToken] = useState(0);
+  const handleSkip = () => { SFX_HOOK('skip'); setSkipToken((t) => t + 1); };
+
   // The live animated beat's source commentary (null for build-up beats).
   const liveSource = beat?.source ?? null;
+  const liveTier = beat ? tierOf(beat) : null;
+  const liveBreadcrumb = beat ? beatBreadcrumb(beat, split, matchState.activeTactics.length) : null;
 
   // FIX 1 — the MATCH LOG / ticker carries each beat's REAL clock (seconds) and
   // mm:ss `time` from the engine, not the increment minute. Lines are sorted by
@@ -1817,7 +2051,7 @@ export default function PitchMatchView({
         // call onSub (which previously could no-op silently — "subs don't work").
         const reason = subBlockReason(matchState, hoverTargetId, p.id);
         if (reason) showToast(reason);
-        else onSub(hoverTargetId, p.id);
+        else { armBeat1(); onSub(hoverTargetId, p.id); }
       } else if (p.id !== hoverTargetId) onReassign(p.id, hoverTargetId);
     }
     setDrag(null); setDragPos(null); setHoverTargetId(null);
@@ -1846,6 +2080,13 @@ export default function PitchMatchView({
   const aScale = animScale();
   const dur = (ms: number) => (aScale === 1 ? undefined : `${Math.round(ms * aScale)}ms`);
 
+  // BEAT 3 · Important tier — the source-card highlight (owner directive: only
+  // a genuinely important beat gets a highlight + causal chain). Looked up on
+  // whichever pitch is CURRENTLY VISIBLE, same rule as the trait firings above.
+  const importantSpot = liveTier === 'important' && liveSource?.scorerId != null
+    ? spots.find((s) => s.cardId === liveSource.scorerId) ?? null
+    : null;
+
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}
       onPointerMove={drag ? movePointer : undefined}
@@ -1862,6 +2103,7 @@ export default function PitchMatchView({
           timeline={timeline}
           baseYou={yourGoals}
           baseOpp={opponentGoals}
+          skipToken={skipToken}
           onState={handleClockState}
           onDone={handleClockDone}
         />
@@ -1907,6 +2149,8 @@ export default function PitchMatchView({
           panelState={outcomeView ? panelState : 'forecast'}
           onPanelState={outcomeView ? setPanelState : undefined}
           deltas={panelDeltas}
+          pulseKeys={beat1?.rowKeys ?? null}
+          glowKey={resolving && spellVisible ? spell?.key ?? null : null}
         />
       </div>
 
@@ -1993,7 +2237,7 @@ export default function PitchMatchView({
               {equipHand.length === 0 && <span style={{ fontSize: 10, color: 'var(--dust)' }}>No tactic cards owned — buy them in the store.</span>}
               {equipHand.map(({ tactic, state, charges, capacity }) => (
                 <CallPill key={tactic.id} tactic={tactic} state={state} charges={charges} capacity={capacity}
-                  onCall={() => onToggleTactic(tactic.id)}
+                  onCall={() => { armBeat1(); onToggleTactic(tactic.id); }}
                   onInspect={() => setModal({ variant: 'tactic', tactic })} />
               ))}
             </div>
@@ -2025,7 +2269,7 @@ export default function PitchMatchView({
                 return (
                   <button
                     key={it.id}
-                    onClick={() => onIntentChange(it.id)}
+                    onClick={() => { armBeat1(); onIntentChange(it.id); }}
                     className="active:scale-95"
                     style={{
                       flex: 1,
@@ -2060,9 +2304,80 @@ export default function PitchMatchView({
 
       {/* Pitch — §6 mow-stripe green + white furniture (a red wash flags the
           "viewing opposition" mode). Every handler/geometry below is unchanged. */}
-      <div ref={pitchRef} style={{ position: 'relative', flex: 1, minHeight: 0, margin: '0 16px', borderRadius: 'var(--radius-lg)', border: `2px solid ${HERO.ink}`, background: oppView
+      <div ref={pitchRef} data-beat-kind={resolving ? beat?.kind : undefined} data-beat-tier={resolving ? liveTier ?? undefined : undefined} style={{ position: 'relative', flex: 1, minHeight: 0, margin: '0 16px', borderRadius: 'var(--radius-lg)', border: `2px solid ${HERO.ink}`, background: oppView
         ? 'repeating-linear-gradient(180deg, #9e3b36 0 34px, #8a2f2a 34px 68px)'
         : 'repeating-linear-gradient(180deg, #1f9d4f 0 34px, #1a8a45 34px 68px)', boxShadow: `0 3px 0 0 ${HERO.ink}, inset 0 0 40px rgba(0,0,0,0.3)`, overflow: 'hidden', touchAction: 'none' }}>
+        {/* SKIP — owner directive: "always available, including mid-Major-
+            moment." One tap fast-forwards straight to the period's final
+            tally (PossessionClock's skipToken effect), whatever beat is live —
+            a goal duel included. Hidden once the sequence has already landed. */}
+        {resolving && !sequenceDone && (
+          <button
+            onClick={handleSkip}
+            aria-label="Skip to the end of this period"
+            style={{
+              position: 'absolute', top: 8, right: 8, zIndex: 16,
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '5px 9px', borderRadius: 'var(--radius-sm)',
+              border: '2px solid var(--ink-black)', boxShadow: '0 2px 0 0 var(--ink-black)',
+              background: 'rgba(7,16,11,0.72)', color: 'var(--cream)',
+              fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.5, cursor: 'pointer',
+            }}
+          >
+            SKIP <span aria-hidden style={{ fontSize: 10 }}>{'»'}</span>
+          </button>
+        )}
+
+        {/* BEAT 2 — the honest one-phrase spell summary (~1s at the top of the
+            resolve sequence). The matching contest family glows on the (force-
+            collapsed) breakdown panel above via `glowKey`, below. */}
+        {resolving && spellVisible && spell && (
+          <div
+            className="kc-verdict-in"
+            style={{
+              position: 'absolute', left: '50%', top: 10, transform: 'translateX(-50%)', zIndex: 13,
+              padding: '6px 14px', borderRadius: 'var(--radius)', pointerEvents: 'none',
+              border: '2px solid var(--gold)', boxShadow: '0 3px 0 0 var(--ink-black)',
+              background: 'rgba(7,16,11,0.88)',
+            }}
+          >
+            <span style={{ fontFamily: PIXEL, fontSize: 12, letterSpacing: 0.6, color: 'var(--gold)', textShadow: '0 2px 0 var(--ink-black)' }}>
+              {spell.text}
+            </span>
+          </div>
+        )}
+
+        {/* BEAT 1 — the 2-3 cards the LATEST choice actually fed, tagged with
+            their real receipt ("+2 Counter Trap"). Your side only (cardMods is
+            your own ledger); skipped when scouting the opposition. */}
+        {!oppView && beat1 && beat1.cards.map((cd) => {
+          const spot = youSpots.find((s) => s.cardId === cd.cardId);
+          if (!spot) return null;
+          const good = cd.delta > 0;
+          return (
+            <div
+              key={`beat1-${cd.cardId}-${cd.source}`}
+              className="kc-impact-chip"
+              style={{
+                position: 'absolute', left: pitchAxis(spot.slot.x, PITCH_INSET_X), top: pitchAxis(spot.slot.y, PITCH_INSET_Y),
+                transform: 'translate(-50%,-115%)', zIndex: 11, pointerEvents: 'none', whiteSpace: 'nowrap',
+              }}
+            >
+              <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.3, color: good ? 'var(--ink-black)' : 'var(--line-white)', background: good ? 'var(--gold)' : 'var(--danger)', border: '1.5px solid var(--ink-black)', borderRadius: 3, padding: '2px 5px', boxShadow: '0 2px 0 0 var(--ink-black)' }}>
+                {good ? `+${cd.delta}` : cd.delta} {cd.source.toUpperCase()}
+              </span>
+            </div>
+          );
+        })}
+        {/* A gold ring on every BEAT 1 card (found or not — cheap, and stays
+            in lockstep with the pills above). */}
+        {!oppView && beat1 && youSpots.map((spot) => {
+          if (spot.cardId === undefined || !beat1.cards.some((cd) => cd.cardId === spot.cardId)) return null;
+          return (
+            <div key={`beat1-ring-${spot.cardId}`} className="kc-impact-chip" aria-hidden style={{ position: 'absolute', left: pitchAxis(spot.slot.x, PITCH_INSET_X), top: pitchAxis(spot.slot.y, PITCH_INSET_Y), transform: 'translate(-50%,-50%)', width: CARD_W + 10, height: CARD_H + 10, zIndex: 5, pointerEvents: 'none', borderRadius: 'var(--radius-sm)', boxShadow: '0 0 0 2px var(--gold), 0 0 10px rgba(232,178,60,0.6)' }} />
+          );
+        })}
+
         {/* Pitch markings — white furniture at 0.22 (§6). */}
         <div style={{ position: 'absolute', inset: 8, border: `1px solid ${FURNITURE}`, borderRadius: 3, pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', left: 8, right: 8, top: '50%', height: 1, background: FURNITURE }} />
@@ -2156,6 +2471,19 @@ export default function PitchMatchView({
             {(beat.kind === 'save' || beat.kind === 'miss') && (
               <div key={`miss-${beatIdx}`} className="shot-miss" style={{ position: 'absolute', left: `${ballLaneX}%`, top: `${targetGoalY + (beat.side === 'you' ? 4 : -4)}%`, transform: 'translate(-50%,-50%)', fontFamily: PIXEL, fontSize: 10, color: 'var(--cream-soft)', background: 'rgba(7,16,11,0.85)', border: '1px solid var(--border)', borderRadius: 3, padding: '3px 6px', zIndex: 9, pointerEvents: 'none', whiteSpace: 'nowrap', animationDuration: dur(620) }}>{beat.label}</div>
             )}
+            {/* BEAT 3 · IMPORTANT — a source-card ring + (honest-only) causal
+                chain. Routine saves/misses get none of this — only a genuine
+                big chance, a trait firing, or a sprung counter slows down. */}
+            {liveTier === 'important' && importantSpot && (
+              <div aria-hidden style={{ position: 'absolute', left: pitchAxis(importantSpot.slot.x, PITCH_INSET_X), top: pitchAxis(importantSpot.slot.y, PITCH_INSET_Y), transform: 'translate(-50%,-50%)', width: CARD_W + 10, height: CARD_H + 10, zIndex: 5, pointerEvents: 'none', borderRadius: 'var(--radius-sm)', boxShadow: '0 0 0 2px var(--amber), 0 0 10px rgba(255,122,31,0.55)' }} />
+            )}
+            {liveTier === 'important' && liveBreadcrumb && (
+              <div style={{ position: 'absolute', left: '50%', top: `${targetGoalY + (beat.side === 'you' ? 13 : -13)}%`, transform: 'translate(-50%,-50%)', zIndex: 9, pointerEvents: 'none', maxWidth: 280, textAlign: 'center' }}>
+                <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.3, color: BREADCRUMB_COLOR[liveBreadcrumb.kind], background: 'rgba(7,16,11,0.88)', border: `1px solid ${BREADCRUMB_COLOR[liveBreadcrumb.kind]}`, borderRadius: 3, padding: '3px 6px', display: 'inline-block' }}>
+                  {liveBreadcrumb.text}
+                </span>
+              </div>
+            )}
           </>
         )}
 
@@ -2224,6 +2552,36 @@ export default function PitchMatchView({
                   </span>
                 );
               })()}
+              {/* BEAT 3 · MAJOR — "the shooter duel is the real receipt": FINISH
+                  v STOP, the d100 roll against its need, GOAL. Both sides read
+                  the same real numbers off the resolved split (no re-derivation). */}
+              {beat.source?.roll != null && beat.source?.need != null && (() => {
+                const src = beat.source!;
+                const shooterAtk = beat.side === 'you'
+                  ? split.cardStats[src.scorerId ?? -1]?.atk ?? split.youEff.find((c) => c.id === src.scorerId)?.atk
+                  : split.oppEff.find((c) => c.id === src.scorerId)?.atk;
+                const stop = beat.side === 'you' ? split.oppContest.stop : split.contest.stop;
+                // Two short lines, not one long one — a narrow phone clips a
+                // single 40+ char line before it ever reaches the pitch edge.
+                return (
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, whiteSpace: 'normal', maxWidth: 300, textAlign: 'center' }}>
+                    {typeof shooterAtk === 'number' && (
+                      <span style={{ fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1.3, color: 'var(--cream-soft)', letterSpacing: 0.2 }}>
+                        {`FINISH ${shooterAtk} v STOP ${stop}`}
+                      </span>
+                    )}
+                    <span style={{ fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1.3, color: 'var(--cream-soft)', letterSpacing: 0.2 }}>
+                      {`rolled ${src.roll} ≤ need ${src.need} → GOAL`}
+                    </span>
+                  </span>
+                );
+              })()}
+              {/* The honest causal chain (Major tier always shows it when real). */}
+              {liveBreadcrumb && (
+                <span style={{ fontFamily: PIXEL, fontSize: 7, lineHeight: 1.3, letterSpacing: 0.2, color: BREADCRUMB_COLOR[liveBreadcrumb.kind], background: 'rgba(7,16,11,0.7)', border: `1px solid ${BREADCRUMB_COLOR[liveBreadcrumb.kind]}`, borderRadius: 3, padding: '2px 5px', marginTop: 2, whiteSpace: 'normal', maxWidth: 300, textAlign: 'center' }}>
+                  {liveBreadcrumb.text}
+                </span>
+              )}
             </div>
           );
         })()}
@@ -2397,7 +2755,7 @@ export default function PitchMatchView({
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {ownedFormations.map((fid) => {
                 const active = formation.id === fid;
-                return <button key={fid} onClick={() => { onFormationChange(fid); setFormSheet(false); }} style={{ padding: '9px 14px', borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: PIXEL, fontSize: 11, border: '2px solid var(--ink-black)', boxShadow: active ? '0 3px 0 0 var(--ink-black)' : 'none', background: active ? 'var(--kit-blue)' : 'var(--surface)', color: active ? 'var(--line-white)' : 'var(--cream-soft)' }}>{getFormation(fid).name}</button>;
+                return <button key={fid} onClick={() => { armBeat1(); onFormationChange(fid); setFormSheet(false); }} style={{ padding: '9px 14px', borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: PIXEL, fontSize: 11, border: '2px solid var(--ink-black)', boxShadow: active ? '0 3px 0 0 var(--ink-black)' : 'none', background: active ? 'var(--kit-blue)' : 'var(--surface)', color: active ? 'var(--line-white)' : 'var(--cream-soft)' }}>{getFormation(fid).name}</button>;
               })}
             </div>
           </div>
@@ -2473,7 +2831,7 @@ export default function PitchMatchView({
                   return (
                     <button
                       key={tactic.id}
-                      onClick={() => { if (!blocked) onToggleTactic(tactic.id); }}
+                      onClick={() => { if (!blocked) { armBeat1(); onToggleTactic(tactic.id); } }}
                       disabled={blocked}
                       aria-disabled={blocked}
                       className="tactic-card-btn"

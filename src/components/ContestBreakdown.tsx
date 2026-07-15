@@ -187,12 +187,18 @@ function TierPips({ tier }: { tier: 0 | 1 | 2 }) {
   );
 }
 
-function DuelRow({ vm, group, secondary }: { vm: RowVM; group: 'atk' | 'def'; secondary?: ReactNode }) {
+function DuelRow({ vm, group, secondary, pulse, glow }: { vm: RowVM; group: 'atk' | 'def'; secondary?: ReactNode; pulse?: boolean; glow?: boolean }) {
   const tag = group === 'atk' ? ATK_TAG : DEF_TAG;
   const fill = group === 'atk' ? ATK_FILL : DEF_FILL;
   const committed = vm.bonus > 0;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <div
+      className={pulse ? 'kc-row-pulse' : undefined}
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 2, borderRadius: 4,
+        boxShadow: glow ? '0 0 0 1px var(--gold), 0 0 8px rgba(232,178,60,0.55)' : undefined,
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: tag, width: LABEL_W, flexShrink: 0, lineHeight: 1 }}>
           {vm.key}
@@ -266,6 +272,8 @@ export function ContestBreakdown({
   panelState = 'forecast',
   onPanelState,
   deltas = null,
+  pulseKeys = null,
+  glowKey = null,
 }: {
   /** The six-row selector view; null → the FILL-YOUR-XI placeholder. */
   view: ContestPanelView | null;
@@ -282,6 +290,13 @@ export function ContestBreakdown({
   onPanelState?: (s: PanelState) => void;
   /** This break's per-contest changes (tactic/intent/shape) — nonzero only. */
   deltas?: Partial<Record<ContestKey, number>> | null;
+  /** BEAT 1 (match-animation.md) — the rows the player's LATEST choice actually
+   *  moved; a brief one-shot glow, cleared once its consequence resolves. Only
+   *  the rows that changed pulse — everything else stays visually still. */
+  pulseKeys?: ContestKey[] | null;
+  /** BEAT 2 — the spell-summary's contest family, given a held glow for the
+   *  ~1s the phrase reads (KEEP/PRESS "the ball", CREATE "the chances"). */
+  glowKey?: ContestKey | null;
 }) {
   const rows = view ? buildRows(view, yourCommit) : null;
   const showOutcome = panelState === 'outcome' && !!outcome;
@@ -339,11 +354,23 @@ export function ContestBreakdown({
           {([['ATT', rows.attack, ATK_TAG], ['DEF', rows.defend, DEF_TAG]] as const).map(([label, group, colour]) => (
             <span key={label} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, minWidth: 0 }}>
               <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.8, color: colour }}>{label}</span>
-              {group.map((r) => (
-                <span key={r.key} style={{ fontFamily: PIXEL, fontSize: 7.5, color: edgeCol(r.edge) }}>
-                  {r.key.slice(0, 1)}{sgn(r.edge)}
-                </span>
-              ))}
+              {group.map((r) => {
+                const pulsing = !!pulseKeys?.includes(r.key);
+                const glowing = glowKey === r.key;
+                return (
+                  <span
+                    key={r.key}
+                    className={pulsing ? 'kc-row-pulse' : undefined}
+                    style={{
+                      fontFamily: PIXEL, fontSize: 7.5, color: edgeCol(r.edge), padding: '1px 2px',
+                      boxShadow: glowing ? '0 0 0 1px var(--gold), 0 0 6px rgba(232,178,60,0.7)' : undefined,
+                      borderRadius: 3,
+                    }}
+                  >
+                    {r.key.slice(0, 1)}{sgn(r.edge)}
+                  </span>
+                );
+              })}
             </span>
           ))}
         </div>
@@ -409,19 +436,20 @@ export function ContestBreakdown({
           ) : rows && view ? (
             <>
               <GroupLabel text="ATTACKING" color={ATK_TAG} />
-              <DuelRow vm={rows.attack[0]} group="atk" secondary={`PROJECTED POSSESSION: ${view.attack.possession[0]}–${view.attack.possession[1]}`} />
-              <DuelRow vm={rows.attack[1]} group="atk" secondary={`BIG-CHANCE ODDS: ${view.attack.bigChanceOdds}`} />
+              <DuelRow vm={rows.attack[0]} group="atk" secondary={`PROJECTED POSSESSION: ${view.attack.possession[0]}–${view.attack.possession[1]}`} pulse={pulseKeys?.includes('KEEP')} glow={glowKey === 'KEEP'} />
+              <DuelRow vm={rows.attack[1]} group="atk" secondary={`BIG-CHANCE ODDS: ${view.attack.bigChanceOdds}`} pulse={pulseKeys?.includes('CREATE')} glow={glowKey === 'CREATE'} />
               <DuelRow
                 vm={rows.attack[2]}
                 group="atk"
                 secondary={shooter
                   ? `${lastName(shooter.name).toUpperCase()} ${shooter.atk} v STOP ${shooter.stop} · HALF ${shooter.needs.half}% · BIG ${shooter.needs.big}% · CORNER ${shooter.needs.corner}%`
                   : undefined}
+                pulse={pulseKeys?.includes('FINISH')} glow={glowKey === 'FINISH'}
               />
               <GroupLabel text="DEFENDING" color={DEF_TAG} />
-              <DuelRow vm={rows.defend[0]} group="def" />
-              <DuelRow vm={rows.defend[1]} group="def" />
-              <DuelRow vm={rows.defend[2]} group="def" />
+              <DuelRow vm={rows.defend[0]} group="def" pulse={pulseKeys?.includes('PRESS')} glow={glowKey === 'PRESS'} />
+              <DuelRow vm={rows.defend[1]} group="def" pulse={pulseKeys?.includes('BREAK')} glow={glowKey === 'BREAK'} />
+              <DuelRow vm={rows.defend[2]} group="def" pulse={pulseKeys?.includes('STOP')} glow={glowKey === 'STOP'} />
             </>
           ) : (
             <>
