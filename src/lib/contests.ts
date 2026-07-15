@@ -97,6 +97,15 @@ function commitStep(key: CKey, n: number): number {
   return 0;
 }
 
+/** Which commitment step a contest's bonus represents (0 none / I / II) — the
+ *  panel's "CREATE II · +7 COMMITTED" chip reads this, so the hidden step
+ *  bonus becomes a visible, completable build milestone. */
+export function commitTierOf(key: CKey, bonus: number): 0 | 1 | 2 {
+  if (bonus >= COMMIT_B2[key]) return 2;
+  if (bonus >= COMMIT_B1[key] && bonus > 0) return 1;
+  return 0;
+}
+
 // ---------------------------------------------------------------------------
 // Contest-targeting predicates — the SINGLE partition contestTotals scores on.
 //
@@ -180,6 +189,49 @@ export const MARGIN_PER_POINT = 3;
 /** No shot is ever surer than 80 (a 1-in-5 always survives) or hopeless below 5 —
  *  the blowout ceiling: a cracked build still wins big, not 13–0 big. */
 const NEED_MIN = 5, NEED_MAX = 80;
+
+// ---------------------------------------------------------------------------
+// Resolution maths as PURE EXPORTED functions. The resolver below calls THESE —
+// and so does the contest-breakdown panel — so the forecast a player reads and
+// the resolution the dice run can never drift apart (owner directive, 2026-07:
+// expose the actual engine; no decorative statistics).
+// ---------------------------------------------------------------------------
+
+/** THE BALL: how the round's 6 possessions split (deterministic, clamp 2–4). */
+export function possessionSplit(you: ContestTotals, opp: ContestTotals): [number, number] {
+  const score = (a: ContestTotals, b: ContestTotals) => Math.max(1, a.keep - b.press);
+  const yourScore = score(you, opp);
+  const oppScore = score(opp, you);
+  const yours = clamp(
+    Math.round(POSSESSIONS_PER_ROUND * (yourScore / (yourScore + oppScore))),
+    POSS_MIN, POSS_MAX,
+  );
+  return [yours, POSSESSIONS_PER_ROUND - yours];
+}
+
+/** THE OUTCOME table's weights after the CREATE−BREAK slide (per possession). */
+export interface OutcomeWeights { turnover: number; half: number; big: number; corner: number; foul: number }
+export function outcomeWeights(create: number, brk: number, cornersBlocked = false): OutcomeWeights {
+  const m = clamp(Math.round((create - brk) / MARGIN_DIV), -MARGIN_CAP, MARGIN_CAP);
+  return {
+    turnover: Math.max(2, W_TURNOVER - 1.2 * m),
+    half: Math.max(2, W_HALF + 0.8 * m),
+    big: Math.max(2, W_BIG + 0.4 * m),
+    corner: cornersBlocked ? 0 : W_CORNER,
+    foul: W_FOUL,
+  };
+}
+
+/** THE SHOT's goal threshold: d100 ≤ this scores (clamped 5..80). */
+export function shotNeed(
+  quality: 'half' | 'big' | 'corner',
+  shooterAtk: number,
+  stop: number,
+  finishCommit = 0,
+  drama = 0,
+): number {
+  return clamp(SHOT_BASE[quality] + MARGIN_PER_POINT * (shooterAtk - stop) + drama + finishCommit, NEED_MIN, NEED_MAX);
+}
 /** Non-goals within this window over the need are ON TARGET (a save). */
 const SAVE_WINDOW = 25;
 /** Final-round drama: late chances convert a touch more (flavour, kept small). */
@@ -288,13 +340,29 @@ function weightedPick(pool: EffCard[], weightOf: (c: EffCard) => number, r: numb
   return pool[pool.length - 1];
 }
 
+/** The shooter weighting — ONE function so the resolver's pick and the panel's
+ *  "likely shooter" preview can never drift apart. */
+const shooterWeight = (c: EffCard): number => {
+  const lane = laneOfCard(c.card);
+  const w = lane === 'finishing' ? 2 : lane === 'creation' ? 1 : 0.5;
+  return Math.max(0.25, c.atk) * w;
+};
+
 function pickShooter(cards: EffCard[], r: number): EffCard | null {
   const pool = cards.filter((c) => !c.gk);
-  return weightedPick(pool, (c) => {
-    const lane = laneOfCard(c.card);
-    const w = lane === 'finishing' ? 2 : lane === 'creation' ? 1 : 0.5;
-    return Math.max(0.25, c.atk) * w;
-  }, r);
+  return weightedPick(pool, shooterWeight, r);
+}
+
+/** The MOST LIKELY shooter (highest weight — the panel's FINISH face). */
+export function likelyShooter(cards: EffCard[]): EffCard | null {
+  let best: EffCard | null = null;
+  let bw = -1;
+  for (const c of cards) {
+    if (c.gk) continue;
+    const w = shooterWeight(c);
+    if (w > bw) { bw = w; best = c; }
+  }
+  return best;
 }
 
 function pickCornerHeader(cards: EffCard[], r: number): EffCard | null {
@@ -365,14 +433,7 @@ export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext):
   const roundYellows: Record<number, number> = {};
 
   // --- Contest 1: THE BALL (deterministic split of 6 possessions) -------------
-  const score = (a: LiveSide, b: LiveSide) => Math.max(1, a.totals.keep - b.totals.press);
-  const yourScore = score(sides[0], sides[1]);
-  const oppScore = score(sides[1], sides[0]);
-  const yourPoss = clamp(
-    Math.round(POSSESSIONS_PER_ROUND * (yourScore / (yourScore + oppScore))),
-    POSS_MIN, POSS_MAX,
-  );
-  const oppPoss = POSSESSIONS_PER_ROUND - yourPoss;
+  const [yourPoss, oppPoss] = possessionSplit(sides[0].totals, sides[1].totals);
 
   // --- Arm the stop traits (once per round, seeded per trait) -----------------
   for (const side of sides) {
@@ -428,12 +489,11 @@ export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext):
     shooter: EffCard, creator: EffCard | null, traitName: string | undefined,
     clock: { clock: number; time: string },
   ): void => {
-    const margin = shooter.atk - def.totals.stop;
     const drama = inc === 4 ? LATE_DRAMA : 0;
     // FINISH commitment (a finisher-stacked XI) converts a touch better — the
     // build-around's payoff, routed into the shot need (finish's only real lever).
     const finishCommit = att.totals.commit?.finish ?? 0;
-    const need = clamp(SHOT_BASE[quality] + MARGIN_PER_POINT * margin + drama + finishCommit, NEED_MIN, NEED_MAX);
+    const need = shotNeed(quality, shooter.atk, def.totals.stop, finishCommit, drama);
     const roll = d100(seed, inc, att.idx, i, 3);
     att.shots += 1;
     att.xg += need / 100;
@@ -506,12 +566,10 @@ export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext):
       return;
     }
 
-    // Outcome table, slid by the craft margin.
-    const m = clamp(Math.round((att.totals.create - def.totals.brk) / MARGIN_DIV), -MARGIN_CAP, MARGIN_CAP);
-    const wTurn = Math.max(2, W_TURNOVER - 1.2 * m);
-    const wHalf = Math.max(2, W_HALF + 0.8 * m);
-    const wBig = Math.max(2, W_BIG + 0.4 * m);
-    const wCorner = att.cornersUsed >= CORNERS_CAP ? 0 : W_CORNER;
+    // Outcome table, slid by the craft margin (the SAME pure function the
+    // forecast panel reads — outcomeWeights — so display can never drift).
+    const w = outcomeWeights(att.totals.create, def.totals.brk, att.cornersUsed >= CORNERS_CAP);
+    const wTurn = w.turnover, wHalf = w.half, wBig = w.big, wCorner = w.corner;
     const total = wTurn + wHalf + wBig + wCorner + W_FOUL;
     const r = prng(seed, inc, att.idx, i, 1) * total;
 
