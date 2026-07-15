@@ -75,16 +75,25 @@ export function contestsForCard(card: Pick<Card, 'archetype' | 'position'>): Con
 }
 
 // ---------------------------------------------------------------------------
-// Manager card → contests  (only the reworked, contest-targeted managers name a
-// contest; the identity managers — Gambler / Youth Dev / Hairdryer / Chemistry
-// Set — return none, so their tiles simply omit the contest row.)
+// Manager card → contests (MANAGER_ROSTER_V2): the contests each manager's
+// buff package moves. Wheeler-Dealer is economy-only, so his tile omits the
+// contest row entirely.
 // ---------------------------------------------------------------------------
 
 export const MANAGER_CONTESTS: Record<string, ContestKey[]> = {
-  the_professor: ['keep'],   // Émile Roux  → +KEEP
-  the_dinosaur: ['finish'],  // Roy Tanner  → +FINISH
-  the_mourinho: ['stop'],    // Aurélio Sá  → +STOP
-  scouts_eye: ['press'],     // Dieter Falk → +PRESS
+  pomo: ['stop', 'finish'],            // all +1 DEF + shot-quality bump
+  anti_football: ['stop'],             // the wall
+  tiki_taka: ['keep'],                 // possession
+  gegenpress: ['press', 'finish'],     // win it high, finish fast
+  box_office: ['finish'],              // the showman
+  tinkerman: ['create'],               // rotation (fresh subs)
+  cholismo: ['break', 'stop'],         // the grind
+  murderball: ['press', 'create'],     // attrition press
+  fergie_time: ['finish'],             // the late show
+  entertainers: ['finish'],            // all-out attack (STOP downside)
+  total_football: ['keep', 'create'],  // fluidity
+  set_pieces_fc: ['create', 'stop'],   // aerial bombardment
+  joga_bonito: ['create'],             // flair
 };
 
 export function contestsForManager(jokerId: string): ContestKey[] {

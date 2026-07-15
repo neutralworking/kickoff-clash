@@ -35,7 +35,7 @@ import { cupMatchPower } from '../lib/opponent';
 import type { HandState } from '../lib/hand';
 import { INCREMENT_MINUTES } from '../lib/hand';
 import type { JokerCard } from '../lib/jokers';
-import { rehydrateJokers } from '../lib/jokers';
+import { rehydrateJokers, payoutMult, refreshDiscount } from '../lib/jokers';
 import { ripStarterPacks, ripCardPack, type PackTier } from '../lib/packs';
 import { getTacticById } from '../lib/tactics';
 import { calculateAttendance, matchReward, JOKER_COST, SCOUT_PACK_COST, ELITE_PACK_COST } from '../lib/economy';
@@ -249,7 +249,7 @@ export default function GameShell() {
     // Option B reward: a flat per-result base by round × the purchased stadium payout
     // tier. A win earns the base, a draw DRAW_REWARD_FACTOR of it, a loss nothing (the
     // run is over). The gate (attendance.revenue) is now a flavour display only.
-    const reward = matchReward(
+    const baseReward = matchReward(
       runState.round,
       result.result,
       runState.stadiumTier,
@@ -257,6 +257,9 @@ export default function GameShell() {
       result.yourGoals,
       runState.boxOffice ?? false,
     );
+    // Manager economy hooks (MANAGER_ROSTER_V2): Box Office / Wheeler-Dealer
+    // pay more per result. Flat multiplier on the settled reward.
+    const reward = Math.round(baseReward * payoutMult(runState.jokers ?? []));
 
     // Create match result entry
     const matchResult: MatchResult = {
@@ -464,7 +467,9 @@ export default function GameShell() {
     if (!runState) return false;
     const item = getShopItem('reroll');
     if (!item) return false;
-    const result = buyShopItem(runState, item);
+    // Wheeler-Dealer: shop refreshes at a discount (MANAGER_ROSTER_V2).
+    const disc = refreshDiscount(runState.jokers ?? []);
+    const result = buyShopItem(runState, disc > 0 ? { ...item, cost: Math.round(item.cost * (1 - disc)) } : item);
     if (!result) return false;
     setRunState(result);
     saveRun(result);

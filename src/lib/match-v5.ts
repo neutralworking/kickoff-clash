@@ -28,6 +28,7 @@ import { getTacticById } from './tactics';
 import type { TeamIntent } from './run';
 import { INCREMENT_MINUTES, generateGoalText, generateChanceText } from './hand';
 import type { MatchEvent } from './hand';
+import { laneOfCard } from './funnel';
 import type { Lane, Cell, Band } from './field';
 import { CELLS, BANDS, LANES, cellOf, bandOf } from './field';
 import { generateOpponentXI } from './opponent';
@@ -72,6 +73,8 @@ export interface MatchV5State {
   opponentXI: Card[];
   opponentFormation: Formation;
   chemistry: CoAppearance;
+  /** Joga Bonito's stretch-conversion trigger: set once a CREATOR scores. */
+  jogaFired: boolean;
   /** TACTICS BY CARDS (per-call): the tactic ids CALLED for the current period.
    *  Set at a planning break, cleared when the period resolves — a called play's
    *  flat effect applies for that period only. Calling one spent a charge. */
@@ -153,6 +156,8 @@ export interface AttackDefenceSplit {
   oppEff: EffCard[];
   teamChances: TeamChance[];
   oppTeamChances: TeamChance[];
+  /** Your manager's shot-quality bonuses (POMO / Set Pieces FC). */
+  needBonus: { all: number; corner: number };
 }
 
 /** One commentary beat of the round playout (contests.ts). */
@@ -418,6 +423,7 @@ export function initMatch(
     tacticCharges,
     bookings: {},
     sentOffIds: [],
+    jogaFired: false,
     seed,
   };
 }
@@ -492,6 +498,8 @@ export function evaluateSplit(
     personality: true, defining: true,
     yourGoals: state.yourGoals, theirGoals: state.opponentGoals,
     sentOffIds: sentOff,
+    subbedInIds: new Set(state.subsUsed.map((s) => s.inId)),
+    jogaFired: state.jogaFired,
   });
   const opp = buildSide({
     xi: state.opponentXI, formation: state.opponentFormation,
@@ -635,6 +643,7 @@ export function evaluateSplit(
     oppEff: opp.cards,
     teamChances: you.teamChances,
     oppTeamChances: opp.teamChances,
+    needBonus: you.needBonus,
   };
 }
 
@@ -657,7 +666,7 @@ export function resolveIncrement(
   };
 
   const outcome = resolveRound(
-    { cards: split.youEff, teamChances: split.teamChances },
+    { cards: split.youEff, teamChances: split.teamChances, needBonus: split.needBonus },
     { cards: split.oppEff, teamChances: split.oppTeamChances },
     {
       seed,
@@ -885,6 +894,17 @@ export function advanceIncrement(state: MatchV5State, result: IncrementResult): 
   const nextIncrement = state.currentIncrement + 1;
   const isFirstHalf = nextIncrement <= 1;
 
+  // Joga Bonito's stretch-conversion trigger: the FIRST goal scored by one of
+  // your CREATION-lane cards unlocks the flair buff for the rest of the match.
+  const byId = new Map(state.xi.map((c) => [c.id, c]));
+  const jogaFired =
+    state.jogaFired ||
+    result.beats.some((b) => {
+      if (b.outcome !== 'goal' || b.side !== 'you' || b.scorerId == null) return false;
+      const scorer = byId.get(b.scorerId);
+      return !!scorer && laneOfCard(scorer) === 'creation';
+    });
+
   // Discipline: fold this round's cards into the match ledger.
   const newBookings = { ...state.bookings };
   const newSentOff = [...state.sentOffIds];
@@ -940,6 +960,7 @@ export function advanceIncrement(state: MatchV5State, result: IncrementResult): 
     isFirstHalf,
     bookings: newBookings,
     sentOffIds: newSentOff,
+    jogaFired,
     attackerIds: new Set(),
     attackerOrder: [],
     // Called plays last one period — clear them so the next break is a fresh
