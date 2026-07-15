@@ -190,6 +190,24 @@ export const MARGIN_PER_POINT = 3;
  *  the blowout ceiling: a cracked build still wins big, not 13–0 big. */
 const NEED_MIN = 5, NEED_MAX = 80;
 
+/** THE COUNTER (owner decision, 2026-07-15): a TURNOVER can spring an immediate
+ *  counter-attack for the side that won the ball. The division of labour:
+ *  BREAK creates MORE turnovers (the outcome slide, above); PRESS decides
+ *  whether a turnover becomes a CHANCE (winning it high). This is what makes a
+ *  Gegenpress build work — and makes "PRESS EDGE → TURNOVER → CHANCE" an
+ *  honest, mechanically real causal chain for the match presentation. */
+const COUNTER_BASE = 4;           // % chance a turnover springs a counter
+const COUNTER_PER_PRESS = 0.4;    // + per point of the winner's PRESS
+const COUNTER_CAP = 30;           // probability ceiling
+const COUNTER_BIG = 35;           // d100 ≤ this → the counter is a BIG chance
+const COUNTERS_CAP = 2;           // per side per round (blowout guard)
+
+/** p(counter | turnover) for a side with this PRESS — a pure exported function
+ *  (the resolver calls it; so can the forecast panel — the no-drift rule). */
+export function counterChance(winnerPress: number): number {
+  return clamp(COUNTER_BASE + COUNTER_PER_PRESS * winnerPress, 0, COUNTER_CAP);
+}
+
 // ---------------------------------------------------------------------------
 // Resolution maths as PURE EXPORTED functions. The resolver below calls THESE —
 // and so does the contest-breakdown panel — so the forecast a player reads and
@@ -270,6 +288,9 @@ export interface RoundBeat {
   assisterName: string | null;
   /** Set when a defining trait made this beat (animates via trait-copy). */
   traitName?: string;
+  /** Set on chances/shots sprung directly from a turnover — the COUNTER. The
+   *  honest causal chain for the presentation layer (PRESS → turnover → this). */
+  counter?: boolean;
   text: string;
 }
 
@@ -414,6 +435,7 @@ interface LiveSide {
   needBonus?: { all: number; corner: number };
   stops: { cardId: number; name: string; save?: boolean }[];
   cornersUsed: number;
+  countersUsed: number;
   goals: number;
   xg: number;
   shots: number;
@@ -428,8 +450,8 @@ interface PossessionPlan {
 export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext): RoundOutcome {
   const { seed, increment: inc } = ctx;
   const sides: [LiveSide, LiveSide] = [
-    { label: 'you', idx: 0, cards: [...you.cards], totals: contestTotals(you.cards), teamChances: you.teamChances, needBonus: you.needBonus, stops: [], cornersUsed: 0, goals: 0, xg: 0, shots: 0, onTarget: 0 },
-    { label: 'opp', idx: 1, cards: [...opp.cards], totals: contestTotals(opp.cards), teamChances: opp.teamChances, needBonus: opp.needBonus, stops: [], cornersUsed: 0, goals: 0, xg: 0, shots: 0, onTarget: 0 },
+    { label: 'you', idx: 0, cards: [...you.cards], totals: contestTotals(you.cards), teamChances: you.teamChances, needBonus: you.needBonus, stops: [], cornersUsed: 0, countersUsed: 0, goals: 0, xg: 0, shots: 0, onTarget: 0 },
+    { label: 'opp', idx: 1, cards: [...opp.cards], totals: contestTotals(opp.cards), teamChances: opp.teamChances, needBonus: opp.needBonus, stops: [], cornersUsed: 0, countersUsed: 0, goals: 0, xg: 0, shots: 0, onTarget: 0 },
   ];
   const beats: RoundBeat[] = [];
   const bookings: RoundBooking[] = [];
@@ -492,6 +514,7 @@ export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext):
     quality: 'half' | 'big' | 'corner',
     shooter: EffCard, creator: EffCard | null, traitName: string | undefined,
     clock: { clock: number; time: string },
+    counter = false,
   ): void => {
     const drama = inc === 4 ? LATE_DRAMA : 0;
     // FINISH commitment (a finisher-stacked XI) converts a touch better — the
@@ -515,7 +538,8 @@ export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext):
       ? (creator ?? pickAssister(att.cards, shooter.id, prng(seed, inc, att.idx, i, 4)))
       : creator;
     const gk = def.cards.find((c) => c.gk);
-    const qWord = quality === 'big' ? 'a big chance' : quality === 'corner' ? 'the corner' : 'a half-chance';
+    const qBase = quality === 'big' ? 'a big chance' : quality === 'corner' ? 'the corner' : 'a half-chance';
+    const qWord = counter ? `${qBase} on the counter` : qBase;
     // The shot receipt shows the roll against the goal threshold as a clear
     // inequality: a GOAL cleared `roll ≤ need`; a save/miss rolled OVER it (`> need`).
     const text = goal
@@ -528,7 +552,7 @@ export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext):
       xg: need / 100, roll, need, quality, outcome,
       scorerId: shooter.id, scorerName: shooter.name,
       assisterId: assister?.id ?? null, assisterName: assister?.name ?? null,
-      traitName, text,
+      traitName, counter: counter || undefined, text,
     });
   };
 
@@ -538,6 +562,7 @@ export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext):
     quality: 'half' | 'big' | 'corner',
     forced: PossessionPlan['forced'] | undefined,
     clock: { clock: number; time: string },
+    counter = false,
   ): void => {
     const stop = def.stops.shift();
     if (stop) {
@@ -563,7 +588,7 @@ export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext):
     const creator = forced?.creatorId != null && forced.creatorId !== shooter.id
       ? att.cards.find((c) => c.id === forced.creatorId) ?? null
       : null;
-    resolveShot(att, def, i, quality, shooter, creator, forced?.traitName, clock);
+    resolveShot(att, def, i, quality, shooter, creator, forced?.traitName, clock, counter);
   };
 
   /** One possession for `att` against `def`. */
@@ -588,6 +613,25 @@ export function resolveRound(you: RoundSide, opp: RoundSide, ctx: RoundContext):
         scorerId: null, scorerName: null, assisterId: null, assisterName: null,
         text: att.label === 'you' ? 'Move breaks down — possession lost' : 'They lose it — you win the ball back',
       });
+      // THE COUNTER: the side that won the ball can spring an immediate chance.
+      // BREAK made this turnover likelier; the winner's PRESS decides whether it
+      // turns into an attack (winning it high). Salted off the OWN possession
+      // space (i+50) so the extra draws collide with nothing.
+      if (def.countersUsed < COUNTERS_CAP) {
+        const pCounter = counterChance(def.totals.press);
+        if (d100(seed, inc, att.idx, i, 11) <= pCounter) {
+          def.countersUsed += 1;
+          const cq: 'half' | 'big' = d100(seed, inc, att.idx, i, 12) <= COUNTER_BIG ? 'big' : 'half';
+          // The counter happens SECONDS after the turnover — inherit its clock
+          // (+9s) so the final by-clock sort keeps the honest order.
+          const cSecs = clock.clock + 9;
+          const cClock = {
+            clock: cSecs,
+            time: `${Math.floor(cSecs / 60).toString().padStart(2, '0')}:${(cSecs % 60).toString().padStart(2, '0')}`,
+          };
+          contestChance(def, att, i + 50, cq, undefined, cClock, true);
+        }
+      }
       return;
     }
     if (r < wTurn + wHalf) { contestChance(att, def, i, 'half', undefined, clock); return; }
