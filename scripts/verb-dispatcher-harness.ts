@@ -260,6 +260,29 @@ console.log('— 5. The d100 shot law —');
 }
 
 // ---------------------------------------------------------------------------
+console.log('— 5b. The counter law —');
+{
+  // A COUNTER chance may only ever follow a TURNOVER by the OTHER side in the
+  // same increment (the honest PRESS → turnover → chance causal chain).
+  let counters = 0;
+  let orphan = false;
+  for (let s = 0; s < 30; s++) {
+    const { results } = playMatch(draftXI(0.4), 6100 + s * 17);
+    for (const r of results) {
+      for (let bi = 0; bi < r.beats.length; bi++) {
+        const b = r.beats[bi];
+        if (!b.counter) continue;
+        counters += 1;
+        const other = b.side === 'you' ? 'opp' : 'you';
+        const preceded = r.beats.slice(0, bi).some((p) => p.outcome === 'turnover' && p.side === other);
+        if (!preceded) orphan = true;
+      }
+    }
+  }
+  check('counters occur (turnovers can spring chances)', counters > 0, `${counters} counter beats / 30 matches`);
+  check('every counter follows an opposition turnover (the honest chain)', !orphan);
+}
+
 console.log('— 6. Discipline —');
 {
   let redViolation = false;
