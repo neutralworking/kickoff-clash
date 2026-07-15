@@ -836,14 +836,20 @@ const SPELL_LEAD_MS = 950;
 // CAUSAL BREADCRUMBS — honest-only, exactly three sources (owner directive):
 //   1. THE COUNTER — `beat.source.counter` is a real, mechanically-landed
 //      turnover→chance link (contests.ts `counterChance`). Always this label.
-//   2. A pre-dice COUNTERFACTUAL — for a goal YOUR side scored while a tactic
-//      is equipped and fed the scorer's ATK, algebraically recover the shot's
-//      NEED without that tactic's contribution. Because `shotNeed` is linear
-//      in (shooterAtk − stop) with slope MARGIN_PER_POINT, and the OTHER
-//      inputs (base, stop, finishCommit, drama) are identical either way,
-//      altNeed = need − MARGIN_PER_POINT × tacticAtk — with NO need to touch
-//      the actual die roll. Skipped if the real need sits at the clamp rails
-//      (5 or 80): the algebra can't be un-clamped honestly at the boundary.
+//   2. A pre-dice COUNTERFACTUAL — for ANY goal (either side — both sides'
+//      mod ledgers are on `split`: yours via `cardMods`, theirs via `oppEff`
+//      each card's own `.mods`), algebraically recover the shot's NEED
+//      without the removable contribution. Because `shotNeed` is linear in
+//      (shooterAtk − stop) with slope MARGIN_PER_POINT, and the OTHER inputs
+//      (base, stop, finishCommit, drama) are identical either way, altNeed =
+//      need − MARGIN_PER_POINT × Σremovable — with NO need to touch the
+//      actual die roll. "Removable" means: your own tactic calls (`kind:
+//      'tactic'`) for a goal you scored, or their Cohesion / your Antagonist
+//      /Dark Arts landing on them (`kind: 'opponent'`) for a goal they scored
+//      — opponents carry no tactics of their own (Known tech debt: cohesion
+//      is their only difficulty lever today). Skipped if the real need sits
+//      at the clamp rails (5 or 80): the algebra can't be un-clamped
+//      honestly at the boundary.
 //   3. A RECEIPT — the beat's own traitName (a stop/chance trait IS a named
 //      flat mod — points.ts `kind: 'trait'`), read via trait-copy so the words
 //      never drift from the on-card pill.
@@ -851,21 +857,32 @@ const SPELL_LEAD_MS = 950;
 // ---------------------------------------------------------------------------
 interface Breadcrumb { text: string; kind: 'counter' | 'counterfactual' | 'receipt' }
 
+/** A scorer's own mod ledger, from whichever side's build actually holds it —
+ *  `cardMods` is your XI's ledger; `oppEff` carries each opposing card's own
+ *  `.mods` alongside it. Same shape either way (PointMod[]). */
+function modsForScorer(split: AttackDefenceSplit, side: 'you' | 'opp', scorerId: number): PointMod[] {
+  if (side === 'you') return split.cardMods[scorerId] ?? [];
+  return split.oppEff.find((c) => c.id === scorerId)?.mods ?? [];
+}
+
 function beatBreadcrumb(beat: Beat, split: AttackDefenceSplit, activeTacticCount: number): Breadcrumb | null {
   const src = beat.source;
   if (!src) return null;
   if (src.counter) return { text: 'PRESS EDGE → TURNOVER → CHANCE', kind: 'counter' };
   if (
-    beat.kind === 'goal' && beat.side === 'you' && activeTacticCount > 0 &&
-    src.scorerId != null && src.quality && typeof src.need === 'number' && src.need > 5 && src.need < 80
+    beat.kind === 'goal' && src.scorerId != null && src.quality &&
+    typeof src.need === 'number' && src.need > 5 && src.need < 80
   ) {
-    const mods = split.cardMods[src.scorerId] ?? [];
-    const tacticAtk = mods.filter((m) => m.kind === 'tactic').reduce((s, m) => s + m.atk, 0);
-    if (tacticAtk !== 0) {
-      const altNeed = Math.max(5, Math.min(80, Math.round(src.need - MARGIN_PER_POINT * tacticAtk)));
-      if (altNeed !== src.need) {
-        const names = [...new Set(mods.filter((m) => m.kind === 'tactic' && m.atk !== 0).map((m) => m.source))].join(' + ');
-        return { text: `WITHOUT ${names.toUpperCase()}: NEED ≤${altNeed} (WAS ≤${src.need})`, kind: 'counterfactual' };
+    const removableKind = beat.side === 'you' ? 'tactic' : 'opponent';
+    if (beat.side === 'you' ? activeTacticCount > 0 : true) {
+      const mods = modsForScorer(split, beat.side, src.scorerId);
+      const removableAtk = mods.filter((m) => m.kind === removableKind).reduce((s, m) => s + m.atk, 0);
+      if (removableAtk !== 0) {
+        const altNeed = Math.max(5, Math.min(80, Math.round(src.need - MARGIN_PER_POINT * removableAtk)));
+        if (altNeed !== src.need) {
+          const names = [...new Set(mods.filter((m) => m.kind === removableKind && m.atk !== 0).map((m) => m.source))].join(' + ');
+          return { text: `WITHOUT ${names.toUpperCase()}: NEED ≤${altNeed} (WAS ≤${src.need})`, kind: 'counterfactual' };
+        }
       }
     }
   }
@@ -2348,8 +2365,10 @@ export default function PitchMatchView({
         )}
 
         {/* BEAT 1 — the 2-3 cards the LATEST choice actually fed, tagged with
-            their real receipt ("+2 Counter Trap"). Your side only (cardMods is
-            your own ledger); skipped when scouting the opposition. */}
+            their real receipt ("+2 Counter Trap"). Your side only by design —
+            this beat is about YOUR decision; skipped when scouting the
+            opposition. (The counterfactual breadcrumb below is symmetric —
+            see beatBreadcrumb — this one intentionally isn't.) */}
         {!oppView && beat1 && beat1.cards.map((cd) => {
           const spot = youSpots.find((s) => s.cardId === cd.cardId);
           if (!spot) return null;
