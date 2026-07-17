@@ -15,6 +15,7 @@ import type { Card } from '../lib/scoring';
 import { getTransferFee } from '../lib/economy';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
+import RosterCanvas from './RosterCanvas';
 import { PIXEL } from './cards/cardTokens';
 
 interface SquadGalleryProps {
@@ -52,9 +53,12 @@ const fitnessOf = (c: Card): number => c.fitness ?? (c.injured ? 33 : 100);
 export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCard }: SquadGalleryProps) {
   const [group, setGroup] = useState('all');
   const [sort, setSort] = useState<SortKey>('power');
+  const [view, setView] = useState<'grid' | 'roster'>('grid');
   const [modal, setModal] = useState<GameCardModel | null>(null);
   const [sellConfirm, setSellConfirm] = useState<Card | null>(null);
   const sellMode = !!onSellCard;
+  // The class-sectioned ROSTER canvas is a browse-only view (inspect, no sell).
+  const rosterView = view === 'roster' && !sellMode;
 
   const cards = useMemo(() => {
     const groupPositions = POS_GROUPS.find((g) => g.id === group)?.positions ?? [];
@@ -136,7 +140,7 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCar
         })}
       </div>
 
-      {/* ── Sort ───────────────────────────────────────────────────────────── */}
+      {/* ── Sort + view ────────────────────────────────────────────────────── */}
       <div className="shrink-0 flex items-center gap-1.5 px-3 mt-1.5">
         <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)' }}>SORT</span>
         <div className="flex" style={{ borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}>
@@ -159,14 +163,43 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCar
             );
           })}
         </div>
+
+        {/* View toggle (browse-only — hidden in sell mode). */}
+        {!sellMode && (
+          <div className="flex ml-auto" style={{ borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}>
+            {(['grid', 'roster'] as const).map((v) => {
+              const on = view === v;
+              return (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className="active:scale-95"
+                  style={{
+                    fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.5, padding: '5px 10px',
+                    background: on ? 'var(--amber)' : 'var(--surface)',
+                    color: on ? 'var(--ink-black)' : 'var(--cream-soft)',
+                    transition: 'background 0.15s ease',
+                  }}
+                >
+                  {v === 'grid' ? 'GRID' : 'ROSTER'}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* ── Grid (the only scroller) ───────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 pt-2.5 pb-2" style={{ overscrollBehavior: 'contain' }}>
+      {/* ── Grid / Roster (the only scroller) ──────────────────────────────── */}
+      <div
+        className={`flex-1 min-h-0 overflow-y-auto pb-2 ${rosterView ? '' : 'px-3 pt-2.5'}`}
+        style={{ overscrollBehavior: 'contain' }}
+      >
         {cards.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <span style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--dust)', letterSpacing: 0.5 }}>NO CARDS HERE</span>
           </div>
+        ) : rosterView ? (
+          <RosterCanvas cards={cards} onInspect={(c) => setModal({ variant: 'player', card: c })} title={title} />
         ) : (
           <div className="grid grid-cols-3 gap-2.5">
             {cards.map((c, i) => (

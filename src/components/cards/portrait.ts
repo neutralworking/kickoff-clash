@@ -23,6 +23,73 @@
  */
 
 import type { CSSProperties } from 'react';
+import portraitManifest from '../../../public/portraits/manifest.json';
+import portraitPool from '../../../public/portraits/pool.json';
+
+// ---------------------------------------------------------------------------
+// REAL-PORTRAIT resolver (design_handoff_player_cards). The card chassis is
+// portrait-READY. Faces come from two layers, manifest wins:
+//
+//  1. MANIFEST override (`public/portraits/manifest.json`) — a flat `{key:file}`
+//     map to PIN a specific face to a specific card. Player keys are the slug
+//     (lower-cased surname, punctuation stripped); manager keys are `mgr-{id}`.
+//     Ships EMPTY — it's the curation hook.
+//  2. POOL assignment (`public/portraits/pool.json`) — the sliced sheet faces
+//     (players[] / managers[]). The card art has no authored name→face mapping,
+//     so each card is assigned a STABLE face from the pool by its id (a card
+//     always shows the same face; faces repeat across the 540-card deck). To
+//     re-point one card, add a manifest entry.
+//
+// If both layers are empty/missing, the portrait window falls back — cleanly —
+// to the procedural pixel bust below (and again on <img> onError). Regenerate
+// the pool with scripts/slice-portraits.mjs after dropping new sheets.
+// ---------------------------------------------------------------------------
+
+const PORTRAIT_MANIFEST = portraitManifest as Record<string, string>;
+const PLAYER_POOL = (portraitPool as { players: string[]; managers: string[] }).players ?? [];
+const MANAGER_POOL = (portraitPool as { players: string[]; managers: string[] }).managers ?? [];
+
+// Assets are served under the deploy basePath (see next.config.ts). A raw <img>
+// src is NOT auto-prefixed (only next/image is), so we prefix it here.
+const ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? '/kickoff-clash';
+
+/** A card's portrait slug — the lower-cased surname, punctuation stripped. */
+export function portraitSlug(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const surname = parts[parts.length - 1] || name;
+  return surname.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Deterministic string → 32-bit hash (FNV-1a), for stable pool assignment. */
+function hashString(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+/** Resolve a player's real-portrait URL: manifest override, else a stable pool
+ *  face keyed off the card id, else null (→ procedural fallback). */
+export function portraitSrc(card: { id?: number | string; name: string }): string | null {
+  const pinned = PORTRAIT_MANIFEST[portraitSlug(card.name)];
+  if (pinned) return `${ASSET_BASE}/portraits/players/${pinned}`;
+  if (!PLAYER_POOL.length) return null;
+  const key = card.id != null ? String(card.id) : card.name;
+  const file = PLAYER_POOL[hashString(key) % PLAYER_POOL.length];
+  return `${ASSET_BASE}/portraits/players/${file}`;
+}
+
+/** Resolve a manager's real-portrait URL: manifest override, else a stable pool
+ *  face keyed off the manager id, else null (→ procedural fallback). */
+export function managerPortraitSrc(id: string): string | null {
+  const pinned = PORTRAIT_MANIFEST[`mgr-${id}`] ?? PORTRAIT_MANIFEST[id];
+  if (pinned) return `${ASSET_BASE}/portraits/managers/${pinned}`;
+  if (!MANAGER_POOL.length) return null;
+  const file = MANAGER_POOL[hashString(id) % MANAGER_POOL.length];
+  return `${ASSET_BASE}/portraits/managers/${file}`;
+}
 
 // ---------------------------------------------------------------------------
 // Hash + PRNG + colour helpers (ported 1:1 from the handoff logic script)

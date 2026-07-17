@@ -601,6 +601,39 @@ h1, h2, h3,
   .card-foil { animation: none; opacity: 0.5; transform: skewX(-18deg); }
 }
 
+/* ---------------------------------------------------------------------------
+   PORTRAIT-CARD motion (design_handoff_player_cards). All GLASS-frame overlay
+   effects — they never touch the pixel portrait interior.
+     • cardRise   — each card settles up from below (roster entrance, staggered)
+     • holoShift  — the Legendary black+gold seam travels across the frame
+     • kcSheen    — a diagonal gloss sweeps the framed portrait window
+   Easing is always smooth expo-out, never bouncy. Reduced motion freezes them.
+   --------------------------------------------------------------------------- */
+@keyframes cardRise {
+  0% { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: none; }
+}
+.card-rise {
+  opacity: 0;
+  animation: cardRise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes holoShift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+@keyframes kcSheen {
+  0% { transform: translateX(-140%) skewX(-18deg); }
+  100% { transform: translateX(240%) skewX(-18deg); }
+}
+.card-sheen {
+  animation: kcSheen 5.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-rise { animation: none; opacity: 1; transform: none; }
+  .card-sheen { animation: none; opacity: 0; }
+  .card-holo { animation: none !important; }
+}
+
 /* The sealed pack idles with a tiny breathing wobble, inviting a tap. */
 @keyframes packIdle {
   0%, 100% { transform: translateY(0) rotate(-1deg); }

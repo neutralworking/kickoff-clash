@@ -10,7 +10,7 @@
 
 import type { Card } from '../../lib/scoring';
 import type { TacticRarity } from '../../lib/tactics';
-import { type ContestKey, classOfCard, PLAYER_CLASS_META } from '../../lib/contest-map';
+import { type ContestKey, classOfCard, PLAYER_CLASS_META, MANAGER_CONTESTS } from '../../lib/contest-map';
 import { definingTraitsFor as resolveDefiningTraits, SIGNATURE_OVERRIDES } from '../../lib/defining-traits';
 import { traitCopy, type TraitCopy } from '../../lib/trait-copy';
 
@@ -378,6 +378,134 @@ export const POSITION_COLOR: Record<string, string> = {
   WF: '#f59e0b',
   CF: '#e23b35',
 };
+
+// ---------------------------------------------------------------------------
+// PORTRAIT-CARD HANDOFF tokens (design_handoff_player_cards). The refined,
+// real-portrait evolution of the card face: a thin METALLIC rarity frame
+// (Common→bronze, Rare→silver, Epic→gold, Legendary→black+gold seam that
+// shimmers), a class DISC (radial class-colour fill + rarity-edge ring + a
+// hand-drawn class glyph), stacked position pills, a framed 3:4 portrait window,
+// Archivo-Black name, class-coloured ability rows, a match-fit bar and
+// overlapping ATK/DEF corner discs. Values are lifted VERBATIM from the mock's
+// tier() / classColor() / posColor(). Additive — the older foil tokens
+// (RARITY_FRAME in portrait.ts) stay for the tactic / investment surfaces.
+// ---------------------------------------------------------------------------
+
+export interface HandoffTier {
+  /** Metallic gradient painted on the 2px frame border (the primary rarity tell). */
+  frame: string;
+  /** Accent — disc ring, portrait-window border, hairlines, eyebrow label. */
+  edge: string;
+  /** Rarity glow colour in the frame's shadow stack. */
+  glow: string;
+  /** Eyebrow / rarity-label colour. */
+  label: string;
+  /** Legendary → animated holoShift over the black+gold seam + a double glow. */
+  holo: boolean;
+}
+
+export const HANDOFF_TIER: Record<string, HandoffTier> = {
+  Common: {
+    edge: '#c88a4a', glow: 'rgba(184,110,54,0.42)', label: '#eab878', holo: false,
+    frame: 'linear-gradient(140deg,#e0a061 0%,#8a4e22 26%,#eeb478 50%,#7a441e 74%,#cf8f52 100%)',
+  },
+  Rare: {
+    edge: '#cdd4dc', glow: 'rgba(196,210,224,0.45)', label: '#f2f6fa', holo: false,
+    frame: 'linear-gradient(140deg,#f4f7fa 0%,#93a0ad 26%,#ffffff 50%,#7d8b99 74%,#dbe3ea 100%)',
+  },
+  Epic: {
+    edge: '#f5c542', glow: 'rgba(245,197,66,0.52)', label: '#ffe6a0', holo: false,
+    frame: 'linear-gradient(140deg,#ffeeb0 0%,#c89628 26%,#ffe08c 50%,#a8791f 74%,#ffe6a0 100%)',
+  },
+  Legendary: {
+    edge: '#f5c542', glow: 'rgba(245,197,66,0.62)', label: '#ffe6a0', holo: true,
+    frame: 'linear-gradient(120deg,#4a4a54 0%,#0b0b0f 22%,#5a5a66 42%,#f5c542 50%,#5a5a66 58%,#0b0b0f 78%,#4a4a54 100%)',
+  },
+};
+
+/** Resolve the player-card metallic tier, defaulting to Common/bronze. */
+export function handoffTier(rarity: string | undefined): HandoffTier {
+  return HANDOFF_TIER[rarity ?? 'Common'] ?? HANDOFF_TIER.Common;
+}
+
+/** Manager-card frames (Manager Cards.dc.html tier()) — ornate, rarity-tinted
+ *  (Rare = blue, Epic = purple, Legendary = gold) each with an inner hairline. */
+export interface HandoffMgrTier extends HandoffTier {
+  /** Inner-card hairline / plate border. */
+  inner: string;
+}
+
+export const HANDOFF_MGR_TIER: Record<string, HandoffMgrTier> = {
+  Common: {
+    edge: '#c99a5a', glow: 'rgba(198,140,70,0.4)', label: '#e6c48a', holo: false,
+    frame: 'linear-gradient(150deg,#e8cf9a 0%,#a8793a 26%,#f0dca8 50%,#8a5f28 74%,#e0c288 100%)',
+    inner: 'rgba(210,170,110,0.5)',
+  },
+  Rare: {
+    edge: '#4aa0ff', glow: 'rgba(58,160,255,0.5)', label: '#a9d4ff', holo: false,
+    frame: 'linear-gradient(150deg,#bfe0ff 0%,#2f6fd0 26%,#cfe8ff 50%,#255cba 74%,#8fc4ff 100%)',
+    inner: 'rgba(120,180,255,0.55)',
+  },
+  Epic: {
+    edge: '#b06cff', glow: 'rgba(176,108,255,0.55)', label: '#d8bcff', holo: false,
+    frame: 'linear-gradient(150deg,#e6d0ff 0%,#7a35d0 26%,#e2ccff 50%,#5f28a8 74%,#c9a0ff 100%)',
+    inner: 'rgba(190,140,255,0.55)',
+  },
+  Legendary: {
+    edge: '#f5c542', glow: 'rgba(245,197,66,0.75)', label: '#ffe6a0', holo: false,
+    frame: 'linear-gradient(150deg,#fff0c0 0%,#d4a035 24%,#ffe9a8 48%,#a8791f 72%,#ffdf8a 100%)',
+    inner: 'rgba(255,215,120,0.6)',
+  },
+};
+
+/** Resolve the manager-card metallic tier, defaulting to Common. */
+export function handoffMgrTier(rarity: string | undefined): HandoffMgrTier {
+  return HANDOFF_MGR_TIER[rarity ?? 'Common'] ?? HANDOFF_MGR_TIER.Common;
+}
+
+/** Exact handoff CLASS colour (disc fill · section headers · ability keyword).
+ *  These are the mock's classColor() values; PLAYER_CLASS_META keeps the engine's
+ *  near-equivalents, so the card FACE uses these for pixel fidelity. */
+export const HANDOFF_CLASS_COLOR: Record<string, string> = {
+  Creator: '#a855f7',
+  Destroyer: '#ef4444',
+  Engine: '#f59e0b',
+  Controller: '#3aa0ff',
+  Finisher: '#f5c542',
+  Wall: '#22c55e',
+};
+
+/** Class colour for the portrait-card face, with a neutral fallback. */
+export function handoffClassColor(cls: string): string {
+  return HANDOFF_CLASS_COLOR[cls] ?? '#b6a68a';
+}
+
+/** Class-disc glyph ink: white, EXCEPT Engine/Finisher (their class colours are
+ *  light) → dark ink so the hand-drawn glyph reads on the disc. */
+export function classIconInk(cls: string): string {
+  return cls === 'Engine' || cls === 'Finisher' ? '#241a06' : '#fff';
+}
+
+/** Position-pill ink — dark on WF/GK (their pill colours are light), else black. */
+export function posInk(pos: string): string {
+  return pos === 'WF' || pos === 'GK' ? '#241a06' : '#0b0b0b';
+}
+
+/** A manager's on-card class — from the contest its buff package most moves,
+ *  mapped back to the 1:1 class taxonomy (keep→Controller … stop→Wall). */
+const CONTEST_TO_CLASS: Record<ContestKey, string> = {
+  keep: 'Controller',
+  create: 'Creator',
+  finish: 'Finisher',
+  press: 'Engine',
+  break: 'Destroyer',
+  stop: 'Wall',
+};
+
+export function managerClass(jokerId: string): string {
+  const cs = MANAGER_CONTESTS[jokerId];
+  return cs && cs.length ? CONTEST_TO_CLASS[cs[0]] : 'Wall';
+}
 
 // Long-form position labels for the expanded card.
 export const POSITION_LABEL: Record<string, string> = {
