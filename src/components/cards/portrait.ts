@@ -23,6 +23,45 @@
  */
 
 import type { CSSProperties } from 'react';
+import portraitManifest from '../../../public/portraits/manifest.json';
+
+// ---------------------------------------------------------------------------
+// REAL-PORTRAIT resolver (design_handoff_player_cards). The card chassis is
+// portrait-READY: when a sliced PNG + a manifest entry exist, the portrait
+// window renders the real face; otherwise it falls back — cleanly — to the
+// procedural pixel bust below (and again on <img> onError). No player→file name
+// is ever hardcoded: the human drops PNGs into `public/portraits/{players,
+// managers}/` and maps them in `public/portraits/manifest.json`.
+//
+// The manifest is a flat `{ key: file }` map. Player keys are the slug (the
+// lower-cased surname, punctuation stripped); manager keys are `mgr-{id}`.
+// It ships EMPTY ({}), so today every card renders via the procedural bust.
+// ---------------------------------------------------------------------------
+
+const PORTRAIT_MANIFEST = portraitManifest as Record<string, string>;
+
+// Assets are served under the deploy basePath (see next.config.ts). A raw <img>
+// src is NOT auto-prefixed (only next/image is), so we prefix it here.
+const ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? '/kickoff-clash';
+
+/** A card's portrait slug — the lower-cased surname, punctuation stripped. */
+export function portraitSlug(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const surname = parts[parts.length - 1] || name;
+  return surname.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Resolve a player's real-portrait URL from the manifest, or null (→ fallback). */
+export function portraitSrc(card: { name: string }): string | null {
+  const file = PORTRAIT_MANIFEST[portraitSlug(card.name)];
+  return file ? `${ASSET_BASE}/portraits/players/${file}` : null;
+}
+
+/** Resolve a manager's real-portrait URL from the manifest, or null (→ fallback). */
+export function managerPortraitSrc(id: string): string | null {
+  const file = PORTRAIT_MANIFEST[`mgr-${id}`] ?? PORTRAIT_MANIFEST[id];
+  return file ? `${ASSET_BASE}/portraits/managers/${file}` : null;
+}
 
 // ---------------------------------------------------------------------------
 // Hash + PRNG + colour helpers (ported 1:1 from the handoff logic script)

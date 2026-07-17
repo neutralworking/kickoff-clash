@@ -27,6 +27,7 @@
  * Tokens come from cardTokens.ts + portrait.ts. See DESIGN.md › Cards.
  */
 
+import { useState } from 'react';
 import type { Card } from '../../lib/scoring';
 import { deriveStats } from '../../lib/funnel';
 import type { JokerCard } from '../../lib/jokers';
@@ -42,20 +43,26 @@ import {
   lastName,
   eligiblePositions,
   tacticMedallion,
-  MANAGER_MEDALLION,
   playerActions,
-  matchFitColor,
+  ACTION_BONUS_GOLD,
+  handoffTier,
+  handoffMgrTier,
+  handoffClassColor,
+  classIconInk,
+  posInk,
+  managerClass,
   type ClassMedallion,
 } from './cardTokens';
-import { ChargePips, ClassGem } from './ContestIcons';
+import ClassGlyph from './ClassGlyph';
+import { ChargePips } from './ContestIcons';
 import { classOfCard } from '../../lib/contest-map';
 import {
   portraitArtStyle,
+  portraitSrc,
+  managerPortraitSrc,
   rarityFrame,
-  PLAYER_PITCH_BG,
   MANAGER_LEATHER_BG,
   TACTIC_BOARD_BG,
-  GROUND_SHADOW_BG,
   NAME_BAND_BG,
   EFFECT_BLOCK_BG,
   INNER_INK,
@@ -69,6 +76,10 @@ const GLYPH_FONT = "'DejaVu Sans', 'Noto Sans Symbols', 'Segoe UI Symbol', sans-
 // Body font (role line, effect text) and flavour font (quotes), per the handoff.
 const BODY_FONT = "var(--font-body, 'DM Sans', sans-serif)";
 const FLAVOUR_FONT = "var(--font-flavour, 'Playfair Display', serif)";
+// The portrait-card handoff puts ARCHIVO BLACK on names / numbers / labels. In
+// this repo Archivo Black is loaded as --font-heavy (layout.tsx); the app's
+// Silkscreen canon is untouched — only the card faces adopt the heavy display.
+const HEAVY = "var(--font-heavy, 'Archivo Black', sans-serif)";
 
 // Handoff surface tokens.
 const CREAM = '#f2ead6';
@@ -212,31 +223,58 @@ export default function GameCard({
     );
   }
 
-  // --- PLAYER / MANAGER / TACTIC: the v3 foil-frame → inner card. ---
-  const frameRarity =
-    model.variant === 'player'
-      ? model.card.rarity
-      : model.variant === 'manager'
-        ? MANAGER_RARITY_TO_FRAME[model.manager.rarity] ?? 'Rare'
-        : TACTIC_RARITY_TO_FRAME[model.tactic.rarity];
-  const fr = rarityFrame(frameRarity);
+  // --- PLAYER / MANAGER / TACTIC: metallic rarity frame → inner card. ---
+  // The frame MATERIAL is the rarity tell (handoff): players + managers wear the
+  // portrait-card metallic tiers (bronze/silver/gold; Legendary = a black+gold
+  // seam that shimmers); tactics keep the legacy foil frame.
   const ring = selected ? '0 0 0 2px var(--gold), ' : '';
-  // The blown-up PLAYER card is content-driven, not aspect-locked: a Legendary
-  // can carry up to 4 full-text actions, and those must ALL show without a clip
-  // or a scroll. So drop the fixed aspect ratio and let height flow from the
-  // rows (the actions region is grow-no-shrink — see PlayerFace); a minHeight
-  // keeps the classic card shape for a sparse (1–2 action) card. Grid tokens and
-  // manager/tactic/investment cards stay aspect-locked.
-  const growPlayer = full && model.variant === 'player';
+  let frameBg: string;
+  let frameShadow: string;
+  let framePad: number;
+  let frameRadius: number;
+  let holoFrame = false; // Legendary player → animated seam
+  let tacticFoil = false;
+
+  if (model.variant === 'player') {
+    const tier = handoffTier(model.card.rarity);
+    frameBg = tier.frame;
+    frameShadow = `0 8px 22px rgba(0,0,0,0.55), 0 0 ${tier.holo ? 24 : 14}px ${tier.glow}${tier.holo ? `, 0 0 46px ${tier.glow}` : ''}`;
+    framePad = full ? 2.5 : 2;
+    frameRadius = full ? 15 : 11;
+    holoFrame = tier.holo;
+  } else if (model.variant === 'manager') {
+    const tier = handoffMgrTier(MANAGER_RARITY_TO_FRAME[model.manager.rarity] ?? 'Rare');
+    frameBg = tier.frame;
+    frameShadow = `0 8px 22px rgba(0,0,0,0.6), 0 0 ${full ? 22 : 14}px ${tier.glow}`;
+    framePad = full ? 4 : 3;
+    frameRadius = full ? 18 : 13;
+  } else {
+    const fr = rarityFrame(TACTIC_RARITY_TO_FRAME[model.tactic.rarity]);
+    frameBg = fr.frame;
+    frameShadow = fr.glow;
+    framePad = full ? 5 : 3;
+    frameRadius = full ? 15 : 9;
+    tacticFoil = fr.foil;
+  }
+
+  // Player + manager cards are CONTENT-driven height (the portrait window sets a
+  // 3:4-ish shape; the full player grows to fit every ability row). Tactics stay
+  // aspect-locked. Vertical margin (only) gives the glow room without touching
+  // width:100% — so no horizontal page-scroll is ever introduced.
+  const contentHeight = model.variant === 'player' || model.variant === 'manager';
   frameStyle = {
     position: 'relative',
     width: '100%',
-    aspectRatio: growPlayer ? undefined : `${ASPECT}`,
-    minHeight: growPlayer ? 290 : undefined,
-    borderRadius: full ? 15 : 9,
-    padding: full ? 5 : 3,
-    background: fr.frame,
-    boxShadow: ring + fr.glow,
+    aspectRatio: contentHeight ? undefined : `${ASPECT}`,
+    minHeight: full && model.variant === 'player' ? 288 : undefined,
+    borderRadius: frameRadius,
+    padding: framePad,
+    background: frameBg,
+    backgroundSize: holoFrame ? '260% 100%' : contentHeight ? '150% 150%' : undefined,
+    // Inline animation would override the .chip-reveal class (and its opacity:0),
+    // so only run the holo seam when NOT staggering a reveal (delay == null).
+    animation: holoFrame && delay == null ? 'holoShift 7s linear infinite' : undefined,
+    boxShadow: ring + frameShadow,
     boxSizing: 'border-box',
     opacity: dimmed ? 0.42 : 1,
     display: 'flex',
@@ -244,29 +282,27 @@ export default function GameCard({
     cursor: onClick ? 'pointer' : 'default',
     transition: 'transform 0.12s ease',
     minWidth: 0,
-    // The Turn-9 player card's corner GEMS overhang the frame top/bottom — a
-    // vertical margin gives them room (vertical only, so width:100% is untouched
-    // and no horizontal page-scroll is introduced). Manager/tactic keep no margin.
-    margin: model.variant === 'player' ? `${full ? 12 : 7}px 0` : undefined,
+    margin: contentHeight ? `${full ? 8 : 5}px 0` : undefined,
     animationDelay: delay != null ? `${delay}ms` : undefined,
   };
 
   content =
     model.variant === 'player' ? (
-      <PlayerFace card={model.card} full={full} foil={fr.foil} />
+      <PlayerFace card={model.card} full={full} />
     ) : model.variant === 'manager' ? (
-      <ManagerFace manager={model.manager} full={full} foil={fr.foil} />
+      <ManagerFace manager={model.manager} full={full} />
     ) : (
-      <TacticFace tactic={model.tactic} charges={model.charges} full={full} foil={fr.foil} />
+      <TacticFace tactic={model.tactic} charges={model.charges} full={full} foil={tacticFoil} />
     );
 
+  const holoClass = holoFrame ? 'card-holo' : '';
   if (onClick) {
     return (
       <button
         type="button"
         onClick={onClick}
         aria-label={ariaLabel}
-        className={`active:scale-95 ${delay != null ? 'chip-reveal' : ''} ${className ?? ''}`}
+        className={`active:scale-95 ${holoClass} ${delay != null ? 'chip-reveal' : ''} ${className ?? ''}`}
         style={frameStyle}
       >
         {content}
@@ -274,7 +310,7 @@ export default function GameCard({
     );
   }
   return (
-    <div className={`${delay != null ? 'chip-reveal' : ''} ${className ?? ''}`} style={frameStyle}>
+    <div className={`${holoClass} ${delay != null ? 'chip-reveal' : ''} ${className ?? ''}`} style={frameStyle}>
       {content}
     </div>
   );
@@ -541,337 +577,248 @@ function EffectBlock({ effect, flavour, full }: { effect: string; flavour: strin
 }
 
 // ===========================================================================
-// PLAYER face (Turn 9) — glassy foil frame, pixel interior, overhanging gems.
-//   Four stacked regions in a fixed-height inner card:
-//     1. Art (stadium horizon + pix5c bust, position group top-right)
-//     2. Name plate (name + role under, centered)
-//     3. Actions (real defining traits, class-coloured keyword + effect)
-//     4. Fitness bar (MATCH FIT · NN%)
-//   Corner gems overhang the frame: CLASS top-left, ATK bottom-left, DEF bottom-right.
+// PLAYER face (portrait-card handoff) — a thin METALLIC rarity frame around a
+// pixel/photo interior. Top → bottom: framed 3:4 portrait window (class disc
+// top-left, stacked position pills top-right, rarity vignette + sheen sweep) ·
+// Archivo-Black name + archetype · class-coloured ability rows (full only) ·
+// match-fit bar with overlapping ATK (red) / DEF (blue) corner discs.
 // ===========================================================================
 
-function PlayerFace({ card, full, foil }: { card: Card; full: boolean; foil: boolean }) {
+function PlayerFace({ card, full }: { card: Card; full: boolean }) {
   const stats = deriveStats(card);
   const name = lastName(card.name).toUpperCase();
   const role = card.tacticalRole ?? card.archetype;
   const cls = classOfCard(card);
+  const tier = handoffTier(card.rarity);
+  const cc = handoffClassColor(cls);
+  const iconInk = classIconInk(cls);
   const fitPct = Math.max(0, Math.min(100, Math.round(card.fitness ?? 100)));
-  const fitColor = matchFitColor(fitPct);
   const actions = playerActions(card);
+  const src = portraitSrc(card);
+  const [imgOk, setImgOk] = useState(true);
 
-  const primaryPos = card.position;
-  // Secondary "can operate" slots stack BELOW the primary (Turn-9). Grid keeps
-  // just the primary pill so the small art stays readable.
-  const secondary = full ? eligiblePositions(card.position).slice(1, 3) : [];
+  // full shows every eligible slot (capped at 2); grid shows the primary only.
+  const positions = full ? eligiblePositions(card.position).slice(0, 2) : [card.position];
 
-  // The card is FIXED-HEIGHT: as the action count climbs (a Legendary can carry
-  // up to 4), the actions region tightens (fewer lines/action, a hair smaller,
-  // a slightly shorter art window) so every action fits cleanly and nothing
-  // clips. The region also scrolls internally as a final safety net.
-  // Fixed-height budgeting: the more actions, the tighter the actions region and
-  // the shorter the art window, so every line fits and nothing clips (the region
-  // also scrolls internally as a last resort). Full has room for a couple of
-  // wrapped lines; the small grid token clamps each action to one line and steps
-  // the type/spacing/art down as the count climbs (a 4-action Legendary is the
-  // tightest case).
-  const nActions = actions.length;
-  const busy = nActions >= 3;
-  // GRID (small token): TITLE ONLY — no effect text. Cards carry 1 action
-  // (Legendary: 2, never more), so the name plate + actions + fitness bar take
-  // their NATURAL height and the ART window is the flexible region — it fills
-  // the slack on a quiet card and yields on a busy one, so the type never has
-  // to shrink below phone legibility to make room. FULL (the blow-up): the
-  // WHOLE effect text, NO clamp/truncation. The full card is NOT aspect-locked
-  // (see frameStyle) — its art window is a FIXED height and the actions region
-  // grows to fit every row, so the frame itself grows taller as the action
-  // count climbs. Nothing scrolls and nothing clips.
-  const artBasis = full ? '0 0 132px' : '1 1 auto';
-  // Full effect (supplementary) text — small, smaller still when busy.
-  const fullEffFont = nActions >= 4 ? 8 : busy ? 8.5 : 9.5;
-  const fullKwFont = nActions >= 4 ? 7 : 7.5;
-  // Grid keyword — sized to read at the 3-across phone width (~115px card);
-  // length-aware ("POACHER'S INSTINCT" steps down and wraps rather than
-  // truncating). The ≥3-action guard only fires if the rarity knob ever lifts.
-  const gridKwFont = (label: string) => gridMetaFont(label, busy ? 8 : 9);
-  const actGap = full ? (busy ? 4 : 6) : nActions >= 4 ? 3 : 4;
-  const nameThin = !full && busy;
+  const cfg = full
+    ? { disc: 44, glyph: 24, badgeFs: 9, badgePad: '3px 7px', discR: 50, nameBase: 19, arche: 11, winPad: '8px 8px 0', winRadius: 8 }
+    : { disc: 26, glyph: 15, badgeFs: 6.5, badgePad: '2px 4px', discR: 30, nameBase: 11, arche: 8, winPad: '5px 5px 0', winRadius: 6 };
 
-  return (
-    <>
-      <Inner background="#0f1510" full={full} foil={foil}>
-        {/* 1 — ART REGION: stadium horizon, ground shadow, bust, position group. */}
-        <div
-          style={{
-            position: 'relative',
-            flex: artBasis,
-            // Grid: the art yields to the text rows but never below a head-and-
-            // shoulders window, so the bust stays the card's anchor.
-            minHeight: full ? 0 : 30,
-            background: PLAYER_PITCH_BG,
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              left: '50%',
-              bottom: full ? 6 : 4,
-              transform: 'translateX(-50%)',
-              width: '50%',
-              height: full ? 18 : 10,
-              borderRadius: '50%',
-              background: GROUND_SHADOW_BG,
-            }}
-          />
-          <div className="pixelated" aria-hidden style={portraitArtStyle(card.id)} />
-
-          {/* Position group — primary pill on top, secondaries stacked below. */}
-          <div
-            style={{
-              position: 'absolute',
-              top: full ? 8 : 4,
-              right: full ? 8 : 4,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'flex-end',
-              gap: full ? 5 : 3,
-              zIndex: 2,
-            }}
-          >
-            <PositionPill pos={primaryPos} primary full={full} />
-            {secondary.map((p) => (
-              <PositionPill key={p} pos={p} primary={false} full={full} />
-            ))}
-          </div>
-        </div>
-
-        {/* 2 — NAME PLATE: name + role directly under, centered. */}
-        <div
-          style={{
-            flexShrink: 0,
-            background: 'linear-gradient(180deg, #2a2113, #171207)',
-            borderTop: `2px solid ${INNER_INK}`,
-            borderBottom: '1px solid rgba(232,178,60,0.4)',
-            padding: full ? '6px 12px' : nameThin ? '3px 7px' : '4px 7px',
-            textAlign: 'center',
-            zIndex: 2,
-          }}
-        >
-          <span
-            style={{
-              display: 'block',
-              fontFamily: PIXEL,
-              fontSize: fitFontSize(name, full ? 15 : 10),
-              color: CREAM,
-              textShadow: `0 ${full ? 2 : 1}px 0 ${INNER_INK}`,
-              lineHeight: 1.12,
-              overflowWrap: 'anywhere',
-            }}
-          >
-            {name}
-          </span>
-          <span
-            style={{
-              display: 'block',
-              fontFamily: BODY_FONT,
-              // Grid: gentler length curve than the name — roles are bounded
-              // strings, so they step 8 → 7 → 6.5 instead of collapsing to ~5px.
-              fontSize: full ? fitFontSize(role, 9.5) : gridMetaFont(role, 8),
-              color: DUST,
-              marginTop: full ? 3 : 1.5,
-              lineHeight: 1.2,
-              overflowWrap: 'break-word',
-            }}
-          >
-            {role}
-          </span>
-        </div>
-
-        {/* 3 — ACTIONS. GRID: keyword title only (no effect text). FULL: the
-            class-coloured keyword + the WHOLE effect text, wrapped, no clamp.
-            Bonus (★ gold) for signature / high-rarity extras. */}
-        <div
-          style={{
-            // FULL: grow-no-shrink off content height — this is what forces the
-            // (non-aspect-locked) frame taller so every action row shows in full,
-            // and fills any slack on a sparse card. GRID: content-sized (1–2
-            // title lines, bounded) — the flexible ART window above absorbs the
-            // difference, so nothing here ever shrinks or scrolls.
-            flex: full ? '1 0 auto' : '0 0 auto',
-            minHeight: 0,
-            background: 'linear-gradient(180deg, #14100a, #0f0b06)',
-            padding: full ? '9px 13px 10px' : '5px 7px 6px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: full ? 'flex-start' : 'center',
-            gap: actGap,
-            overscrollBehavior: 'contain',
-            zIndex: 2,
-          }}
-        >
-          {actions.map((a) =>
-            full ? (
-              <span
-                key={a.key}
-                style={{
-                  fontFamily: BODY_FONT,
-                  fontSize: fullEffFont,
-                  lineHeight: 1.3,
-                  color: '#e6dcc6',
-                  overflowWrap: 'break-word',
-                }}
-              >
-                <b style={{ fontFamily: PIXEL, fontSize: fullKwFont, letterSpacing: 0.5, color: a.color }}>
-                  {a.bonus ? '★ ' : ''}
-                  {a.label}:
-                </b>{' '}
-                {a.text}
-              </span>
-            ) : (
-              // Grid title: WRAPS (max ~2 short lines) rather than truncating —
-              // "POACHER'S INSTINCT" reads on two 7.5px lines, never ellipsized.
-              <span
-                key={a.key}
-                style={{
-                  fontFamily: PIXEL,
-                  fontSize: gridKwFont(a.label),
-                  letterSpacing: 0.4,
-                  lineHeight: 1.25,
-                  color: a.color,
-                  overflowWrap: 'break-word',
-                }}
-              >
-                {a.bonus ? '★ ' : ''}
-                {a.label}
-              </span>
-            ),
-          )}
-        </div>
-
-        {/* 4 — FITNESS BAR: slim meter (fill = fitness %, colour = fitColor) with a
-            centered MATCH FIT · NN% micro-label. */}
-        <div
-          style={{
-            position: 'relative',
-            flexShrink: 0,
-            background: '#0f0b06',
-            borderTop: '1px solid rgba(232,178,60,0.2)',
-            padding: full ? '7px 34px 8px' : '4px 19px 5px',
-            zIndex: 2,
-          }}
-        >
-          <div
-            style={{
-              height: full ? 9 : 6,
-              borderRadius: 5,
-              background: '#241c10',
-              border: `1px solid ${INNER_INK}`,
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                height: '100%',
-                width: `${fitPct}%`,
-                background: `linear-gradient(180deg, ${fitColor}, #0b0703)`,
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25)',
-              }}
-            />
-          </div>
-          <span
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              textAlign: 'center',
-              fontFamily: PIXEL,
-              // Grid reads BIGGER than full here: the full card's meter is
-              // physically long, the grid one is the tell at a glance.
-              fontSize: full ? 5.5 : 6,
-              letterSpacing: 1,
-              color: '#fbf7ec',
-              textShadow: '0 1px 1px #000',
-              pointerEvents: 'none',
-            }}
-          >
-            {fitPct}%
-          </span>
-        </div>
-      </Inner>
-
-      {/* CORNER GEMS — overhang the frame. CLASS top-left, ATK bottom-left,
-          DEF bottom-right (per Turn-9). */}
-      <div style={{ position: 'absolute', left: full ? -6 : -4, top: full ? -9 : -6, zIndex: 6 }}>
-        <ClassGem cls={cls} size={full ? 34 : 22} border={3} />
-      </div>
-      <StatGem value={stats.atk} label="ATK" side="atk" full={full} pos="left" />
-      <StatGem value={stats.def} label="DEF" side="def" full={full} pos="right" />
-    </>
-  );
-}
-
-/** An overhanging ATK/DEF corner gem — a dark radial disc with a red (ATK) or
- *  blue (DEF) ring, the value in near-white Silkscreen + a tiny tinted label.
- *  Sits over the frame's bottom corner (per Turn-9). */
-function StatGem({ value, label, side, full, pos }: { value: number; label: string; side: 'atk' | 'def'; full: boolean; pos: 'left' | 'right' }) {
-  const size = full ? 38 : 25;
-  const ring = side === 'atk' ? '#e23b35' : '#3d7bd6';
-  const bg = side === 'atk'
-    ? 'radial-gradient(circle at 38% 30%, #46281a, #150b06 72%)'
-    : 'radial-gradient(circle at 38% 30%, #1c3247, #0a1119 72%)';
-  const labelColor = side === 'atk' ? '#ff8f6a' : '#8fb6ff';
   return (
     <div
       style={{
-        position: 'absolute',
-        [pos]: full ? -6 : -4,
-        bottom: full ? -10 : -6,
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        background: bg,
-        border: `3px solid ${ring}`,
-        boxShadow: '0 3px 8px rgba(0,0,0,0.65), inset 0 2px 3px rgba(255,255,255,0.18)',
+        position: 'relative',
+        flex: 1,
+        minWidth: 0,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 6,
+        borderRadius: full ? 12 : 9,
+        background: 'linear-gradient(180deg,#12100e,#0b0908)',
+        paddingBottom: cfg.discR * 0.46,
       }}
     >
-      <span style={{ fontFamily: PIXEL, fontSize: full ? 15 : 11, lineHeight: 0.85, color: '#fbf7ec', textShadow: `0 2px 0 ${INNER_INK}` }}>
-        {value}
-      </span>
-      <span style={{ fontFamily: PIXEL, fontSize: 4.5, letterSpacing: 1, color: labelColor, lineHeight: 1 }}>
-        {label}
+      {/* 1 — PORTRAIT WINDOW: framed 3:4 image (or procedural bust) on the pitch. */}
+      <div
+        style={{
+          position: 'relative',
+          margin: cfg.winPad,
+          flex: full ? '0 0 auto' : '1 1 auto',
+          aspectRatio: full ? '1.2' : undefined,
+          minHeight: full ? 0 : 42,
+          borderRadius: cfg.winRadius,
+          overflow: 'hidden',
+          border: `1px solid ${tier.edge}66`,
+          background: 'radial-gradient(ellipse at 50% 34%, #2f7a45, #1c5230 58%, #103322)',
+        }}
+      >
+        {src && imgOk ? (
+          // eslint-disable-next-line @next/next/no-img-element -- raw <img> is deliberate: it needs onError → procedural fallback + a basePath src under static export.
+          <img
+            src={src}
+            alt=""
+            draggable={false}
+            onError={() => setImgOk(false)}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 6%', display: 'block' }}
+          />
+        ) : (
+          <div className="pixelated" aria-hidden style={portraitArtStyle(card.id)} />
+        )}
+
+        {/* top rarity vignette */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '46%', background: `linear-gradient(180deg, ${tier.edge}3a, transparent)`, pointerEvents: 'none', zIndex: 2 }} />
+        {/* bottom fade into the name plate */}
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '34%', background: 'linear-gradient(180deg, transparent, rgba(9,7,4,0.6))', pointerEvents: 'none', zIndex: 2 }} />
+        {/* diagonal sheen sweep — GLASS overlay, never touches the pixel interior */}
+        <div className="card-sheen" aria-hidden style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: '42%', zIndex: 3, pointerEvents: 'none', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.26), transparent)' }} />
+
+        {/* CLASS DISC (top-left) */}
+        <div
+          style={{
+            position: 'absolute',
+            top: full ? 7 : 4,
+            left: full ? 7 : 4,
+            zIndex: 5,
+            width: cfg.disc,
+            height: cfg.disc,
+            borderRadius: '50%',
+            background: `radial-gradient(circle at 35% 30%, ${cc}, ${cc}bb)`,
+            border: `2px solid ${tier.edge}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: `0 2px 7px rgba(0,0,0,0.6), 0 0 8px ${tier.glow}`,
+          }}
+        >
+          <ClassGlyph cls={cls} size={cfg.glyph} color={iconInk} />
+        </div>
+
+        {/* POSITION PILLS (top-right, stacked) */}
+        <div style={{ position: 'absolute', top: full ? 7 : 4, right: full ? 7 : 4, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: full ? 4 : 3 }}>
+          {positions.map((p) => (
+            <span
+              key={p}
+              style={{
+                background: POSITION_COLOR[p] ?? '#71717a',
+                color: posInk(p),
+                fontFamily: BODY_FONT,
+                fontWeight: 800,
+                fontSize: cfg.badgeFs,
+                letterSpacing: '0.03em',
+                padding: cfg.badgePad,
+                borderRadius: 5,
+                lineHeight: 1,
+                boxShadow: '0 1px 4px rgba(0,0,0,0.5)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {p}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* 2 — NAME PLATE */}
+      <div style={{ padding: full ? '9px 10px 6px' : '5px 6px 3px', textAlign: 'center', flexShrink: 0 }}>
+        <div
+          style={{
+            fontFamily: HEAVY,
+            fontSize: fitFontSize(name, cfg.nameBase),
+            color: CREAM,
+            letterSpacing: '0.01em',
+            lineHeight: 1.04,
+            textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {name}
+        </div>
+        <div
+          style={{
+            fontFamily: BODY_FONT,
+            fontSize: full ? fitFontSize(role, cfg.arche) : gridMetaFont(role, cfg.arche),
+            color: DUST,
+            marginTop: full ? 3 : 1.5,
+            lineHeight: 1.15,
+            overflowWrap: 'break-word',
+          }}
+        >
+          {role}
+        </div>
+      </div>
+
+      {/* 3 — ABILITY ROWS (full only): base always; a starred bonus (★ gold) for
+          signature / Epic / Legendary extras. Class-coloured keyword. */}
+      {full && (
+        <div style={{ flex: '1 0 auto', padding: '0 13px 4px' }}>
+          <div style={{ height: 1, background: `linear-gradient(90deg,transparent,${tier.edge}55,transparent)`, margin: '2px 0 9px' }} />
+          {actions.map((a) => (
+            <p key={a.key} style={{ margin: '0 0 7px', fontFamily: BODY_FONT, fontSize: 11, lineHeight: 1.35, color: CREAM_SOFT, textAlign: 'left' }}>
+              <span style={{ fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: a.bonus ? ACTION_BONUS_GOLD : cc }}>
+                {(a.bonus ? '★ ' : '') + a.label + ': '}
+              </span>
+              {a.text}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {/* 4 — MATCH-FIT BAR + overlapping ATK/DEF corner discs. */}
+      <div style={{ position: 'relative', marginTop: full ? 8 : 6, padding: full ? '0 12px' : '0 8px', flexShrink: 0 }}>
+        <div style={{ margin: `0 ${cfg.discR * 0.72}px` }}>
+          <FitBar pct={fitPct} full={full} />
+        </div>
+        <StatDisc kind="ATK" value={stats.atk} side="atk" full={full} discR={cfg.discR} anchor="left" />
+        <StatDisc kind="DEF" value={stats.def} side="def" full={full} discR={cfg.discR} anchor="right" />
+      </div>
+    </div>
+  );
+}
+
+/** The match-fit bar — a rounded green track, fill to fit%, with a centered
+ *  `MATCH FIT · NN%` (full) / `NN%` (grid) label. */
+function FitBar({ pct, full }: { pct: number; full: boolean }) {
+  return (
+    <div
+      style={{
+        position: 'relative',
+        height: full ? 16 : 11,
+        borderRadius: 999,
+        background: 'rgba(0,0,0,0.5)',
+        border: '1px solid rgba(45,138,78,0.5)',
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: 'linear-gradient(90deg,#1f7a3e,#3ba55d)', boxShadow: '0 0 8px rgba(59,165,93,0.5)' }} />
+      <span
+        style={{
+          position: 'relative',
+          fontFamily: BODY_FONT,
+          fontWeight: 800,
+          fontSize: full ? 8 : 7,
+          letterSpacing: '0.1em',
+          color: '#eafff0',
+          textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+          textTransform: 'uppercase',
+        }}
+      >
+        {full ? `Match Fit · ${pct}%` : `${pct}%`}
       </span>
     </div>
   );
 }
 
-/** A Turn-9 position pill — primary is a larger filled pill in the position
- *  colour; secondaries are smaller filled pills stacked below it. */
-function PositionPill({ pos, primary, full }: { pos: string; primary: boolean; full: boolean }) {
-  const color = POSITION_COLOR[pos] ?? '#9aa0a8';
+/** An overlapping ATK/DEF corner disc — a dark radial disc with a red (ATK) or
+ *  blue (DEF) ring, the value in Archivo Black + a tiny tinted label. Overlaps
+ *  the card's bottom edge (translateY 42%), anchored to a bottom corner. */
+function StatDisc({ kind, value, side, full, discR, anchor }: { kind: string; value: number; side: 'atk' | 'def'; full: boolean; discR: number; anchor: 'left' | 'right' }) {
+  const col = side === 'atk' ? '#ef4444' : '#4a9eff';
   return (
-    <span
+    <div
       style={{
-        fontFamily: PIXEL,
-        fontSize: primary ? (full ? 12 : 9) : full ? 7 : 5.5,
+        position: 'absolute',
+        [anchor]: full ? 6 : 4,
+        bottom: 0,
+        transform: 'translateY(42%)',
+        zIndex: 7,
+        width: discR,
+        height: discR,
+        borderRadius: '50%',
+        background: 'radial-gradient(circle at 38% 32%, #17120b, #0a0705)',
+        border: `2.5px solid ${col}`,
+        boxShadow: `0 3px 9px rgba(0,0,0,0.6), 0 0 9px ${col}55`,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
         lineHeight: 1,
-        color: '#fbf7ec',
-        background: color,
-        padding: primary ? (full ? '4px 7px' : '3px 5px') : full ? '3px 5px' : '2px 3px',
-        borderRadius: primary ? 5 : 3,
-        border: `1px solid ${INNER_INK}`,
-        boxShadow: primary ? 'inset 0 1px 0 rgba(255,255,255,0.35)' : undefined,
-        whiteSpace: 'nowrap',
       }}
     >
-      {pos}
-    </span>
+      <span style={{ fontFamily: HEAVY, fontSize: full ? 22 : 12, color: CREAM, textShadow: `0 0 6px ${col}77` }}>{value}</span>
+      {full && <span style={{ fontFamily: BODY_FONT, fontWeight: 800, fontSize: 7, letterSpacing: '0.14em', color: col, marginTop: 1 }}>{kind}</span>}
+    </div>
   );
 }
 
@@ -879,42 +826,157 @@ function PositionPill({ pos, primary, full }: { pos: string; primary: boolean; f
 // MANAGER face (#7b)
 // ===========================================================================
 
-function ManagerFace({ manager, full, foil }: { manager: JokerCard; full: boolean; foil: boolean }) {
+// ===========================================================================
+// MANAGER face (portrait-card handoff) — full-bleed portrait behind the ornate
+// rarity frame: class-icon disc top-left, MGR foil chip + rarity chip top-right,
+// four corner brackets in the rarity edge, and a bottom identity plate
+// (Archivo-Black name · dashed-rule archetype · amber ACTION pill · effect line ·
+// Playfair flavour). Wired to the real JokerCard.
+// ===========================================================================
+
+function ManagerFace({ manager, full }: { manager: JokerCard; full: boolean }) {
+  const tier = handoffMgrTier(MANAGER_RARITY_TO_FRAME[manager.rarity] ?? 'Rare');
+  const rarityName = MANAGER_RARITY_TO_FRAME[manager.rarity] ?? 'Rare';
+  const cls = managerClass(manager.id);
+  const cc = handoffClassColor(cls);
+  const iconInk = classIconInk(cls);
   const name = manager.name.toUpperCase();
-  const role = manager.traits[0] ?? 'The Gaffer';
+  const action = (manager.traits[0] ?? manager.archetype).toUpperCase();
+  const flav = (manager.flavour || manager.philosophy || '').trim();
+  const quoted = flav ? (/^["'“]/.test(flav) ? flav : `“${flav}”`) : '';
+  const src = managerPortraitSrc(manager.id);
+  const [imgOk, setImgOk] = useState(true);
+
+  const dashRule = (
+    <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${tier.edge}99, transparent)` }} />
+  );
+  const bracket = (m: 'tl' | 'tr' | 'bl' | 'br') => {
+    const base: React.CSSProperties = { position: 'absolute', width: full ? 16 : 11, height: full ? 16 : 11, pointerEvents: 'none', borderColor: tier.edge, borderStyle: 'solid', borderWidth: 0, zIndex: 8 };
+    const off = full ? 5 : 3;
+    const r = full ? 5 : 4;
+    const m2: Record<string, React.CSSProperties> = {
+      tl: { top: off, left: off, borderTopWidth: 2, borderLeftWidth: 2, borderTopLeftRadius: r },
+      tr: { top: off, right: off, borderTopWidth: 2, borderRightWidth: 2, borderTopRightRadius: r },
+      bl: { bottom: off, left: off, borderBottomWidth: 2, borderLeftWidth: 2, borderBottomLeftRadius: r },
+      br: { bottom: off, right: off, borderBottomWidth: 2, borderRightWidth: 2, borderBottomRightRadius: r },
+    };
+    return <div key={m} style={{ ...base, ...m2[m] }} />;
+  };
+
   return (
-    <Inner background="linear-gradient(165deg, #2f2415, #161009)" full={full} foil={foil}>
-      {/* ART REGION — aged leather, suited bust, medallion, ground shadow. */}
-      <div style={{ position: 'relative', flex: 1, minHeight: full ? 96 : 40, background: MANAGER_LEATHER_BG, overflow: 'hidden' }}>
+    <>
+      {/* INNER — full-bleed portrait + overlays. A fixed 300:452 aspect (the
+          handoff card shape) gives the all-absolute children an intrinsic
+          height, so a standalone manager card never collapses. */}
+      <div
+        style={{
+          position: 'relative',
+          flex: 1,
+          minWidth: 0,
+          aspectRatio: '300 / 452',
+          overflow: 'hidden',
+          borderRadius: full ? 14 : 10,
+          border: `1px solid ${tier.inner}`,
+          background: '#0b0805',
+        }}
+      >
+        {/* fallback leather tint + full-bleed portrait (real, or procedural suit bust) */}
+        <div style={{ position: 'absolute', inset: 0, background: MANAGER_LEATHER_BG, zIndex: 0, pointerEvents: 'none' }} />
+        {src && imgOk ? (
+          // eslint-disable-next-line @next/next/no-img-element -- raw <img> is deliberate: it needs onError → procedural fallback + a basePath src under static export.
+          <img
+            src={src}
+            alt=""
+            draggable={false}
+            onError={() => setImgOk(false)}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 6%', display: 'block', zIndex: 1 }}
+          />
+        ) : (
+          <div className="pixelated" aria-hidden style={{ ...portraitArtStyle(manager.id, { suit: true }), zIndex: 1 }} />
+        )}
+
+        {/* top scrim */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: full ? 74 : 44, zIndex: 2, background: 'linear-gradient(180deg, rgba(6,4,2,0.78), transparent)', pointerEvents: 'none' }} />
+
+        {/* class icon (top-left) */}
         <div
           style={{
             position: 'absolute',
-            left: '50%',
-            bottom: full ? 8 : 5,
-            transform: 'translateX(-50%)',
-            width: '52%',
-            height: full ? 22 : 12,
+            top: full ? 12 : 7,
+            left: full ? 12 : 7,
+            zIndex: 4,
+            width: full ? 40 : 26,
+            height: full ? 40 : 26,
             borderRadius: '50%',
-            background: GROUND_SHADOW_BG,
+            background: `radial-gradient(circle at 35% 30%, ${cc}, ${cc}aa)`,
+            border: `2px solid ${tier.edge}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: `0 2px 8px rgba(0,0,0,0.55), 0 0 8px ${tier.glow}`,
           }}
-        />
-        <div className="pixelated" aria-hidden style={portraitArtStyle(manager.id, { suit: true })} />
-        <Medallion med={MANAGER_MEDALLION} classLabel="MANAGER" chipFg="#0b0703" chipBg="#e8b23a" full={full} />
+        >
+          <ClassGlyph cls={cls} size={full ? 24 : 15} color={iconInk} />
+        </div>
+
+        {/* MGR chip + rarity chip (top-right) */}
+        <div style={{ position: 'absolute', top: full ? 14 : 8, right: full ? 12 : 7, zIndex: 4, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: full ? 5 : 3 }}>
+          <span style={{ fontFamily: HEAVY, fontSize: full ? 13 : 9, letterSpacing: '0.02em', color: '#1a0f06', background: tier.frame, padding: full ? '4px 9px' : '2px 6px', borderRadius: 6, border: `1px solid ${tier.inner}`, boxShadow: '0 2px 6px rgba(0,0,0,0.5)' }}>
+            MGR
+          </span>
+          {full && (
+            <span style={{ fontFamily: BODY_FONT, fontSize: 8, fontWeight: 700, letterSpacing: '0.16em', color: tier.label, background: 'rgba(0,0,0,0.55)', border: `1px solid ${tier.edge}`, padding: '2px 7px', borderRadius: 4, textTransform: 'uppercase' }}>
+              {rarityName}
+            </span>
+          )}
+        </div>
+
+        {/* identity plate */}
+        <div
+          style={{
+            position: 'absolute',
+            left: full ? 10 : 6,
+            right: full ? 10 : 6,
+            bottom: full ? 10 : 6,
+            zIndex: 3,
+            borderRadius: full ? 11 : 8,
+            background: 'linear-gradient(180deg, rgba(12,9,5,0.86) 0%, rgba(10,7,4,0.96) 40%)',
+            border: `1px solid ${tier.inner}`,
+            boxShadow: '0 -2px 10px rgba(0,0,0,0.4)',
+            padding: full ? '12px 14px 13px' : '7px 8px 8px',
+            textAlign: 'center',
+          }}
+        >
+          <div style={{ fontFamily: HEAVY, fontSize: fitFontSize(name, full ? 26 : 13), color: CREAM, letterSpacing: '0.01em', lineHeight: 0.98, textShadow: '0 2px 4px rgba(0,0,0,0.6)', overflowWrap: 'anywhere' }}>
+            {name}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: full ? '7px 0 9px' : '4px 0 6px' }}>
+            {dashRule}
+            <span style={{ fontFamily: BODY_FONT, fontSize: full ? 9.5 : 7.5, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: tier.label, whiteSpace: 'nowrap' }}>
+              {manager.archetype}
+            </span>
+            {dashRule}
+          </div>
+
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: full ? '5px 14px' : '3px 9px', borderRadius: 7, border: '1.5px solid var(--amber, #f59e0b)', background: 'rgba(245,158,11,0.1)', boxShadow: '0 0 10px rgba(245,158,11,0.25), inset 0 0 8px rgba(245,158,11,0.08)' }}>
+            <span style={{ fontFamily: GLYPH_FONT, fontSize: full ? 11 : 9, color: 'var(--amber-hi, #fbbf24)' }}>⚡</span>
+            <span style={{ fontFamily: HEAVY, fontSize: full ? 12 : 8.5, letterSpacing: '0.03em', color: 'var(--amber-hi, #fbbf24)' }}>{action}</span>
+          </div>
+
+          {full && (
+            <>
+              <div style={{ height: 1, background: 'rgba(212,160,53,0.2)', margin: '11px 0 9px' }} />
+              <p style={{ margin: 0, fontFamily: BODY_FONT, fontSize: 11, lineHeight: 1.4, color: CREAM_SOFT }}>{manager.effect}</p>
+              {quoted && <p style={{ margin: '8px 0 0', fontFamily: FLAVOUR_FONT, fontStyle: 'italic', fontSize: 12, lineHeight: 1.25, color: DUST }}>{quoted}</p>}
+            </>
+          )}
+        </div>
       </div>
 
-      {/* NAME BAND — name + role, JOKER chip on the right. Manager names are full
-          (first + last), so a slightly smaller face keeps two words legible. */}
-      <NameBand
-        name={name}
-        role={role}
-        full={full}
-        nameSize={full ? 13 : 8}
-        right={<ClassChip glyph={'\u{1F0CF}'} label="JOKER" color="#e8b23a" bg="rgba(232,178,60,0.14)" border="rgba(232,178,60,0.4)" full={full} />}
-      />
-
-      {/* EFFECT + FLAVOUR block. */}
-      <EffectBlock effect={manager.effect} flavour={manager.philosophy} full={full} />
-    </Inner>
+      {/* corner brackets */}
+      {(['tl', 'tr', 'bl', 'br'] as const).map(bracket)}
+    </>
   );
 }
 
