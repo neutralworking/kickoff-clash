@@ -638,7 +638,9 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
             alt=""
             draggable={false}
             onError={() => setImgOk(false)}
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 6%', display: 'block' }}
+            // The full window is tall (biases to the very top for headroom); the
+            // short grid window crops hard, so sit lower to keep the FACE in frame.
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: full ? 'center 6%' : 'center 22%', display: 'block' }}
           />
         ) : (
           <div className="pixelated" aria-hidden style={portraitArtStyle(card.id)} />
