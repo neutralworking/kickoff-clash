@@ -8,6 +8,7 @@
     "start": "next start --port 3001",
     "lint": "eslint",
     "playtest": "playwright test tests/playtest.spec.ts",
+    "playtest:v6": "playwright test tests/v6-match.spec.ts",
     "test": "vitest run"
   },
   "dependencies": {
