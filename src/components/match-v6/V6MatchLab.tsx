@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import './v6lab.css';
 import {
   startMatch,
@@ -23,8 +23,10 @@ import { V6Bench } from './V6Bench';
 import { V6PlanTray, type PlanRow } from './V6PlanTray';
 import { V6EventTicker, type Tick } from './V6EventTicker';
 import { V6DebugReceipt } from './V6DebugReceipt';
+import { V6RevealSequence } from './V6RevealSequence';
+import { V6ChanceResolution } from './V6ChanceResolution';
 
-type Phase = 'summary' | 'break' | 'fulltime';
+type Phase = 'summary' | 'break' | 'reveal' | 'chance' | 'fulltime';
 interface Game {
   match: MatchStep;
   phase: Phase;
@@ -101,10 +103,18 @@ export default function V6MatchLab() {
   const lock = () => {
     const committed = commitBreak(st, { side: 'player', pairs: plan }, defaultOpponentAI.plan(st, 'opponent'));
     const adv = advancePeriod(committed.state, game.match.rng);
-    setGame({ match: { state: adv.state, rng: adv.rng }, phase: 'summary', lastResult: adv.result, lastReveals: committed.reveals });
+    setGame({
+      match: { state: adv.state, rng: adv.rng },
+      phase: committed.reveals.length > 0 ? 'reveal' : 'chance',
+      lastResult: adv.result,
+      lastReveals: committed.reveals,
+    });
     setPlan([]);
     setPick(null);
   };
+
+  const toChance = useCallback(() => setGame((g) => ({ ...g, phase: 'chance' })), []);
+  const toSummary = useCallback(() => setGame((g) => ({ ...g, phase: 'summary' })), []);
 
   // derived UI data
   const benchCards = st.player.cards
@@ -125,9 +135,20 @@ export default function V6MatchLab() {
   const phaseLabel =
     game.phase === 'break'
       ? `${BREAK_NAME[st.breakIndex]} · P${st.period + 1} next`
-      : game.phase === 'fulltime'
-        ? 'Full time'
-        : `Period ${st.period}${st.period >= 4 ? '' : ' done'}`;
+      : game.phase === 'reveal'
+        ? `Reveal · Period ${st.period}`
+        : game.phase === 'chance'
+          ? `Period ${st.period}`
+          : game.phase === 'fulltime'
+            ? 'Full time'
+            : `Period ${st.period}${st.period >= 4 ? '' : ' done'}`;
+
+  // Freeze the header score during reveal/chance so the sequences don't spoil it.
+  const preScore = {
+    player: st.player.score - (game.lastResult?.playerGoals ?? 0),
+    opponent: st.opponent.score - (game.lastResult?.opponentGoals ?? 0),
+  };
+  const headerScore = game.phase === 'reveal' || game.phase === 'chance' ? preScore : undefined;
 
   const ticks: Tick[] = [];
   for (const r of game.lastReveals) ticks.push({ kind: 'reveal', text: r.text });
@@ -167,11 +188,17 @@ export default function V6MatchLab() {
         <button onClick={() => setDebug((d) => !d)}>{debug ? 'Hide' : 'Debug'}</button>
       </div>
 
-      <V6ScoreHeader state={st} phaseLabel={phaseLabel} />
+      <V6ScoreHeader state={st} phaseLabel={phaseLabel} scoreOverride={headerScore} />
 
       <V6Board boards={boards} outlook={outlook} pool={pool} mode={game.phase === 'break' ? 'break' : 'idle'} onPickActive={pickActive} />
 
       {debug && <V6DebugReceipt state={st} boards={boards} outlook={outlook} />}
+
+      {game.phase === 'reveal' && <V6RevealSequence reveals={game.lastReveals} pool={pool} onDone={toChance} />}
+
+      {game.phase === 'chance' && game.lastResult && (
+        <V6ChanceResolution result={game.lastResult} pool={pool} preScore={preScore} playerName={st.player.name} oppName={st.opponent.name} onDone={toSummary} />
+      )}
 
       {game.phase === 'break' && (
         <div className="v6-break">

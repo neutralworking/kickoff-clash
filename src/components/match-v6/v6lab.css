@@ -143,3 +143,33 @@
 .v6-fulltime { text-align: center; padding: 30px 16px; }
 .v6-fulltime .big { font-size: 46px; color: #ffd45e; text-shadow: 0 4px #8c341b; }
 .v6-fulltime .verdict { font-size: 20px; margin-top: 6px; }
+
+/* ── reveal + chance sequences (commit 7) — a receipt of engine events ── */
+.v6-seq { border-top: 2px solid #7c5532; background: linear-gradient(#21150e, #100a07); padding: 16px 10px 14px; min-height: 226px; position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.v6-seq-label { font-size: 11px; color: #bba98a; text-transform: uppercase; letter-spacing: .6px; font-weight: 800; }
+.v6-skip { position: absolute; top: 10px; right: 10px; font: 700 11px Inter, sans-serif; color: #cbb998; background: #24170f; border: 1px solid #6b4930; border-radius: 7px; padding: 4px 8px; cursor: pointer; }
+.v6-skip:hover { background: #2e1d12; }
+.v6-seq-dots { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+.v6-seq-dots i { width: 7px; height: 7px; border-radius: 50%; background: #513617; }
+.v6-seq-dots i.on { background: #f1b84e; }
+.v6-seq-dots i.goal { background: #4eb37a; box-shadow: 0 0 6px #4eb37a99; }
+
+/* reveal card */
+.v6-reveal-card { width: 152px; border: 2px solid #e5c17f; border-radius: 14px; background: linear-gradient(#4b2e19, #1a100a 62%); overflow: hidden; box-shadow: 0 16px 36px #000c; }
+.v6-reveal-card.kind-sub_off { border-color: #8a5a44; filter: grayscale(.4) brightness(.8); }
+.v6-reveal-card.in-right { animation: v6InRight .42s cubic-bezier(.2, .8, .3, 1) both; }
+.v6-reveal-card.in-left { animation: v6InLeft .42s cubic-bezier(.2, .8, .3, 1) both; }
+.v6-reveal-card .v6-av { height: 92px; }
+.v6-reveal-card .rc-name { font-size: 15px; font-weight: 900; padding: 7px 10px 2px; }
+.v6-reveal-card .rc-text { font-size: 11px; color: #e7ba70; padding: 0 10px 9px; line-height: 1.25; }
+@keyframes v6InRight { from { transform: translateX(64px) scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes v6InLeft { from { transform: translateX(-64px) scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* chance dice */
+.v6-runscore { font: 900 22px Impact, 'Arial Black', sans-serif; color: #fff6dc; text-shadow: 0 2px 0 #000; letter-spacing: 1px; }
+.v6-die-big { width: 74px; height: 74px; border-radius: 15px; background: #f6efd9; color: #17110b; display: grid; place-items: center; font-size: 56px; line-height: 1; box-shadow: 0 8px 22px #000b; animation: v6Die .38s ease-out both; }
+@keyframes v6Die { 0% { transform: rotate(-120deg) scale(.5); opacity: 0; } 60% { transform: rotate(12deg) scale(1.12); opacity: 1; } 100% { transform: none; } }
+.v6-outcome { font-size: 15px; min-height: 22px; text-align: center; padding: 0 8px; }
+.v6-outcome.goal { color: #ffd45e; font-family: Impact, 'Arial Black', sans-serif; text-transform: uppercase; letter-spacing: .5px; text-shadow: 0 2px #8c341b; animation: v6Pop .3s ease-out both; }
+.v6-outcome.miss { color: #9c8f78; }
+@keyframes v6Pop { from { transform: scale(.7); opacity: .4; } to { transform: scale(1); opacity: 1; } }
