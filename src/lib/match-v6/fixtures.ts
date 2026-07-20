@@ -72,11 +72,12 @@ const SPECS: Spec[] = [
   { name: 'Cy Dell', sector: 'left', cost: 2, att: 4, def: 1, rarity: 'common', role: 'Wide', position: 'LM', actions: [atk(1)] },
   { name: 'Milo Ray', sector: 'centre', cost: 2, att: 4, def: 1, rarity: 'common', role: 'Runner', position: 'CM', actions: [reactAtk(1)] },
 
-  // ── Combo enablers (faces / reroll / add-chance) ──
-  { name: 'Isa Dane', sector: 'centre', cost: 6, att: 8, def: 3, rarity: 'legendary', role: 'Maestro', position: 'AM', actions: [faces([4, 5, 6], 'all_in_sector'), reroll(1, 'all_in_sector')] },
-  { name: 'Ren Colm', sector: 'centre', cost: 5, att: 7, def: 3, rarity: 'epic', role: 'Playmaker', position: 'CM', actions: [faces([5, 6], 'all_in_sector')] },
-  { name: 'Umi Vale', sector: 'left', cost: 4, att: 6, def: 2, rarity: 'rare', role: 'Creator', position: 'LW', actions: [reroll(1, 'all_in_sector')] },
-  { name: 'Dex Falk', sector: 'right', cost: 4, att: 6, def: 3, rarity: 'rare', role: 'Creator', position: 'RW', actions: [addChance(1)] },
+  // ── Combo enablers (faces / reroll / add-chance) — the A2 skill lever, kept
+  //    mostly first-in-sector so only a dedicated stack reaches high conversion.
+  { name: 'Isa Dane', sector: 'centre', cost: 6, att: 8, def: 3, rarity: 'legendary', role: 'Maestro', position: 'AM', actions: [faces([5, 6]), reroll(1)] },
+  { name: 'Ren Colm', sector: 'centre', cost: 5, att: 7, def: 3, rarity: 'epic', role: 'Playmaker', position: 'CM', actions: [faces([5, 6])] },
+  { name: 'Umi Vale', sector: 'left', cost: 4, att: 6, def: 2, rarity: 'rare', role: 'Creator', position: 'LW', actions: [reroll(1)] },
+  { name: 'Dex Falk', sector: 'right', cost: 4, att: 6, def: 3, rarity: 'rare', role: 'Creator', position: 'RW', actions: [faces([5, 6])] },
   { name: 'Nael Ortiz', sector: 'centre', cost: 3, att: 4, def: 3, rarity: 'uncommon', role: 'Link', position: 'CM', actions: [faces([5, 6])] },
 
   // ── Flexible utility (cheap, discount / move / reactive) ──
@@ -112,7 +113,7 @@ const SPECS: Spec[] = [
   { name: 'Fabi Ono', sector: 'centre', cost: 1, att: 2, def: 1, rarity: 'common', role: 'Squad', position: 'CM', actions: [reactAtk(1)] },
   { name: 'Hugo Selk', sector: 'left', cost: 4, att: 6, def: 3, rarity: 'rare', role: 'Winger', position: 'LW', actions: [faces([5, 6])] },
   { name: 'Ravi Tuck', sector: 'right', cost: 5, att: 8, def: 3, rarity: 'epic', role: 'Winger', position: 'RW', actions: [addChance(1)] },
-  { name: 'Coby Wren', sector: 'right', cost: 6, att: 9, def: 2, rarity: 'legendary', role: 'Finisher', position: 'RW', actions: [atk(2, 'on_reveal'), reroll(1, 'all_in_sector')] },
+  { name: 'Coby Wren', sector: 'right', cost: 6, att: 9, def: 2, rarity: 'legendary', role: 'Finisher', position: 'RW', actions: [atk(2, 'on_reveal'), reroll(1)] },
   { name: 'Sami Roux', sector: 'left', cost: 6, att: 8, def: 4, rarity: 'legendary', role: 'Talisman', position: 'LW', actions: [faces([5, 6], 'all_in_sector'), atk(1)] },
 ];
 
@@ -156,50 +157,49 @@ export const V6_DECKS: V6Deck[] = [
     id: 'aggressive',
     name: 'Full Throttle',
     style: 'aggressive',
-    // XI: ATT-heavy across all three sectors, a thin spine of cover.
+    // Moderate ATT with cover (stars wait on the bench): sector ATT≈DEF ~12–15.
     startingXI: ids(
-      'Rai Okonkwo', 'Bo Marsh', 'Cy Dell', // left
-      'Niko Vale', 'Enzo Cai', 'Kip Sol', 'Levi Ash', // centre
-      'Juno Pike', 'Tave Rune', 'Ade Boro', // right
-      'Malik Daro', // centre screen
+      'Lio Fen', 'Otis Kane', 'Cy Dell', 'Sig Reed', // left
+      'Enzo Cai', 'Aris Nov', 'Malik Daro', 'Ivo Senn', // centre
+      'Pier Sol', 'Cass Ojo', 'Ode Vance', // right
     ),
-    bench: ids('Sol Voss', 'Ravi Tuck', 'Rio Bast', 'Otis Kane', 'Pier Sol', 'Milo Ray', 'Bax Rami'),
+    bench: ids('Niko Vale', 'Sol Voss', 'Juno Pike', 'Rio Bast', 'Milo Ray', 'Bax Rami', 'Nel Adu'),
   },
   {
     id: 'flexible',
     name: 'Total Rotation',
     style: 'flexible',
+    // Balanced, cheap, mobile: sector ATT ~11–15, DEF ~10–12.
     startingXI: ids(
-      'Lio Fen', 'Sig Reed', 'Cy Dell',
-      'Enzo Cai', 'Deni Ferro', 'Aris Nov', 'Malik Daro',
-      'Tave Rune', 'Ode Vance', 'Zane Roos',
-      'Kip Sol',
+      'Lio Fen', 'Cy Dell', 'Ugo Bell', 'Kes Rowan',
+      'Deni Ferro', 'Aris Nov', 'Malik Daro',
+      'Tave Rune', 'Pier Sol', 'Zane Roos', 'Rex Hale',
     ),
-    bench: ids('Val Marr', 'Cass Ojo', 'Tom Flint', 'Nel Adu', 'Wyn Poll', 'Rio Bast', 'Levi Ash'),
+    bench: ids('Val Marr', 'Tom Flint', 'Nel Adu', 'Wyn Poll', 'Rio Bast', 'Otis Kane', 'Enzo Cai'),
   },
   {
     id: 'defensive',
     name: 'Iron Vale',
     style: 'defensive',
+    // DEF-heavy, low ATT: concedes little, grinds — sector DEF ~15–18.
     startingXI: ids(
       'Sig Reed', 'Pao Lin', 'Kes Rowan',
-      'Tomas Lock', 'Mira Kaine', 'Ivo Senn', 'Malik Daro',
-      'Ode Vance', 'Rex Hale', 'Bram Reef',
-      'Enzo Cai',
+      'Gio Pace', 'Malik Daro', 'Ivo Senn', 'Enzo Cai',
+      'Ode Vance', 'Rex Hale', 'Bram Reef', 'Pier Sol',
     ),
-    bench: ids('Gio Pace', 'Mira Kaine', 'Juno Pike', 'Sol Voss', 'Rio Bast', 'Nael Ortiz', 'Bax Rami'),
+    bench: ids('Mira Kaine', 'Otis Kane', 'Sol Voss', 'Rio Bast', 'Bax Rami', 'Nael Ortiz', 'Cass Ojo'),
   },
   {
     id: 'combo',
     name: 'Clockwork',
     style: 'combo',
+    // Faces/reroll enablers on a balanced spine — the A2 skill-ceiling deck.
     startingXI: ids(
-      'Umi Vale', 'Hugo Selk', 'Cy Dell',
-      'Isa Dane', 'Ren Colm', 'Nael Ortiz', 'Malik Daro',
-      'Dex Falk', 'Tave Rune', 'Ade Boro',
-      'Enzo Cai',
+      'Umi Vale', 'Cy Dell', 'Otis Kane',
+      'Isa Dane', 'Nael Ortiz', 'Malik Daro', 'Ivo Senn',
+      'Dex Falk', 'Tave Rune', 'Zane Roos', 'Ode Vance',
     ),
-    bench: ids('Niko Vale', 'Sol Voss', 'Rio Bast', 'Nel Adu', 'Milo Ray', 'Otis Kane', 'Bax Rami'),
+    bench: ids('Niko Vale', 'Sol Voss', 'Ren Colm', 'Rio Bast', 'Milo Ray', 'Bax Rami', 'Hugo Selk'),
   },
 ];
 

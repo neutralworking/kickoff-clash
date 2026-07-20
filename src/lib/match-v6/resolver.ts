@@ -216,6 +216,22 @@ function attribute(state: V6MatchState, roll: ChanceRoll, side: TeamSide): Chanc
   return { ...roll, attackerCardId, saverCardId };
 }
 
+/**
+ * Per-side per-sector stat-driven chance count (the "threshold" the mockup
+ * shows). Used by the match loop to tell whether a break changed a threshold —
+ * action add/cancel are excluded on purpose; this is the stat threshold only.
+ */
+export function chanceOutlook(state: V6MatchState, balance: V6Balance = V6_BALANCE): Record<TeamSide, Record<Sector, number>> {
+  const pB = buildBoard(activePlacements(state.player.cards, state.cardPool), statEffectsFor(state, 'player'), balance);
+  const oB = buildBoard(activePlacements(state.opponent.cards, state.cardPool), statEffectsFor(state, 'opponent'), balance);
+  const outlook = (mine: typeof pB, theirs: typeof pB): Record<Sector, number> => {
+    const r = { left: 0, centre: 0, right: 0 } as Record<Sector, number>;
+    for (const sec of SECTORS) r[sec] = capNaturalChances(naturalChances(mine[sec].attack, theirs[sec].defence, balance).remaining, balance);
+    return r;
+  };
+  return { player: outlook(pB, oB), opponent: outlook(oB, pB) };
+}
+
 // ── The period ───────────────────────────────────────────────────────────────
 
 export interface PeriodResolution {
