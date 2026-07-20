@@ -131,12 +131,13 @@ export function describeAction(action: V6Action): string {
 
 // ── Immutable state helpers ──────────────────────────────────────────────────
 
-function teamOf(state: V6MatchState, side: TeamSide): V6TeamState {
+export function teamOf(state: V6MatchState, side: TeamSide): V6TeamState {
   return side === 'player' ? state.player : state.opponent;
 }
-function withTeam(state: V6MatchState, side: TeamSide, team: V6TeamState): V6MatchState {
+export function withTeam(state: V6MatchState, side: TeamSide, team: V6TeamState): V6MatchState {
   return side === 'player' ? { ...state, player: team } : { ...state, opponent: team };
 }
+export const otherSide = (side: TeamSide): TeamSide => (side === 'player' ? 'opponent' : 'player');
 
 function appendEffects(state: V6MatchState, side: TeamSide, effects: ActiveEffect[]): V6MatchState {
   if (effects.length === 0) return state;
