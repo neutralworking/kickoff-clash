@@ -1,6 +1,6 @@
 # Kickoff Clash V6 — Spec Decisions (sign-off gate)
 
-**Status: DRAFT — awaiting owner sign-off. Nothing is built from this until it is approved.**
+**Status: APPROVED — owner sign-off 2026-07-20, with refinements to A2 / A3 / D2 folded in below. This is the committed direction; the build proceeds from here.**
 
 Companion to `KICKOFF_CLASH_V6_CLAUDE_HANDOFF.md`. The handoff's governing clause says:
 *"If a rule is ambiguous, choose the simplest implementation that preserves blind simultaneous
@@ -9,8 +9,10 @@ This file is that documentation, resolved **up front** so the build is unambiguo
 below has a **default I will build** and, where the call is a matter of taste, the **flip cost** of
 overriding it. Read it, then approve or mark changes.
 
-Scope reminder: V6 is an **isolated lab prototype** behind `/lab/match-v6`. It does not touch the live
-`SCORING_V2` game (`src/lib/match-v5.ts`, `MatchPhase.tsx`) or the headless six-contest `src/engine-v2/`.
+Scope reminder: V6 is built in isolation behind `/lab/match-v6` and does not touch the live `SCORING_V2` game
+(`src/lib/match-v5.ts`, `MatchPhase.tsx`) *during the build*. Per the owner's D2 call, V6 is now the direction
+of record and the six-contest `src/engine-v2/` + parked `src/engine/` are dead (removal scheduled once the lab
+route is playable); the live game keeps running only until V6 is ready to replace it.
 
 ---
 
@@ -30,31 +32,37 @@ and explains the mockup framing "You reveal second" as a (conditional) informati
 snowball. We do not fix it pre-emptively; instead the sim reports **lead-stickiness** (see D2) and we revisit
 only if it shows a runaway.
 
-### A2. Chance → goal conversion (the #1 fun/skill risk) — made pluggable, defaults to the handoff
-**Decision.** Keep the handoff's model as the **default**: each surviving chance rolls one d6, a natural 6
-scores. But route it through a single strategy field so the sim can A/B it **without engine changes**:
-```ts
-V6_BALANCE.conversion = 'd6_six_only'        // DEFAULT — exactly as handoff
-// alt for the sim only: 'floor_plus_d6'     // every N net chances = 1 guaranteed goal, d6 for the remainder
-```
-**Rationale.** The whole strategic layer (thresholds, reveals, priority) only changes the *number* of dice,
-not the 1/6 per-die odds — so two players who each earn 3 chances are on a coinflip. That may be the intended
-"football is random" flavour, or it may drown the deep decisions in variance. Making conversion pluggable
-costs nothing and lets the 10k-match sim answer it empirically instead of us guessing. **The default ships as
-written**; the alternative is a sim experiment, not a spec change.
-**Flip cost.** Zero — one config value.
+### A2. Chance → goal conversion — d6 only, skill lives in stacking the odds  *(owner-refined)*
+**Decision.** Conversion is **always** the d6: each surviving chance rolls one d6 and scores on its current
+scoring faces (default `[6]`). **There are no guaranteed goals, ever** — the single die *is* the football
+variance. Skill expresses by **stacking a chance toward near-certainty without ever reaching it**, via three
+levers:
+1. **More dice** — raise sector ATT past each 5-threshold (`floor(ATT/5)`), plus rare `add_chance` actions.
+2. **Better faces** — `improve_die_faces` widens the scoring set for a chance/sector (`[5,6]`, then `[4,5,6]`).
+   This is a **primary, cross-rarity** skill lever (conditional), *not* rare — it is where most skill lives.
+3. **Rerolls** — `reroll_die` re-rolls a miss (consumes one extra RNG value).
 
-### A3. Sector compatibility for substitutions — simplest legal placement
-**Decision.** An incoming bench card may replace **any** active card you choose. The incoming card occupies
-**its own printed `sector`** (not the outgoing card's), so subbing can reshape sector composition over the
-match. The only hard constraints are the handoff's: outgoing is active, incoming is unused, each card appears
-once, order is explicit, total cost ≤ current energy. **Role/position is cosmetic in V6** — sector + ATT/DEF
-are the only things the engine reads.
-**Rationale.** The handoff defers this to "prototype fixture rules" that don't exist, i.e. hands us the call,
-and its governing clause says pick the simplest. Free placement is the simplest legal rule and the most
-expressive; it avoids inventing a position-matching matrix the prototype was told not to build.
-**Flip cost.** Low. Strict same-sector subs are a one-line validator flip (`plan.in.sector === plan.out.sector`)
-if you'd rather sectors be sticky. **← This is the one A-level call I'd most like you to confirm.**
+The gradient this produces: one unbuilt chance ≈ **17%** (a long shot); a fully-built sector (4 dice, faces
+`[4,5,6]`, one reroll) ≈ **95%+**, but never 100%. Building toward the high end is the game.
+**Rationale.** The owner's call: guaranteed-goal flooring is explicitly rejected; keeping conversion on the die
+preserves the sport's variance while the *action stack* — dice count × face quality × rerolls — carries the
+skill. So the `improve_die_faces` / `reroll_die` palette is **first-class, not garnish**; only *directly
+adding* a chance stays rare/expensive/legendary (per the handoff's stat-budget note).
+**Removed.** The earlier pluggable `V6_BALANCE.conversion` strategy and its `floor_plus_d6` alternative are cut.
+
+### A3. Substitution placement — free placement with an out-of-position penalty  *(owner-refined)*
+**Decision.** When you sub, the incoming bench card takes the **slot and sector of the card it replaces** — so
+you can place any card anywhere (free placement). Each card has a natural `sector`; whenever a card's *current*
+sector ≠ its natural sector it suffers a flat **out-of-position penalty** (`V6_BALANCE.outOfPositionPenalty`,
+default **−2 ATT / −2 DEF**), applied uniformly to starters and subs, and to cards relocated by a `move_sector`
+action. Threshold math floors effective ATT/DEF at 0. The other constraints are the handoff's: outgoing active,
+incoming unused, each card once, order explicit, total cost ≤ energy.
+**Rationale.** Directly mirrors the live game's wrong-flank −2/−2. Free placement stays maximally expressive
+(you *can* plug a hole in a weak sector with an off-position card) but is no longer consequence-free — doing so
+costs stats, so playing a card in its natural sector is rewarded without being mandatory. Position/role beyond
+sector stays cosmetic in the prototype.
+**Tunable.** Penalty magnitude lives in balance config; flat for any mismatch now, with adjacent-vs-opposite
+gradation (centre is adjacent to both wings) noted as a later refinement if the flat value proves too blunt.
 
 ### A4. Multiple substitutions in one break — explicit ordered pairing
 **Decision.** A break plan is an **ordered list of `{ out, in }` pairs**. UI: tap a bench card, then tap the
@@ -140,34 +148,36 @@ build I will add a short one-paragraph pointer to the top of `CLAUDE.md` noting 
 `/lab/match-v6` as a *possible* replacement direction, with **no live migration** until a promote decision — so
 the next session isn't whipsawed by two conflicting "directions of record."
 
-### D2. Kill/promote gate + two added sim metrics
-The repo already contains the tombstone of the last "isolated rebuild we'd playtest before migrating"
-(`/rebuild` → `src/engine/`, abandoned). To avoid a repeat, the promote decision is pre-committed:
-**V6 becomes a migration candidate only if** the headless sim + one human playtest clear all of —
-- average total goals **2.2–3.2**, draw rate **20–35%**, no manager matchup consistently **>55%** (handoff targets);
-- **threshold changes in ≥70%** of substitution windows (handoff's decision-relevance metric);
-- **[ADDED] decision divergence** — the AI's chosen best sub differs from "do nothing"/a fixed curve in ≥70% of windows (proves board state *drives* the choice, not just that the effect lands);
-- **[ADDED] lead-stickiness** — P(team that scores first wins) **< ~65%** (proves it isn't a coinflip-snowball; tests A1's risk).
+### D2. V6 is the direction — metrics are tuning targets, not a gate  *(owner-refined)*
+Owner decision this session: **V6 is the direction of record. The old engines are dead.** The six-contest
+`src/engine-v2/` direction and the parked `src/engine/` get no further investment and are slated for removal
+once `/lab/match-v6` is playable (kept temporarily only so `npm test` and `npm run build` stay green through
+the transition — not deleted mid-build). The live `SCORING_V2` root game keeps running until V6 is mature
+enough to replace it, per the handoff's own "don't break live" constraint.
 
-If the sim shows conversion is pure variance (skill can't move win-rate), we switch A2 to `floor_plus_d6` and
-re-run **before** any UI spend. If it still fails, V6 parks — it does not get quietly wired to the live game.
+The former "gate" numbers become the **balance targets we tune V6 toward** (not a go/no-go against a rival
+direction). We still watch them because the repo already holds one tombstone (`/rebuild` → `src/engine/`) and
+a badly-tuned V6 helps no one:
+- average total goals **2.2–3.2**, draw rate **20–35%**, no manager matchup consistently **>55%**;
+- **threshold changes in ≥70%** of substitution windows;
+- **decision divergence** — the AI's best sub differs from "do nothing" in ≥70% of windows;
+- **lead-stickiness** — P(first scorer wins) **< ~65%** (guards against a priority snowball, per A1);
+- **[given A2] a scoring-skill gradient** — a well-built sector's P(goal) must dominate an unbuilt one, i.e.
+  dice/face/reroll stacking (not luck alone) moves the win rate.
 
-### D3. Delivery order — sim is the go/no-go gate
-Build the handoff's commits **1–5 (engine + AI + 10k-match sim) first, with no UI**. The sim report is the gate:
-we only spend on commits 6–8 (the `/lab/match-v6` mobile UI) if the model clears D2. This is the handoff's own
-ordering, with the gate made explicit.
+### D3. Delivery order — engine + sim before any UI
+Build the handoff's commits **1–5 (engine + AI + 10k-match sim) first, with no UI**, and read the sim report
+before spending on commits 6–8 (the `/lab/match-v6` mobile UI). V6 is the committed direction either way; this
+ordering just means we tune the model against the D2 targets on cheap headless runs before investing in pixels.
 
 ---
 
-## Part E — Where I need your eyes
+## Part E — Sign-off log
 
-Everything above I will build as the stated default. The calls most worth your explicit steer:
+Owner sign-off **2026-07-20**:
+- **A3** → free placement **with** an out-of-position penalty (−2/−2 default). Folded into A3 above.
+- **A2** → **no** guaranteed goals; the d6 is the only converter; skill = stacking dice count + scoring faces +
+  rerolls toward near-certainty. The pluggable-conversion idea is dropped. Folded into A2 above.
+- **D2** → V6 **is** the direction; the old engines are dead; the metrics are tuning targets. Folded into D2 above.
 
-1. **A3 — sector compatibility.** Default = free placement (any card replaces any card, keeps its own sector).
-   Say the word if you want strict same-sector subs instead.
-2. **A2 — conversion default.** Default = pure d6, made pluggable so the sim can test a deterministic-floor
-   variant. Confirm you're happy shipping pure d6 as the baseline and letting the sim challenge it.
-3. **D2 — promote gate.** Confirm the four-part gate (and the two added metrics) is the bar V6 must clear
-   before it's allowed anywhere near the live game.
-
-Approve as-is, or reply with the item numbers you want changed and I'll revise this doc before writing any code.
+Build proceeds: this doc committed, then handoff commits 1–5 (engine + sim), then 6–8 (lab UI).
