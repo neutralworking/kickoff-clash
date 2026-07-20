@@ -156,11 +156,13 @@ export interface CardInPlay {
  * `faces`/`reroll` effects when rolling chances. Every effect names its source
  * card so the board receipt can show which card created each number.
  */
+export type EffectKind = 'stat' | 'faces' | 'reroll' | 'add_chance' | 'cancel_chance' | 'discount';
+
 export interface ActiveEffect {
   id: string; // instance id (loop-guard + dedupe)
   sourceCardId: string;
   sourceLabel: string; // e.g. "Niko Vale · On Reveal"
-  kind: 'stat' | 'faces' | 'reroll';
+  kind: EffectKind;
   onEnemy: boolean; // targets the OTHER team's board
 
   // kind === 'stat'
@@ -176,6 +178,13 @@ export interface ActiveEffect {
   faces?: Die[];
   rerollCount?: number;
   chanceSelector?: ChanceTarget;
+
+  // kind === 'add_chance' | 'cancel_chance' (resolver reads these when building tokens)
+  count?: number;
+
+  // kind === 'discount' (substitutions.ts reads these when validating cost)
+  discount?: number;
+  filter?: CardFilter;
 
   duration: EffectDuration;
   createdPeriod: number; // for `period` expiry

@@ -30,6 +30,8 @@ export const V6_BALANCE = {
   startingXI: 11,
   /** Spec A3 — flat penalty for a card in a non-natural sector. Tunable. */
   outOfPositionPenalty: { attack: 2, defence: 2 },
+  /** Defensive cap on the reaction chain depth (spec B6; primary guard is the instance-id set). */
+  maxEventDepth: 4,
 } as const;
 
 export type V6Balance = typeof V6_BALANCE;
