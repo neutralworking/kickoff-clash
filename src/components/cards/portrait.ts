@@ -46,8 +46,13 @@ import portraitPool from '../../../public/portraits/pool.json';
 // ---------------------------------------------------------------------------
 
 const PORTRAIT_MANIFEST = portraitManifest as Record<string, string>;
-const PLAYER_POOL = (portraitPool as { players: string[]; managers: string[] }).players ?? [];
-const MANAGER_POOL = (portraitPool as { players: string[]; managers: string[] }).managers ?? [];
+const POOL = portraitPool as { players: string[]; keepers?: string[]; managers: string[] };
+const KEEPER_POOL = POOL.keepers ?? [];
+const MANAGER_POOL = POOL.managers ?? [];
+// Outfield pool excludes the gloved keeper faces so an outfielder never draws a
+// keeper portrait; GK cards draw from KEEPER_POOL instead (see portraitSrc).
+const KEEPER_SET = new Set(KEEPER_POOL);
+const OUTFIELD_POOL = (POOL.players ?? []).filter((f) => !KEEPER_SET.has(f));
 
 // Assets are served under the deploy basePath (see next.config.ts). A raw <img>
 // src is NOT auto-prefixed (only next/image is), so we prefix it here.
@@ -71,13 +76,15 @@ function hashString(s: string): number {
 }
 
 /** Resolve a player's real-portrait URL: manifest override, else a stable pool
- *  face keyed off the card id, else null (→ procedural fallback). */
-export function portraitSrc(card: { id?: number | string; name: string }): string | null {
+ *  face keyed off the card id, else null (→ procedural fallback). Goalkeepers
+ *  (position GK) are biased to the gloved keeper faces. */
+export function portraitSrc(card: { id?: number | string; name: string; position?: string }): string | null {
   const pinned = PORTRAIT_MANIFEST[portraitSlug(card.name)];
   if (pinned) return `${ASSET_BASE}/portraits/players/${pinned}`;
-  if (!PLAYER_POOL.length) return null;
   const key = card.id != null ? String(card.id) : card.name;
-  const file = PLAYER_POOL[hashString(key) % PLAYER_POOL.length];
+  const pool = card.position === 'GK' && KEEPER_POOL.length ? KEEPER_POOL : OUTFIELD_POOL;
+  if (!pool.length) return null;
+  const file = pool[hashString(key) % pool.length];
   return `${ASSET_BASE}/portraits/players/${file}`;
 }
 

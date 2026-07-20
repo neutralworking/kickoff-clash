@@ -28,7 +28,7 @@
  * grid cell (fluid) unless `width` pins it.
  */
 
-import type { CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import type { Card } from '../../lib/scoring';
 import { deriveStats } from '../../lib/funnel';
 import { classOfCard, PLAYER_CLASS_META, type PlayerClass } from '../../lib/contest-map';
@@ -41,7 +41,7 @@ import {
   definingTraitsFor,
   lastName,
 } from './cardTokens';
-import { portraitBackgroundStyle } from './portrait';
+import { portraitBackgroundStyle, portraitSrc } from './portrait';
 
 // Class glyphs (🪄 🎯 🗡️ 🎛️ ⚙️ 🧱) fall outside Silkscreen — render them in the
 // same symbol-complete fallback stack GameCard uses, tinted per the spec.
@@ -170,6 +170,9 @@ export default function FoilCard({
   const stats = deriveStats(card);
   const fit = Math.max(0, Math.min(100, Math.round(card.fitness ?? 100)));
   const fc = foilFitColor(fit);
+  // Real sliced portrait (GK-biased), falling back to the seeded Pixel Hero bust.
+  const portrait = portraitSrc(card);
+  const [imgOk, setImgOk] = useState(true);
 
   // Action chips — the card's REAL defining traits (trait-copy labels). One chip
   // normally; a Legendary carries two, kept on ONE line at the smaller size so
@@ -286,17 +289,28 @@ export default function FoilCard({
             : 'linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 100%)',
         }}
       >
-        <div
-          className="pixelated"
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            ...portraitBackgroundStyle(card.id),
-            backgroundSize: 'auto 120%',
-            backgroundPosition: 'center 25%',
-          }}
-        />
+        {portrait && imgOk ? (
+          // eslint-disable-next-line @next/next/no-img-element -- raw <img> is deliberate: needs onError → procedural fallback + a basePath src under static export.
+          <img
+            src={portrait}
+            alt=""
+            draggable={false}
+            onError={() => setImgOk(false)}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 22%', display: 'block' }}
+          />
+        ) : (
+          <div
+            className="pixelated"
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              ...portraitBackgroundStyle(card.id),
+              backgroundSize: 'auto 120%',
+              backgroundPosition: 'center 25%',
+            }}
+          />
+        )}
         {animate && (
           <div
             aria-hidden

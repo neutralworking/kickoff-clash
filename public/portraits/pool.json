@@ -185,11 +185,16 @@
     "p182.jpg",
     "p183.jpg",
     "p184.jpg",
-    "p185.jpg",
-    "p186.jpg",
-    "p187.jpg",
-    "p188.jpg",
-    "p189.jpg"
+    "p185.jpg"
+  ],
+  "keepers": [
+    "p050.jpg",
+    "p055.jpg",
+    "p067.jpg",
+    "p080.jpg",
+    "p085.jpg",
+    "p110.jpg",
+    "p150.jpg"
   ],
   "managers": [
     "m00.jpg",

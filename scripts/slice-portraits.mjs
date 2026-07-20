@@ -27,21 +27,25 @@ const playersDir = path.join(OUT, 'players');
 const managersDir = path.join(OUT, 'managers');
 for (const d of [playersDir, managersDir]) { fs.rmSync(d, { recursive: true, force: true }); fs.mkdirSync(d, { recursive: true }); }
 
-// file, w, h, cols, rows, playerRows[], mgrRows[]. Rows not listed are skipped
-// (e.g. a mixed player/manager row we can't cleanly classify).
+// file, w, h, cols, rows, playerRows[], mgrRows[], keeperCells[[row,col]...].
+// Rows not listed in playerRows/mgrRows are skipped (e.g. a mixed player/manager
+// row we can't cleanly classify). keeperCells flags the gloved GK tiles (picked
+// visually from the contact sheet) so GK cards can be biased to real keepers.
 const sheets = [
-  { f: 's_1536.png', w: 1536, h: 1024, cols: 10, rows: 5, playerRows: [0,1,2,3], mgrRows: [] },
-  { f: 's_a.png',    w: 1448, h: 1086, cols: 10, rows: 6, playerRows: [0,1,2,3,4], mgrRows: [5] },
-  { f: 's_b.png',    w: 1448, h: 1086, cols: 10, rows: 6, playerRows: [0,1,2,3,4], mgrRows: [5] },
-  { f: 's_c.png',    w: 1448, h: 1086, cols: 10, rows: 6, playerRows: [0,1,2,3,4], mgrRows: [5] },
+  { f: 's_1536.png', w: 1536, h: 1024, cols: 9,  rows: 5, playerRows: [0,1,2,3], mgrRows: [], keeperCells: [] }, // 9-wide (verified by gutter overlay); row4 mixed → skip
+  { f: 's_a.png',    w: 1448, h: 1086, cols: 10, rows: 6, playerRows: [0,1,2,3,4], mgrRows: [5], keeperCells: [[1,4],[1,9],[3,1],[4,4],[4,9]] },
+  { f: 's_b.png',    w: 1448, h: 1086, cols: 10, rows: 6, playerRows: [0,1,2,3,4], mgrRows: [5], keeperCells: [[2,4]] },
+  { f: 's_c.png',    w: 1448, h: 1086, cols: 10, rows: 6, playerRows: [0,1,2,3,4], mgrRows: [5], keeperCells: [[1,4]] },
 ];
 
 const bound = (i, n, total) => Math.round((i * total) / n);
 const players = new Map(), managers = new Map();
+const keepers = []; // player filenames flagged as goalkeepers
 let pIdx = 0, mIdx = 0, pDupes = 0, mDupes = 0;
 
 for (const s of sheets) {
   if (!fs.existsSync(path.join(SRC, s.f))) { console.warn(`skip missing ${s.f}`); continue; }
+  const keeperSet = new Set((s.keeperCells ?? []).map(([r, c]) => `${r},${c}`));
   for (let r = 0; r < s.rows; r++) {
     const isPlayer = s.playerRows.includes(r), isMgr = s.mgrRows.includes(r);
     if (!isPlayer && !isMgr) continue;
@@ -56,10 +60,15 @@ for (const s of sheets) {
       const name = `${prefix}${String(isPlayer ? pIdx++ : mIdx++).padStart(pad, '0')}.jpg`;
       fs.writeFileSync(path.join(dir, name), buf);
       map.set(hash, name);
+      if (isPlayer && keeperSet.has(`${r},${c}`)) keepers.push(name);
     }
   }
 }
 
-const pool = { players: [...players.values()].sort(), managers: [...managers.values()].sort() };
+const pool = {
+  players: [...players.values()].sort(),
+  keepers: keepers.sort(),
+  managers: [...managers.values()].sort(),
+};
 fs.writeFileSync(path.join(OUT, 'pool.json'), JSON.stringify(pool, null, 2) + '\n');
-console.log(`players: ${pool.players.length} unique (+${pDupes} dupes)  managers: ${pool.managers.length} unique (+${mDupes} dupes)`);
+console.log(`players: ${pool.players.length} unique (+${pDupes} dupes)  keepers: ${pool.keepers.length}  managers: ${pool.managers.length} unique (+${mDupes} dupes)`);
