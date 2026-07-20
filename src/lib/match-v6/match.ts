@@ -1,20 +1,25 @@
 /**
- * Kickoff Clash V6 — the four-period match loop.
+ * Kickoff Clash V6 — the four-period match loop + stepwise drivers.
  *
  * Kickoff (starters' Game Start + On Reveal fire, standing effects build) → for
  * each period: a break before P2/P3/P4 (energy set, both sides plan blind, the
  * priority side's plan resolves first), then the period resolves and its
- * one-shot effects expire. AI-v-AI by default; the live UI supplies the player
- * plan instead (commit 6). Deterministic: one seed, fixed consumption order.
+ * one-shot effects expire.
+ *
+ * The loop is exposed as STEPPERS (startMatch / advancePeriod / openBreak /
+ * commitBreak) so the interactive lab UI can pause at each break for the player
+ * while the headless `simulateMatch` composes the very same steps — one code
+ * path, so the UI and the 10k-match sim stay in lockstep. Deterministic: one
+ * seed, fixed consumption order.
  */
 
-import type { MatchLogEvent, SubstitutionPlan, TeamSide, V6MatchState } from './types';
+import type { BreakIndex, MatchLogEvent, RevealEvent, SubstitutionPlan, TeamSide, V6MatchState } from './types';
+import { SECTORS } from './types';
 import { V6_BALANCE } from './balance';
 import { makeRng, type RngState } from './random';
 import { processTriggers, rebuildStandingEffects, expirePeriodEffects, teamOf } from './actions';
 import { applyBreak } from './substitutions';
-import { resolvePeriod, chanceOutlook } from './resolver';
-import { SECTORS } from './types';
+import { resolvePeriod, chanceOutlook, type PeriodResolution } from './resolver';
 import { buildInitialState } from './fixtures';
 import { defaultOpponentAI, type OpponentAI } from './opponent-ai';
 
@@ -53,7 +58,7 @@ function outlookChanged(a: Record<TeamSide, Record<'left' | 'centre' | 'right', 
   return false;
 }
 
-/** Fire every active starter's Game Start + On Reveal at kickoff (spec: starters reveal at KO). */
+/** Fire every active starter's Game Start + On Reveal at kickoff (starters reveal at KO). */
 function fireKickoff(state: V6MatchState): V6MatchState {
   let s = state;
   for (const side of ['player', 'opponent'] as TeamSide[]) {
@@ -67,64 +72,97 @@ function fireKickoff(state: V6MatchState): V6MatchState {
   return s;
 }
 
-/** Run a full deterministic match. */
+// ── Steppers (the UI drives these; simulateMatch composes them) ──────────────
+
+export interface MatchStep {
+  state: V6MatchState;
+  rng: RngState;
+}
+
+/** Kickoff → state ready to resolve Period 1. */
+export function startMatch(playerDeckId: string, opponentDeckId: string, seed: number): MatchStep {
+  let s = buildInitialState(playerDeckId, opponentDeckId, seed);
+  s = fireKickoff(s);
+  s = rebuildStandingEffects(s);
+  return { state: { ...s, period: 1 }, rng: makeRng(seed) };
+}
+
+/** Resolve the current period; update priority + expire one-shots. */
+export function advancePeriod(state: V6MatchState, rng: RngState): MatchStep & { result: PeriodResolution['result'] } {
+  const res = resolvePeriod(state, rng);
+  let s = res.state;
+  s = { ...s, priority: res.result.nextPriority };
+  s = expirePeriodEffects(s);
+  return { state: s, rng: res.rng, result: res.result };
+}
+
+/** Open the break that precedes the next period (call after resolving P, when P<4). */
+export function openBreak(state: V6MatchState): V6MatchState {
+  const breakIndex = state.period as BreakIndex; // break 1 before P2, etc.
+  const energy = V6_BALANCE.energyByBreak[breakIndex - 1];
+  return { ...state, breakIndex, energy, log: [...state.log, { type: 'break_open', breakIndex, energy, priority: state.priority }] };
+}
+
+export interface BreakCommit {
+  state: V6MatchState;
+  reveals: RevealEvent[];
+  diag: BreakDiag;
+}
+
+/**
+ * Commit both locked plans; advances to the next period (the period field is set
+ * BEFORE reveals so period-gated On Reveal actions see the right period). The
+ * priority side's plan resolves first (spec A1).
+ */
+export function commitBreak(state: V6MatchState, playerPlan: SubstitutionPlan, opponentPlan: SubstitutionPlan): BreakCommit {
+  const before = chanceOutlook(state);
+  const targetPeriod = state.period + 1;
+  let s: V6MatchState = {
+    ...state,
+    period: targetPeriod,
+    log: [...state.log, { type: 'plan_locked', side: 'player', pairs: playerPlan.pairs }, { type: 'plan_locked', side: 'opponent', pairs: opponentPlan.pairs }],
+  };
+  const applied = applyBreak(s, playerPlan, opponentPlan);
+  s = applied.state;
+  s = { ...s, log: [...s.log, ...applied.reveals.map((event) => ({ type: 'reveal' as const, event }))] };
+  s = rebuildStandingEffects(s);
+  const diag: BreakDiag = {
+    breakIndex: state.breakIndex,
+    playerPlanSize: playerPlan.pairs.length,
+    opponentPlanSize: opponentPlan.pairs.length,
+    thresholdChanged: outlookChanged(before, chanceOutlook(s)),
+  };
+  return { state: s, reveals: applied.reveals, diag };
+}
+
+/** Run a full deterministic match (headless), composing the steppers. */
 export function simulateMatch(opts: SimMatchOptions): MatchResult {
   const playerAI = opts.playerAI ?? defaultOpponentAI;
   const opponentAI = opts.opponentAI ?? defaultOpponentAI;
 
-  let s = buildInitialState(opts.playerDeckId, opts.opponentDeckId, opts.seed);
-  let rng: RngState = makeRng(opts.seed);
-
-  // Kickoff
-  s = fireKickoff(s);
-  s = rebuildStandingEffects(s);
-
+  let { state, rng } = startMatch(opts.playerDeckId, opts.opponentDeckId, opts.seed);
+  const breaks: BreakDiag[] = [];
   let playerSubs = 0;
   let opponentSubs = 0;
-  const breaks: BreakDiag[] = [];
 
-  for (let period = 1; period <= V6_BALANCE.periods; period++) {
-    s = { ...s, period };
+  ({ state, rng } = advancePeriod(state, rng)); // Period 1
 
-    if (period > 1) {
-      const breakIndex = (period - 1) as 1 | 2 | 3;
-      const energy = V6_BALANCE.energyByBreak[breakIndex - 1];
-      s = { ...s, breakIndex, energy, log: [...s.log, { type: 'break_open', breakIndex, energy, priority: s.priority }] };
-
-      const before = chanceOutlook(s);
-      const playerPlan: SubstitutionPlan = playerAI.plan(s, 'player');
-      const opponentPlan: SubstitutionPlan = opponentAI.plan(s, 'opponent');
-      playerSubs += playerPlan.pairs.length;
-      opponentSubs += opponentPlan.pairs.length;
-      s = {
-        ...s,
-        log: [...s.log, { type: 'plan_locked', side: 'player', pairs: playerPlan.pairs }, { type: 'plan_locked', side: 'opponent', pairs: opponentPlan.pairs }],
-      };
-
-      const applied = applyBreak(s, playerPlan, opponentPlan);
-      s = applied.state;
-      s = { ...s, log: [...s.log, ...applied.reveals.map((event) => ({ type: 'reveal' as const, event }))] };
-      s = rebuildStandingEffects(s);
-
-      breaks.push({
-        breakIndex,
-        playerPlanSize: playerPlan.pairs.length,
-        opponentPlanSize: opponentPlan.pairs.length,
-        thresholdChanged: outlookChanged(before, chanceOutlook(s)),
-      });
-    }
-
-    const res = resolvePeriod(s, rng);
-    s = res.state;
-    rng = res.rng;
-    s = { ...s, priority: res.result.nextPriority };
-    s = expirePeriodEffects(s);
+  for (let b = 0; b < V6_BALANCE.periods - 1; b++) {
+    state = openBreak(state);
+    const playerPlan = playerAI.plan(state, 'player');
+    const opponentPlan = opponentAI.plan(state, 'opponent');
+    playerSubs += playerPlan.pairs.length;
+    opponentSubs += opponentPlan.pairs.length;
+    const committed = commitBreak(state, playerPlan, opponentPlan);
+    state = committed.state;
+    breaks.push(committed.diag);
+    ({ state, rng } = advancePeriod(state, rng));
   }
 
-  const playerScore = s.player.score;
-  const opponentScore = s.opponent.score;
-  s = { ...s, log: [...s.log, { type: 'full_time', playerScore, opponentScore }] };
+  const playerScore = state.player.score;
+  const opponentScore = state.opponent.score;
+  state = { ...state, log: [...state.log, { type: 'full_time', playerScore, opponentScore }] };
 
   const winner: TeamSide | 'draw' = playerScore > opponentScore ? 'player' : opponentScore > playerScore ? 'opponent' : 'draw';
-  return { state: s, playerScore, opponentScore, winner, subsMade: playerSubs + opponentSubs, playerSubs, opponentSubs, breaks, log: s.log };
+  return { state, playerScore, opponentScore, winner, subsMade: playerSubs + opponentSubs, playerSubs, opponentSubs, breaks, log: state.log };
 }

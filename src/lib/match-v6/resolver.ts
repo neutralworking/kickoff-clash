@@ -216,6 +216,14 @@ function attribute(state: V6MatchState, roll: ChanceRoll, side: TeamSide): Chanc
   return { ...roll, attackerCardId, saverCardId };
 }
 
+/** Both sides' effective boards (printed + penalty + all applied effects) — for the UI + debug receipt. */
+export function effectiveBoards(state: V6MatchState, balance: V6Balance = V6_BALANCE) {
+  return {
+    player: buildBoard(activePlacements(state.player.cards, state.cardPool), statEffectsFor(state, 'player'), balance),
+    opponent: buildBoard(activePlacements(state.opponent.cards, state.cardPool), statEffectsFor(state, 'opponent'), balance),
+  };
+}
+
 /**
  * Per-side per-sector stat-driven chance count (the "threshold" the mockup
  * shows). Used by the match loop to tell whether a break changed a threshold —
