@@ -1,38 +1,36 @@
 'use client';
 
 /**
- * Kickoff Clash — PostMatch (SURVIVAL beat)
+ * Kickoff Clash — PostMatch (full-time report).
  *
  * v1 permadeath: a single LOSS ends the run and routes straight to the end
  * screen — so THIS screen is only ever reached after a WIN or a DRAW. It is the
- * "you survived — on to the next" beat, not a neutral full-time recap.
+ * "you got the result — on to the shop" beat.
  *
- * In the canonical Sensible-Soccer pixel house style. TABBED layout (mirrors
- * ShopPhase): a compact, always-visible survival header (SURVIVED · scoreline ·
- * result · vs opponent), a two-tab body that each fills the viewport, and a
- * fixed CONTINUE-to-shop footer. The page never scrolls; only a tab body may
- * scroll internally when a group runs long.
+ * House style: near-black felt, gold chrome + green (win) / gold (draw) result
+ * accent, Silkscreen pixel headers (PIXEL), DM Sans body, crisp pixel content.
+ * The page NEVER scrolls: a fixed result header + tab bar + fixed CONTINUE
+ * footer bracket ONE tab body that fills the slack and scrolls internally.
  *
- *   • SURVIVAL — the "advanced" hero treatment carrying the result (WIN or
- *     DRAW), the one-life fixture arc (Match X of 5 + a pip strip of what's
- *     behind / ahead), and the REWARD EARNED (cash; a draw is flagged as a
- *     reduced gate). No season-points / board-target framing — that concept is
- *     gone under permadeath.
- *   • SQUAD — the durability aftermath: shattered / injured / promoted players
- *     as real GameCards under colour-coded headers (or a SQUAD INTACT state).
- *     In-run attrition still matters, so the aftermath stays.
+ *   • SUMMARY  — the hero: pixel trophy + result word + narrative (the engine's
+ *     verdict headline), the decisive tactical insight (top verdict factor),
+ *     the player of the match, and a reward / fitness / cup stat strip.
+ *   • CONTESTS — the full ranked verdict factors, each with a signed swing chip.
+ *   • SQUAD    — the durability aftermath (shattered / injured / promoted / worn)
+ *     as real GameCards, or the SQUAD INTACT empty state.
  *
- * Tapping any aftermath card opens the shared CardModal.
+ * Everything is driven by the real engine props — no example copy.
  */
 
 import { useState } from 'react';
 import type { Card } from '../lib/scoring';
 import type { MatchResult } from '../lib/run';
 import type { MatchVerdict, VerdictFactor } from '../lib/match-v5';
-import { cupSize, isCupFinal } from '../lib/run';
+import { cupSize } from '../lib/run';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
-import { PIXEL } from './cards/cardTokens';
+import { PIXEL, formatCash } from './cards/cardTokens';
+import { portraitSrc, portraitDataUri } from './cards/portrait';
 
 interface PostMatchProps {
   matchResult: {
@@ -61,20 +59,21 @@ interface PostMatchProps {
   totalRounds: number;    // number of cups in a run (5)
   wins: number;           // wins so far this run (incl. this one)
   matchHistory: MatchResult[]; // results so far this run (incl. this one)
+  /** Player of the match — top-rated XI card + its match line (engine
+   *  playerMatchStats). Null if unavailable (old save / 0-increment edge). */
+  playerOfMatch?: { card: Card; goals: number; assists: number; rating: number } | null;
   onContinue: () => void;
 }
 
-// Per-result presentation: accent colour + verb + survival tagline.
-const RESULT_META: Record<
-  PostMatchProps['matchResult']['result'],
-  { label: string; color: string; tag: string }
-> = {
-  win: { label: 'WIN', color: 'var(--success)', tag: 'Full gate' },
-  draw: { label: 'DRAW', color: 'var(--gold)', tag: 'Reduced gate' },
-  loss: { label: 'LOSS', color: 'var(--danger)', tag: 'Run over' },
+// Per-result presentation: accent colour + hero word + full-time verb.
+type ResultKey = PostMatchProps['matchResult']['result'];
+const RESULT_META: Record<ResultKey, { label: string; word: string; color: string }> = {
+  win: { label: 'WIN', word: 'VICTORY', color: 'var(--success)' },
+  draw: { label: 'DRAW', word: 'STALEMATE', color: 'var(--gold)' },
+  loss: { label: 'LOSS', word: 'DEFEAT', color: 'var(--danger)' },
 };
 
-// Aftermath groups: shattered (gone) → injured → promoted.
+// Aftermath groups: shattered (gone) → worn → injured → promoted.
 // `badgeFg` is the foreground over the solid `color` fill (contrast law: white on
 // the red/amber fates, ink on the bright gold one).
 type GroupTone = { key: string; title: string; color: string; bg: string; marker: string; badgeFg: string };
@@ -85,7 +84,7 @@ const GROUP_META: Record<'shattered' | 'worn' | 'injured' | 'promoted', GroupTon
   promoted: { key: 'promoted', title: 'Promoted', color: 'var(--gold)', bg: 'rgba(245,197,66,0.12)', marker: '★', badgeFg: 'var(--ink-black)' },
 };
 
-type Tab = 'survival' | 'squad';
+type Tab = 'summary' | 'contests' | 'squad';
 
 export default function PostMatch({
   matchResult,
@@ -93,11 +92,10 @@ export default function PostMatch({
   round,
   matchInCup,
   totalRounds,
-  wins,
-  matchHistory,
+  playerOfMatch,
   onContinue,
 }: PostMatchProps) {
-  const [tab, setTab] = useState<Tab>('survival');
+  const [tab, setTab] = useState<Tab>('summary');
   const [modal, setModal] = useState<GameCardModel | null>(null);
 
   const meta = RESULT_META[matchResult.result];
@@ -111,6 +109,14 @@ export default function PostMatch({
   ].filter((g) => g.cards.length > 0);
 
   const affected = groups.reduce((n, g) => n + g.cards.length, 0);
+  const fitnessAffected = shattered.length + injured.length;
+
+  const ties = cupSize(round);
+  const verdict = matchResult.verdict;
+  // The factors ranked by absolute impact — the strongest reason first.
+  const rankedFactors = verdict
+    ? [...verdict.factors].sort((a, b) => Math.abs(b.swing) - Math.abs(a.swing))
+    : [];
 
   // Find which group a commentary line refers to (for its accent tint).
   const lineTone = (line: string): GroupTone | null => {
@@ -130,103 +136,98 @@ export default function PostMatch({
         paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
       }}
     >
-      {/* ── Survival head: SURVIVED · scoreline · result ──────────────────── */}
+      {/* ── Result header: cup/tie · scoreline · result verb ─────────────── */}
       <div className="shrink-0 px-3">
         <div
           className="glass-raised sheen relative overflow-hidden"
           style={{
             borderRadius: 'var(--radius)',
-            boxShadow: `inset 0 1px 0 0 var(--glass-highlight), 0 0 18px ${meta.color}33, var(--depth-2)`,
-            padding: '10px 14px 12px',
+            border: '1px solid var(--glass-border)',
+            boxShadow: `inset 0 1px 0 0 var(--glass-highlight), 0 0 18px ${meta.color}2e, var(--depth-2)`,
+            padding: '9px 14px 11px',
           }}
         >
           {/* result-tinted glow wash behind the verdict */}
           <div
-            className="absolute inset-0 -z-0"
+            className="absolute inset-0"
             style={{
-              background: `radial-gradient(ellipse at 50% 130%, ${meta.color}22 0%, transparent 60%)`,
+              background: `radial-gradient(ellipse at 50% 130%, ${meta.color}24 0%, transparent 62%)`,
               pointerEvents: 'none',
+              zIndex: 0,
             }}
           />
           {/* accent rail in the result colour */}
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: meta.color, boxShadow: `0 0 8px ${meta.color}`, zIndex: 2 }} />
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: meta.color, boxShadow: `0 0 8px ${meta.color}`, zIndex: 2 }} />
 
-          <div className="relative flex items-center justify-between" style={{ gap: 8, zIndex: 2 }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: 1.4, color: 'var(--dust)' }}>
-              SURVIVED
-            </span>
-            <span className="truncate" style={{ fontSize: 11, color: 'var(--cream-soft)' }}>
-              vs <b style={{ color: 'var(--cream)' }}>{matchResult.opponentName}</b>
+          {/* Cup / tie context line */}
+          <div className="relative flex justify-center" style={{ zIndex: 2 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1.4, color: 'var(--dust)' }}>
+              CUP {round}/{totalRounds} {'·'} TIE {matchInCup}/{ties}
             </span>
           </div>
 
-          {/* Scoreline + result pill on one tight row */}
-          <div className="relative flex items-center justify-center" style={{ gap: 12, marginTop: 6, zIndex: 2 }}>
-            <ScoreNum value={matchResult.yourGoals} win={matchResult.result === 'win'} />
-            <span style={{ fontFamily: PIXEL, fontSize: 18, color: 'var(--ink)', lineHeight: 1, paddingBottom: 6 }}>
-              {'–'}
+          {/* YOUR XI  ·  goals – goals  ·  OPPONENT */}
+          <div className="relative flex items-center justify-center" style={{ gap: 12, marginTop: 4, zIndex: 2 }}>
+            <span className="text-right" style={{ flex: 1, fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.6, color: 'var(--cream-soft)' }}>
+              YOUR XI
             </span>
-            <ScoreNum value={matchResult.opponentGoals} win={false} />
+            <span className="flex items-baseline shrink-0" style={{ gap: 8 }}>
+              <ScoreNum value={matchResult.yourGoals} lit={matchResult.result === 'win'} />
+              <span style={{ fontFamily: PIXEL, fontSize: 20, color: 'var(--ink)', lineHeight: 1 }}>{'–'}</span>
+              <ScoreNum value={matchResult.opponentGoals} lit={false} />
+            </span>
+            <span className="truncate" style={{ flex: 1, fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.6, color: 'var(--cream-soft)', textTransform: 'uppercase' }}>
+              {matchResult.opponentName}
+            </span>
           </div>
 
-          <div className="relative flex items-center justify-center" style={{ marginTop: 6, zIndex: 2 }}>
-            <span
-              className="score-pop"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                fontFamily: PIXEL,
-                fontSize: 13,
-                letterSpacing: 1,
-                color: meta.color,
-                background: `${meta.color}1f`,
-                border: `1.5px solid ${meta.color}`,
-                borderRadius: 'var(--radius-sm)',
-                padding: '5px 12px',
-                lineHeight: 1,
-              }}
-            >
-              {meta.label}
-              <span style={{ width: 3, height: 11, background: meta.color, opacity: 0.55, borderRadius: 1 }} />
-              <span style={{ fontSize: 8, letterSpacing: 0.6, color: 'var(--cream-soft)' }}>
-                {meta.tag.toUpperCase()}
-              </span>
+          {/* Result line: — WIN · VICTORY — */}
+          <div className="relative flex items-center justify-center" style={{ gap: 8, marginTop: 6, zIndex: 2 }}>
+            <span style={{ width: 16, height: 2, background: meta.color, opacity: 0.5, borderRadius: 1 }} />
+            <span style={{ fontFamily: PIXEL, fontSize: 11, letterSpacing: 1, color: meta.color, textShadow: `0 0 10px ${meta.color}66` }}>
+              {meta.label} {'·'} {meta.word}
             </span>
+            <span style={{ width: 16, height: 2, background: meta.color, opacity: 0.5, borderRadius: 1 }} />
           </div>
         </div>
       </div>
 
-      {/* ── Tab bar ───────────────────────────────────────────────────────── */}
+      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
       <div className="shrink-0 flex gap-1.5 px-3" style={{ marginTop: 10 }}>
-        <TabButton label="Survival" active={tab === 'survival'} onClick={() => setTab('survival')} />
+        <TabButton label="Summary" active={tab === 'summary'} accent={meta.color} onClick={() => setTab('summary')} />
+        <TabButton label="Contests" active={tab === 'contests'} accent={meta.color} onClick={() => setTab('contests')} />
         <TabButton
           label="Squad"
           active={tab === 'squad'}
+          accent={meta.color}
           badge={affected > 0 ? affected : undefined}
           badgeColor={shattered.length > 0 ? 'var(--danger)' : injured.length > 0 ? 'var(--amber)' : 'var(--gold)'}
           onClick={() => setTab('squad')}
         />
       </div>
 
-      {/* ── Active tab body — the ONLY region that may scroll ──────────────── */}
+      {/* ── Active tab body — the ONLY region that may scroll ─────────────── */}
       <div className="flex-1 min-h-0 px-3" style={{ marginTop: 10 }}>
-        {tab === 'survival' ? (
-          <SurvivalTab
+        {tab === 'summary' && (
+          <SummaryTab
             matchResult={matchResult}
             meta={meta}
             round={round}
             matchInCup={matchInCup}
-            totalRounds={totalRounds}
-            wins={wins}
-            matchHistory={matchHistory}
+            ties={ties}
+            topFactor={rankedFactors[0] ?? null}
+            fitnessAffected={fitnessAffected}
+            playerOfMatch={playerOfMatch ?? null}
+            onOpen={(card) => setModal({ variant: 'player', card })}
           />
-        ) : (
+        )}
+        {tab === 'contests' && <ContestsTab meta={meta} factors={rankedFactors} />}
+        {tab === 'squad' && (
           <SquadTab groups={groups} commentary={commentary} lineTone={lineTone} onOpen={(card) => setModal({ variant: 'player', card })} />
         )}
       </div>
 
-      {/* ── Continue CTA ──────────────────────────────────────────────────── */}
+      {/* ── Continue CTA ─────────────────────────────────────────────────── */}
       <div className="shrink-0 px-3" style={{ paddingTop: 10 }}>
         <button
           onClick={onContinue}
@@ -235,19 +236,19 @@ export default function PostMatch({
             height: 52,
             borderRadius: 'var(--radius)',
             border: '2px solid var(--ink-black)',
-            background: 'linear-gradient(180deg, var(--amber) 0%, var(--amber-soft) 100%)',
+            background: 'linear-gradient(180deg, var(--gold) 0%, #c8901f 100%)',
             boxShadow:
               'inset 0 1px 0 0 var(--glass-highlight), 0 3px 0 0 var(--ink-black), var(--depth-2)',
             fontFamily: PIXEL,
             fontSize: 14,
             letterSpacing: 0.8,
-            color: 'var(--line-white)',
+            color: 'var(--ink-black)',
             textTransform: 'uppercase',
-            ['--glow' as string]: 'var(--amber-glow)',
+            ['--glow' as string]: 'var(--gold-glow)',
           }}
         >
           <span className="relative" style={{ zIndex: 2 }}>
-            {isCupFinal(round, matchInCup) && round >= totalRounds ? 'Claim the Trophy' : 'Continue to Shop'} {'→'}
+            Continue to Shop {'→'}
           </span>
         </button>
       </div>
@@ -259,207 +260,381 @@ export default function PostMatch({
 }
 
 // ===========================================================================
-// SURVIVAL TAB — the "you advanced" beat: hero verdict + one-life fixture arc +
-// reward earned.
-//
-// The panel is ONE vertically-centred composition: the survival poster, the
-// fixture run, and the reward sit as a single stack pinned to the middle of the
-// tab body, with equal flex spacers above and below so the slack is split evenly
-// and the screen reads as deliberately composed — never two clusters shoved
-// apart.
+// SUMMARY TAB — the hero: trophy + result word + narrative, the decisive
+// tactical insight, the player of the match, and a reward / fitness / cup strip.
 // ===========================================================================
 
-function SurvivalTab({
+function SummaryTab({
   matchResult,
   meta,
   round,
   matchInCup,
-  totalRounds,
-  wins,
-  matchHistory,
+  ties,
+  topFactor,
+  fitnessAffected,
+  playerOfMatch,
+  onOpen,
 }: {
   matchResult: PostMatchProps['matchResult'];
-  meta: { label: string; color: string; tag: string };
+  meta: { label: string; word: string; color: string };
   round: number;
   matchInCup: number;
-  totalRounds: number;
-  wins: number;
-  matchHistory: MatchResult[];
+  ties: number;
+  topFactor: VerdictFactor | null;
+  fitnessAffected: number;
+  playerOfMatch: { card: Card; goals: number; assists: number; rating: number } | null;
+  onOpen: (card: Card) => void;
 }) {
-  const ties = cupSize(round);
-  const cupFinal = isCupFinal(round, matchInCup);
-  // Big survival verb: a cup final clears the cup; a mid-cup tie just survives. (The true
-  // championship is the EndScreen — winning the LAST cup's final routes there.)
-  const heroWord = cupFinal ? (matchResult.result === 'win' ? 'CUP WON' : 'CUP CLEARED') : 'SURVIVED';
-  const arcLine = cupFinal
-    ? round >= totalRounds
-      ? 'The last cup is yours — champions.'
-      : `Cup ${round} cleared — into the shop, then Cup ${round + 1}.`
-    : survivalLine(matchResult, round, matchInCup, ties);
-  // The engine's verdict headline (why the match went that way) is the lead line
-  // whenever it exists; the progression line is the fallback for pre-verdict
-  // saves. Cup/tie progression stays legible via the marker row + the pip arc.
-  const verdict = matchResult.verdict;
-  const leadLine = verdict?.headline ?? arcLine;
-  const rewardSub = matchResult.result === 'draw' ? 'reduced gate' : 'gate banked';
+  const margin = matchResult.yourGoals - matchResult.opponentGoals;
+  const subTag = resultSubTag(matchResult.result, margin, matchResult.yourGoals);
 
   return (
     <div
-      key="survival"
-      className="glass-raised sheen h-full flex flex-col relative overflow-hidden stats-rise"
-      style={{
-        borderRadius: 'var(--radius)',
-        boxShadow: `inset 0 1px 0 0 var(--glass-highlight), 0 0 18px ${meta.color}22, var(--depth-2)`,
-      }}
+      key="summary"
+      className="h-full overflow-y-auto stats-rise"
+      style={{ overscrollBehavior: 'contain' }}
     >
-      {/* result-tinted wash + accent rail unify the panel under the verdict colour */}
-      <div
-        className="absolute inset-0"
-        style={{ background: `radial-gradient(ellipse at 50% 12%, ${meta.color}22 0%, transparent 58%)`, pointerEvents: 'none', zIndex: 1 }}
-      />
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: meta.color, boxShadow: `0 0 8px ${meta.color}`, zIndex: 2 }} />
-
-      {/* Three composed regions distributed across the FULL panel height with
-          equal flex spacers between them (space-around) — no concentrated void:
-          (1) the match marker near the top, (2) the verdict poster + fixture arc
-          in the upper-middle, (3) the books/reward grounded in the lower third. */}
-      <div className="shrink-0" style={{ flex: 0.6 }} />
-
-      {/* (1) Match marker */}
-      <div className="relative shrink-0 flex justify-center" style={{ padding: '0 18px', zIndex: 2 }}>
-        <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1.4, color: 'var(--dust)' }}>
-          CUP {round}/{totalRounds} {'·'} TIE {matchInCup}/{ties}
-        </span>
-      </div>
-
-      <div className="shrink-0" style={{ flex: 1 }} />
-
-      {/* (2) Verdict poster + summary line + one-life fixture arc */}
-      <div className="relative shrink-0 flex flex-col items-center text-center" style={{ padding: '0 18px', gap: 14, zIndex: 2 }}>
-        <span
-          className="score-pop"
+      <div className="flex flex-col" style={{ gap: 10, paddingBottom: 4 }}>
+        {/* (1) Result hero — trophy, big result word, sub-tag, narrative. */}
+        <div
+          className="glass-raised sheen relative overflow-hidden flex flex-col items-center text-center"
           style={{
-            fontFamily: PIXEL,
-            fontSize: heroWord.length > 8 ? 32 : 44,
-            letterSpacing: 1.5,
-            lineHeight: 1,
-            color: meta.color,
-            textShadow: `0 3px 0 var(--ink-black), 0 0 24px ${meta.color}`,
+            borderRadius: 'var(--radius)',
+            border: '1px solid var(--glass-border)',
+            boxShadow: `inset 0 1px 0 0 var(--glass-highlight), 0 0 20px ${meta.color}26, var(--depth-2)`,
+            padding: '18px 16px 16px',
           }}
         >
-          {heroWord}
-        </span>
-        <span style={{ fontSize: 12.5, color: 'var(--cream-soft)', lineHeight: 1.45, maxWidth: 300 }}>
-          {leadLine}
-        </span>
+          {/* stadium-glow backdrop */}
+          <div
+            className="absolute inset-0"
+            style={{ background: `radial-gradient(ellipse at 50% 4%, ${meta.color}30 0%, transparent 58%)`, pointerEvents: 'none', zIndex: 0 }}
+          />
 
-        {/* The verdict's ranked factors — the quiet evidence under the headline.
-            Engine copy verbatim; absent on pre-verdict saves (renders nothing). */}
-        {verdict && verdict.factors.length > 0 && <VerdictList verdict={verdict} />}
+          <div className="relative" style={{ zIndex: 2 }}>
+            <TrophyShield accent={meta.color} size={58} />
+          </div>
 
-        {/* Tie arc for THIS cup — a pip per tie so the cup's shape is legible at a
-            glance: played ties coloured by outcome, the current one ringed, rest pending. */}
-        <FixtureArc round={round} matchInCup={matchInCup} matchHistory={matchHistory} />
-      </div>
+          <span
+            className="relative score-pop"
+            style={{
+              zIndex: 2,
+              marginTop: 10,
+              fontFamily: PIXEL,
+              fontSize: meta.word.length > 8 ? 30 : 40,
+              letterSpacing: 1.5,
+              lineHeight: 1,
+              color: meta.color,
+              textShadow: `0 3px 0 var(--ink-black), 0 0 24px ${meta.color}`,
+            }}
+          >
+            {meta.word}
+          </span>
 
-      <div className="shrink-0" style={{ flex: 1 }} />
+          <span
+            className="relative"
+            style={{
+              zIndex: 2,
+              marginTop: 8,
+              fontFamily: PIXEL,
+              fontSize: 8.5,
+              letterSpacing: 1.2,
+              color: 'var(--cream-soft)',
+              background: `${meta.color}1c`,
+              border: `1px solid ${meta.color}66`,
+              borderRadius: 'var(--radius-sm)',
+              padding: '4px 9px',
+              lineHeight: 1,
+            }}
+          >
+            {subTag}
+          </span>
 
-      {/* (3) The books — divider + reward readout, grounded in the lower third */}
-      <div className="relative shrink-0" style={{ padding: '0 14px', zIndex: 2 }}>
-        <div className="flex items-center" style={{ gap: 8 }}>
-          <span style={{ flex: 1, height: 1, background: 'var(--glass-border)' }} />
-          <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>THE BOOKS</span>
-          <span style={{ flex: 1, height: 1, background: 'var(--glass-border)' }} />
+          {matchResult.verdict && (
+            <span
+              className="relative"
+              style={{ zIndex: 2, marginTop: 11, fontSize: 12.5, lineHeight: 1.5, color: 'var(--cream-soft)', maxWidth: 300 }}
+            >
+              {matchResult.verdict.headline}
+            </span>
+          )}
+        </div>
+
+        {/* (2) Tactical insight — the single most decisive verdict factor. */}
+        {topFactor && <InsightCard factor={topFactor} accent={meta.color} />}
+
+        {/* (3) Player of the match. */}
+        {playerOfMatch && <PlayerOfMatch pom={playerOfMatch} accent={meta.color} onOpen={onOpen} />}
+
+        {/* (4) Reward / fitness / cup progress strip. */}
+        <div
+          className="glass-raised sheen relative overflow-hidden grid"
+          style={{
+            gridTemplateColumns: 'repeat(3, minmax(0,1fr))',
+            borderRadius: 'var(--radius)',
+            border: '1px solid var(--glass-border)',
+            boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
+            padding: '12px 8px',
+          }}
+        >
+          <StripCell
+            label="Reward"
+            divider={false}
+            value={<span style={{ fontFamily: PIXEL, fontSize: 17, color: 'var(--gold)' }}>{formatCash(matchResult.revenue)}</span>}
+          />
+          <StripCell
+            label="Fitness"
+            divider
+            value={
+              fitnessAffected === 0 ? (
+                <span style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--success)' }}>No issues</span>
+              ) : (
+                <span style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--amber)' }}>{fitnessAffected} affected</span>
+              )
+            }
+          />
+          <StripCell
+            label="Cup Progress"
+            divider
+            value={
+              <span className="flex items-center justify-center" style={{ gap: 5 }}>
+                <TrophyShield accent="var(--gold)" size={13} />
+                <span style={{ fontFamily: PIXEL, fontSize: 15, color: 'var(--cream)' }}>
+                  {matchInCup}/{ties}
+                </span>
+              </span>
+            }
+          />
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="relative shrink-0 grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', padding: '16px 14px 0', zIndex: 2 }}>
-        <EconStat label="Reward" value={`£${compact(matchResult.revenue)}`} sub={rewardSub} color="var(--gold)" delay={0} divider={false} />
-        <EconStat label="Attendance" value={compact(matchResult.attendance)} sub="in seats" color="var(--cream)" delay={60} divider />
-        <EconStat label="Cup" value={`${round}/${totalRounds}`} sub={`${wins} won`} color="var(--success)" delay={120} divider />
+/** Derive the result sub-tag from the goal margin. */
+function resultSubTag(result: ResultKey, margin: number, yourGoals: number): string {
+  if (result === 'draw') return yourGoals === 0 ? 'GOALLESS DRAW' : 'HARD-FOUGHT DRAW';
+  if (result === 'loss') return 'DEFEAT';
+  if (margin >= 3) return 'COMFORTABLE WIN';
+  if (margin === 1) return 'NARROW WIN';
+  return 'SOLID WIN';
+}
+
+/** The single decisive verdict factor as a tactical-insight card. */
+function InsightCard({ factor, accent }: { factor: VerdictFactor; accent: string }) {
+  const tone = factorTone(factor.swing);
+  return (
+    <div
+      className="glass-raised sheen relative overflow-hidden flex items-start"
+      style={{
+        gap: 11,
+        borderRadius: 'var(--radius)',
+        border: '1px solid var(--glass-border)',
+        boxShadow: `inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)`,
+        padding: '11px 12px',
+      }}
+    >
+      {/* icon tile — a tactics/arrow motif */}
+      <span
+        className="shrink-0 flex items-center justify-center"
+        style={{
+          width: 38,
+          height: 38,
+          borderRadius: 'var(--radius-sm)',
+          background: `${accent}18`,
+          border: `1px solid ${accent}66`,
+          boxShadow: `inset 0 1px 0 0 var(--glass-highlight)`,
+        }}
+      >
+        <TacticsGlyph accent={accent} size={22} />
+      </span>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center" style={{ gap: 6 }}>
+          <span className="mr-auto truncate" style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.6, color: 'var(--cream)', textTransform: 'uppercase' }}>
+            {factor.label}
+          </span>
+          <SwingChip factor={factor} />
+          <span style={{ color: 'var(--dust)', fontSize: 13, lineHeight: 1 }}>{'›'}</span>
+        </div>
+        <p style={{ marginTop: 5, fontSize: 11, lineHeight: 1.45, color: 'var(--cream-soft)' }}>{factor.detail}</p>
       </div>
 
-      <div className="shrink-0" style={{ flex: 0.6 }} />
+      <span style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, background: tone, opacity: 0.7 }} />
     </div>
   );
 }
 
-/** The one-life fixture arc: one pip per fixture in the run. Played fixtures are
- *  coloured by outcome (win green / draw gold), the most-recent one ringed, and
- *  upcoming fixtures show as hollow pending slots. Makes the survive-or-die arc
- *  readable in a glance. */
-function FixtureArc({
-  round,
-  matchInCup,
-  matchHistory,
+/** Player of the match — portrait + surname + match line. */
+function PlayerOfMatch({
+  pom,
+  accent,
+  onOpen,
 }: {
-  round: number;
-  matchInCup: number;
-  matchHistory: MatchResult[];
+  pom: { card: Card; goals: number; assists: number; rating: number };
+  accent: string;
+  onOpen: (card: Card) => void;
 }) {
-  const ties = cupSize(round);
-  // Ties of THIS cup, in the order they were played (incl. the one just played). The
-  // i-th played result fills tie i+1; the current tie is `matchInCup`.
-  const cupResults = matchHistory.filter((m) => m.round === round);
-  const pips = Array.from({ length: ties }, (_, i) => {
-    const tieNo = i + 1;
-    const played = cupResults[i];
-    const isCurrent = tieNo === matchInCup;
-    return { tieNo, played, isCurrent };
-  });
-
+  const { card, goals, assists, rating } = pom;
   return (
-    <div className="flex items-center" style={{ gap: 6, marginTop: 2 }}>
-      {pips.map(({ tieNo, played, isCurrent }) => {
-        const color =
-          played?.result === 'win'
-            ? 'var(--success)'
-            : played?.result === 'draw'
-            ? 'var(--gold)'
-            : 'transparent';
-        const filled = Boolean(played);
-        return (
-          <div
-            key={tieNo}
-            className="flex flex-col items-center"
-            style={{ gap: 4 }}
-            aria-label={
-              played
-                ? `Tie ${tieNo}: ${played.result} ${played.yourGoals}-${played.opponentGoals}`
-                : `Tie ${tieNo}: upcoming`
-            }
-          >
-            <span
-              style={{
-                width: 16,
-                height: 16,
-                borderRadius: 4,
-                background: filled ? color : 'rgba(0,0,0,0.32)',
-                border: `2px solid ${isCurrent ? 'var(--line-white)' : 'var(--ink-black)'}`,
-                boxShadow: filled ? `0 0 8px ${color}66` : 'none',
-              }}
-            />
-            <span style={{ fontFamily: PIXEL, fontSize: 7, color: isCurrent ? 'var(--cream)' : 'var(--dust)' }}>
-              {tieNo}
-            </span>
-          </div>
-        );
-      })}
-    </div>
+    <button
+      onClick={() => onOpen(card)}
+      className="glass-raised sheen relative overflow-hidden flex items-center w-full text-left active:scale-[0.99]"
+      style={{
+        gap: 12,
+        borderRadius: 'var(--radius)',
+        border: '1px solid var(--glass-border)',
+        boxShadow: `inset 0 1px 0 0 var(--glass-highlight), 0 0 16px var(--gold-glow), var(--depth-1)`,
+        padding: '11px 12px',
+      }}
+    >
+      <Portrait64 card={card} accent={accent} />
+      <div className="flex-1 min-w-0">
+        <span className="block truncate" style={{ fontFamily: PIXEL, fontSize: 13, color: 'var(--cream)' }}>
+          {surname(card.name)}
+        </span>
+        <span className="block" style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--gold)', marginTop: 3 }}>
+          PLAYER OF THE MATCH
+        </span>
+        <span className="block" style={{ fontSize: 11, color: 'var(--cream-soft)', marginTop: 6 }}>
+          {goals} {goals === 1 ? 'goal' : 'goals'} {'·'} {assists} {assists === 1 ? 'assist' : 'assists'} {'·'}{' '}
+          <b style={{ color: 'var(--success)' }}>{rating} rating</b>
+        </span>
+      </div>
+      <span style={{ color: 'var(--dust)', fontSize: 14, lineHeight: 1, paddingRight: 2 }}>{'›'}</span>
+    </button>
   );
 }
 
-/** A one-line plain-language survival summary for a mid-cup tie. */
-function survivalLine(m: PostMatchProps['matchResult'], round: number, matchInCup: number, ties: number): string {
-  const opp = m.opponentName;
-  const left = ties - matchInCup;
-  const tail = left === 1 ? 'One more tie to the cup final.' : `${left} ties left in Cup ${round}.`;
-  if (m.result === 'win') return `${opp} beaten — Cup ${round}, tie ${matchInCup}/${ties}. ${tail}`;
-  return `Honours even with ${opp} — you survive Cup ${round}, tie ${matchInCup}/${ties}. ${tail}`;
+/** A compact 64px pixel portrait window, framed in the result accent. */
+function Portrait64({ card, accent }: { card: Card; accent: string }) {
+  const fallback = portraitDataUri(card.id ?? card.name);
+  const [src, setSrc] = useState<string>(() => portraitSrc(card) ?? fallback);
+  return (
+    <span
+      className="shrink-0 relative overflow-hidden"
+      style={{
+        width: 60,
+        height: 60,
+        borderRadius: 'var(--radius-sm)',
+        border: `1.5px solid ${accent}`,
+        boxShadow: `inset 0 1px 0 0 var(--glass-highlight), 0 0 10px ${accent}44`,
+        background: 'linear-gradient(180deg, #15231a 0%, #21472d 100%)',
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={card.name}
+        onError={() => setSrc(fallback)}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          objectPosition: 'center top',
+          imageRendering: 'pixelated',
+        }}
+      />
+    </span>
+  );
 }
 
 // ===========================================================================
-// SQUAD TAB — durability aftermath (shattered / injured / promoted)
+// CONTESTS TAB — the full ranked verdict factors, each with a signed swing chip.
+// ===========================================================================
+
+function ContestsTab({ meta, factors }: { meta: { color: string }; factors: VerdictFactor[] }) {
+  return (
+    <div
+      key="contests"
+      className="glass-raised sheen h-full flex flex-col overflow-hidden stats-rise relative"
+      style={{
+        borderRadius: 'var(--radius)',
+        border: '1px solid var(--glass-border)',
+        boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-2)',
+      }}
+    >
+      <PanelHeader accent={meta.color} title="Match Breakdown" />
+      <div
+        className="flex-1 min-h-0 overflow-y-auto relative"
+        style={{ overscrollBehavior: 'contain', padding: '0 11px 11px', zIndex: 2 }}
+      >
+        {factors.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center h-full" style={{ minHeight: 200, padding: 20 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--cream-soft)', letterSpacing: 0.6 }}>NO BREAKDOWN</span>
+            <span style={{ fontSize: 11.5, color: 'var(--dust)', marginTop: 8, lineHeight: 1.5, maxWidth: 240 }}>
+              The engine did not record a verdict for this fixture.
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 8 }}>
+            {factors.map((f) => (
+              <FactorRow key={f.key} factor={f} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** One verdict factor — label · detail · signed swing chip. */
+function FactorRow({ factor }: { factor: VerdictFactor }) {
+  const tone = factorTone(factor.swing);
+  return (
+    <div
+      className="glass-surface relative overflow-hidden"
+      style={{
+        borderRadius: 'var(--radius-sm)',
+        boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
+        padding: '9px 10px 9px 12px',
+      }}
+    >
+      <span style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, background: tone, opacity: 0.75 }} />
+      <div className="flex items-center" style={{ gap: 6 }}>
+        <span className="mr-auto truncate" style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.6, color: 'var(--cream)', textTransform: 'uppercase' }}>
+          {factor.label}
+        </span>
+        <SwingChip factor={factor} />
+      </div>
+      <p style={{ marginTop: 5, fontSize: 11, lineHeight: 1.45, color: 'var(--cream-soft)' }}>{factor.detail}</p>
+    </div>
+  );
+}
+
+/** The signed-swing chip: `KEY ±N`, colour-coded for/against. */
+function SwingChip({ factor }: { factor: VerdictFactor }) {
+  const tone = factorTone(factor.swing);
+  const n = Math.round(factor.swing * 10);
+  const label = `${n >= 0 ? '+' : '−'}${Math.abs(n)}`;
+  return (
+    <span
+      className="shrink-0"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        fontFamily: PIXEL,
+        fontSize: 8,
+        letterSpacing: 0.5,
+        color: tone,
+        background: tone === 'var(--dust)' ? 'rgba(154,139,106,0.12)' : `${tone}1f`,
+        border: `1px solid ${tone}`,
+        borderRadius: 'var(--radius-sm)',
+        padding: '3px 6px',
+        lineHeight: 1,
+      }}
+    >
+      {factor.key.toUpperCase()}
+      <span style={{ opacity: 0.85 }}>{label}</span>
+    </span>
+  );
+}
+
+// ===========================================================================
+// SQUAD TAB — durability aftermath (shattered / worn / injured / promoted)
 // ===========================================================================
 
 function SquadTab({
@@ -482,6 +657,7 @@ function SquadTab({
       className="glass-raised sheen h-full flex flex-col overflow-hidden stats-rise relative"
       style={{
         borderRadius: 'var(--radius)',
+        border: '1px solid var(--glass-border)',
         boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-2)',
       }}
     >
@@ -545,8 +721,6 @@ function SquadTab({
           </div>
         ) : (
           <div className="flex flex-col" style={{ gap: 11 }}>
-            {/* One dense grid so cards fill the width regardless of how many share
-                a fate; each card carries a corner badge for its outcome. */}
             <div className="grid grid-cols-3" style={{ gap: 8 }}>
               {groups.flatMap(({ tone, cards }) =>
                 cards.map((card, i) => (
@@ -555,7 +729,6 @@ function SquadTab({
               )}
             </div>
 
-            {/* Commentary tied to the aftermath — secondary to the cards. */}
             {commentary.length > 0 && (
               <div className="flex flex-col" style={{ gap: 6, marginTop: 1 }}>
                 <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>
@@ -577,16 +750,18 @@ function SquadTab({
 // Pieces
 // ===========================================================================
 
-/** A tab toggle, matching the ShopPhase tab bar with an optional count badge. */
+/** A tab toggle: accent outline + underline when active (ShopPhase family). */
 function TabButton({
   label,
   active,
+  accent,
   badge,
   badgeColor = 'var(--amber)',
   onClick,
 }: {
   label: string;
   active: boolean;
+  accent: string;
   badge?: number;
   badgeColor?: string;
   onClick: () => void;
@@ -594,21 +769,21 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex-1 active:scale-[0.98] relative overflow-hidden ${active ? 'sheen-strong glow-edge' : 'glass-surface sheen'}`}
+      className={`flex-1 active:scale-[0.98] relative overflow-hidden ${active ? 'sheen-strong' : 'glass-surface sheen'}`}
       style={{
         height: 38,
         borderRadius: 'var(--radius-sm)',
-        border: active ? '1px solid var(--ink-black)' : undefined,
-        background: active ? 'linear-gradient(135deg, var(--amber), var(--amber-soft))' : undefined,
+        border: active ? `1px solid ${accent}` : '1px solid var(--glass-border)',
+        borderBottom: active ? `3px solid ${accent}` : '1px solid var(--glass-border)',
+        background: active ? `${accent}1c` : undefined,
         boxShadow: active
-          ? 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)'
+          ? `inset 0 1px 0 0 var(--glass-highlight), 0 0 12px ${accent}33, var(--depth-1)`
           : 'var(--depth-1)',
         fontFamily: PIXEL,
         fontSize: 10,
         letterSpacing: 0.6,
-        color: active ? 'var(--ink-black)' : 'var(--cream-soft)',
+        color: active ? accent : 'var(--cream-soft)',
         textTransform: 'uppercase',
-        ...(active ? { ['--glow' as string]: 'var(--amber-glow)' } : {}),
       }}
     >
       <span className="relative" style={{ zIndex: 2 }}>{label}</span>
@@ -641,57 +816,11 @@ function TabButton({
   );
 }
 
-/** Subtle for/against tone from a verdict factor's signed swing (+ favours you,
- *  − the opponent); near-zero swings stay neutral. Colour only — never copy. */
+/** For/against tone from a verdict factor's signed swing. Colour only. */
 function factorTone(swing: number): string {
-  if (swing > 0.12) return 'var(--success)';
-  if (swing < -0.12) return 'var(--danger)';
+  if (swing > 0.05) return 'var(--success)';
+  if (swing < -0.05) return 'var(--danger)';
   return 'var(--dust)';
-}
-
-/** The verdict's top factors as a quiet, left-aligned evidence list beneath the
- *  headline. Label + detail render VERBATIM from the engine; the only string
- *  this component adds is the plain section label. Some headline branches
- *  restate the decisive factor's detail word-for-word — that duplicate row is
- *  skipped (presentation only, no copy altered). */
-function VerdictList({ verdict }: { verdict: MatchVerdict }) {
-  const headline = verdict.headline.toLowerCase();
-  const top = verdict.factors
-    .filter((f: VerdictFactor) => !headline.includes(f.detail.toLowerCase()))
-    .slice(0, 3);
-  return (
-    <div className="flex flex-col w-full" style={{ gap: 7, maxWidth: 304 }}>
-      <div className="flex items-center" style={{ gap: 8 }}>
-        <span style={{ flex: 1, height: 1, background: 'var(--glass-border)' }} />
-        <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>WHY</span>
-        <span style={{ flex: 1, height: 1, background: 'var(--glass-border)' }} />
-      </div>
-      {top.map((f) => {
-        const tone = factorTone(f.swing);
-        return (
-          <div key={f.key} className="flex items-start text-left" style={{ gap: 7 }}>
-            <span
-              style={{
-                width: 5,
-                height: 5,
-                marginTop: 5,
-                borderRadius: 1,
-                background: tone,
-                boxShadow: tone === 'var(--dust)' ? 'none' : `0 0 6px ${tone}`,
-                flexShrink: 0,
-              }}
-            />
-            <span style={{ fontSize: 10.5, lineHeight: 1.5, color: 'var(--cream-soft)' }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.7, color: tone, marginRight: 6 }}>
-                {f.label.toUpperCase()}
-              </span>
-              {f.detail}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 /** Shared panel header chip: accent bar · pixel title · optional right slot. */
@@ -710,16 +839,29 @@ function PanelHeader({ accent, title, right }: { accent: string; title: string; 
   );
 }
 
-/** A large scoreline digit; the winning side reads in --cream (full ink), the other dimmed. */
-function ScoreNum({ value, win }: { value: number; win: boolean }) {
+/** One stat-strip cell (label over a value), with an optional left divider. */
+function StripCell({ label, value, divider }: { label: string; value: React.ReactNode; divider: boolean }) {
+  return (
+    <div
+      className="flex flex-col items-center text-center"
+      style={{ gap: 6, padding: '0 4px', borderLeft: divider ? '1px solid var(--glass-border)' : undefined }}
+    >
+      <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: 'var(--dust)', textTransform: 'uppercase' }}>{label}</span>
+      <span className="flex items-center justify-center" style={{ minHeight: 18 }}>{value}</span>
+    </div>
+  );
+}
+
+/** A large scoreline digit; the winning side reads full-ink, the other dimmed. */
+function ScoreNum({ value, lit }: { value: number; lit: boolean }) {
   return (
     <span
       style={{
         fontFamily: PIXEL,
-        fontSize: 40,
+        fontSize: 34,
         lineHeight: 0.9,
-        color: win ? 'var(--cream)' : 'var(--cream-soft)',
-        textShadow: win ? '0 3px 0 var(--ink-black)' : '0 2px 0 var(--ink-black)',
+        color: lit ? 'var(--cream)' : 'var(--cream-soft)',
+        textShadow: lit ? '0 3px 0 var(--ink-black)' : '0 2px 0 var(--ink-black)',
       }}
     >
       {value}
@@ -776,8 +918,6 @@ function FateCard({
         delay={delay}
         ariaLabel={`${card.name} — ${tone.title}`}
       />
-      {/* fate badge — a corner ribbon pinned to the card's top-right corner,
-          clear of the position tab (top-left) and rating (which it tucks beside). */}
       <span
         style={{
           position: 'absolute',
@@ -807,46 +947,87 @@ function FateCard({
 }
 
 // ===========================================================================
+// Pixel glyphs (crisp — box-pixels, no blur, no soft shadow on the pixels)
+// ===========================================================================
+
+/** A pixel trophy sitting on a shield, drawn as crisp rects. The shield reads in
+ *  the result accent; the cup is gold, so it reads premium against any accent. */
+function TrophyShield({ accent, size }: { accent: string; size: number }) {
+  const cup = 'var(--gold)';
+  // Shield silhouette: horizontal spans on a 16-wide grid (accent, semi-fill).
+  const shield: [number, number, number][] = [
+    [3, 0, 10],
+    [2, 1, 12],
+    [2, 2, 12],
+    [2, 3, 12],
+    [2, 4, 12],
+    [2, 5, 12],
+    [3, 6, 10],
+    [3, 7, 10],
+    [4, 8, 8],
+    [5, 9, 6],
+    [6, 10, 4],
+    [7, 11, 2],
+  ];
+  // Trophy cup rects (gold).
+  const trophy: [number, number, number, number][] = [
+    [4, 1, 8, 1],   // rim
+    [3, 2, 1, 2],   // left handle
+    [12, 2, 1, 2],  // right handle
+    [5, 2, 6, 2],   // bowl upper
+    [6, 4, 4, 1],   // bowl taper
+    [7, 5, 2, 1],   // stem
+    [6, 6, 4, 1],   // base upper
+    [5, 7, 6, 1],   // base foot
+  ];
+  return (
+    <svg
+      width={size}
+      height={(size * 13) / 16}
+      viewBox="0 0 16 13"
+      shapeRendering="crispEdges"
+      style={{ imageRendering: 'pixelated', display: 'block', filter: `drop-shadow(0 0 6px ${accent}55)` }}
+    >
+      {shield.map(([x, y, w], i) => (
+        <rect key={`s${i}`} x={x} y={y} width={w} height={1} fill={accent} opacity={0.28} />
+      ))}
+      {/* shield top-edge highlight */}
+      <rect x={3} y={0} width={10} height={1} fill={accent} opacity={0.6} />
+      {trophy.map(([x, y, w, h], i) => (
+        <rect key={`t${i}`} x={x} y={y} width={w} height={h} fill={cup} />
+      ))}
+      {/* cup inner highlight */}
+      <rect x={5} y={2} width={1} height={2} fill="#fff2b0" />
+    </svg>
+  );
+}
+
+/** A tactics-board arrow motif (a run + arrowhead), crisp pixel rects. */
+function TacticsGlyph({ accent, size }: { accent: string; size: number }) {
+  const rects: [number, number, number, number][] = [
+    [1, 8, 2, 2],   // start node
+    [3, 7, 2, 2],
+    [5, 6, 2, 2],
+    [7, 5, 2, 2],
+    [9, 4, 2, 2],   // shaft
+    [8, 2, 4, 2],   // arrowhead top
+    [11, 2, 2, 4],  // arrowhead side
+  ];
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" shapeRendering="crispEdges" style={{ imageRendering: 'pixelated', display: 'block' }}>
+      {rects.map(([x, y, w, h], i) => (
+        <rect key={i} x={x} y={y} width={w} height={h} fill={accent} />
+      ))}
+    </svg>
+  );
+}
+
+// ===========================================================================
 // Utils
 // ===========================================================================
 
-/** Compact money/attendance: 12_345 → "12.3k", 1_200_000 → "1.2M". */
-function compact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
-  return n.toLocaleString();
-}
-
-/** One economy stat in the reward readout row (label · big value · sub), with an
- *  optional left hairline so the three columns read as a connected ledger. */
-function EconStat({
-  label,
-  value,
-  sub,
-  color,
-  delay,
-  divider,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  color: string;
-  delay: number;
-  divider: boolean;
-}) {
-  return (
-    <div
-      className="stat-row-in flex flex-col items-center text-center"
-      style={{
-        gap: 7,
-        padding: '0 4px',
-        borderLeft: divider ? '1px solid var(--glass-border)' : undefined,
-        animationDelay: `${delay}ms`,
-      }}
-    >
-      <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>{label.toUpperCase()}</span>
-      <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 19, lineHeight: 1.05, color, maxWidth: '100%' }}>{value}</span>
-      <span style={{ fontSize: 8.5, color: 'var(--cream-soft)', letterSpacing: 0.2 }}>{sub}</span>
-    </div>
-  );
+/** The player's surname (last whitespace-delimited token). */
+function surname(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return parts[parts.length - 1] || name;
 }

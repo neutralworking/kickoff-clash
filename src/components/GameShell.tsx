@@ -167,6 +167,7 @@ export default function GameShell() {
   const [hasExistingRun, setHasExistingRun] = useState(false);
   const [durabilityResult, setDurabilityResult] = useState<DurabilityResult | null>(null);
   const [lastMatchResult, setLastMatchResult] = useState<MatchResult | null>(null);
+  const [lastPOTM, setLastPOTM] = useState<{ card: Card; goals: number; assists: number; rating: number } | null>(null);
   const [pendingContents, setPendingContents] = useState<PackContents | null>(null);
   const [pendingSeed, setPendingSeed] = useState<number>(0);
   // Manager + tactic chosen during the pack reveal; carried into TeamSelect.
@@ -225,7 +226,7 @@ export default function GameShell() {
   }, [pendingSeed]);
 
   // --- Match Complete ---
-  const handleMatchComplete = useCallback((result: { yourGoals: number; opponentGoals: number; result: 'win' | 'draw' | 'loss'; handState: HandState; verdict: MatchVerdict; sentOffIds: number[]; scored: Record<number, { goals: number; assists: number }> }) => {
+  const handleMatchComplete = useCallback((result: { yourGoals: number; opponentGoals: number; result: 'win' | 'draw' | 'loss'; handState: HandState; verdict: MatchVerdict; sentOffIds: number[]; scored: Record<number, { goals: number; assists: number }>; playerOfMatch: { card: Card; goals: number; assists: number; rating: number } | null }) => {
     if (!runState) return;
 
     // Calculate attendance from hand's final XI
@@ -342,6 +343,7 @@ export default function GameShell() {
     };
 
     setLastMatchResult(matchResult);
+    setLastPOTM(result.playerOfMatch);
     setDurabilityResult(durResult);
 
     if (result.result === 'loss') {
@@ -559,6 +561,7 @@ export default function GameShell() {
     setRunState(null);
     setDurabilityResult(null);
     setLastMatchResult(null);
+    setLastPOTM(null);
     setHasExistingRun(false);
     setPhase('title');
   }, []);
@@ -709,6 +712,7 @@ export default function GameShell() {
             totalRounds={MAX_CUPS}
             wins={runState.wins}
             matchHistory={runState.matchHistory}
+            playerOfMatch={lastPOTM}
             onContinue={handlePostMatchContinue}
           />
         );
