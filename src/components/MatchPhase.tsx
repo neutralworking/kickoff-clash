@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
+import type { Card } from '../lib/scoring';
 import type { RunState, TeamIntent } from '../lib/run';
 import { getOpponent, getOpponentBuild, buildMatchSeed, cupSize } from '../lib/run';
 import { cupMatchPower } from '../lib/opponent';
@@ -40,6 +41,9 @@ interface MatchPhaseProps {
     /** Per-card goals/assists this match (your side) — accrued to the deck's
      *  RECORD post-match. Keyed by card id. */
     scored: Record<number, { goals: number; assists: number }>;
+    /** Player of the match — the top-rated XI card + its match line (engine
+     *  playerMatchStats). Null if no stats (e.g. a 0-increment edge case). */
+    playerOfMatch: { card: Card; goals: number; assists: number; rating: number } | null;
   }) => void;
 }
 
@@ -215,6 +219,20 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
         if (b.assisterId != null) (scored[b.assisterId] ??= { goals: 0, assists: 0 }).assists += 1;
       }
     }
+    // Player of the match — top XI rating (tiebreak on goals+assists), off the
+    // engine's per-player match stats (the same numbers the ratings sheet shows).
+    const stats = playerMatchStats(matchState.scores, matchState.xi, matchState.formation);
+    let playerOfMatch: { card: Card; goals: number; assists: number; rating: number } | null = null;
+    for (const card of matchState.xi) {
+      const st = stats[card.id];
+      if (!st) continue;
+      const better =
+        !playerOfMatch ||
+        st.rating > playerOfMatch.rating ||
+        (st.rating === playerOfMatch.rating && st.goals + st.assists > playerOfMatch.goals + playerOfMatch.assists);
+      if (better) playerOfMatch = { card, goals: st.goals, assists: st.assists, rating: st.rating };
+    }
+
     onMatchComplete({
       yourGoals: result.yourGoals,
       opponentGoals: result.opponentGoals,
@@ -222,6 +240,7 @@ export default function MatchPhase({ runState, onMatchComplete }: MatchPhaseProp
       verdict: result.verdict,
       sentOffIds: matchState.sentOffIds.filter((id) => yourIds.has(id)),
       scored,
+      playerOfMatch,
       // Bridge to HandState shape for backward compatibility
       handState: {
         xi: matchState.xi,

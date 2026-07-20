@@ -27,7 +27,6 @@ import type { JokerCard } from '../lib/jokers';
 import type { TacticCard } from '../lib/tactics';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
-import FoilCard from './cards/FoilCard';
 import { PIXEL } from './cards/cardTokens';
 
 // ---------------------------------------------------------------------------
@@ -211,7 +210,7 @@ function PlayerGrid({ players, onOpen }: { players: Card[]; onOpen: (c: Card) =>
         style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', alignItems: 'start', gap: 7 }}
       >
         {players.map((c, i) => (
-          <FoilCard key={c.id} card={c} revealDelayMs={i * 70} onClick={() => onOpen(c)} />
+          <GameCard key={c.id} model={{ variant: 'player', card: c }} size="grid" delay={i * 70} onClick={() => onOpen(c)} />
         ))}
       </div>
     </div>
