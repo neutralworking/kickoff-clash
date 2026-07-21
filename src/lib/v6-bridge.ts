@@ -15,8 +15,10 @@
  */
 
 import type { Card } from './scoring';
+import type { Formation } from './formations';
 import { deriveStats } from './funnel';
-import { STAT_BUDGET_BY_COST, type Rarity, type Sector, type V6Action, type V6Card } from './match-v6';
+import { generateOpponentXI } from './opponent';
+import { STAT_BUDGET_BY_COST, scaleV6Squad, type Rarity, type Sector, type V6Action, type V6Card } from './match-v6';
 
 const WIDE = new Set(['WD', 'WM', 'WF']);
 
@@ -94,4 +96,104 @@ export function toV6Card(card: Card): V6Card {
     rarity,
     actions: v6Action(card, attack, defence, rarity),
   };
+}
+
+/** Sector from a formation slot's left–right geometry (x 0–100). */
+export function sectorFromSlot(x: number): Sector {
+  return x < 33 ? 'left' : x > 67 ? 'right' : 'centre';
+}
+
+/**
+ * The starting XI as V6 cards, sectored by FORMATION GEOMETRY (the slot's x) —
+ * not the card's nominal wide/central role — so the XI spreads across the three
+ * lanes instead of piling every central role into centre. Bench cards keep their
+ * natural `v6Sector` (they get a lane when subbed on). Index-aligned to `xi`, so
+ * callers can zip portraits back on by position.
+ */
+export function toV6Starters(xi: Card[], formation: Formation): V6Card[] {
+  return xi.map((c, i) => {
+    const v6 = toV6Card(c);
+    const slot = formation.slots[i];
+    return slot ? { ...v6, sector: sectorFromSlot(slot.x) } : v6;
+  });
+}
+
+/**
+ * Live-run balance for the V6 match (migration Phase 4). Two problems to fix:
+ *  1. the ENGINE runs hot (~2× the goal target) even fixture-vs-fixture, and the
+ *     bridged player XI is hotter still (centre-stacked real-card attack);
+ *  2. difficulty didn't scale with the run.
+ *
+ * The fix keeps to bridge-level knobs (the handoff pins the engine threshold at 5):
+ *  • the opponent is the SCORING_V2 generator's named XI (the same side the scout
+ *    screen shows) bridged through the identical pipeline as the player, so
+ *    difficulty is the already-tuned power curve (`ROUND_POWER`/`cupMatchPower`),
+ *    not a fixture-deck quirk — no separate strength multiplier needed;
+ *  • `attackDamp` cools BOTH sides' attack toward the 2.2–3.2 goal band (defence
+ *    is left intact, so cooling attack doesn't also open the game up).
+ * This is the ONLY live-run knob; tune it with `scripts/kc_v6_runsim.ts`.
+ */
+export const LIVE_RUN_BALANCE = {
+  /**
+   * Multiplier on BOTH sides' ATT — cools the hot engine toward the goal band.
+   * 0.7 lands run-average total goals at ~3.0 (in the 2.2–3.2 target) in
+   * `kc_v6_runsim.ts`; lower over-cools and hands defensive shapes the game.
+   */
+  attackDamp: 0.7,
+  /**
+   * V6 opponent-power softening. Above `powerKnee`, only `powerSlope` of each extra
+   * point of the SCORING_V2 power curve counts. V6's coarse cost-banding turns the
+   * raw top-end (`CUP_FINAL_POWER` 90 → cost-6 budget-13 defence) into a near-wall,
+   * so this keeps boss finals HARD but not hopeless (it lifts the cup-4 final from
+   * ~17%→~25% in-sim) while leaving the well-balanced low/mid cups (below the knee)
+   * exactly as the curve sets them. NB: the cup-5 boss remains a known wall for the
+   * crude sim AI — see `docs/kc_v6_runsim_report.md`.
+   */
+  powerKnee: 76,
+  powerSlope: 0.35,
+};
+
+/** Soften raw SCORING_V2 opponent power for V6's cost-banded stat model (see `powerKnee`). */
+export function v6OpponentPower(rawPower: number): number {
+  const { powerKnee, powerSlope } = LIVE_RUN_BALANCE;
+  return rawPower <= powerKnee ? rawPower : powerKnee + (rawPower - powerKnee) * powerSlope;
+}
+
+/** A named, bridged squad ready for `startMatchFromSquads` / `simulateMatchFromSquads`. */
+export interface LiveV6Squad {
+  name: string;
+  xi: V6Card[];
+  bench: V6Card[];
+}
+
+/** Cool a squad's attack (defence intact) — the symmetric engine damper. */
+function dampAttack(squad: LiveV6Squad): LiveV6Squad {
+  return scaleV6Squad(squad, LIVE_RUN_BALANCE.attackDamp, 1);
+}
+
+/**
+ * The player's bridged squad for a live V6 match: real starters sectored by
+ * formation geometry, real bench, attack damped. The UI zips real portraits back
+ * on by index (see `toV6Starters`); ids stay `live_<n>` so the scorer can map goals
+ * back to the collection.
+ */
+export function bridgePlayerSquad(name: string, xi: Card[], bench: Card[], formation: Formation): LiveV6Squad {
+  return dampAttack({ name, xi: toV6Starters(xi, formation), bench: bench.map(toV6Card) });
+}
+
+/**
+ * The opponent for a cup tie: the SCORING_V2 generator's XI (opponent.ts) bridged
+ * through the same pipeline, so it's balanced against the player by construction and
+ * scales via the tuned power curve. A 7-card bench is generated from a salted seed;
+ * every opponent id lives in a private `opp_*` namespace (never `live_<n>`, which the
+ * goal-scorer parser owns), so player and opponent can never collide in the pool.
+ */
+export function bridgeOpponentSquad(opts: { name: string; round: number; style: string; seed: number; power: number }): LiveV6Squad {
+  const { name, round, style, seed } = opts;
+  const power = v6OpponentPower(opts.power);
+  const main = generateOpponentXI(round, style, seed, power);
+  const benchGen = generateOpponentXI(round, style, seed + 7919, power);
+  const xi = toV6Starters(main.xi, main.formation).map((c, i) => ({ ...c, id: `opp_s${i}` }));
+  const bench = benchGen.xi.slice(0, 7).map((c, i) => ({ ...toV6Card(c), id: `opp_b${i}` }));
+  return dampAttack({ name, xi, bench });
 }

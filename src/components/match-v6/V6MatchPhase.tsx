@@ -13,18 +13,17 @@ import { useCallback, useMemo, useState } from 'react';
 import './v6lab.css';
 import type { Card } from '../../lib/scoring';
 import type { RunState } from '../../lib/run';
-import { getOpponent, buildMatchSeed } from '../../lib/run';
+import { getOpponent, buildMatchSeed, cupSize } from '../../lib/run';
 import { getFormation } from '../../lib/formations';
+import { cupMatchPower } from '../../lib/opponent';
 import { rollXI, handFromSelection, type HandState } from '../../lib/hand';
 import type { MatchVerdict } from '../../lib/match-v5';
-import { toV6Card, v6Sector } from '../../lib/v6-bridge';
+import { bridgePlayerSquad, bridgeOpponentSquad } from '../../lib/v6-bridge';
 import {
   startMatchFromSquads,
   advancePeriod,
   openBreak,
   commitBreak,
-  deckV6Squad,
-  V6_DECKS,
   effectiveBoards,
   chanceOutlook,
   cardEffectiveCost,
@@ -32,9 +31,7 @@ import {
   type MatchStep,
   type PeriodResult,
   type RevealEvent,
-  type Sector,
   type SubPair,
-  type V6Card,
 } from '../../lib/match-v6';
 import { portraitSrc } from '../cards/portrait';
 import { V6ScoreHeader } from './V6ScoreHeader';
@@ -67,8 +64,6 @@ interface Game {
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 const BREAK_NAME = ['', 'First break', 'Half-time', 'Final break'];
 
-const withPortrait = (c: Card): V6Card => ({ ...toV6Card(c), portrait: portraitSrc(c) ?? undefined });
-
 export default function V6MatchPhase({ runState, onMatchComplete }: { runState: RunState; onMatchComplete: (r: MatchResultPayload) => void }) {
   const formation = getFormation(runState.activeFormation);
   const matchSeed = buildMatchSeed(runState.seed, runState.round, runState.matchInCup);
@@ -89,24 +84,24 @@ export default function V6MatchPhase({ runState, onMatchComplete }: { runState: 
     );
   }, [runState, formation, matchSeed]);
 
-  // Sector from formation geometry (slot x), so the XI spreads across the three
-  // lanes instead of piling every central role into centre.
-  const sectorFromX = (x: number): Sector => (x < 33 ? 'left' : x > 67 ? 'right' : 'centre');
-  const playerSquad = useMemo(
-    () => ({
-      name: 'YOUR XI',
-      xi: hand.xi.map((c, i) => {
-        const slot = formation.slots[i];
-        return { ...withPortrait(c), sector: slot ? sectorFromX(slot.x) : v6Sector(c) };
-      }),
-      bench: hand.bench.map(withPortrait),
-    }),
-    [hand, formation],
-  );
+  // The player's bridged, damped squad (starters sectored by formation geometry),
+  // with real portraits zipped back on by index (bridge maps are index-aligned).
+  const playerSquad = useMemo(() => {
+    const squad = bridgePlayerSquad('YOUR XI', hand.xi, hand.bench, formation);
+    return {
+      ...squad,
+      xi: squad.xi.map((c, i) => ({ ...c, portrait: portraitSrc(hand.xi[i]) ?? undefined })),
+      bench: squad.bench.map((c, i) => ({ ...c, portrait: portraitSrc(hand.bench[i]) ?? undefined })),
+    };
+  }, [hand, formation]);
+
+  // The opponent: the cup's SCORING_V2 generated XI (the scouted side), bridged the
+  // same way and scaled by the tuned power curve — so difficulty rises with the run.
   const opponentSquad = useMemo(() => {
-    const deck = V6_DECKS[runState.round % V6_DECKS.length];
-    return { ...deckV6Squad(deck.id), name: opponentName };
-  }, [runState.round, opponentName]);
+    const opp = getOpponent(runState.round);
+    const power = cupMatchPower(runState.round, runState.matchInCup, cupSize(runState.round));
+    return bridgeOpponentSquad({ name: opponentName, round: runState.round, style: opp.style, seed: matchSeed, power });
+  }, [runState.round, runState.matchInCup, opponentName, matchSeed]);
 
   const [game, setGame] = useState<Game>(() => {
     const start = startMatchFromSquads(playerSquad, opponentSquad, matchSeed);
