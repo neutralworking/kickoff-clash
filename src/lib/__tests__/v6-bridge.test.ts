@@ -13,6 +13,7 @@ import {
   bridgePlayerSquad,
   bridgeOpponentSquad,
   v6OpponentPower,
+  assignSlots,
 } from '../v6-bridge';
 import { STAT_BUDGET_BY_COST, scaleV6Squad, simulateMatchFromSquads } from '../match-v6';
 import { getFormation } from '../formations';
@@ -145,6 +146,26 @@ describe('bridgeOpponentSquad', () => {
     expect(new Set(ids).size).toBe(18); // no collisions (else the pool loses cards)
     expect(ids.every((id) => id.startsWith('opp_'))).toBe(true);
     expect(ids.some((id) => /^live_\d+$/.test(id))).toBe(false); // never the player's namespace
+  });
+});
+
+describe('assignSlots', () => {
+  it('keeps the kickoff slot order when no subs have happened', () => {
+    const ids = assignSlots(
+      ['a', 'b', 'c'],
+      ['left', 'centre', 'right'],
+      [{ cardId: 'a', sector: 'left' }, { cardId: 'b', sector: 'centre' }, { cardId: 'c', sector: 'right' }],
+    );
+    expect(ids).toEqual(['a', 'b', 'c']);
+  });
+  it('fills a subbed-off slot with the on-card in the same sector (shape holds)', () => {
+    // b came off; x came on in centre — x should take b's centre slot, not the end.
+    const ids = assignSlots(
+      ['a', 'b', 'c'],
+      ['left', 'centre', 'right'],
+      [{ cardId: 'a', sector: 'left' }, { cardId: 'c', sector: 'right' }, { cardId: 'x', sector: 'centre' }],
+    );
+    expect(ids).toEqual(['a', 'x', 'c']);
   });
 });
 

@@ -162,6 +162,9 @@ export function v6OpponentPower(rawPower: number): number {
 /** A named, bridged squad ready for `startMatchFromSquads` / `simulateMatchFromSquads`. */
 export interface LiveV6Squad {
   name: string;
+  /** The formation this squad lines up in — so the match screen can render it on a
+   *  top-down formation pitch (the team-selection look). */
+  formationId: string;
   xi: V6Card[];
   bench: V6Card[];
 }
@@ -178,7 +181,7 @@ function dampAttack(squad: LiveV6Squad): LiveV6Squad {
  * back to the collection.
  */
 export function bridgePlayerSquad(name: string, xi: Card[], bench: Card[], formation: Formation): LiveV6Squad {
-  return dampAttack({ name, xi: toV6Starters(xi, formation), bench: bench.map(toV6Card) });
+  return dampAttack({ name, formationId: formation.id, xi: toV6Starters(xi, formation), bench: bench.map(toV6Card) });
 }
 
 /**
@@ -195,5 +198,34 @@ export function bridgeOpponentSquad(opts: { name: string; round: number; style: 
   const benchGen = generateOpponentXI(round, style, seed + 7919, power);
   const xi = toV6Starters(main.xi, main.formation).map((c, i) => ({ ...c, id: `opp_s${i}` }));
   const bench = benchGen.xi.slice(0, 7).map((c, i) => ({ ...toV6Card(c), id: `opp_b${i}` }));
-  return dampAttack({ name, xi, bench });
+  return dampAttack({ name, formationId: main.formation.id, xi, bench });
+}
+
+/**
+ * Assign a team's currently-active cards to its formation slots for the pitch
+ * display. Starts from the kickoff order (slot i → the i-th starter id); when a
+ * starter has been subbed off, its slot is filled by a subbed-on card in the SAME
+ * sector (V6 subs inherit the outgoing card's sector), so the formation shape holds
+ * across subs without tracking sub events. Returns a card id per slot (or null).
+ */
+export function assignSlots(
+  starterIds: string[],
+  slotSectors: Sector[],
+  active: { cardId: string; sector: Sector }[],
+): (string | null)[] {
+  const activeIds = new Set(active.map((c) => c.cardId));
+  const slots: (string | null)[] = starterIds.map((id) => (activeIds.has(id) ? id : null));
+  // Cards on now that weren't kickoff starters (subbed on) — fill the vacated slots.
+  const placed = new Set(slots.filter((id): id is string => id !== null));
+  const extra = active.filter((c) => !placed.has(c.cardId));
+  const takeExtra = (sector?: Sector): string | null => {
+    const i = sector ? extra.findIndex((c) => c.sector === sector) : extra.length ? 0 : -1;
+    if (i < 0) return null;
+    return extra.splice(i, 1)[0].cardId;
+  };
+  for (let s = 0; s < slots.length; s++) {
+    if (slots[s] !== null) continue;
+    slots[s] = takeExtra(slotSectors[s]) ?? takeExtra();
+  }
+  return slots;
 }
