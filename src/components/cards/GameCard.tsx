@@ -584,6 +584,17 @@ function EffectBlock({ effect, flavour, full }: { effect: string; flavour: strin
 // match-fit bar with overlapping ATK (red) / DEF (blue) corner discs.
 // ===========================================================================
 
+/** Stopgap V6 cost (1–6) from power until real V6 card data lands (migration phase: data). */
+function v6Cost(card: Card): number {
+  const p = card.power ?? 60;
+  if (p < 60) return 1;
+  if (p < 68) return 2;
+  if (p < 76) return 3;
+  if (p < 84) return 4;
+  if (p < 90) return 5;
+  return 6;
+}
+
 function PlayerFace({ card, full }: { card: Card; full: boolean }) {
   const stats = deriveStats(card);
   const name = lastName(card.name).toUpperCase();
@@ -591,8 +602,7 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
   const cls = classOfCard(card);
   const tier = handoffTier(card.rarity);
   const cc = handoffClassColor(cls);
-  const iconInk = classIconInk(cls);
-  const fitPct = Math.max(0, Math.min(100, Math.round(card.fitness ?? 100)));
+  const cost = v6Cost(card);
   const actions = playerActions(card);
   const src = portraitSrc(card);
   const [imgOk, setImgOk] = useState(true);
@@ -640,7 +650,7 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
             onError={() => setImgOk(false)}
             // The full window is tall (biases to the very top for headroom); the
             // short grid window crops hard, so sit lower to keep the FACE in frame.
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: full ? 'center 6%' : 'center 22%', display: 'block' }}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: full ? 'center 20%' : 'center 28%', display: 'block' }}
           />
         ) : (
           <div className="pixelated" aria-hidden style={portraitArtStyle(card.id)} />
@@ -653,7 +663,7 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
         {/* diagonal sheen sweep — GLASS overlay, never touches the pixel interior */}
         <div className="card-sheen" aria-hidden style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: '42%', zIndex: 3, pointerEvents: 'none', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.26), transparent)' }} />
 
-        {/* CLASS DISC (top-left) */}
+        {/* COST BADGE (top-left, V6: the first read) */}
         <div
           style={{
             position: 'absolute',
@@ -663,15 +673,20 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
             width: cfg.disc,
             height: cfg.disc,
             borderRadius: '50%',
-            background: `radial-gradient(circle at 35% 30%, ${cc}, ${cc}bb)`,
-            border: `2px solid ${tier.edge}`,
+            background: 'radial-gradient(circle at 35% 30%, #ffd968, #db8f22 67%, #70400b)',
+            border: '2px solid #ffe6a6',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: `0 2px 7px rgba(0,0,0,0.6), 0 0 8px ${tier.glow}`,
+            color: '#1d1005',
+            fontFamily: HEAVY,
+            fontWeight: 900,
+            fontSize: cfg.disc * 0.56,
+            lineHeight: 1,
+            boxShadow: `0 2px 7px rgba(0,0,0,0.6), 0 2px 0 #7f4610`,
           }}
         >
-          <ClassGlyph cls={cls} size={cfg.glyph} color={iconInk} />
+          {cost}
         </div>
 
         {/* POSITION PILLS (top-right, stacked) */}
@@ -744,11 +759,9 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
         </div>
       )}
 
-      {/* 4 — MATCH-FIT BAR + overlapping ATK/DEF corner discs. */}
+      {/* 4 — overlapping ATK/DEF corner discs (V6: no fitness bar). */}
       <div style={{ position: 'relative', marginTop: full ? 8 : 6, padding: full ? '0 12px' : '0 8px', flexShrink: 0 }}>
-        <div style={{ margin: `0 ${cfg.discR * 0.72}px` }}>
-          <FitBar pct={fitPct} full={full} />
-        </div>
+        <div style={{ margin: `0 ${cfg.discR * 0.72}px`, height: full ? 16 : 11 }} />
         <StatDisc kind="ATK" value={stats.atk} side="atk" full={full} discR={cfg.discR} anchor="left" />
         <StatDisc kind="DEF" value={stats.def} side="def" full={full} discR={cfg.discR} anchor="right" />
       </div>
@@ -756,41 +769,6 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
   );
 }
 
-/** The match-fit bar — a rounded green track, fill to fit%, with a centered
- *  `MATCH FIT · NN%` (full) / `NN%` (grid) label. */
-function FitBar({ pct, full }: { pct: number; full: boolean }) {
-  return (
-    <div
-      style={{
-        position: 'relative',
-        height: full ? 16 : 11,
-        borderRadius: 999,
-        background: 'rgba(0,0,0,0.5)',
-        border: '1px solid rgba(45,138,78,0.5)',
-        overflow: 'hidden',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: 'linear-gradient(90deg,#1f7a3e,#3ba55d)', boxShadow: '0 0 8px rgba(59,165,93,0.5)' }} />
-      <span
-        style={{
-          position: 'relative',
-          fontFamily: BODY_FONT,
-          fontWeight: 800,
-          fontSize: full ? 8 : 7,
-          letterSpacing: '0.1em',
-          color: '#eafff0',
-          textShadow: '0 1px 2px rgba(0,0,0,0.8)',
-          textTransform: 'uppercase',
-        }}
-      >
-        {full ? `Match Fit · ${pct}%` : `${pct}%`}
-      </span>
-    </div>
-  );
-}
 
 /** An overlapping ATK/DEF corner disc — a dark radial disc with a red (ATK) or
  *  blue (DEF) ring, the value in Archivo Black + a tiny tinted label. Overlaps

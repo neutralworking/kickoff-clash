@@ -130,6 +130,7 @@ export interface V6Card {
   rarity: Rarity;
   actions: V6Action[]; // 0..2 (legendaries may have 2)
   art?: CardArt;
+  portrait?: string; // optional real-portrait URL (live-game bridge); falls back to the CSS avatar
 }
 
 // ── In-play placement ────────────────────────────────────────────────────────

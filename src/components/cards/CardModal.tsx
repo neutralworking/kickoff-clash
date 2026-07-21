@@ -351,21 +351,6 @@ function PlayerDetail({ card }: { card: Card }) {
         </div>
       </div>
 
-      {/* ── MATCH FITNESS ── */}
-      <div style={{ padding: '13px 16px', borderBottom: HAIRLINE }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 2, color: '#9a8b6a' }}>MATCH FITNESS</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: fitColor }}>{fitLabel}</span>
-        </div>
-        <div style={{ height: 12, borderRadius: 6, background: '#241c10', border: '1px solid #0b0703', overflow: 'hidden', marginTop: 9 }}>
-          <div style={{ height: '100%', width: `${fitPct}%`, background: `linear-gradient(180deg, ${fitColor}, #0b0703)`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25)' }} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-          <span style={{ fontSize: 10, color: '#9a8b6a' }}>Condition</span>
-          <span style={{ fontFamily: PIXEL, fontSize: 8, color: '#c9bb95' }}>{condition}</span>
-        </div>
-      </div>
-
       {/* ── ACTIONS ── */}
       <div style={{ padding: '13px 16px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
