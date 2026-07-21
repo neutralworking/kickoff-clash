@@ -9,6 +9,7 @@ export function V6ActiveCard(props: {
   att: number;
   def: number;
   oop?: boolean;
+  portrait?: string;
   mode?: 'idle' | 'target' | 'picked';
   onClick?: () => void;
 }) {
@@ -20,7 +21,12 @@ export function V6ActiveCard(props: {
   return (
     <div className={cls.join(' ')} onClick={props.onClick} title={props.oop ? 'Out of position (−2/−2)' : undefined}>
       <div className="v6-av" style={av.style}>
-        {av.hair && <i className={`v6-hair ${av.hair}`} />}
+        {props.portrait ? (
+          // eslint-disable-next-line @next/next/no-img-element -- static-export basePath src + no layout benefit from next/image here
+          <img src={props.portrait} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 22%' }} />
+        ) : (
+          av.hair && <i className={`v6-hair ${av.hair}`} />
+        )}
       </div>
       <div className="nm">{props.name}</div>
       <div className="sd">

@@ -29,7 +29,7 @@ export function V6Board(props: {
               </div>
               <div className="v6-squad opp">
                 {them.cards.map((c) => (
-                  <V6ActiveCard key={c.cardId} id={c.cardId} name={nameOf(c.cardId, c.name)} att={c.attack} def={c.defence} oop={c.outOfPosition} />
+                  <V6ActiveCard key={c.cardId} id={c.cardId} name={nameOf(c.cardId, c.name)} att={c.attack} def={c.defence} oop={c.outOfPosition} portrait={props.pool[c.cardId]?.portrait} />
                 ))}
               </div>
               <div className="v6-chance-row" aria-label={`${chances} chances`}>
@@ -48,6 +48,7 @@ export function V6Board(props: {
                     att={c.attack}
                     def={c.defence}
                     oop={c.outOfPosition}
+                    portrait={props.pool[c.cardId]?.portrait}
                     mode={props.mode === 'break' ? 'target' : 'idle'}
                     onClick={props.mode === 'break' && props.onPickActive ? () => props.onPickActive!(c.cardId) : undefined}
                   />

@@ -213,6 +213,16 @@ function deckCards(deck: V6Deck): CardInPlay[] {
   return [...xi, ...bench];
 }
 
+/** A fixture deck as a V6 squad (name + XI + bench cards) — used as the live game's opponent. */
+export function deckV6Squad(deckId: string): { name: string; xi: V6Card[]; bench: V6Card[] } {
+  const deck = V6_DECK_BY_ID[deckId] ?? V6_DECKS[0];
+  return {
+    name: deck.name,
+    xi: deck.startingXI.map((id) => V6_POOL_BY_ID[id]),
+    bench: deck.bench.map((id) => V6_POOL_BY_ID[id]),
+  };
+}
+
 /** Build the kickoff match state for two decks. Both benches are visible from kickoff. */
 export function buildInitialState(playerDeckId: string, opponentDeckId: string, seed: number): V6MatchState {
   const pDeck = V6_DECK_BY_ID[playerDeckId] ?? V6_DECKS[0];

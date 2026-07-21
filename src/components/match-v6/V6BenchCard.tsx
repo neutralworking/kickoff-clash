@@ -24,7 +24,12 @@ export function V6BenchCard(props: {
     <div className={cls.join(' ')} onClick={props.spent ? undefined : props.onClick}>
       <span className="v6-cost">{props.cost}</span>
       <div className="v6-av" style={av.style}>
-        {av.hair && <i className={`v6-hair ${av.hair}`} />}
+        {card.portrait ? (
+          // eslint-disable-next-line @next/next/no-img-element -- static-export basePath src
+          <img src={card.portrait} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 20%' }} />
+        ) : (
+          av.hair && <i className={`v6-hair ${av.hair}`} />
+        )}
       </div>
       <div className="name">{card.shortName ?? card.name}</div>
       <div className="role">{prefix}</div>

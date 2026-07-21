@@ -13,7 +13,7 @@
  * seed, fixed consumption order.
  */
 
-import type { BreakIndex, MatchLogEvent, RevealEvent, SubstitutionPlan, TeamSide, V6MatchState } from './types';
+import type { BreakIndex, CardInPlay, MatchLogEvent, RevealEvent, SubstitutionPlan, TeamSide, V6Card, V6MatchState } from './types';
 import { SECTORS } from './types';
 import { V6_BALANCE } from './balance';
 import { makeRng, type RngState } from './random';
@@ -21,6 +21,7 @@ import { processTriggers, rebuildStandingEffects, expirePeriodEffects, teamOf } 
 import { applyBreak } from './substitutions';
 import { resolvePeriod, chanceOutlook, type PeriodResolution } from './resolver';
 import { buildInitialState } from './fixtures';
+import { initialPriority } from './priority';
 import { defaultOpponentAI, type OpponentAI } from './opponent-ai';
 
 export interface SimMatchOptions {
@@ -82,6 +83,45 @@ export interface MatchStep {
 /** Kickoff → state ready to resolve Period 1. */
 export function startMatch(playerDeckId: string, opponentDeckId: string, seed: number): MatchStep {
   let s = buildInitialState(playerDeckId, opponentDeckId, seed);
+  s = fireKickoff(s);
+  s = rebuildStandingEffects(s);
+  return { state: { ...s, period: 1 }, rng: makeRng(seed) };
+}
+
+/** A squad for a from-squads match: a name + 11 starters + up to 7 bench (V6 cards). */
+export interface V6Squad {
+  name: string;
+  xi: V6Card[];
+  bench: V6Card[];
+}
+
+/** Kickoff from explicit V6 squads (the live-game bridge) rather than fixture deck ids. */
+export function startMatchFromSquads(player: V6Squad, opponent: V6Squad, seed: number): MatchStep {
+  const pool: Record<string, V6Card> = {};
+  const place = (squad: V6Squad): CardInPlay[] => {
+    const out: CardInPlay[] = [];
+    for (const c of squad.xi) {
+      pool[c.id] = c;
+      out.push({ cardId: c.id, zone: 'active', sector: c.sector });
+    }
+    for (const c of squad.bench) {
+      pool[c.id] = c;
+      out.push({ cardId: c.id, zone: 'bench', sector: c.sector });
+    }
+    return out;
+  };
+  const priority = initialPriority(seed);
+  let s: V6MatchState = {
+    seed,
+    period: 1,
+    breakIndex: 0,
+    priority,
+    energy: 0,
+    player: { side: 'player', managerId: 'live', name: player.name, cards: place(player), effects: [], score: 0 },
+    opponent: { side: 'opponent', managerId: 'live', name: opponent.name, cards: place(opponent), effects: [], score: 0 },
+    cardPool: pool,
+    log: [{ type: 'kickoff', seed, priority }],
+  };
   s = fireKickoff(s);
   s = rebuildStandingEffects(s);
   return { state: { ...s, period: 1 }, rng: makeRng(seed) };
