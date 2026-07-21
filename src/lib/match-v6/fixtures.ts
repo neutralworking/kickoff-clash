@@ -223,6 +223,37 @@ export function deckV6Squad(deckId: string): { name: string; xi: V6Card[]; bench
   };
 }
 
+/**
+ * Scale a printed card's ATT/DEF — the live-run strength knob (migration Phase 4).
+ * Cost, sector, actions, portrait are untouched (only the threshold-feeding stats
+ * move). Rounds to whole points so the `floor(stat/threshold)` math stays legible.
+ */
+export function scaleV6Card(card: V6Card, attackMult: number, defenceMult: number): V6Card {
+  return {
+    ...card,
+    attack: Math.max(0, Math.round(card.attack * attackMult)),
+    defence: Math.max(0, Math.round(card.defence * defenceMult)),
+  };
+}
+
+/**
+ * Scale a whole squad's printed stats (both XI and bench, so subbed-on cards stay
+ * consistent). Generic over the squad shape so the `name` survives and the return
+ * type matches the input (a `V6Squad`). `defenceMult` defaults to `attackMult`
+ * (a single "team strength" dial); pass both for an attack-only damper.
+ */
+export function scaleV6Squad<S extends { xi: V6Card[]; bench: V6Card[] }>(
+  squad: S,
+  attackMult: number,
+  defenceMult: number = attackMult,
+): S {
+  return {
+    ...squad,
+    xi: squad.xi.map((c) => scaleV6Card(c, attackMult, defenceMult)),
+    bench: squad.bench.map((c) => scaleV6Card(c, attackMult, defenceMult)),
+  };
+}
+
 /** Build the kickoff match state for two decks. Both benches are visible from kickoff. */
 export function buildInitialState(playerDeckId: string, opponentDeckId: string, seed: number): V6MatchState {
   const pDeck = V6_DECK_BY_ID[playerDeckId] ?? V6_DECKS[0];

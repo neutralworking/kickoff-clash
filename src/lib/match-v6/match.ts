@@ -175,12 +175,9 @@ export function commitBreak(state: V6MatchState, playerPlan: SubstitutionPlan, o
   return { state: s, reveals: applied.reveals, diag };
 }
 
-/** Run a full deterministic match (headless), composing the steppers. */
-export function simulateMatch(opts: SimMatchOptions): MatchResult {
-  const playerAI = opts.playerAI ?? defaultOpponentAI;
-  const opponentAI = opts.opponentAI ?? defaultOpponentAI;
-
-  let { state, rng } = startMatch(opts.playerDeckId, opts.opponentDeckId, opts.seed);
+/** The shared break-by-break loop: takes a kicked-off step, plays P1→P4, returns the result. */
+function playOut(step: MatchStep, playerAI: OpponentAI, opponentAI: OpponentAI): MatchResult {
+  let { state, rng } = step;
   const breaks: BreakDiag[] = [];
   let playerSubs = 0;
   let opponentSubs = 0;
@@ -205,4 +202,30 @@ export function simulateMatch(opts: SimMatchOptions): MatchResult {
 
   const winner: TeamSide | 'draw' = playerScore > opponentScore ? 'player' : opponentScore > playerScore ? 'opponent' : 'draw';
   return { state, playerScore, opponentScore, winner, subsMade: playerSubs + opponentSubs, playerSubs, opponentSubs, breaks, log: state.log };
+}
+
+/** Run a full deterministic match (headless), composing the steppers. */
+export function simulateMatch(opts: SimMatchOptions): MatchResult {
+  const playerAI = opts.playerAI ?? defaultOpponentAI;
+  const opponentAI = opts.opponentAI ?? defaultOpponentAI;
+  return playOut(startMatch(opts.playerDeckId, opts.opponentDeckId, opts.seed), playerAI, opponentAI);
+}
+
+export interface SimSquadsOptions {
+  player: V6Squad;
+  opponent: V6Squad;
+  seed: number;
+  playerAI?: OpponentAI;
+  opponentAI?: OpponentAI;
+}
+
+/**
+ * Run a full deterministic match from explicit V6 squads — the live-game path
+ * (bridged player XI vs a scaled fixture opponent), and the run-sim's instrument.
+ * Same step composition as `simulateMatch`, so UI and sim stay in lockstep.
+ */
+export function simulateMatchFromSquads(opts: SimSquadsOptions): MatchResult {
+  const playerAI = opts.playerAI ?? defaultOpponentAI;
+  const opponentAI = opts.opponentAI ?? defaultOpponentAI;
+  return playOut(startMatchFromSquads(opts.player, opts.opponent, opts.seed), playerAI, opponentAI);
 }
