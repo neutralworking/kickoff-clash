@@ -34,6 +34,9 @@ import type { Card } from '../lib/scoring';
 import type { Formation } from '../lib/formations';
 import { getFormation, positionFitsSlot } from '../lib/formations';
 import type { TeamIntent, OpponentBuild } from '../lib/run';
+import { getOpponent } from '../lib/run';
+import { generateOpponentXI } from '../lib/opponent';
+import { xiV6Totals, v6Cost, v6OpponentPower, MAX_XI_COST } from '../lib/v6-bridge';
 import type { JokerCard } from '../lib/jokers';
 import { SCOUT_COST } from '../lib/economy';
 import {
@@ -269,6 +272,7 @@ export default function SquadScreen({
   const [intent, setIntent] = useState<TeamIntent>(initialIntent);
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [showScout, setShowScout] = useState(false);
+  const [viewAway, setViewAway] = useState(false); // HOME/AWAY pitch toggle (scout the opponent's shape)
   const [showGallery, setShowGallery] = useState(false);
   // v4: the MISFIT chip is tap-to-reveal — toggles an amber outline on the
   // incompetent tokens on the pitch.
@@ -302,12 +306,22 @@ export default function SquadScreen({
   const filled = startersFilled(sel);
   const slotCount = formation.slots.length;
   const manager = managers?.find((m) => m.id === managerId) ?? null;
-  const ready = filled === slotCount && (mode === 'draft' ? manager !== null : true);
 
   const xiCards = useMemo(
     () => sel.starters.filter((x): x is number => x != null).map((id) => byId.get(id)).filter((c): c is Card => !!c),
     [sel.starters, byId],
   );
+
+  // V6 readout (the numbers the match plays with) + the XI cost budget.
+  const v6Totals = useMemo(() => xiV6Totals(xiCards, formation), [xiCards, formation]);
+  const capOver = v6Totals.cost > MAX_XI_COST;
+  const ready = filled === slotCount && !capOver && (mode === 'draft' ? manager !== null : true);
+
+  // The opponent's real XI (the side the match will field), for the AWAY pitch view.
+  const oppView = useMemo(() => {
+    const r = round ?? 1;
+    return generateOpponentXI(r, getOpponent(r).style, seed ?? 0, v6OpponentPower(opponentPower ?? 70));
+  }, [round, seed, opponentPower]);
   const benchCards = useMemo(
     () => sel.bench.map((id) => byId.get(id)).filter((c): c is Card => !!c),
     [sel.bench, byId],
@@ -401,9 +415,39 @@ export default function SquadScreen({
   function autoPick() {
     const { xi, bench } = autoFillXI(pool, formation, true);
     setSel({
-      starters: formation.slots.map((_, i) => xi[i]?.id ?? null),
+      starters: trimToBudget(formation.slots.map((_, i) => xi[i]?.id ?? null)),
       bench: bench.slice(0, BENCH_SIZE).map((c) => c.id),
     });
+  }
+
+  // Keep an auto-picked XI under the cost cap: swap the priciest starters for the
+  // strongest cheaper legal alternative until the budget is met (best-effort greedy).
+  function trimToBudget(starters: (number | null)[]): (number | null)[] {
+    const s = [...starters];
+    const cost = (id: number) => { const c = byId.get(id); return c ? v6Cost(c) : 0; };
+    const total = () => s.reduce<number>((n, id) => n + (id != null ? cost(id) : 0), 0);
+    let guard = 0;
+    while (total() > MAX_XI_COST && guard++ < 30) {
+      const used = new Set(s.filter((x): x is number => x != null));
+      let best: { i: number; repl: number; save: number; power: number } | null = null;
+      for (let i = 0; i < s.length; i++) {
+        const id = s[i];
+        if (id == null) continue;
+        const slot = formation.slots[i];
+        let repl: Card | null = null;
+        for (const c of pool) {
+          if (used.has(c.id) || !positionFitsSlot(c.position, slot) || v6Cost(c) >= cost(id)) continue;
+          if (!repl || c.power > repl.power) repl = c;
+        }
+        if (repl) {
+          const save = cost(id) - v6Cost(repl);
+          if (!best || save > best.save || (save === best.save && repl.power > best.power)) best = { i, repl: repl.id, save, power: repl.power };
+        }
+      }
+      if (!best) break;
+      s[best.i] = best.repl;
+    }
+    return s;
   }
 
   function placeInOverlay(cardId: number) {
@@ -592,42 +636,32 @@ export default function SquadScreen({
           </button>
         )}
 
-        <button
-          onClick={confirm}
-          disabled={!ready}
-          className={`active:scale-95 shrink-0 relative overflow-hidden ${ready ? 'sheen-strong glow-edge' : 'glass-surface sheen'}`}
-          style={{
-            fontFamily: PIXEL,
-            fontSize: 12.5,
-            letterSpacing: 0.5,
-            color: ready ? 'var(--line-white)' : 'var(--ink)',
-            height: 42,
-            padding: '0 12px',
-            borderRadius: 'var(--radius-sm)',
-            border: ready ? '2px solid var(--ink-black)' : undefined,
-            background: ready ? 'linear-gradient(135deg, var(--amber), var(--amber-soft))' : undefined,
-            boxShadow: ready
-              ? 'inset 0 1px 0 0 var(--glass-highlight), 0 3px 0 0 var(--ink-black), var(--depth-2)'
-              : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
-            transition: 'transform 0.12s ease',
-            cursor: ready ? 'pointer' : 'default',
-            ...(ready ? { ['--glow' as string]: 'var(--amber-glow)' } : {}),
-          }}
-        >
-          KICK OFF
-        </button>
       </div>
 
-      {/* ── CONTEST BREAKDOWN (hero) — the six engine duels vs the opponent ── */}
+      {/* ── Squad readout — total ATT/DEF (the match numbers) + the cost budget ── */}
       <div className="shrink-0 px-3 mt-1.5">
-        <ContestBreakdown
-          view={panelView}
-          yourCommit={previewSplit?.contest.commit ?? null}
-          oppName={opponent.name}
-          deltaVsBalanced={deltaVsBalanced}
-          collapsed={panelCollapsed}
-          onToggleCollapsed={() => setPanelCollapsed((v) => !v)}
-        />
+        <div
+          className="flex items-stretch"
+          style={{ borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'rgba(0,0,0,0.28)', boxShadow: 'inset 0 1px 0 0 var(--glass-highlight)', overflow: 'hidden' }}
+        >
+          <div className="flex-1 flex flex-col items-center justify-center py-2" style={{ borderRight: '1px solid var(--border)' }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)' }}>ATT</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 18, color: 'var(--att, #ff9a54)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{v6Totals.att}</span>
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center py-2" style={{ borderRight: '1px solid var(--border)' }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)' }}>DEF</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 18, color: 'var(--def, #72c9f2)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{v6Totals.def}</span>
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center py-2">
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: capOver ? 'var(--danger)' : 'var(--dust)' }}>COST / MAX</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 18, color: capOver ? 'var(--danger)' : 'var(--cream)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{v6Totals.cost}<span style={{ fontSize: 11, color: 'var(--dust)' }}> / {MAX_XI_COST}</span></span>
+          </div>
+        </div>
+        {capOver && (
+          <div style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 0.5, color: 'var(--danger)', marginTop: 3, textAlign: 'center' }}>
+            OVER BUDGET BY {v6Totals.cost - MAX_XI_COST} — DROP A COSTLY PLAYER TO KICK OFF
+          </div>
+        )}
       </div>
 
       {/* ── Control bar: shape · intent · manager (draft) ─────────────────── */}
@@ -705,24 +739,21 @@ export default function SquadScreen({
       {/* ── Meta line — scout + manager collapsed to names (▾ report), MISFIT
           tap-to-reveal, plus any talk-mode status chips. ─────────────────── */}
       <div className="shrink-0 px-3 mt-1.5 flex items-center gap-1.5">
-        <button
-          onClick={() => setShowScout(true)}
-          className="flex items-center gap-1.5 active:scale-[0.98] min-w-0"
-          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', minWidth: 0 }}
-        >
-          <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--kit-blue)', minWidth: 0 }}>
-            SCOUT: {opponent.name.toUpperCase()}
-          </span>
-          {mode === 'talk' && manager == null && jokers?.[0] && (
-            <>
-              <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--dust)', flexShrink: 0 }} />
-              <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 8, color: 'var(--cream-soft)' }}>MGR {jokers[0].name.toUpperCase()}</span>
-            </>
-          )}
-          <span style={{ fontFamily: PIXEL, fontSize: 8, color: scoutUnlocked ? 'var(--gold)' : 'var(--dust)', flexShrink: 0 }}>
-            {'▾'} report
-          </span>
-        </button>
+        <div className="flex min-w-0" style={{ borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border)', flexShrink: 0 }}>
+          <button
+            onClick={() => setViewAway(false)}
+            style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, padding: '5px 10px', cursor: 'pointer', border: 'none', background: !viewAway ? 'linear-gradient(135deg, var(--amber), var(--amber-soft))' : 'transparent', color: !viewAway ? 'var(--ink-black)' : 'var(--cream-soft)' }}
+          >
+            HOME
+          </button>
+          <button
+            onClick={() => setViewAway(true)}
+            className="truncate"
+            style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 0.5, padding: '5px 10px', cursor: 'pointer', border: 'none', maxWidth: 150, background: viewAway ? 'var(--kit-blue)' : 'transparent', color: viewAway ? 'var(--line-white)' : 'var(--cream-soft)' }}
+          >
+            {opponent.name.toUpperCase()}
+          </button>
+        </div>
 
         <button
           onClick={() => setMisfitReveal((v) => !v)}
@@ -772,29 +803,47 @@ export default function SquadScreen({
           }}
         >
           <PitchMarkings />
-          {formation.slots.map((slot, i) => {
-            const cardId = sel.starters[i];
-            const card = cardId != null ? byId.get(cardId) : undefined;
-            return (
-              <LineupSlot
-                key={i}
-                slot={slot}
-                card={card}
-                competence={competenceByIndex[i]}
-                stats={card ? statsFor(card.id) : undefined}
-                misfitReveal={misfitReveal}
-                justPlaced={placedSlot === i}
-                dim={drag?.from === 'slot' && drag.index === i}
-                dropHint={dropTarget?.kind === 'slot' && dropTarget.index === i}
-                onClick={card ? undefined : () => setOverlay({ kind: 'slot', index: i })}
-                onPointerDown={card ? (e) => beginPointer({ from: 'slot', index: i, id: card.id }, e) : undefined}
-                onPointerMove={card && !drag ? movePointer : undefined}
-                onPointerUp={card && !drag ? endPointer : undefined}
-                onPointerCancel={card ? cancelPointer : undefined}
-                onInspect={card ? () => setModal({ variant: 'player', card }) : undefined}
-              />
-            );
-          })}
+          {viewAway
+            ? oppView.formation.slots.map((slot, i) => {
+                const card = oppView.xi[i];
+                return (
+                  <LineupSlot
+                    key={`opp-${i}`}
+                    slot={slot}
+                    card={card}
+                    justPlaced={false}
+                    onInspect={card ? () => setModal({ variant: 'player', card }) : undefined}
+                  />
+                );
+              })
+            : formation.slots.map((slot, i) => {
+                const cardId = sel.starters[i];
+                const card = cardId != null ? byId.get(cardId) : undefined;
+                return (
+                  <LineupSlot
+                    key={i}
+                    slot={slot}
+                    card={card}
+                    competence={competenceByIndex[i]}
+                    stats={card ? statsFor(card.id) : undefined}
+                    misfitReveal={misfitReveal}
+                    justPlaced={placedSlot === i}
+                    dim={drag?.from === 'slot' && drag.index === i}
+                    dropHint={dropTarget?.kind === 'slot' && dropTarget.index === i}
+                    onClick={card ? undefined : () => setOverlay({ kind: 'slot', index: i })}
+                    onPointerDown={card ? (e) => beginPointer({ from: 'slot', index: i, id: card.id }, e) : undefined}
+                    onPointerMove={card && !drag ? movePointer : undefined}
+                    onPointerUp={card && !drag ? endPointer : undefined}
+                    onPointerCancel={card ? cancelPointer : undefined}
+                    onInspect={card ? () => setModal({ variant: 'player', card }) : undefined}
+                  />
+                );
+              })}
+          {viewAway && (
+            <div style={{ position: 'absolute', top: 6, left: 0, right: 0, textAlign: 'center', pointerEvents: 'none', fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--line-white)', textShadow: '0 1px 3px #000' }}>
+              {opponent.name.toUpperCase()} · SCOUTED XI
+            </div>
+          )}
         </div>
       </div>
 
@@ -866,6 +915,31 @@ export default function SquadScreen({
             );
           })}
         </div>
+      </div>
+
+      {/* ── KICK OFF — the primary action, at the bottom (mirrors the match CTA) ── */}
+      <div className="shrink-0 px-3 mt-1.5">
+        <button
+          onClick={confirm}
+          disabled={!ready}
+          className={`active:scale-95 w-full relative overflow-hidden ${ready ? 'sheen-strong glow-edge' : 'glass-surface'}`}
+          style={{
+            fontFamily: PIXEL,
+            fontSize: 14,
+            letterSpacing: 0.5,
+            color: ready ? 'var(--line-white)' : capOver ? 'var(--danger)' : 'var(--dust)',
+            height: 48,
+            borderRadius: 'var(--radius-sm)',
+            border: ready ? '2px solid var(--ink-black)' : '1px solid var(--border)',
+            background: ready ? 'linear-gradient(135deg, var(--amber), var(--amber-soft))' : 'rgba(0,0,0,0.28)',
+            boxShadow: ready ? 'inset 0 1px 0 0 var(--glass-highlight), 0 3px 0 0 var(--ink-black), var(--depth-2)' : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
+            transition: 'transform 0.12s ease',
+            cursor: ready ? 'pointer' : 'default',
+            ...(ready ? { ['--glow' as string]: 'var(--amber-glow)' } : {}),
+          }}
+        >
+          {capOver ? 'OVER BUDGET' : filled < slotCount ? `FILL YOUR XI · ${filled}/${slotCount}` : mode === 'draft' && !manager ? 'PICK A MANAGER' : 'KICK OFF →'}
+        </button>
       </div>
 
       {/* ── Drag ghost — a lifted solid mini tile following the finger ─────── */}
