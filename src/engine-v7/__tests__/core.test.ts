@@ -35,6 +35,26 @@ describe('V7 deterministic foundations', () => {
     expect(result.defence.effective).toBe(9);
   });
 
+  it('uses the latest set before swapping and rounds negative final stats toward zero', () => {
+    const result = calculatePlayerStats({
+      printedAttack: 2,
+      printedDefence: 9,
+      attackSetEffects: [
+        { value: 12, resolvedOrder: 1 },
+        { value: -5, resolvedOrder: 3 },
+      ],
+      defenceSetEffects: [{ value: 7, resolvedOrder: 2 }],
+      swapStats: true,
+      attackFlatModifiers: [-10],
+      attackMultipliers: [0.5],
+      defenceFlatModifiers: [-2],
+      defenceMultipliers: [1.5],
+    });
+
+    expect(result.attack).toMatchObject({ selectedSet: -5, baseAfterSwap: 7, flatTotal: -10, effective: -1 });
+    expect(result.defence).toMatchObject({ selectedSet: 7, baseAfterSwap: -5, flatTotal: -2, effective: -10 });
+  });
+
   it.each([
     [0, 0, 0],
     [1, 0, 1],
@@ -42,6 +62,16 @@ describe('V7 deterministic foundations', () => {
     [6, 0, 2],
     [80, 67, 3],
   ])('creates chances from global difference %i - %i', (attack, defence, expected) => {
+    expect(calculatedChanceCount(attack, defence)).toBe(expected);
+  });
+
+  it.each([
+    [10, 10, 0],
+    [11, 10, 1],
+    [15, 10, 1],
+    [16, 10, 2],
+    [-4, -10, 2],
+  ])('uses the global attack-defence difference at five-point boundaries', (attack, defence, expected) => {
     expect(calculatedChanceCount(attack, defence)).toBe(expected);
   });
 
@@ -56,6 +86,21 @@ describe('V7 deterministic foundations', () => {
       { sector: 'centre', pressure: 3, chances: 1 },
       { sector: 'right', pressure: 2, chances: 0 },
     ]);
+  });
+
+  it('uses attack, player count, then seeded randomness for regional ties', () => {
+    const sectors = [
+      { sector: 'left' as const, attack: 10, defenceAgainst: 5, attackingPlayers: 2 },
+      { sector: 'centre' as const, attack: 10, defenceAgainst: 5, attackingPlayers: 3 },
+      { sector: 'right' as const, attack: 10, defenceAgainst: 5, attackingPlayers: 3 },
+    ];
+
+    const first = allocateCalculatedChances(2, sectors, createRng(99, 'regional-replay'));
+    const replay = allocateCalculatedChances(2, sectors, createRng(99, 'regional-replay'));
+
+    expect(first).toEqual(replay);
+    expect(first.find(({ sector }) => sector === 'left')?.chances).toBe(0);
+    expect(first.reduce((sum, sector) => sum + sector.chances, 0)).toBe(2);
   });
 
   it('uses 3-5-7 break budgets and net negative incoming costs', () => {

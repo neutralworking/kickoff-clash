@@ -32,10 +32,28 @@ function rank(players: ConditionPlayerView[], direction: 'strongest' | 'weakest'
   });
 }
 
+function selectedPlayers(
+  target: Extract<ActionTarget, { type: 'selected_player' }>,
+  context: TargetContext,
+): ConditionPlayerView[] {
+  const own = target.side === 'own' || target.side === 'player';
+  const active = own ? context.ownActive : context.enemyActive;
+  const bench = own ? context.ownBench : context.enemyBench;
+
+  if (target.zone === 'active') return active;
+  if (target.zone === 'bench') return bench;
+  return [...active, ...bench];
+}
+
 export function resolveTarget(target: ActionTarget, context: TargetContext): ResolvedTarget {
   switch (target.type) {
     case 'self': return { playerIds: [context.source.cardId] };
-    case 'selected_player': return { playerIds: context.selectedPlayerIds ?? [] };
+    case 'selected_player': {
+      const eligibleIds = new Set(selectedPlayers(target, context).map((player) => player.cardId));
+      return {
+        playerIds: [...new Set(context.selectedPlayerIds ?? [])].filter((id) => eligibleIds.has(id)),
+      };
+    }
     case 'team': {
       const own = target.side === 'own';
       const players = target.zone === 'bench'
