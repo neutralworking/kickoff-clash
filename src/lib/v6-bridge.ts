@@ -18,9 +18,29 @@ import type { Card } from './scoring';
 import type { Formation } from './formations';
 import { deriveStats } from './funnel';
 import { generateOpponentXI } from './opponent';
-import { STAT_BUDGET_BY_COST, scaleV6Squad, type Rarity, type Sector, type V6Action, type V6Card } from './match-v6';
+import { STAT_BUDGET_BY_COST, scaleV6Squad, TRIGGER_LABELS, type Rarity, type Sector, type V6Action, type V6Card } from './match-v6';
 
 const WIDE = new Set(['WD', 'WM', 'WF']);
+
+/** A card's V6 action as display copy — the same on every surface (token + full card).
+ *  `short` fits a token line; `full` is a sentence for the big card; `icon` is a glyph. */
+export function actionLabel(a?: V6Action): { short: string; full: string; icon: string } {
+  if (!a) return { short: '—', full: 'No special action.', icon: '·' };
+  const t = TRIGGER_LABELS[a.trigger] ?? '';
+  switch (a.kind) {
+    case 'modify_attack': return { short: `${a.amount >= 0 ? '+' : ''}${a.amount} ATT`, full: `${t}: ${a.amount >= 0 ? '+' : ''}${a.amount} attack to its sector.`, icon: '⚔' };
+    case 'modify_defence': return { short: `${a.amount >= 0 ? '+' : ''}${a.amount} DEF`, full: `${t}: ${a.amount >= 0 ? '+' : ''}${a.amount} defence to its sector.`, icon: '🛡' };
+    case 'modify_enemy_attack': return { short: `${a.amount} FOE ATT`, full: `${t}: ${a.amount} to the opposing sector's attack.`, icon: '🕸' };
+    case 'modify_enemy_defence': return { short: `${a.amount} FOE DEF`, full: `${t}: ${a.amount} to the opposing sector's defence.`, icon: '🕸' };
+    case 'improve_die_faces': return { short: `SCORES ${a.faces.join('·')}`, full: `${t}: a chance in its sector also scores on ${a.faces.join(', ')}.`, icon: '🎯' };
+    case 'reroll_die': return { short: `REROLL ×${a.count}`, full: `${t}: reroll a missed chance in its sector (×${a.count}).`, icon: '🔄' };
+    case 'add_chance': return { short: `+${a.count} CHANCE`, full: `${t}: create ${a.count} extra chance in its sector.`, icon: '⚽' };
+    case 'cancel_chance': return { short: `DENY ×${a.count}`, full: `${t}: cancel ${a.count} of the opponent's chances in its sector.`, icon: '🧤' };
+    case 'discount_cost': return { short: `−${a.amount} COST`, full: `${t}: incoming subs cost ${a.amount} less.`, icon: '💰' };
+    case 'move_sector': return { short: `→ ${a.target.toUpperCase()}`, full: `${t}: moves to the ${a.target} sector.`, icon: '↔' };
+    default: return { short: '—', full: 'No special action.', icon: '·' };
+  }
+}
 
 /** V6 cost (1–6) from power — matches the card-face badge. */
 export function v6Cost(card: Card): number {
@@ -96,6 +116,14 @@ export function toV6Card(card: Card): V6Card {
     rarity,
     actions: v6Action(card, attack, defence, rarity),
   };
+}
+
+/** A live card as the V6 token shows it OFF the pitch (team select / pack): the
+ *  bridged V6 card with attack damped exactly as the match plays it, so the
+ *  numbers on the card match the numbers in the game. Portrait is added by the UI. */
+export function toDisplayV6Card(card: Card): V6Card {
+  const v6 = toV6Card(card);
+  return { ...v6, attack: Math.max(0, Math.round(v6.attack * LIVE_RUN_BALANCE.attackDamp)) };
 }
 
 /** Sector from a formation slot's left–right geometry (x 0–100). */

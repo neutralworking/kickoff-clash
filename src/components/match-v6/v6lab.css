@@ -208,9 +208,11 @@
 .v6-pc { width: 100%; border: 1px solid #d3b07a; border-radius: 8px; background: linear-gradient(#342216, #1a100b); overflow: hidden; position: relative; box-shadow: 0 3px 8px #0009; }
 .v6-pc.oop { border-color: #d64b3c; }
 .v6-pc .v6-cost { position: absolute; z-index: 4; top: 2px; left: 2px; width: 20px; height: 20px; font-size: 11px; border-width: 1px; box-shadow: 0 1px 0 #7f4610; }
+.v6-pc .v6-pos { position: absolute; z-index: 4; top: 3px; right: 3px; font: 800 7px Inter, sans-serif; color: #0b0703; border-radius: 3px; padding: 2px 3px; border: 1px solid #0b0703; line-height: 1; letter-spacing: .2px; }
 .v6-pc .v6-av { height: 34px; }
 .v6-pc-name { font-size: 8px; font-weight: 900; padding: 2px 3px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.v6-pc-role { font-size: 6.5px; color: #c6b798; padding: 0 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; letter-spacing: .2px; }
+.v6-pc-act { font-size: 6.5px; color: #e7ba70; padding: 0 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .2px; font-weight: 700; }
+.v6-pc-act .ic { margin-right: 2px; }
 .v6-pc-sd { display: flex; justify-content: space-between; font-size: 10px; font-weight: 900; padding: 0 4px 2px; }
 .v6-pc.tgt { cursor: pointer; }
 .v6-pc.tgt:after { content: ''; position: absolute; inset: 0; border: 2px dashed #f4b849; border-radius: 8px; pointer-events: none; opacity: .85; }

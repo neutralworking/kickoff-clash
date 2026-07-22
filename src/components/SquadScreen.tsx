@@ -36,7 +36,8 @@ import { getFormation, positionFitsSlot } from '../lib/formations';
 import type { TeamIntent, OpponentBuild } from '../lib/run';
 import { getOpponent } from '../lib/run';
 import { generateOpponentXI } from '../lib/opponent';
-import { xiV6Totals, v6Cost, v6OpponentPower, MAX_XI_COST } from '../lib/v6-bridge';
+import { xiV6Totals, v6Cost, v6OpponentPower, toDisplayV6Card, MAX_XI_COST } from '../lib/v6-bridge';
+import { portraitSrc } from './cards/portrait';
 import type { JokerCard } from '../lib/jokers';
 import { SCOUT_COST } from '../lib/economy';
 import {
@@ -322,6 +323,9 @@ export default function SquadScreen({
     const r = round ?? 1;
     return generateOpponentXI(r, getOpponent(r).style, seed ?? 0, v6OpponentPower(opponentPower ?? 70));
   }, [round, seed, opponentPower]);
+
+  // Live card → the unified V6 token (damped ATT to match the match) + its portrait.
+  const v6Of = (card: Card) => ({ ...toDisplayV6Card(card), portrait: portraitSrc(card) ?? undefined });
   const benchCards = useMemo(
     () => sel.bench.map((id) => byId.get(id)).filter((c): c is Card => !!c),
     [sel.bench, byId],
@@ -811,6 +815,7 @@ export default function SquadScreen({
                     key={`opp-${i}`}
                     slot={slot}
                     card={card}
+                    v6card={card ? v6Of(card) : undefined}
                     justPlaced={false}
                     onInspect={card ? () => setModal({ variant: 'player', card }) : undefined}
                   />
@@ -824,6 +829,7 @@ export default function SquadScreen({
                     key={i}
                     slot={slot}
                     card={card}
+                    v6card={card ? v6Of(card) : undefined}
                     competence={competenceByIndex[i]}
                     stats={card ? statsFor(card.id) : undefined}
                     misfitReveal={misfitReveal}
@@ -887,6 +893,7 @@ export default function SquadScreen({
               <BenchTile
                 key={i}
                 card={card}
+                v6card={v6Of(card)}
                 onRemove={() => removeBench(card.id)}
                 dim={drag?.from === 'bench' && drag.id === card.id}
                 dropHint={hint}
