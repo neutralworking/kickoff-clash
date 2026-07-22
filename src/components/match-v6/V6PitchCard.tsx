@@ -38,7 +38,7 @@ export function V6PitchCard(props: {
       <div className="v6-av" style={av.style}>
         {card.portrait ? (
           // eslint-disable-next-line @next/next/no-img-element -- static-export basePath src
-          <img src={card.portrait} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 20%' }} />
+          <img src={card.portrait} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 32%' }} />
         ) : (
           av.hair && <i className={`v6-hair ${av.hair}`} />
         )}

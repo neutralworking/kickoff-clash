@@ -146,7 +146,11 @@ export default function V6MatchPhase({ runState, onMatchComplete }: { runState: 
   const opponentSquad = useMemo(() => {
     const opp = getOpponent(runState.round);
     const power = cupMatchPower(runState.round, runState.matchInCup, cupSize(runState.round));
-    return { ...bridgeOpponentSquad({ name: 'Away', round: runState.round, style: opp.style, seed: matchSeed, power }) };
+    const sq = bridgeOpponentSquad({ name: 'Away', round: runState.round, style: opp.style, seed: matchSeed, power });
+    // Give the opponent real portraits too (keyed off its card id/position) so its
+    // cards read like the player's — not the CSS-avatar fallback blob.
+    const withPortrait = (c: V6Card): V6Card => ({ ...c, portrait: portraitSrc({ id: c.id, name: c.name, position: c.position }) ?? undefined });
+    return { ...sq, xi: sq.xi.map(withPortrait), bench: sq.bench.map(withPortrait) };
   }, [runState.round, runState.matchInCup, matchSeed]);
 
   const [step, setStep] = useState<MatchStep>(() => startMatchFromSquads(playerSquad, opponentSquad, matchSeed));
