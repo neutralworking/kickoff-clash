@@ -1,5 +1,5 @@
 import type { FormationDefinition, FormationSlot, PositionCode, V7PlayerCard } from '../../lib/match-v7/types';
-import { seededOrder } from '../core/rng';
+import { createRng } from '../core/rng';
 
 export interface MappingPlayer {
   card: V7PlayerCard;
@@ -14,22 +14,11 @@ export interface FormationMapping {
 }
 
 const COMPATIBLE: Partial<Record<PositionCode, PositionCode[]>> = {
-  GK: ['GK'],
-  LB: ['LB', 'LWB'],
-  RB: ['RB', 'RWB'],
-  CB: ['CB'],
-  LWB: ['LWB', 'LB', 'LM'],
-  RWB: ['RWB', 'RB', 'RM'],
-  DM: ['DM', 'CM'],
-  LM: ['LM', 'LW', 'LWB'],
-  CM: ['CM', 'DM', 'AM'],
-  RM: ['RM', 'RW', 'RWB'],
-  LW: ['LW', 'LM', 'LF'],
-  AM: ['AM', 'CM', 'LF', 'RF'],
-  RW: ['RW', 'RM', 'RF'],
-  LF: ['LF', 'LW', 'CF'],
-  CF: ['CF', 'LF', 'RF'],
-  RF: ['RF', 'RW', 'CF'],
+  GK: ['GK'], LB: ['LB', 'LWB'], RB: ['RB', 'RWB'], CB: ['CB'],
+  LWB: ['LWB', 'LB', 'LM'], RWB: ['RWB', 'RB', 'RM'], DM: ['DM', 'CM'],
+  LM: ['LM', 'LW', 'LWB'], CM: ['CM', 'DM', 'AM'], RM: ['RM', 'RW', 'RWB'],
+  LW: ['LW', 'LM', 'LF'], AM: ['AM', 'CM', 'LF', 'RF'], RW: ['RW', 'RM', 'RF'],
+  LF: ['LF', 'LW', 'CF'], CF: ['CF', 'LF', 'RF'], RF: ['RF', 'RW', 'CF'],
 };
 
 export function positionFitsSlot(card: V7PlayerCard, slot: FormationSlot): boolean {
@@ -63,7 +52,7 @@ export function autoMapFormation(
       b.card.printedCost - a.card.printedCost ||
       (b.card.printedAttack + b.card.printedDefence) - (a.card.printedAttack + a.card.printedDefence) ||
       a.deploymentOrder - b.deploymentOrder,
-    )[0];
+    )[0]!;
     assignments[goalkeeperSlot.slotKey] = keeper.card.id;
     availableSlots.splice(availableSlots.indexOf(goalkeeperSlot), 1);
     remainingPlayers.splice(remainingPlayers.indexOf(keeper), 1);
@@ -75,13 +64,21 @@ export function autoMapFormation(
     );
     const bestScore = Math.max(...candidates.map((candidate) => candidate.score));
     const best = candidates.filter((candidate) => candidate.score === bestScore);
-    const ordered = seededOrder(best, seed, `formation-map:${Object.keys(assignments).length}`);
-    const selected = [...ordered].sort((a, b) =>
+    const ranked = [...best].sort((a, b) =>
       b.player.card.printedCost - a.player.card.printedCost ||
       (b.player.card.printedAttack + b.player.card.printedDefence) -
         (a.player.card.printedAttack + a.player.card.printedDefence) ||
       a.player.deploymentOrder - b.player.deploymentOrder,
-    )[0];
+    );
+    const topRank = ranked.filter((candidate) =>
+      candidate.player.card.printedCost === ranked[0]!.player.card.printedCost &&
+      candidate.player.card.printedAttack + candidate.player.card.printedDefence ===
+        ranked[0]!.player.card.printedAttack + ranked[0]!.player.card.printedDefence &&
+      candidate.player.deploymentOrder === ranked[0]!.player.deploymentOrder,
+    );
+    const selected = topRank.length === 1
+      ? topRank[0]!
+      : createRng(seed, `formation-map:${Object.keys(assignments).length}`).pick(topRank);
 
     assignments[selected.slot.slotKey] = selected.player.card.id;
     availableSlots.splice(availableSlots.indexOf(selected.slot), 1);
