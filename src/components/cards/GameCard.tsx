@@ -56,6 +56,7 @@ import {
 import ClassGlyph from './ClassGlyph';
 import { ChargePips } from './ContestIcons';
 import { classOfCard } from '../../lib/contest-map';
+import { toDisplayV6Card, actionLabel } from '../../lib/v6-bridge';
 import {
   portraitArtStyle,
   portraitSrc,
@@ -596,14 +597,11 @@ function v6Cost(card: Card): number {
 }
 
 function PlayerFace({ card, full }: { card: Card; full: boolean }) {
-  const stats = deriveStats(card);
+  const v6 = toDisplayV6Card(card);
   const name = lastName(card.name).toUpperCase();
-  const role = card.tacticalRole ?? card.archetype;
-  const cls = classOfCard(card);
   const tier = handoffTier(card.rarity);
-  const cc = handoffClassColor(cls);
-  const cost = v6Cost(card);
-  const actions = playerActions(card);
+  const cost = v6.cost;
+  const act = actionLabel(v6.actions[0]);
   const src = portraitSrc(card);
   const [imgOk, setImgOk] = useState(true);
 
@@ -729,41 +727,31 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
         >
           {name}
         </div>
-        <div
-          style={{
-            fontFamily: BODY_FONT,
-            fontSize: full ? fitFontSize(role, cfg.arche) : gridMetaFont(role, cfg.arche),
-            color: DUST,
-            marginTop: full ? 3 : 1.5,
-            lineHeight: 1.15,
-            overflowWrap: 'break-word',
-          }}
-        >
-          {role}
-        </div>
+        {!full && (
+          <div style={{ fontFamily: BODY_FONT, fontSize: 7.5, fontWeight: 700, color: ACTION_BONUS_GOLD, marginTop: 2, letterSpacing: '0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {act.short}
+          </div>
+        )}
       </div>
 
-      {/* 3 — ABILITY ROWS (full only): base always; a starred bonus (★ gold) for
-          signature / Epic / Legendary extras. Class-coloured keyword. */}
+      {/* 3 — ACTION (full only): the card's V6 action — the same one the token shows. */}
       {full && (
         <div style={{ flex: '1 0 auto', padding: '0 13px 4px' }}>
           <div style={{ height: 1, background: `linear-gradient(90deg,transparent,${tier.edge}55,transparent)`, margin: '2px 0 9px' }} />
-          {actions.map((a) => (
-            <p key={a.key} style={{ margin: '0 0 7px', fontFamily: BODY_FONT, fontSize: 11, lineHeight: 1.35, color: CREAM_SOFT, textAlign: 'left' }}>
-              <span style={{ fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: a.bonus ? ACTION_BONUS_GOLD : cc }}>
-                {(a.bonus ? '★ ' : '') + a.label + ': '}
-              </span>
-              {a.text}
-            </p>
-          ))}
+          <p style={{ margin: '0 0 7px', fontFamily: BODY_FONT, fontSize: 11, lineHeight: 1.35, color: CREAM_SOFT, textAlign: 'left' }}>
+            <span style={{ fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: ACTION_BONUS_GOLD }}>
+              Action:{' '}
+            </span>
+            {act.full}
+          </p>
         </div>
       )}
 
       {/* 4 — overlapping ATK/DEF corner discs (V6: no fitness bar). */}
       <div style={{ position: 'relative', marginTop: full ? 8 : 6, padding: full ? '0 12px' : '0 8px', flexShrink: 0 }}>
         <div style={{ margin: `0 ${cfg.discR * 0.72}px`, height: full ? 16 : 11 }} />
-        <StatDisc kind="ATK" value={stats.atk} side="atk" full={full} discR={cfg.discR} anchor="left" />
-        <StatDisc kind="DEF" value={stats.def} side="def" full={full} discR={cfg.discR} anchor="right" />
+        <StatDisc kind="ATT" value={v6.attack} side="atk" full={full} discR={cfg.discR} anchor="left" />
+        <StatDisc kind="DEF" value={v6.defence} side="def" full={full} discR={cfg.discR} anchor="right" />
       </div>
     </div>
   );

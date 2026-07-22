@@ -24,6 +24,8 @@ import { PIXEL, POSITION_COLOR, lastName } from '../cards/cardTokens';
 import { deriveStats } from '../../lib/funnel';
 import { HERO, fitnessColor as fitnessColorForPct } from '../cards/portrait';
 import { PitchToken } from '../PitchToken';
+import { V6PitchCard } from '../match-v6/V6PitchCard';
+import type { V6Card } from '../../lib/match-v6';
 import { competenceOf, type Competence } from '../../lib/team-select';
 import { pitchAxis } from '../../lib/pitch-layout';
 
@@ -157,6 +159,7 @@ export function FitnessBar({ card, width = '100%' }: { card: Card; width?: numbe
 export function LineupSlot({
   slot,
   card,
+  v6card,
   justPlaced,
   onClick,
   onInspect,
@@ -172,6 +175,9 @@ export function LineupSlot({
 }: {
   slot: Formation['slots'][number];
   card: Card | undefined;
+  /** When set, render the unified V6 token (portrait/cost/pos/ATT-DEF/action) so
+   *  team-select reads like the match. Falls back to the legacy PitchToken. */
+  v6card?: V6Card;
   justPlaced: boolean;
   onClick?: () => void;
   onInspect?: () => void;
@@ -213,7 +219,9 @@ export function LineupSlot({
           className={`relative ${justPlaced ? 'chip-place' : ''}`}
           style={{ borderRadius: 8, boxShadow: dropHint ? '0 0 0 3px var(--gold-glow)' : undefined, outline: dropHint ? '2px solid var(--gold)' : 'none', outlineOffset: 1 }}
         >
-          {(() => {
+          {v6card ? (
+            <V6PitchCard card={v6card} outOfPosition={comp !== 'primary'} />
+          ) : (() => {
             const s = stats ?? (() => { const d = deriveStats(card); return { atk: d.atk, def: d.def, baseAtk: d.atk, baseDef: d.def }; })();
             return (
               <PitchToken
@@ -273,6 +281,7 @@ export function LineupSlot({
 
 export function BenchTile({
   card,
+  v6card,
   onRemove,
   dim = false,
   dropHint = false,
@@ -283,6 +292,8 @@ export function BenchTile({
   onPointerCancel,
 }: {
   card: Card;
+  /** When set, render the unified V6 token instead of the legacy PitchToken. */
+  v6card?: V6Card;
   onRemove?: () => void;
   dim?: boolean;
   dropHint?: boolean;
@@ -317,18 +328,22 @@ export function BenchTile({
         touchAction: touchAction ?? (onPointerDown ? 'none' : undefined),
       }}
     >
-      <PitchToken
-        card={card}
-        competence="primary"
-        atk={st.atk}
-        def={st.def}
-        baseAtk={st.atk}
-        baseDef={st.def}
-        fitness={fitnessOf(card)}
-        injured={card.injured}
-        dim={dim}
-        width="100%"
-      />
+      {v6card ? (
+        <V6PitchCard card={v6card} dim={dim} />
+      ) : (
+        <PitchToken
+          card={card}
+          competence="primary"
+          atk={st.atk}
+          def={st.def}
+          baseAtk={st.atk}
+          baseDef={st.def}
+          fitness={fitnessOf(card)}
+          injured={card.injured}
+          dim={dim}
+          width="100%"
+        />
+      )}
       {/* remove — pointerdown is stopped so the × never begins a drag. */}
       {onRemove && (
         <span
