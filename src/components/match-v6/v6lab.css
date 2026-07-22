@@ -237,6 +237,46 @@
 .v6-mlog-row.period { color: #fff2ca; background: #221708; border-left-color: #e7b94d; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; font-size: 9.5px; }
 
 .v6-mcta { flex: 0 0 auto; margin: 8px; }
+.v6-mcta.ghost { background: #241810; color: #b9a684; box-shadow: none; text-transform: none; font: 800 12px Inter, sans-serif; cursor: default; }
+
+/* enlarged, prominent ATT/DEF on the pitch/bench tokens (the numbers the anim streams from) */
+.v6-pc-sd { font-size: 12px; padding: 0 4px 3px; }
+
+/* ── SCOREBOARD (clock · score · ATT/DEF counters · chance bars) ── */
+.v6-sb { flex: 0 0 auto; padding: 8px 12px 9px; border-bottom: 1px solid #4b3424; background: linear-gradient(#25190fdd, #161008dd); }
+.v6-sb-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.v6-sb-cnt { display: flex; align-items: center; gap: 7px; font: 900 19px Impact, 'Arial Black', sans-serif; letter-spacing: .5px; }
+.v6-sb-cnt.right { justify-content: flex-end; }
+.v6-sb-cnt .lbl { font: 800 8px Inter, sans-serif; letter-spacing: 1px; color: #b8a889; }
+.v6-sb-cnt .v6-att, .v6-sb-cnt .v6-def { font-variant-numeric: tabular-nums; transition: text-shadow .2s, transform .2s; }
+.v6-sb-cnt.glow .v6-att { text-shadow: 0 0 10px var(--att), 0 0 18px var(--att); transform: scale(1.14); }
+.v6-sb-cnt.glow .v6-def { text-shadow: 0 0 10px var(--def), 0 0 18px var(--def); transform: scale(1.14); }
+.v6-sb-mid { text-align: center; }
+.v6-clock { font: 800 9px Inter, sans-serif; letter-spacing: .5px; color: #cbb083; }
+.v6-sb-score { font: 900 26px Impact, 'Arial Black', sans-serif; color: #fff6dc; line-height: 1; text-shadow: 0 3px 0 #000; }
+.v6-sb-score span { padding: 0 4px; color: #d3b98a; }
+.v6-bars { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.v6-bar-row { display: flex; align-items: center; gap: 7px; }
+.v6-bar-tag { font: 800 8px Inter, sans-serif; letter-spacing: .6px; color: #b8a889; width: 34px; flex-shrink: 0; }
+.v6-bar { flex: 1; height: 12px; border-radius: 7px; background: #10203a; overflow: hidden; border: 1px solid #3a2a1a; box-shadow: inset 0 1px 3px #0009; }
+.v6-bar .fill { display: block; height: 100%; border-radius: 7px 0 0 7px; transition: width .8s cubic-bezier(.2,.8,.25,1); }
+.v6-bar .fill.home { background: linear-gradient(90deg, #ff7a2e, var(--att)); box-shadow: 0 0 10px #ff8a3e88; }
+.v6-bar .fill.away { background: linear-gradient(90deg, #3aa0d8, var(--def)); box-shadow: 0 0 10px #56c0f288; }
+.v6-bar-ch { font: 900 12px Impact, sans-serif; color: #ffe7b0; min-width: 22px; text-align: right; }
+.v6-bar-ch.pop { animation: v6Pop .5s ease-out both; }
+
+/* dice + goal overlay on the pitch */
+.v6-pitchwrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
+.v6-pitchwrap > .v6-fpitch { flex: 1 1 auto; }
+.v6-diebox { position: absolute; inset: 0; z-index: 12; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; pointer-events: none; background: radial-gradient(circle at 50% 46%, #100b07f2 0, #100b07cc 24%, #100b0700 52%); }
+.v6-dielabel { font: 800 11px Inter, sans-serif; letter-spacing: 1px; color: #ffe7b0; text-shadow: 0 2px 6px #000; }
+.v6-diebox .v6-outcome.miss { color: #d8c39c; text-shadow: 0 2px 6px #000; font-weight: 700; }
+.v6-die-big.hot { box-shadow: 0 0 0 3px #ffd45e, 0 8px 30px #f0a92a; }
+.v6-goalpop { position: absolute; inset: 0; z-index: 14; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; pointer-events: none; background: radial-gradient(circle at 50% 45%, #1c130bE0, #0c0806c0); }
+.v6-goalword { font-size: 46px; color: #ffd45e; text-shadow: 0 4px 0 #8c341b, 0 0 24px #f0a92a; animation: v6GoalWord .5s cubic-bezier(.2,1.4,.4,1) both; }
+.v6-goalcard { width: 92px; animation: v6InRight .42s cubic-bezier(.2,.8,.3,1) both; }
+.v6-goalcard .v6-pc { box-shadow: 0 0 0 2px #ffd45e, 0 12px 34px #000c; }
+@keyframes v6GoalWord { from { transform: scale(.4) rotate(-8deg); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* chance dice */
 .v6-runscore { font: 900 22px Impact, 'Arial Black', sans-serif; color: #fff6dc; text-shadow: 0 2px 0 #000; letter-spacing: 1px; }
