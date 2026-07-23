@@ -14,6 +14,7 @@ export default defineConfig({
       'src/lib/__tests__/**/*.test.ts',
       'src/engine/__tests__/**/*.test.ts',
       'src/engine-v2/__tests__/**/*.test.ts',
+      'src/engine-v7/__tests__/**/*.test.ts',
     ],
   },
 });
