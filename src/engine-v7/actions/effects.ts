@@ -73,6 +73,13 @@ export interface LedgerEffect {
   targetIds: string[];
   sector?: Sector;
   slotKey?: string;
+  /**
+   * For chance-targeting effects, the resolved target preserved verbatim from
+   * the action: whose chances (relative to this effect's acting `side`) and
+   * which of them. Period resolution consumes this directly, so token ownership
+   * is never inferred from the effect type.
+   */
+  tokenTarget?: { side: 'own' | 'enemy'; selector: 'first_in_sector' | 'all_in_sector' };
   createdPeriod: PeriodNumber;
   createdBreakIndex: BreakIndex | 0;
   lifetime: EffectLifetime;
@@ -143,6 +150,9 @@ export function buildLedgerEffects(
     targetIds: [...resolved.playerIds],
     ...(resolved.sector !== undefined ? { sector: resolved.sector } : {}),
     ...(resolved.slotKey !== undefined ? { slotKey: resolved.slotKey } : {}),
+    ...(resolved.chanceSelector !== undefined
+      ? { tokenTarget: { side: resolved.chanceSide ?? 'own', selector: resolved.chanceSelector } }
+      : {}),
     createdPeriod: coords.period,
     createdBreakIndex: coords.breakIndex,
     lifetime,
