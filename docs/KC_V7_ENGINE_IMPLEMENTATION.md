@@ -2,6 +2,30 @@
 
 V7 is implemented beside V6 under `src/engine-v7`. The package is pure TypeScript and must not import React, browser APIs, Supabase clients, or mutable global randomness.
 
+## Live-match slice (`src/game-v7` + `/lab/match-v7`)
+
+The first playable V7 vertical slice runs one complete match through the browser
+UI without touching V6 or the default game. It lives in the UI-adjacent
+`src/game-v7` layer (which may import the engine; the engine never imports it):
+
+- `adapter/` — `cards` (live `Card` → V7 player contract), `actions` (runtime
+  instances), `lineup` (decisions → validated `BreakPlan`), `match` (registry +
+  initial state + kickoff dispatch + UI view model). Every adapter returns a
+  typed `AdapterResult` — invalid data surfaces as a visible error, never a
+  silent patch.
+- `receipts.ts` — engine receipts → an ordered UI event feed (authoritative; the
+  UI never diffs state to invent events).
+- `controller.ts` — a pure-TS `V7MatchController` that sequences the engine
+  primitives (period → boundary → break) and enforces legality: no double
+  resolve, no illegal plan, no advance past full time; deterministic + restart.
+- `fixtures.ts` — a clearly-marked **development** fixture (two managers, two
+  formations, full XIs + benches, V7-supported actions, a fixed seed). The
+  frontend/DB does not yet emit V7 manager/formation/action contracts, so the
+  fixture is authored in V7 shape; the live-card adapter is proven separately.
+
+Entry: the unlinked dev route **`/lab/match-v7`** (mirrors `/lab/match-v6`); the
+live root game at `/` stays V6. Gate: `npx vitest run src/game-v7`.
+
 ## First vertical slice
 
 Implemented:

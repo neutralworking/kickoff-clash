@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 // Vitest is the canonical acceptance gate for the KC rebuild.
@@ -8,6 +9,12 @@ import { defineConfig } from 'vitest/config';
 //  • src/engine/       — the parked two-window resolver, kept green as CI hygiene.
 // Playwright's tests/ tree is out of scope here (it has its own runner).
 export default defineConfig({
+  // The game-v7 layer imports the engine via the `@/` path alias (tsconfig
+  // paths); mirror it here so those tests resolve. Engine tests use relative
+  // imports and are unaffected.
+  resolve: {
+    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
   test: {
     include: [
       'src/lib/match-v6/__tests__/**/*.test.ts',
@@ -15,6 +22,7 @@ export default defineConfig({
       'src/engine/__tests__/**/*.test.ts',
       'src/engine-v2/__tests__/**/*.test.ts',
       'src/engine-v7/__tests__/**/*.test.ts',
+      'src/game-v7/__tests__/**/*.test.ts',
     ],
   },
 });
