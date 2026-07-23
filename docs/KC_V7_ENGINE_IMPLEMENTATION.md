@@ -67,13 +67,50 @@ consumption only on success, fizzle receipts, disabled suppression, ongoing
 disappear-while-disabled, paused-then-resumed Glass progress, period-boundary
 expiry, and byte-identical replay).
 
+## Break resolver slice
+
+The break resolver lives in `resolve/` and turns two locked break plans into the
+next period's opening state. It consumes the action runtime and holds to the same
+rule — new immutable state, an appended effect ledger, and an ordered receipt
+trail; it resolves lineups and effects, it does not roll dice (that is the next
+slice).
+
+- `stats.ts` — the effective-stat ledger: folds every stat-touching
+  `LedgerEffect` (set → swap → flat → multiply, in ledger order) onto printed
+  stats, then applies the emergency-goalkeeper rule and the A3 out-of-position
+  penalty (current sector ≠ natural sector, −2/−2, floored at 0). Produces
+  `EffectivePlayer` records; reads the ledger, never writes it. Also holds
+  `CardRegistry` (the static cards / actions / formations the resolver hydrates).
+- `priority.ts` — V6 spec B5: sector control by ATT+DEF → more sectors →
+  priority; tie → total strength; tie → alternate. `resolutionOrder` puts the
+  leader first.
+- `lineup.ts` — applies a plan's formation switch + ordered subs (subbed-off →
+  `removed`; incoming bench card takes the replaced card's slot + sector, free
+  placement) + movement, immutably, with a receipt per change.
+- `context.ts` — the bridge that builds the action runtime's `ConditionContext`
+  / `TargetContext` views from live state + effective stats, rebuilt at the
+  instant each side resolves (so the trailing side sees the leader's landed
+  cards — A1).
+- `chances.ts` — chance CREATION for the upcoming period: global count
+  `ceil((teamATT − enemyDEF)/5)`, regional allocation, capped at the natural
+  per-sector max, defaulting to the d6-only goal threshold.
+- `break.ts` — `resolveBreak`: reset once-per-break flags → in priority order,
+  each side runs before-lineup activations → applies its lineup → runs
+  after-lineup activations → recompute both sides' ongoing effects → create the
+  upcoming chances. Returns new state + ledger + per-side chances + receipts.
+
+Gate: `npx vitest run src/engine-v7` (`__tests__/break-resolver.test.ts` proves
+priority, effective-stat folds + positional penalties, subs/free-placement,
+staged activation with A1 ordering, ongoing recompute, chance creation, and
+deterministic replay).
+
 ## Next slice
 
-The break resolver, which connects this action runtime to the rest of the
-match:
+Period resolution — the dice, wired onto the chances this resolver creates:
 
-1. period chance resolution and dice receipts;
-2. break resolver with before/after internal stages (formation changes,
-   substitutions and movement, reveal-priority order);
-3. ongoing recalculation and chance creation inside resolution;
-4. End of Period timing snapshots.
+1. chance resolution: roll each surviving token (d6 ≥ its `minimumGoalRoll`),
+   `add_reroll` / `set_goal_threshold` / cancel-chance token effects, and the
+   attribution substream (scorer/saver, separate from the roll stream — B2);
+2. goal + score updates and the dice receipts;
+3. End of Period timing snapshots + priority recompute for the next break;
+4. the full match loop tying periods and breaks together.
