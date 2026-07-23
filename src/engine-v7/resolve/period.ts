@@ -21,11 +21,14 @@ import { effectivePlayers, type CardRegistry, type EffectivePlayer } from './sta
 // goal on a separate substream, and returns immutable score + state plus an
 // end-of-period snapshot. It reads the ledger — it does not roll it into state.
 //
-// Token targeting from normalized data: an effect's `type` drives behavior and
-// its `side` + `sector` select tokens. By convention a buff (set_goal_threshold,
-// add_reroll) hits the acting side's own tokens; a cancel_chance hits the
-// opposing side's tokens. (The chance target's own/enemy selector is not carried
-// on the ledger today — see the PR's design questions.)
+// Token targeting from normalized data: a token effect carries the resolved
+// chance target (`tokenTarget = { side: own | enemy, selector }`) preserved from
+// the action. The effect's `type` drives behavior; the target — never the type —
+// decides which tokens are hit. `own` resolves to the effect's acting `side`,
+// `enemy` to the other side, so debuffing enemy chances is just `side: enemy`.
+// `first_in_sector` targets the lowest-order token per in-scope sector;
+// `all_in_sector` targets every in-scope token. A token effect with no
+// `tokenTarget` (never produced by a chance-targeting action) is ignored.
 
 export const FINAL_PERIOD: PeriodNumber = 4;
 
@@ -73,31 +76,61 @@ export interface PeriodResolution {
   snapshot: PeriodSnapshot;
 }
 
-/** Apply the token-level ledger effects to one side's chance tokens. */
+/** The concrete side a token effect targets, from its relative target + acting side. */
+function targetedSide(entry: LedgerEffect): TeamSide | undefined {
+  if (!entry.tokenTarget) return undefined;
+  return entry.tokenTarget.side === 'own' ? entry.side : other(entry.side);
+}
+
+/** The tokens an effect selects: in-scope by sector, narrowed by the selector. */
+function selectTokens(tokens: readonly ChanceToken[], entry: LedgerEffect): ChanceToken[] {
+  const inScope = tokens.filter((token) => entry.sector === undefined || entry.sector === token.sector);
+  if (entry.tokenTarget?.selector === 'all_in_sector') return inScope;
+  // first_in_sector → the lowest-order token in each in-scope sector.
+  const firstBySector = new Map<Sector, ChanceToken>();
+  for (const token of [...inScope].sort((a, b) => a.order - b.order)) {
+    if (!firstBySector.has(token.sector)) firstBySector.set(token.sector, token);
+  }
+  return [...firstBySector.values()];
+}
+
+/**
+ * Apply the token-level ledger effects to one side's chance tokens. Ownership
+ * and precision come entirely from each effect's preserved `tokenTarget`; the
+ * effect type only decides what to do to the selected tokens.
+ */
 export function applyTokenEffects(
   tokens: readonly ChanceToken[],
   ledger: readonly LedgerEffect[],
   side: TeamSide,
 ): ChanceToken[] {
   let out = tokens.map((token) => ({ ...token }));
-  const matches = (effect: LedgerEffect, token: ChanceToken): boolean =>
-    effect.sector === undefined || effect.sector === token.sector;
 
   for (const entry of ledger) {
     const effect = entry.effect;
-    if (entry.side === side) {
-      if (effect.type === 'set_goal_threshold') {
-        out = out.map((token) => (matches(entry, token) ? { ...token, minimumGoalRoll: effect.minimumRoll } : token));
-      } else if (effect.type === 'add_reroll') {
-        out = out.map((token) => (matches(entry, token) ? { ...token, rerolls: token.rerolls + effect.count } : token));
-      }
-    } else if (entry.side === other(side) && effect.type === 'cancel_chance') {
-      const targets = out
-        .filter((token) => !token.cancelled && matches(entry, token))
-        .sort((a, b) => SECTOR_RANK[a.sector] - SECTOR_RANK[b.sector] || a.order - b.order)
-        .slice(0, effect.count);
-      const ids = new Set(targets.map((token) => token.id));
+    if (effect.type !== 'set_goal_threshold' && effect.type !== 'add_reroll' && effect.type !== 'cancel_chance') {
+      continue;
+    }
+    if (!entry.tokenTarget || targetedSide(entry) !== side) continue;
+
+    const selected = selectTokens(out, entry);
+    if (effect.type === 'cancel_chance') {
+      const ids = new Set(
+        selected
+          .filter((token) => !token.cancelled)
+          .sort((a, b) => SECTOR_RANK[a.sector] - SECTOR_RANK[b.sector] || a.order - b.order)
+          .slice(0, effect.count)
+          .map((token) => token.id),
+      );
       out = out.map((token) => (ids.has(token.id) ? { ...token, cancelled: true } : token));
+      continue;
+    }
+
+    const ids = new Set(selected.map((token) => token.id));
+    if (effect.type === 'set_goal_threshold') {
+      out = out.map((token) => (ids.has(token.id) ? { ...token, minimumGoalRoll: effect.minimumRoll } : token));
+    } else {
+      out = out.map((token) => (ids.has(token.id) ? { ...token, rerolls: token.rerolls + effect.count } : token));
     }
   }
 

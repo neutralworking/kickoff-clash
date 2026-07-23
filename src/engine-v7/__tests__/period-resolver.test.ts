@@ -14,14 +14,17 @@ import type {
 import {
   applyTokenEffects,
   attributeGoal,
+  buildLedgerEffects,
   createRng,
   FINAL_PERIOD,
   MAX_REROLLS_PER_TOKEN,
   playMatch,
   processBoundary,
   resolvePeriod,
+  resolveTarget,
   rollToken,
   type CardRegistry,
+  type ConditionPlayerView,
   type EffectivePlayer,
   type LedgerEffect,
 } from '..';
@@ -86,12 +89,32 @@ function token(side: TeamSide, sector: Sector, order: number, overrides: Partial
   return { id: `t:${side}:${sector}:${order}`, side, sector, origin: 'calculated', order, minimumGoalRoll: 6, rerolls: 0, cancelled: false, ...overrides };
 }
 
-function ledgerEffect(side: TeamSide, effect: ActionEffect, sector?: Sector, lifetime: LedgerEffect['lifetime'] = { kind: 'period', untilPeriod: 1 }): LedgerEffect {
+interface LedgerEffectOptions {
+  sector?: Sector;
+  tokenTarget?: LedgerEffect['tokenTarget'];
+  lifetime?: LedgerEffect['lifetime'];
+}
+
+function ledgerEffect(side: TeamSide, effect: ActionEffect, options: LedgerEffectOptions = {}): LedgerEffect {
+  const lifetime = options.lifetime ?? { kind: 'period', untilPeriod: 1 };
   return {
-    id: `e:${side}:${effect.type}:${sector ?? 'all'}`, side, origin: 'activated',
-    sourceInstanceId: 's', sourceActionId: 'a', sourceCardId: `${side}-cf`, actionName: 'A',
-    effect, targetIds: [], ...(sector ? { sector } : {}), createdPeriod: 1, createdBreakIndex: 1, lifetime,
+    id: `e:${side}:${effect.type}:${options.sector ?? 'all'}:${options.tokenTarget?.side ?? '-'}`,
+    side, origin: 'activated', sourceInstanceId: 's', sourceActionId: 'a', sourceCardId: `${side}-cf`, actionName: 'A',
+    effect, targetIds: [],
+    ...(options.sector ? { sector: options.sector } : {}),
+    ...(options.tokenTarget ? { tokenTarget: options.tokenTarget } : {}),
+    createdPeriod: 1, createdBreakIndex: 1, lifetime,
   };
+}
+
+/** Shorthand for a chance-targeting token effect carrying a preserved target. */
+function tokenEffect(
+  actingSide: TeamSide,
+  effect: ActionEffect,
+  target: NonNullable<LedgerEffect['tokenTarget']>,
+  sector?: Sector,
+): LedgerEffect {
+  return ledgerEffect(actingSide, effect, { ...(sector ? { sector } : {}), tokenTarget: target });
 }
 
 function eff(cardId: string, sector: Sector, attack: number, overrides: Partial<EffectivePlayer> = {}): EffectivePlayer {
@@ -140,33 +163,80 @@ describe('token rolling', () => {
 // ── Token-level effects ───────────────────────────────────────────────────────
 
 describe('token-level ledger effects', () => {
+  const own = { side: 'own' as const, selector: 'all_in_sector' as const };
+  const enemyAll = { side: 'enemy' as const, selector: 'all_in_sector' as const };
+
   it('sets a goal threshold, applying the latest effect in ledger order', () => {
     const tokens = [token('player', 'left', 0)];
     const out = applyTokenEffects(tokens, [
-      ledgerEffect('player', { type: 'set_goal_threshold', minimumRoll: 3 }),
-      ledgerEffect('player', { type: 'set_goal_threshold', minimumRoll: 5 }),
+      tokenEffect('player', { type: 'set_goal_threshold', minimumRoll: 3 }, own),
+      tokenEffect('player', { type: 'set_goal_threshold', minimumRoll: 5 }, own),
     ], 'player');
     expect(out[0]!.minimumGoalRoll).toBe(5);
   });
 
   it('adds rerolls to the acting side and restricts by sector', () => {
     const tokens = [token('player', 'left', 0), token('player', 'right', 1)];
-    const out = applyTokenEffects(tokens, [ledgerEffect('player', { type: 'add_reroll', count: 2 }, 'left')], 'player');
+    const out = applyTokenEffects(tokens, [tokenEffect('player', { type: 'add_reroll', count: 2 }, own, 'left')], 'player');
     expect(out.find((t) => t.sector === 'left')!.rerolls).toBe(2);
     expect(out.find((t) => t.sector === 'right')!.rerolls).toBe(0);
   });
 
-  it('cancels the opposing side chances (deny), first-by-order', () => {
+  it('cancels the opposing side chances (deny) via an enemy-targeted effect', () => {
     const playerTokens = [token('player', 'left', 0), token('player', 'left', 1)];
-    // An opponent cancel_chance count 1 in the left sector cancels the player's first left token.
-    const out = applyTokenEffects(playerTokens, [ledgerEffect('opponent', { type: 'cancel_chance', count: 1 }, 'left')], 'player');
+    // An opponent cancel_chance targeting `enemy` cancels the player's first left token.
+    const out = applyTokenEffects(playerTokens, [tokenEffect('opponent', { type: 'cancel_chance', count: 1 }, enemyAll, 'left')], 'player');
     expect(out[0]!.cancelled).toBe(true);
     expect(out[1]!.cancelled).toBe(false);
   });
 
-  it('leaves the acting side untouched by its own cancel targeting the enemy', () => {
-    const out = applyTokenEffects([token('player', 'left', 0)], [ledgerEffect('player', { type: 'cancel_chance', count: 1 }, 'left')], 'player');
-    expect(out[0]!.cancelled).toBe(false);
+  it('ignores a token effect that carries no preserved target', () => {
+    const out = applyTokenEffects([token('player', 'left', 0)], [ledgerEffect('player', { type: 'set_goal_threshold', minimumRoll: 3 })], 'player');
+    expect(out[0]!.minimumGoalRoll).toBe(6);
+  });
+});
+
+describe('token target ownership + selector', () => {
+  it('resolves own to the acting side and enemy to the other side', () => {
+    const playerToken = [token('player', 'centre', 0)];
+    const opponentToken = [token('opponent', 'centre', 0)];
+    const enemyRaise = tokenEffect('player', { type: 'set_goal_threshold', minimumRoll: 7 }, { side: 'enemy', selector: 'all_in_sector' }, 'centre');
+
+    // The player debuffs the opponent's chances — the opponent's threshold rises…
+    expect(applyTokenEffects(opponentToken, [enemyRaise], 'opponent')[0]!.minimumGoalRoll).toBe(7);
+    // …and the player's own chances are untouched by the same effect.
+    expect(applyTokenEffects(playerToken, [enemyRaise], 'player')[0]!.minimumGoalRoll).toBe(6);
+  });
+
+  it('first_in_sector hits one deterministic token; all_in_sector hits each', () => {
+    const tokens = [token('player', 'centre', 0), token('player', 'centre', 1)];
+    const first = applyTokenEffects(tokens, [tokenEffect('player', { type: 'add_reroll', count: 3 }, { side: 'own', selector: 'first_in_sector' }, 'centre')], 'player');
+    expect(first.map((t) => t.rerolls)).toEqual([3, 0]);
+    const all = applyTokenEffects(tokens, [tokenEffect('player', { type: 'add_reroll', count: 3 }, { side: 'own', selector: 'all_in_sector' }, 'centre')], 'player');
+    expect(all.map((t) => t.rerolls)).toEqual([3, 3]);
+  });
+
+  it('cancels exactly one token with first_in_sector rather than the whole sector', () => {
+    const tokens = [token('player', 'centre', 0), token('player', 'centre', 1)];
+    const out = applyTokenEffects(tokens, [tokenEffect('opponent', { type: 'cancel_chance', count: 1 }, { side: 'enemy', selector: 'first_in_sector' }, 'centre')], 'player');
+    expect(out.map((t) => t.cancelled)).toEqual([true, false]);
+  });
+
+  it('preserves the resolved chance target through effect creation (resolveTarget → buildLedgerEffects)', () => {
+    const source: ConditionPlayerView = { cardId: 'c', sector: 'left', attack: 5, defence: 5, cost: 3, partnerCardIds: [] };
+    const resolved = resolveTarget(
+      { type: 'chance', side: 'enemy', selector: 'first_in_sector', sector: 'left' },
+      { source, ownActive: [], enemyActive: [], ownBench: [], enemyBench: [] },
+    );
+    const effects = buildLedgerEffects(
+      { instanceId: 'i', actionId: 'a', cardId: 'c', actionName: 'A', side: 'player', origin: 'activated' },
+      [{ type: 'cancel_chance', count: 1 }],
+      resolved,
+      { period: 2, breakIndex: 1, effectivePeriod: 2 },
+      'this_break',
+    );
+    expect(effects[0]!.tokenTarget).toEqual({ side: 'enemy', selector: 'first_in_sector' });
+    expect(effects[0]!.sector).toBe('left');
   });
 });
 
@@ -248,7 +318,8 @@ describe('period resolution', () => {
     // Threshold 7 can never be met; lowering it to 3 lets the reroll (a 6) score.
     const chances = { player: [token('player', 'centre', 0, { minimumGoalRoll: 7, rerolls: 1 })], opponent: [] };
     expect(resolvePeriod(baseInput(chances)).state.player.score).toBe(0);
-    const out = resolvePeriod(baseInput(chances, [ledgerEffect('player', { type: 'set_goal_threshold', minimumRoll: 3 })]));
+    const lower = tokenEffect('player', { type: 'set_goal_threshold', minimumRoll: 3 }, { side: 'own', selector: 'all_in_sector' }, 'centre');
+    const out = resolvePeriod(baseInput(chances, [lower]));
     expect(out.state.player.score).toBe(1);
   });
 
@@ -278,8 +349,8 @@ describe('period resolution', () => {
 
 describe('boundary processing', () => {
   it('expires period-scoped effects and keeps match effects', () => {
-    const periodEffect = ledgerEffect('player', { type: 'modify_stat', stat: 'attack', mode: 'flat', amount: 1 }, undefined, { kind: 'period', untilPeriod: 1 });
-    const matchEffect = ledgerEffect('player', { type: 'modify_stat', stat: 'defence', mode: 'flat', amount: 1 }, undefined, { kind: 'match' });
+    const periodEffect = ledgerEffect('player', { type: 'modify_stat', stat: 'attack', mode: 'flat', amount: 1 }, { sector: 'left', lifetime: { kind: 'period', untilPeriod: 1 } });
+    const matchEffect = ledgerEffect('player', { type: 'modify_stat', stat: 'defence', mode: 'flat', amount: 1 }, { sector: 'right', lifetime: { kind: 'match' } });
     const result = processBoundary(matchState(1), [periodEffect, matchEffect], registry());
     expect(result.expired.map((effect) => effect.id)).toEqual([periodEffect.id]);
     expect(result.ledger.map((effect) => effect.id)).toEqual([matchEffect.id]);

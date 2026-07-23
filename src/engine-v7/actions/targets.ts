@@ -17,6 +17,8 @@ export interface ResolvedTarget {
   sector?: Sector;
   slotKey?: string;
   chanceSelector?: 'first_in_sector' | 'all_in_sector';
+  /** For chance targets: whose chances, relative to the acting side. */
+  chanceSide?: 'own' | 'enemy';
   side?: TeamSide;
 }
 
@@ -97,7 +99,7 @@ export function resolveTarget(target: ActionTarget, context: TargetContext): Res
       playerIds: [],
       sector: target.sector ?? context.source.sector,
       chanceSelector: target.selector,
-      side: target.side === 'own' ? 'player' : 'opponent',
+      chanceSide: target.side,
     };
   }
 }

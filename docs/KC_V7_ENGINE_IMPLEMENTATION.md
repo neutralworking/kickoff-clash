@@ -123,12 +123,23 @@ state, and loops the whole match — deterministically, immutably, receipt-first
   substream (B2 — attribution can't change whether the goal happened). Fizzles
   safely when no one is eligible (the goal is left unattributed, nothing mutated).
 - `period.ts` — `resolvePeriod`: applies token-level ledger effects
-  (`set_goal_threshold` / `add_reroll` / `cancel_chance`, from normalized effect
-  data), rolls every token in a stable order, attributes goals, updates score
-  immutably, and returns the end-of-period snapshot (score, token outcomes, goal
-  events, active lineup, effective stats, ledger). Guards against resolving past
-  the final period. Direct roll overrides are intentionally NOT implemented — no
-  V7 contract permits setting a die result.
+  (`set_goal_threshold` / `add_reroll` / `cancel_chance`), rolls every token in a
+  stable order, attributes goals, updates score immutably, and returns the
+  end-of-period snapshot (score, token outcomes, goal events, active lineup,
+  effective stats, ledger). Guards against resolving past the final period.
+  Direct roll overrides are intentionally NOT implemented — no V7 contract
+  permits setting a die result.
+  - **Token targeting is explicit, never conventional.** Each token effect
+    carries the resolved chance target preserved from the action —
+    `LedgerEffect.tokenTarget = { side: own | enemy, selector: first_in_sector |
+    all_in_sector }`, populated in `buildLedgerEffects` from the `chance`
+    `ActionTarget` (`targets.ts` keeps the relative `own`/`enemy`). `own`
+    resolves to the effect's acting `side`, `enemy` to the other side, so
+    debuffing enemy chances is `side: enemy` (not an inference from the effect
+    type); `first_in_sector` hits the lowest-order token per in-scope sector,
+    `all_in_sector` hits every one. `applyTokenEffects` reads this target
+    directly — the effect type only decides *what* happens to the selected
+    tokens, never *whose*.
 - `boundary.ts` — `processBoundary`: expires `period`-scoped effects (match
   effects survive), recomputes priority for the next break (B5), and reports
   match-over at the final period.
