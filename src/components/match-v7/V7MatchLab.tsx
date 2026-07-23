@@ -78,10 +78,32 @@ function TeamBoard({
 }
 
 export default function V7MatchLab() {
-  // The controller is a stable mutable instance held in state (created once);
-  // reading it during render is safe, and a tick forces re-render after each
-  // command mutates it in place.
-  const [controller] = useState(() => new V7MatchController(v7Fixture()));
+  // Guarded initialisation: build the controller once, and if it throws, show a
+  // useful diagnostic (with the heading) instead of a blank page. All match
+  // hooks live in the inner component so hook order is never conditional.
+  const [init] = useState<{ controller?: V7MatchController; error?: string }>(() => {
+    try {
+      return { controller: new V7MatchController(v7Fixture()) };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  if (init.error || !init.controller) {
+    return (
+      <div className="v7-lab">
+        <h1 className="v7-h1">Kickoff Clash — V7 match lab</h1>
+        <div className="v7-err">Failed to initialise the V7 match: {init.error ?? 'unknown error'}</div>
+      </div>
+    );
+  }
+
+  return <V7MatchInner controller={init.controller} />;
+}
+
+function V7MatchInner({ controller }: { controller: V7MatchController }) {
+  // The controller is a stable mutable instance; reading it during render is
+  // safe, and a tick forces re-render after each command mutates it in place.
   const [, setTick] = useState(0);
   const bump = () => setTick((tick) => tick + 1);
   const [pickBench, setPickBench] = useState<string | null>(null);
@@ -164,6 +186,7 @@ export default function V7MatchLab() {
 
   return (
     <div className="v7-lab">
+      <h1 className="v7-h1">Kickoff Clash — V7 match lab</h1>
       <div className="v7-banner">
         <span className="v7-tag">V7 dev slice</span>
         <span className="v7-muted">Entry <b>/lab/match-v7</b> · data <b>{diag.dataSource}</b> · V6 is still the default game.</span>

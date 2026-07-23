@@ -18,6 +18,7 @@
 }
 
 .v7-lab * { box-sizing: border-box; }
+.v7-h1 { font-size: 18px; margin: 0 0 8px; font-weight: 700; }
 .v7-tag { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--v7-muted); }
 .v7-muted { color: var(--v7-muted); }
 .v7-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
