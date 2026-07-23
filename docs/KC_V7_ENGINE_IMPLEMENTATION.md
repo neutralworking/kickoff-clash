@@ -104,13 +104,50 @@ priority, effective-stat folds + positional penalties, subs/free-placement,
 staged activation with A1 ordering, ongoing recompute, chance creation, and
 deterministic replay).
 
+## Period resolution slice
+
+Period resolution lives in `resolve/` + the top-level `match-loop.ts`. It rolls
+the chances the break resolver created into goals, updates score and period
+state, and loops the whole match — deterministically, immutably, receipt-first.
+
+- `rerolls.ts` — the reroll policy. The contract gives a token a `rerolls` count
+  but no forced/optional flag, so we resolve it as **mandatory on a miss, never
+  on a hit** (rerolling a hit could only un-score it). A safety cap
+  (`MAX_REROLLS_PER_TOKEN`) guarantees termination against pathological data.
+- `rolls.ts` — `rollToken`: one d6 per token, scores when the roll meets or
+  exceeds the token's `minimumGoalRoll`; misses re-roll per the policy, each
+  reroll consuming the next RNG value (B2); cancelled tokens never roll. Every
+  die (original + rerolls + accepted) is recorded.
+- `attribution.ts` — credits a goal to an eligible scorer (active, can attack,
+  not an emergency keeper) weighted by effective attack, on a **separate** RNG
+  substream (B2 — attribution can't change whether the goal happened). Fizzles
+  safely when no one is eligible (the goal is left unattributed, nothing mutated).
+- `period.ts` — `resolvePeriod`: applies token-level ledger effects
+  (`set_goal_threshold` / `add_reroll` / `cancel_chance`, from normalized effect
+  data), rolls every token in a stable order, attributes goals, updates score
+  immutably, and returns the end-of-period snapshot (score, token outcomes, goal
+  events, active lineup, effective stats, ledger). Guards against resolving past
+  the final period. Direct roll overrides are intentionally NOT implemented — no
+  V7 contract permits setting a die result.
+- `boundary.ts` — `processBoundary`: expires `period`-scoped effects (match
+  effects survive), recomputes priority for the next break (B5), and reports
+  match-over at the final period.
+- `match-loop.ts` — `playMatch`: pure loop — period 1 opens from the initial
+  board, then { break → next period → boundary } repeats to the final whistle.
+  Returns state + ledger + per-period snapshots + ordered receipts + final score,
+  fully replayable from a seed and the supplied break plans.
+
+Gate: `npx vitest run src/engine-v7` (`__tests__/period-resolver.test.ts` proves
+deterministic rolls/scorers/score/receipts, stable ordering, cancelled tokens
+never roll, threshold-effect order, reroll consumption + termination, scored/
+missed/attribution receipts, eligibility-only attribution + safe fizzle,
+immutable score, `period_end` expiry with `match_end` survival, priority
+recompute, the final period ending the match without double-resolution, and a
+full multi-period replay).
+
 ## Next slice
 
-Period resolution — the dice, wired onto the chances this resolver creates:
-
-1. chance resolution: roll each surviving token (d6 ≥ its `minimumGoalRoll`),
-   `add_reroll` / `set_goal_threshold` / cancel-chance token effects, and the
-   attribution substream (scorer/saver, separate from the roll stream — B2);
-2. goal + score updates and the dice receipts;
-3. End of Period timing snapshots + priority recompute for the next break;
-4. the full match loop tying periods and breaks together.
+The engine now resolves a full match end to end. Remaining V7 work is above the
+match engine: the roguelike run loop + economy, modelled-opponent break-plan
+selection (this slice consumes already-legal plans), and the `/lab/match-v7` UI —
+all out of scope here and untouched.

@@ -428,10 +428,13 @@ describe('break orchestration', () => {
 
 describe('splitByZone', () => {
   it('separates active and bench effective players', () => {
-    const registry = buildRegistry();
+    const base = buildRegistry();
+    const registry: CardRegistry = {
+      ...base,
+      cards: new Map([...base.cards, ['player-bench', card('player-bench', 'centre', 4, 4, ['CM'])]]),
+    };
     const team = fullTeam('player');
     const withBench: V7TeamState = { ...team, players: [...team.players, benchPlayer('player-bench', 20)] };
-    registry.cards.set('player-bench', card('player-bench', 'centre', 4, 4, ['CM']));
     const { active, bench } = splitByZone(effectivePlayers(withBench, registry, []));
     expect(active).toHaveLength(11);
     expect(bench.map((player) => player.cardId)).toEqual(['player-bench']);
