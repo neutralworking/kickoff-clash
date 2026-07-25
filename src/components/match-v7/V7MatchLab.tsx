@@ -3,9 +3,12 @@
 import { useMemo, useState } from 'react';
 import './v7lab.css';
 import {
+  buildBroadcastBeats,
+  MatchDirector,
   V7MatchController,
   v7Fixture,
   type BreakDecision,
+  type BroadcastBeat,
   type MatchEvent,
   type SubDecision,
   type UiActionView,
@@ -45,12 +48,14 @@ function TeamBoard({
   breaking,
   pickBench,
   onPickActive,
+  activeSector,
 }: {
   team: UiTeamView;
   isPlayer: boolean;
   breaking: boolean;
   pickBench: string | null;
   onPickActive: (cardId: string) => void;
+  activeSector: 'left' | 'centre' | 'right' | null;
 }) {
   const bySector = (key: string) => team.active.filter((p) => (p.sector ?? 'centre') === key);
   return (
@@ -61,7 +66,7 @@ function TeamBoard({
         const players = bySector(sector.key);
         if (players.length === 0) return null;
         return (
-          <div className="v7-sector" key={sector.key}>
+          <div className={`v7-sector${activeSector === sector.key ? ' active' : ''}`} key={sector.key}>
             <div className="v7-sector-label">{sector.label}</div>
             {players.map((player) => (
               <PlayerRow
@@ -77,10 +82,40 @@ function TeamBoard({
   );
 }
 
+function sectorForBeat(beat: BroadcastBeat | null): 'left' | 'centre' | 'right' | null {
+  if (!beat) return null;
+  const text = `${beat.title} ${beat.detail ?? ''}`.toLowerCase();
+  if (text.includes('left')) return 'left';
+  if (text.includes('right')) return 'right';
+  if (text.includes('centre') || text.includes('center')) return 'centre';
+  return null;
+}
+
+function CurrentMoment({ beat, onAdvance }: { beat: BroadcastBeat | null; onAdvance: () => void }) {
+  if (!beat) {
+    return (
+      <section className="v7-moment empty">
+        <div className="v7-tag">Current moment</div>
+        <div className="v7-moment-title">Ready for the next phase</div>
+        <div className="v7-muted">Resolve the period or confirm your coaching decisions to continue.</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className={`v7-moment kind-${beat.kind} emphasis-${beat.emphasis}`}>
+      <div className="v7-moment-copy">
+        <div className="v7-tag">{beat.eyebrow}</div>
+        {beat.kind === 'roll' && <div className="v7-dice">◆</div>}
+        <div className="v7-moment-title">{beat.title}</div>
+        {beat.detail && <div className="v7-moment-detail">{beat.detail}</div>}
+      </div>
+      <button className="v7-btn cta v7-moment-next" onClick={onAdvance}>Next moment →</button>
+    </section>
+  );
+}
+
 export default function V7MatchLab() {
-  // Guarded initialisation: build the controller once, and if it throws, show a
-  // useful diagnostic (with the heading) instead of a blank page. All match
-  // hooks live in the inner component so hook order is never conditional.
   const [init] = useState<{ controller?: V7MatchController; error?: string }>(() => {
     try {
       return { controller: new V7MatchController(v7Fixture()) };
@@ -102,10 +137,9 @@ export default function V7MatchLab() {
 }
 
 function V7MatchInner({ controller }: { controller: V7MatchController }) {
-  // The controller is a stable mutable instance; reading it during render is
-  // safe, and a tick forces re-render after each command mutates it in place.
   const [, setTick] = useState(0);
   const bump = () => setTick((tick) => tick + 1);
+  const [director] = useState(() => new MatchDirector());
   const [pickBench, setPickBench] = useState<string | null>(null);
   const [subs, setSubs] = useState<SubDecision[]>([]);
   const [activations, setActivations] = useState<string[]>([]);
@@ -114,6 +148,9 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const view: UiMatchView = controller.getView();
   const events = controller.getEvents();
   const diag = controller.getDiagnostics();
+  const presentation = director.snapshot();
+  const activeSector = sectorForBeat(presentation.currentBeat);
+  const recentMoments = [...presentation.history].slice(-5).reverse();
 
   const resetLocal = () => {
     setPickBench(null);
@@ -132,13 +169,20 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     activations: nextActivations.map((instanceId) => ({ actionInstanceId: instanceId, sourceId: activationSource.get(instanceId) ?? '' })),
   });
 
+  const appendNewEvents = (beforeCount: number) => {
+    const nextEvents = controller.getEvents().slice(beforeCount);
+    director.append(buildBroadcastBeats(nextEvents));
+  };
+
   const sync = (nextSubs: SubDecision[], nextActivations: string[]) => {
     if (phase === 'break') controller.setPlayerDecision(buildDecision(nextSubs, nextActivations));
     bump();
   };
 
   const onResolvePeriod = () => {
+    const beforeCount = controller.getEvents().length;
     controller.resolvePeriod();
+    appendNewEvents(beforeCount);
     resetLocal();
     bump();
   };
@@ -149,14 +193,22 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
       bump();
       return;
     }
+    const beforeCount = controller.getEvents().length;
     controller.resolveBreak();
+    appendNewEvents(beforeCount);
     resetLocal();
     bump();
   };
 
   const onRestart = () => {
     controller.restart();
+    director.reset();
     resetLocal();
+    bump();
+  };
+
+  const onAdvanceMoment = () => {
+    director.advance();
     bump();
   };
 
@@ -188,7 +240,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     <div className="v7-lab">
       <h1 className="v7-h1">Kickoff Clash — V7 match lab</h1>
       <div className="v7-banner">
-        <span className="v7-tag">V7 dev slice</span>
+        <span className="v7-tag">V7 broadcast slice</span>
         <span className="v7-muted">Entry <b>/lab/match-v7</b> · data <b>{diag.dataSource}</b> · V6 is still the default game.</span>
       </div>
 
@@ -202,10 +254,24 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         <div className="v7-team-name right">{view.opponent.managerName}</div>
       </div>
 
+      <CurrentMoment beat={presentation.currentBeat} onAdvance={onAdvanceMoment} />
+
       <div className="v7-boards">
-        <TeamBoard team={view.player} isPlayer breaking={phase === 'break'} pickBench={pickBench} onPickActive={onPickActive} />
-        <TeamBoard team={view.opponent} isPlayer={false} breaking={false} pickBench={null} onPickActive={() => {}} />
+        <TeamBoard team={view.player} isPlayer breaking={phase === 'break'} pickBench={pickBench} onPickActive={onPickActive} activeSector={activeSector} />
+        <TeamBoard team={view.opponent} isPlayer={false} breaking={false} pickBench={null} onPickActive={() => {}} activeSector={activeSector} />
       </div>
+
+      {recentMoments.length > 0 && (
+        <section className="v7-recent">
+          <div className="v7-tag">Recent moments</div>
+          {recentMoments.map((beat) => (
+            <div className={`v7-recent-item kind-${beat.kind}`} key={beat.id}>
+              <span>{beat.eyebrow}</span>
+              <b>{beat.title}</b>
+            </div>
+          ))}
+        </section>
+      )}
 
       {phase === 'period' && (
         <div className="v7-panel v7-row">
@@ -257,7 +323,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
 
           <div className="v7-row" style={{ marginTop: 10 }}>
             <span className="v7-spacer" />
-            <button className="v7-btn cta" onClick={onResolveBreak}>Resolve Break →</button>
+            <button className="v7-btn cta" onClick={onResolveBreak}>Ready — Resolve Break →</button>
           </div>
         </div>
       )}
@@ -270,18 +336,8 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         </div>
       )}
 
-      <div className="v7-tag" style={{ margin: '4px 2px' }}>Event feed ({events.length})</div>
-      <div className="v7-feed">
-        {[...events].slice(-80).reverse().map((event: MatchEvent) => (
-          <div className={`v7-feed-item k-${event.kind}`} key={event.id}>
-            <span className="v7-feed-kind">{event.kind.replace(/_/g, ' ')}</span>
-            <span>{event.text}</span>
-          </div>
-        ))}
-      </div>
-
       <details className="v7-panel v7-diag" style={{ marginTop: 12 }}>
-        <summary>Diagnostics</summary>
+        <summary>Diagnostics and raw events</summary>
         <dl className="v7-diag-grid">
           <dt>seed</dt><dd>{diag.seed}</dd>
           <dt>phase</dt><dd>{diag.phase}</dd>
@@ -295,6 +351,14 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
           <dt>data source</dt><dd>{diag.dataSource}</dd>
           <dt>validation</dt><dd>{diag.validationErrors.length ? diag.validationErrors.join(' ') : 'ok'}</dd>
         </dl>
+        <div className="v7-feed">
+          {[...events].slice(-80).reverse().map((event: MatchEvent) => (
+            <div className={`v7-feed-item k-${event.kind}`} key={event.id}>
+              <span className="v7-feed-kind">{event.kind.replace(/_/g, ' ')}</span>
+              <span>{event.text}</span>
+            </div>
+          ))}
+        </div>
       </details>
     </div>
   );
