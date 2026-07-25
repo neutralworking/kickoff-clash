@@ -114,14 +114,20 @@ export function buildBroadcastBeats(events: readonly MatchEvent[]): BroadcastBea
   return beats;
 }
 
-export interface PresentationQueueSnapshot {
-  active: BroadcastBeat | null;
+export interface MatchDirectorSnapshot {
+  currentBeat: BroadcastBeat | null;
+  history: readonly BroadcastBeat[];
   pending: number;
-  presented: number;
   complete: boolean;
+  isPlaying: boolean;
 }
 
-export class PresentationQueue {
+/**
+ * Owns the order in which the player experiences a resolved match sequence.
+ * The internal queue and cursor are deliberately private so UI components only
+ * depend on the current beat and completed history, never storage mechanics.
+ */
+export class MatchDirector {
   private beats: BroadcastBeat[] = [];
   private cursor = 0;
 
@@ -134,16 +140,20 @@ export class PresentationQueue {
     this.beats.push(...beats);
   }
 
-  current(): BroadcastBeat | null {
+  currentBeat(): BroadcastBeat | null {
     return this.beats[this.cursor] ?? null;
   }
 
-  next(): BroadcastBeat | null {
-    if (this.cursor < this.beats.length) this.cursor += 1;
-    return this.current();
+  history(): readonly BroadcastBeat[] {
+    return this.beats.slice(0, this.cursor);
   }
 
-  skipAll(): void {
+  advance(): BroadcastBeat | null {
+    if (this.cursor < this.beats.length) this.cursor += 1;
+    return this.currentBeat();
+  }
+
+  skip(): void {
     this.cursor = this.beats.length;
   }
 
@@ -152,16 +162,17 @@ export class PresentationQueue {
     this.cursor = 0;
   }
 
-  hasPending(): boolean {
-    return this.cursor < this.beats.length;
+  isPlaying(): boolean {
+    return this.currentBeat() !== null;
   }
 
-  snapshot(): PresentationQueueSnapshot {
+  snapshot(): MatchDirectorSnapshot {
     return {
-      active: this.current(),
+      currentBeat: this.currentBeat(),
+      history: this.history(),
       pending: Math.max(0, this.beats.length - this.cursor),
-      presented: this.cursor,
-      complete: !this.hasPending(),
+      complete: !this.isPlaying(),
+      isPlaying: this.isPlaying(),
     };
   }
 }
