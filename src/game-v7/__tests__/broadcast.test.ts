@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBroadcastBeats, PresentationQueue, type MatchEvent } from '@/game-v7';
+import { buildBroadcastBeats, MatchDirector, type MatchEvent } from '@/game-v7';
 
 const event = (id: string, kind: MatchEvent['kind'], text: string, side: MatchEvent['side'] = 'player'): MatchEvent => ({
   id,
@@ -43,23 +43,41 @@ describe('buildBroadcastBeats', () => {
   });
 });
 
-describe('PresentationQueue', () => {
-  it('presents one beat at a time and drains safely', () => {
-    const queue = new PresentationQueue();
+describe('MatchDirector', () => {
+  it('presents one beat at a time and exposes completed history', () => {
+    const director = new MatchDirector();
     const beats = buildBroadcastBeats([
       event('chance', 'chance_created', 'Chance created'),
       event('goal', 'goal', 'Goal'),
     ]);
 
-    queue.load(beats);
-    expect(queue.snapshot()).toMatchObject({ pending: 2, presented: 0, complete: false });
-    expect(queue.current()?.kind).toBe('chance');
+    director.load(beats);
+    expect(director.snapshot()).toMatchObject({ pending: 2, complete: false, isPlaying: true });
+    expect(director.currentBeat()?.kind).toBe('chance');
+    expect(director.history()).toEqual([]);
 
-    queue.next();
-    expect(queue.current()?.kind).toBe('goal');
+    director.advance();
+    expect(director.currentBeat()?.kind).toBe('goal');
+    expect(director.history().map((beat) => beat.kind)).toEqual(['chance']);
 
-    queue.skipAll();
-    expect(queue.snapshot()).toMatchObject({ pending: 0, complete: true });
-    expect(queue.current()).toBeNull();
+    director.skip();
+    expect(director.snapshot()).toMatchObject({ pending: 0, complete: true, isPlaying: false });
+    expect(director.currentBeat()).toBeNull();
+    expect(director.history().map((beat) => beat.kind)).toEqual(['chance', 'goal']);
+  });
+
+  it('resets all presentation state', () => {
+    const director = new MatchDirector();
+    director.load(buildBroadcastBeats([event('goal', 'goal', 'Goal')]));
+    director.advance();
+    director.reset();
+
+    expect(director.snapshot()).toEqual({
+      currentBeat: null,
+      history: [],
+      pending: 0,
+      complete: true,
+      isPlaying: false,
+    });
   });
 });
