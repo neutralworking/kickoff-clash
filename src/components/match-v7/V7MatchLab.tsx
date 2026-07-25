@@ -1,12 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import './v7lab.css';
 import {
+  MatchDirector,
   V7MatchController,
+  buildBroadcastBeats,
   v7Fixture,
   type BreakDecision,
-  type MatchEvent,
+  type BroadcastBeat,
   type SubDecision,
   type UiActionView,
   type UiMatchView,
@@ -77,10 +79,49 @@ function TeamBoard({
   );
 }
 
+function BroadcastStage({
+  beat,
+  history,
+  pending,
+  onAdvance,
+  onSkip,
+}: {
+  beat: BroadcastBeat;
+  history: readonly BroadcastBeat[];
+  pending: number;
+  onAdvance: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <section className={`v7-broadcast e-${beat.emphasis}`} aria-live="polite">
+      <div className="v7-broadcast-topline">
+        <span className="v7-tag">Live match · period {beat.period}</span>
+        <span className="v7-muted">{pending} moment{pending === 1 ? '' : 's'} remaining</span>
+      </div>
+      <div className={`v7-moment k-${beat.kind}`} key={beat.id}>
+        <div className="v7-moment-eyebrow">{beat.eyebrow}</div>
+        <div className="v7-moment-title">{beat.title}</div>
+        {beat.detail && <div className="v7-moment-detail">{beat.detail}</div>}
+      </div>
+      <div className="v7-broadcast-actions">
+        <button className="v7-btn" onClick={onSkip}>Skip sequence</button>
+        <button className="v7-btn cta" onClick={onAdvance}>{pending > 1 ? 'Next moment →' : 'Continue →'}</button>
+      </div>
+      {history.length > 0 && (
+        <div className="v7-history" aria-label="Recent moments">
+          {[...history].slice(-5).reverse().map((item) => (
+            <div className="v7-history-item" key={item.id}>
+              <span>{item.eyebrow}</span>
+              <b>{item.title}</b>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function V7MatchLab() {
-  // Guarded initialisation: build the controller once, and if it throws, show a
-  // useful diagnostic (with the heading) instead of a blank page. All match
-  // hooks live in the inner component so hook order is never conditional.
   const [init] = useState<{ controller?: V7MatchController; error?: string }>(() => {
     try {
       return { controller: new V7MatchController(v7Fixture()) };
@@ -102,10 +143,12 @@ export default function V7MatchLab() {
 }
 
 function V7MatchInner({ controller }: { controller: V7MatchController }) {
-  // The controller is a stable mutable instance; reading it during render is
-  // safe, and a tick forces re-render after each command mutates it in place.
   const [, setTick] = useState(0);
   const bump = () => setTick((tick) => tick + 1);
+  const directorRef = useRef<MatchDirector | null>(null);
+  if (!directorRef.current) directorRef.current = new MatchDirector();
+  const director = directorRef.current;
+
   const [pickBench, setPickBench] = useState<string | null>(null);
   const [subs, setSubs] = useState<SubDecision[]>([]);
   const [activations, setActivations] = useState<string[]>([]);
@@ -114,6 +157,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const view: UiMatchView = controller.getView();
   const events = controller.getEvents();
   const diag = controller.getDiagnostics();
+  const presentation = director.snapshot();
 
   const resetLocal = () => {
     setPickBench(null);
@@ -137,8 +181,15 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     bump();
   };
 
+  const directNewEvents = (previousEventCount: number) => {
+    const nextEvents = controller.getEvents().slice(previousEventCount);
+    director.load(buildBroadcastBeats(nextEvents));
+  };
+
   const onResolvePeriod = () => {
+    const previousEventCount = controller.getEvents().length;
     controller.resolvePeriod();
+    directNewEvents(previousEventCount);
     resetLocal();
     bump();
   };
@@ -149,14 +200,27 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
       bump();
       return;
     }
+    const previousEventCount = controller.getEvents().length;
     controller.resolveBreak();
+    directNewEvents(previousEventCount);
     resetLocal();
     bump();
   };
 
   const onRestart = () => {
     controller.restart();
+    director.reset();
     resetLocal();
+    bump();
+  };
+
+  const onAdvancePresentation = () => {
+    director.advance();
+    bump();
+  };
+
+  const onSkipPresentation = () => {
+    director.skip();
     bump();
   };
 
@@ -183,6 +247,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const playerActivatable = view.player.actions.filter((a) => a.timing === 'activated' && !a.disabled && (a.remainingCharges ?? 1) > 0);
   const benchViews = view.player.bench;
   const nameOf = (cardId: string) => view.player.active.find((p) => p.cardId === cardId)?.shortName ?? view.player.bench.find((p) => p.cardId === cardId)?.shortName ?? cardId;
+  const presenting = presentation.currentBeat !== null;
 
   return (
     <div className="v7-lab">
@@ -196,89 +261,105 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         <div className="v7-team-name">{view.player.managerName}</div>
         <div>
           <div className="v7-score">{view.player.score}–{view.opponent.score}</div>
-          <div className="v7-phase">{view.phaseLabel}</div>
+          <div className="v7-phase">{presenting ? 'Live sequence' : view.phaseLabel}</div>
           <div className="v7-priority">Priority: {view.priority === 'player' ? view.player.managerName : view.opponent.managerName}</div>
         </div>
         <div className="v7-team-name right">{view.opponent.managerName}</div>
       </div>
 
-      <div className="v7-boards">
-        <TeamBoard team={view.player} isPlayer breaking={phase === 'break'} pickBench={pickBench} onPickActive={onPickActive} />
-        <TeamBoard team={view.opponent} isPlayer={false} breaking={false} pickBench={null} onPickActive={() => {}} />
-      </div>
-
-      {phase === 'period' && (
-        <div className="v7-panel v7-row">
-          <div>
-            <div className="v7-tag">Ready</div>
-            <div className="v7-muted">Resolve period {view.period}: create chances → roll → goals.</div>
-          </div>
-          <span className="v7-spacer" />
-          <button className="v7-btn cta" onClick={onResolvePeriod}>Resolve Period {view.period} →</button>
-        </div>
+      {presentation.currentBeat && (
+        <BroadcastStage
+          beat={presentation.currentBeat}
+          history={presentation.history}
+          pending={presentation.pending}
+          onAdvance={onAdvancePresentation}
+          onSkip={onSkipPresentation}
+        />
       )}
 
-      {phase === 'break' && (
-        <div className="v7-panel">
-          <div className="v7-tag">{view.phaseLabel}</div>
-          <div className="v7-muted" style={{ marginBottom: 8 }}>Blind changes — the opponent has locked a hidden plan. Pick a bench card, then an active player, to substitute.</div>
+      {!presenting && (
+        <>
+          <div className="v7-boards">
+            <TeamBoard team={view.player} isPlayer breaking={phase === 'break'} pickBench={pickBench} onPickActive={onPickActive} />
+            <TeamBoard team={view.opponent} isPlayer={false} breaking={false} pickBench={null} onPickActive={() => {}} />
+          </div>
 
-          <div className="v7-tag">Bench (energy {[0, 3, 5, 7][view.period] ?? 3} at this break)</div>
-          {benchViews.map((player) => (
-            <PlayerRow key={player.cardId} player={player} onPick={() => onPickBench(player.cardId)} selected={pickBench === player.cardId} />
-          ))}
-
-          {playerActivatable.length > 0 && (
-            <div className="v7-actions">
-              <div className="v7-tag">Actions</div>
-              {playerActivatable.map((action: UiActionView) => (
-                <label className="v7-action" key={action.instanceId}>
-                  <input type="checkbox" checked={activations.includes(action.instanceId)} onChange={() => toggleActivation(action.instanceId)} />
-                  <b>{action.actionName}</b> <span className="v7-muted">{action.cardName} · {action.displayText}</span>
-                  <span className="v7-chip">{action.remainingCharges ?? '∞'}⚡</span>
-                </label>
-              ))}
+          {phase === 'period' && (
+            <div className="v7-panel v7-row">
+              <div>
+                <div className="v7-tag">Ready</div>
+                <div className="v7-muted">Watch period {view.period}: chances, rolls and goals will play moment by moment.</div>
+              </div>
+              <span className="v7-spacer" />
+              <button className="v7-btn cta" onClick={onResolvePeriod}>Watch Period {view.period} →</button>
             </div>
           )}
 
-          {subs.length > 0 && (
-            <div className="v7-actions">
-              <div className="v7-tag">Plan</div>
-              {subs.map((sub, i) => (
-                <div className="v7-plan-row" key={i}>
-                  <span>{nameOf(sub.outCardId)} → <b>{nameOf(sub.inCardId)}</b></span>
-                  <button className="v7-btn" onClick={() => removeSub(i)}>remove</button>
+          {phase === 'break' && (
+            <div className="v7-panel">
+              <div className="v7-tag">{view.phaseLabel}</div>
+              <div className="v7-muted" style={{ marginBottom: 8 }}>Blind changes — the opponent has locked a hidden plan. Pick a bench card, then an active player, to substitute.</div>
+
+              <div className="v7-tag">Bench (energy {[0, 3, 5, 7][view.period] ?? 3} at this break)</div>
+              {benchViews.map((player) => (
+                <PlayerRow key={player.cardId} player={player} onPick={() => onPickBench(player.cardId)} selected={pickBench === player.cardId} />
+              ))}
+
+              {playerActivatable.length > 0 && (
+                <div className="v7-actions">
+                  <div className="v7-tag">Actions</div>
+                  {playerActivatable.map((action: UiActionView) => (
+                    <label className="v7-action" key={action.instanceId}>
+                      <input type="checkbox" checked={activations.includes(action.instanceId)} onChange={() => toggleActivation(action.instanceId)} />
+                      <b>{action.actionName}</b> <span className="v7-muted">{action.cardName} · {action.displayText}</span>
+                      <span className="v7-chip">{action.remainingCharges ?? '∞'}⚡</span>
+                    </label>
+                  ))}
                 </div>
-              ))}
+              )}
+
+              {subs.length > 0 && (
+                <div className="v7-actions">
+                  <div className="v7-tag">Plan</div>
+                  {subs.map((sub, i) => (
+                    <div className="v7-plan-row" key={i}>
+                      <span>{nameOf(sub.outCardId)} → <b>{nameOf(sub.inCardId)}</b></span>
+                      <button className="v7-btn" onClick={() => removeSub(i)}>remove</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {diag.validationErrors.length > 0 && <div className="v7-err">{diag.validationErrors.join(' ')}</div>}
+
+              <div className="v7-row" style={{ marginTop: 10 }}>
+                <span className="v7-spacer" />
+                <button className="v7-btn cta" onClick={onResolveBreak}>Ready →</button>
+              </div>
             </div>
           )}
 
-          {diag.validationErrors.length > 0 && <div className="v7-err">{diag.validationErrors.join(' ')}</div>}
-
-          <div className="v7-row" style={{ marginTop: 10 }}>
-            <span className="v7-spacer" />
-            <button className="v7-btn cta" onClick={onResolveBreak}>Resolve Break →</button>
-          </div>
-        </div>
+          {phase === 'fulltime' && view.result && (
+            <div className={`v7-result ${view.result}`}>
+              <div className="big">{view.player.score}–{view.opponent.score}</div>
+              <div className="verdict">{view.result}</div>
+              <button className="v7-btn cta" onClick={onRestart}>Restart (same seed)</button>
+            </div>
+          )}
+        </>
       )}
 
-      {phase === 'fulltime' && view.result && (
-        <div className={`v7-result ${view.result}`}>
-          <div className="big">{view.player.score}–{view.opponent.score}</div>
-          <div className="verdict">{view.result}</div>
-          <button className="v7-btn cta" onClick={onRestart}>Restart (same seed)</button>
+      {!presenting && events.length > 0 && (
+        <div className="v7-recent">
+          <div className="v7-tag">Recent moments</div>
+          {buildBroadcastBeats(events).slice(-5).reverse().map((beat) => (
+            <div className="v7-recent-item" key={beat.id}>
+              <span>{beat.eyebrow}</span>
+              <b>{beat.title}</b>
+            </div>
+          ))}
         </div>
       )}
-
-      <div className="v7-tag" style={{ margin: '4px 2px' }}>Event feed ({events.length})</div>
-      <div className="v7-feed">
-        {[...events].slice(-80).reverse().map((event: MatchEvent) => (
-          <div className={`v7-feed-item k-${event.kind}`} key={event.id}>
-            <span className="v7-feed-kind">{event.kind.replace(/_/g, ' ')}</span>
-            <span>{event.text}</span>
-          </div>
-        ))}
-      </div>
 
       <details className="v7-panel v7-diag" style={{ marginTop: 12 }}>
         <summary>Diagnostics</summary>
