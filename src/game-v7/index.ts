@@ -8,5 +8,7 @@ export * from './adapter/actions';
 export * from './adapter/lineup';
 export * from './adapter/match';
 export * from './receipts';
+export * from './beats';
+export * from './broadcast';
 export * from './fixtures';
 export * from './controller';

@@ -260,6 +260,7 @@ export interface UiPlayerView {
   slotKey?: string;
   attack: number;
   defence: number;
+  cost: number;
   outOfPosition: boolean;
   emergencyGoalkeeper: boolean;
 }
@@ -317,6 +318,7 @@ function teamView(state: V7MatchState, side: TeamSide, registry: GameRegistry, l
       ...(e?.slotKey ? { slotKey: e.slotKey } : {}),
       attack: e?.attack ?? registry.cards.get(cardId)?.printedAttack ?? 0,
       defence: e?.defence ?? registry.cards.get(cardId)?.printedDefence ?? 0,
+      cost: registry.cards.get(cardId)?.printedCost ?? 0,
       outOfPosition: e?.outOfPosition ?? false,
       emergencyGoalkeeper: e?.emergencyGoalkeeper ?? false,
     };

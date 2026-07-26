@@ -194,22 +194,40 @@ export function resolvePeriod(input: PeriodResolutionInput): PeriodResolution {
     const roll = rollToken(token, rollRng, policy);
 
     if (roll.cancelled) {
-      receipts.push(receipt('chance_cancelled', `Chance in the ${token.sector} was cancelled.`, token.side, token.id));
+      receipts.push(
+        receipt('chance_cancelled', `Chance in the ${token.sector} was cancelled.`, token.side, token.id, {
+          sector: token.sector,
+          tokenId: token.id,
+          order: token.order,
+        }),
+      );
       tokenOutcomes.push(roll);
       continue;
     }
 
     receipts.push(
       receipt('chance_roll', `Rolled ${roll.rolls.join('/')} vs ${roll.threshold}.`, token.side, token.id, {
+        sector: token.sector,
+        tokenId: token.id,
+        order: token.order,
         rolls: roll.rolls,
         finalRoll: roll.finalRoll,
         threshold: roll.threshold,
         rerollsUsed: roll.rerollsUsed,
+        scored: roll.scored,
       }),
     );
 
     if (!roll.scored) {
-      receipts.push(receipt('chance_missed', `Missed (${roll.finalRoll} < ${roll.threshold}).`, token.side, token.id));
+      receipts.push(
+        receipt('chance_missed', `Missed (${roll.finalRoll} < ${roll.threshold}).`, token.side, token.id, {
+          sector: token.sector,
+          tokenId: token.id,
+          order: token.order,
+          finalRoll: roll.finalRoll,
+          threshold: roll.threshold,
+        }),
+      );
       tokenOutcomes.push(roll);
       continue;
     }
@@ -227,13 +245,32 @@ export function resolvePeriod(input: PeriodResolutionInput): PeriodResolution {
     };
     goals.push(goal);
 
-    receipts.push(receipt('goal_scored', `GOAL for ${token.side} (${roll.finalRoll} ≥ ${roll.threshold}).`, token.side, token.id, { goalOrder: goal.order }));
+    receipts.push(
+      receipt('goal_scored', `GOAL for ${token.side} (${roll.finalRoll} ≥ ${roll.threshold}).`, token.side, token.id, {
+        goalOrder: goal.order,
+        sector: token.sector,
+        tokenId: token.id,
+        order: token.order,
+        finalRoll: roll.finalRoll,
+        threshold: roll.threshold,
+        playerScore: score.player,
+        opponentScore: score.opponent,
+        ...(attribution.scorerId ? { scorerId: attribution.scorerId } : {}),
+      }),
+    );
     if (attribution.fizzled) {
-      receipts.push(receipt('attribution_fizzled', `Goal for ${token.side} has no eligible scorer.`, token.side, token.id));
+      receipts.push(
+        receipt('attribution_fizzled', `Goal for ${token.side} has no eligible scorer.`, token.side, token.id, {
+          sector: token.sector,
+          tokenId: token.id,
+        }),
+      );
     } else {
       receipts.push(receipt('attribution', `${attribution.scorerId} scores for ${token.side}.`, token.side, token.id, {
         scorerId: attribution.scorerId,
         eligible: attribution.eligibleIds,
+        sector: token.sector,
+        tokenId: token.id,
       }));
     }
 

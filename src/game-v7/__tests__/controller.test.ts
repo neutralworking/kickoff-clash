@@ -9,9 +9,11 @@ function fresh() {
 function playThrough(controller: V7MatchController): void {
   let guard = 0;
   while (controller.getPhase() !== 'fulltime' && guard++ < 20) {
+    controller.drainBeats(); // present the pending sequence before advancing the engine
     if (controller.canResolvePeriod()) controller.resolvePeriod();
     else if (controller.canResolveBreak()) controller.resolveBreak();
   }
+  controller.drainBeats();
 }
 
 describe('controller lifecycle', () => {
@@ -27,6 +29,7 @@ describe('controller lifecycle', () => {
 
   it('cannot resolve one phase twice', () => {
     const c = fresh();
+    c.drainBeats();
     c.resolvePeriod();
     expect(c.canResolvePeriod()).toBe(false);
     expect(() => c.resolvePeriod()).toThrow();
@@ -52,7 +55,9 @@ describe('controller lifecycle', () => {
 describe('break plans through the controller', () => {
   it('accepts a legal player plan and rejects an illegal one before resolution', () => {
     const c = fresh();
+    c.drainBeats();
     c.resolvePeriod(); // → break 1
+    c.drainBeats();
     expect(c.canResolveBreak()).toBe(true);
     const cf = c.getView().player.active.find((p) => p.position === 'CF')!;
 
@@ -72,7 +77,9 @@ describe('break plans through the controller', () => {
 
   it('applies a submitted substitution when the break resolves', () => {
     const c = fresh();
+    c.drainBeats();
     c.resolvePeriod();
+    c.drainBeats();
     const cf = c.getView().player.active.find((p) => p.position === 'CF')!;
     c.setPlayerDecision({ subs: [{ outCardId: cf.cardId, inCardId: 'h_b3' }] });
     c.resolveBreak();
