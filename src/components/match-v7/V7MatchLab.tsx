@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './v7lab.css';
 import {
   buildBroadcastBeats,
@@ -188,23 +188,24 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const activeSector = sectorForBeat(currentBeat);
   const recentMoments = [...presentation.history].slice(-5).reverse();
 
-  useEffect(() => {
-    if (!currentBeat || currentBeat.kind !== 'goal' || !currentBeat.side || revealedGoalIds.current.has(currentBeat.id)) return;
-    revealedGoalIds.current.add(currentBeat.id);
-    setPresentedScore((score) => ({
-      ...score,
-      [currentBeat.side as 'player' | 'opponent']: score[currentBeat.side as 'player' | 'opponent'] + 1,
-    }));
-  }, [currentBeat]);
+  const revealGoal = useCallback((beat: BroadcastBeat | null) => {
+    if (!beat || beat.kind !== 'goal' || !beat.side || revealedGoalIds.current.has(beat.id)) return;
+    revealedGoalIds.current.add(beat.id);
+    const side = beat.side;
+    setPresentedScore((score) => ({ ...score, [side]: score[side] + 1 }));
+  }, []);
+
+  const advancePresentation = useCallback(() => {
+    const nextBeat = director.advance();
+    revealGoal(nextBeat);
+    setTick((tick) => tick + 1);
+  }, [director, revealGoal]);
 
   useEffect(() => {
     if (!autoPlay || !currentBeat) return;
-    const timer = window.setTimeout(() => {
-      director.advance();
-      setTick((tick) => tick + 1);
-    }, currentBeat.durationMs);
+    const timer = window.setTimeout(advancePresentation, currentBeat.durationMs);
     return () => window.clearTimeout(timer);
-  }, [autoPlay, currentBeat, director]);
+  }, [advancePresentation, autoPlay, currentBeat]);
 
   const resetLocal = () => {
     setPickBench(null);
@@ -226,6 +227,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const appendNewEvents = (beforeCount: number) => {
     const nextEvents = controller.getEvents().slice(beforeCount);
     director.append(buildBroadcastBeats(nextEvents));
+    revealGoal(director.currentBeat());
   };
 
   const sync = (nextSubs: SubDecision[], nextActivations: string[]) => {
@@ -264,11 +266,6 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     setPresentedScore({ player: restartedView.player.score, opponent: restartedView.opponent.score });
     setAutoPlay(true);
     resetLocal();
-    bump();
-  };
-
-  const onAdvanceMoment = () => {
-    director.advance();
     bump();
   };
 
@@ -314,7 +311,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         <div className="v7-team-name">{view.player.managerName}</div>
         <div>
           <div className="v7-score">{presentedScore.player}–{presentedScore.opponent}</div>
-          <div className="v7-phase">{view.phaseLabel}</div>
+          <div className="v7-phase">{presentationBusy ? 'Live match' : view.phaseLabel}</div>
           <div className="v7-priority">Priority: {view.priority === 'player' ? view.player.managerName : view.opponent.managerName}</div>
         </div>
         <div className="v7-team-name right">{view.opponent.managerName}</div>
@@ -324,7 +321,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         beat={currentBeat}
         autoPlay={autoPlay}
         pending={presentation.pending}
-        onAdvance={onAdvanceMoment}
+        onAdvance={advancePresentation}
         onToggleAutoPlay={() => setAutoPlay((playing) => !playing)}
         onSkip={onSkipMoments}
       />
