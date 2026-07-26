@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './v7lab.css';
 import {
   buildBroadcastBeats,
@@ -44,6 +44,7 @@ function PlayerRow({ player, onPick, selected }: { player: UiPlayerView; onPick?
 
 function TeamBoard({
   team,
+  score,
   isPlayer,
   breaking,
   pickBench,
@@ -51,6 +52,7 @@ function TeamBoard({
   activeSector,
 }: {
   team: UiTeamView;
+  score: number;
   isPlayer: boolean;
   breaking: boolean;
   pickBench: string | null;
@@ -60,7 +62,7 @@ function TeamBoard({
   const bySector = (key: string) => team.active.filter((p) => (p.sector ?? 'centre') === key);
   return (
     <div className="v7-board">
-      <h3>{team.managerName} <span className="v7-muted">· {team.score}</span></h3>
+      <h3>{team.managerName} <span className="v7-muted">· {score}</span></h3>
       <div className="sub">{team.formationName}</div>
       {SECTORS.map((sector) => {
         const players = bySector(sector.key);
@@ -91,26 +93,52 @@ function sectorForBeat(beat: BroadcastBeat | null): 'left' | 'centre' | 'right' 
   return null;
 }
 
-function CurrentMoment({ beat, onAdvance }: { beat: BroadcastBeat | null; onAdvance: () => void }) {
+function CurrentMoment({
+  beat,
+  autoPlay,
+  pending,
+  onAdvance,
+  onToggleAutoPlay,
+  onSkip,
+}: {
+  beat: BroadcastBeat | null;
+  autoPlay: boolean;
+  pending: number;
+  onAdvance: () => void;
+  onToggleAutoPlay: () => void;
+  onSkip: () => void;
+}) {
   if (!beat) {
     return (
       <section className="v7-moment empty">
-        <div className="v7-tag">Current moment</div>
-        <div className="v7-moment-title">Ready for the next phase</div>
-        <div className="v7-muted">Resolve the period or confirm your coaching decisions to continue.</div>
+        <div>
+          <div className="v7-tag">Current moment</div>
+          <div className="v7-moment-title">Ready for the next phase</div>
+          <div className="v7-muted">Resolve the period or confirm your coaching decisions to continue.</div>
+        </div>
       </section>
     );
   }
 
   return (
-    <section className={`v7-moment kind-${beat.kind} emphasis-${beat.emphasis}`}>
+    <section className={`v7-moment kind-${beat.kind} emphasis-${beat.emphasis}`} aria-live="polite">
       <div className="v7-moment-copy">
         <div className="v7-tag">{beat.eyebrow}</div>
         {beat.kind === 'roll' && <div className="v7-dice">◆</div>}
         <div className="v7-moment-title">{beat.title}</div>
         {beat.detail && <div className="v7-moment-detail">{beat.detail}</div>}
       </div>
-      <button className="v7-btn cta v7-moment-next" onClick={onAdvance}>Next moment →</button>
+      <div className="v7-moment-controls">
+        <div className={`v7-playback-status${autoPlay ? ' active' : ''}`}>
+          <span className="v7-playback-dot" aria-hidden="true" />
+          {autoPlay ? 'Auto-playing' : 'Paused'} · {pending} {pending === 1 ? 'moment' : 'moments'} remaining
+        </div>
+        <div className="v7-moment-buttons">
+          <button className="v7-btn" onClick={onToggleAutoPlay}>{autoPlay ? 'Pause' : 'Play'}</button>
+          <button className="v7-btn cta" onClick={onAdvance}>Next →</button>
+          <button className="v7-btn subtle" onClick={onSkip}>Skip sequence</button>
+        </div>
+      </div>
     </section>
   );
 }
@@ -140,6 +168,12 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const [, setTick] = useState(0);
   const bump = () => setTick((tick) => tick + 1);
   const [director] = useState(() => new MatchDirector());
+  const [autoPlay, setAutoPlay] = useState(true);
+  const [presentedScore, setPresentedScore] = useState(() => {
+    const initialView = controller.getView();
+    return { player: initialView.player.score, opponent: initialView.opponent.score };
+  });
+  const revealedGoalIds = useRef(new Set<string>());
   const [pickBench, setPickBench] = useState<string | null>(null);
   const [subs, setSubs] = useState<SubDecision[]>([]);
   const [activations, setActivations] = useState<string[]>([]);
@@ -149,8 +183,29 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const events = controller.getEvents();
   const diag = controller.getDiagnostics();
   const presentation = director.snapshot();
-  const activeSector = sectorForBeat(presentation.currentBeat);
+  const currentBeat = presentation.currentBeat;
+  const presentationBusy = presentation.isPlaying;
+  const activeSector = sectorForBeat(currentBeat);
   const recentMoments = [...presentation.history].slice(-5).reverse();
+
+  const revealGoal = useCallback((beat: BroadcastBeat | null) => {
+    if (!beat || beat.kind !== 'goal' || !beat.side || revealedGoalIds.current.has(beat.id)) return;
+    revealedGoalIds.current.add(beat.id);
+    const side = beat.side;
+    setPresentedScore((score) => ({ ...score, [side]: score[side] + 1 }));
+  }, []);
+
+  const advancePresentation = useCallback(() => {
+    const nextBeat = director.advance();
+    revealGoal(nextBeat);
+    setTick((tick) => tick + 1);
+  }, [director, revealGoal]);
+
+  useEffect(() => {
+    if (!autoPlay || !currentBeat) return;
+    const timer = window.setTimeout(advancePresentation, currentBeat.durationMs);
+    return () => window.clearTimeout(timer);
+  }, [advancePresentation, autoPlay, currentBeat]);
 
   const resetLocal = () => {
     setPickBench(null);
@@ -172,6 +227,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const appendNewEvents = (beforeCount: number) => {
     const nextEvents = controller.getEvents().slice(beforeCount);
     director.append(buildBroadcastBeats(nextEvents));
+    revealGoal(director.currentBeat());
   };
 
   const sync = (nextSubs: SubDecision[], nextActivations: string[]) => {
@@ -180,6 +236,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   };
 
   const onResolvePeriod = () => {
+    if (presentationBusy) return;
     const beforeCount = controller.getEvents().length;
     controller.resolvePeriod();
     appendNewEvents(beforeCount);
@@ -188,6 +245,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   };
 
   const onResolveBreak = () => {
+    if (presentationBusy) return;
     const result = controller.setPlayerDecision(buildDecision(subs, activations));
     if (!result.ok) {
       bump();
@@ -203,18 +261,23 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const onRestart = () => {
     controller.restart();
     director.reset();
+    revealedGoalIds.current.clear();
+    const restartedView = controller.getView();
+    setPresentedScore({ player: restartedView.player.score, opponent: restartedView.opponent.score });
+    setAutoPlay(true);
     resetLocal();
     bump();
   };
 
-  const onAdvanceMoment = () => {
-    director.advance();
+  const onSkipMoments = () => {
+    director.skip();
+    setPresentedScore({ player: view.player.score, opponent: view.opponent.score });
     bump();
   };
 
   const onPickBench = (cardId: string) => setPickBench((cur) => (cur === cardId ? null : cardId));
   const onPickActive = (cardId: string) => {
-    if (!pickBench) return;
+    if (!pickBench || presentationBusy) return;
     if (subs.some((s) => s.outCardId === cardId || s.inCardId === pickBench)) return;
     const next = [...subs, { outCardId: cardId, inCardId: pickBench }];
     setSubs(next);
@@ -240,25 +303,32 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     <div className="v7-lab">
       <h1 className="v7-h1">Kickoff Clash — V7 match lab</h1>
       <div className="v7-banner">
-        <span className="v7-tag">V7 broadcast slice</span>
+        <span className="v7-tag">V7 auto-play slice</span>
         <span className="v7-muted">Entry <b>/lab/match-v7</b> · data <b>{diag.dataSource}</b> · V6 is still the default game.</span>
       </div>
 
       <div className="v7-scorebar">
         <div className="v7-team-name">{view.player.managerName}</div>
         <div>
-          <div className="v7-score">{view.player.score}–{view.opponent.score}</div>
-          <div className="v7-phase">{view.phaseLabel}</div>
+          <div className="v7-score">{presentedScore.player}–{presentedScore.opponent}</div>
+          <div className="v7-phase">{presentationBusy ? 'Live match' : view.phaseLabel}</div>
           <div className="v7-priority">Priority: {view.priority === 'player' ? view.player.managerName : view.opponent.managerName}</div>
         </div>
         <div className="v7-team-name right">{view.opponent.managerName}</div>
       </div>
 
-      <CurrentMoment beat={presentation.currentBeat} onAdvance={onAdvanceMoment} />
+      <CurrentMoment
+        beat={currentBeat}
+        autoPlay={autoPlay}
+        pending={presentation.pending}
+        onAdvance={advancePresentation}
+        onToggleAutoPlay={() => setAutoPlay((playing) => !playing)}
+        onSkip={onSkipMoments}
+      />
 
       <div className="v7-boards">
-        <TeamBoard team={view.player} isPlayer breaking={phase === 'break'} pickBench={pickBench} onPickActive={onPickActive} activeSector={activeSector} />
-        <TeamBoard team={view.opponent} isPlayer={false} breaking={false} pickBench={null} onPickActive={() => {}} activeSector={activeSector} />
+        <TeamBoard team={view.player} score={presentedScore.player} isPlayer breaking={phase === 'break' && !presentationBusy} pickBench={pickBench} onPickActive={onPickActive} activeSector={activeSector} />
+        <TeamBoard team={view.opponent} score={presentedScore.opponent} isPlayer={false} breaking={false} pickBench={null} onPickActive={() => {}} activeSector={activeSector} />
       </div>
 
       {recentMoments.length > 0 && (
@@ -273,7 +343,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         </section>
       )}
 
-      {phase === 'period' && (
+      {phase === 'period' && !presentationBusy && (
         <div className="v7-panel v7-row">
           <div>
             <div className="v7-tag">Ready</div>
@@ -284,7 +354,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         </div>
       )}
 
-      {phase === 'break' && (
+      {phase === 'break' && !presentationBusy && (
         <div className="v7-panel">
           <div className="v7-tag">{view.phaseLabel}</div>
           <div className="v7-muted" style={{ marginBottom: 8 }}>Blind changes — the opponent has locked a hidden plan. Pick a bench card, then an active player, to substitute.</div>
@@ -328,9 +398,9 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         </div>
       )}
 
-      {phase === 'fulltime' && view.result && (
+      {phase === 'fulltime' && view.result && !presentationBusy && (
         <div className={`v7-result ${view.result}`}>
-          <div className="big">{view.player.score}–{view.opponent.score}</div>
+          <div className="big">{presentedScore.player}–{presentedScore.opponent}</div>
           <div className="verdict">{view.result}</div>
           <button className="v7-btn cta" onClick={onRestart}>Restart (same seed)</button>
         </div>
