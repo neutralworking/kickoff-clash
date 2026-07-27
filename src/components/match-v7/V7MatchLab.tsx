@@ -16,25 +16,41 @@ import {
   type UiPlayerView,
   type UiTeamView,
 } from '@/game-v7';
+import { V7Pitch } from './V7Pitch';
 
-const SECTORS: Array<{ key: 'left' | 'centre' | 'right'; label: string }> = [
+type Sector = 'left' | 'centre' | 'right';
+
+const SECTORS: Array<{ key: Sector; label: string }> = [
   { key: 'left', label: 'Left' },
   { key: 'centre', label: 'Centre' },
   { key: 'right', label: 'Right' },
 ];
 
-function PlayerRow({ player, onPick, selected }: { player: UiPlayerView; onPick?: () => void; selected?: boolean }) {
+function PlayerRow({
+  player,
+  onPick,
+  selected,
+}: {
+  player: UiPlayerView;
+  onPick?: () => void;
+  selected?: boolean;
+}) {
   const className = `v7-card${onPick ? ' pick' : ''}${selected ? ' selected' : ''}`;
   const body = (
     <>
       <span>
         <span className="nm">{player.shortName}</span>{' '}
         <span className="meta">{player.position}</span>
-        {player.emergencyGoalkeeper ? <span className="v7-oop"> · GK!</span> : player.outOfPosition ? <span className="v7-oop"> · OOP</span> : null}
+        {player.emergencyGoalkeeper ? (
+          <span className="v7-oop"> · GK!</span>
+        ) : player.outOfPosition ? (
+          <span className="v7-oop"> · OOP</span>
+        ) : null}
       </span>
       <span className="stat">{player.attack}A / {player.defence}D</span>
     </>
   );
+
   return onPick ? (
     <button type="button" className={className} onClick={onPick}>{body}</button>
   ) : (
@@ -57,9 +73,10 @@ function TeamBoard({
   breaking: boolean;
   pickBench: string | null;
   onPickActive: (cardId: string) => void;
-  activeSector: 'left' | 'centre' | 'right' | null;
+  activeSector: Sector | null;
 }) {
-  const bySector = (key: string) => team.active.filter((p) => (p.sector ?? 'centre') === key);
+  const bySector = (key: Sector) => team.active.filter((player) => (player.sector ?? 'centre') === key);
+
   return (
     <div className="v7-board">
       <h3>{team.managerName} <span className="v7-muted">· {score}</span></h3>
@@ -84,7 +101,7 @@ function TeamBoard({
   );
 }
 
-function sectorForBeat(beat: BroadcastBeat | null): 'left' | 'centre' | 'right' | null {
+function sectorForBeat(beat: BroadcastBeat | null): Sector | null {
   if (!beat) return null;
   const text = `${beat.title} ${beat.detail ?? ''}`.toLowerCase();
   if (text.includes('left')) return 'left';
@@ -221,7 +238,10 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
 
   const buildDecision = (nextSubs: SubDecision[], nextActivations: string[]): BreakDecision => ({
     subs: nextSubs,
-    activations: nextActivations.map((instanceId) => ({ actionInstanceId: instanceId, sourceId: activationSource.get(instanceId) ?? '' })),
+    activations: nextActivations.map((instanceId) => ({
+      actionInstanceId: instanceId,
+      sourceId: activationSource.get(instanceId) ?? '',
+    })),
   });
 
   const appendNewEvents = (beforeCount: number) => {
@@ -275,35 +295,46 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     bump();
   };
 
-  const onPickBench = (cardId: string) => setPickBench((cur) => (cur === cardId ? null : cardId));
+  const onPickBench = (cardId: string) => setPickBench((current) => (current === cardId ? null : cardId));
+
   const onPickActive = (cardId: string) => {
     if (!pickBench || presentationBusy) return;
-    if (subs.some((s) => s.outCardId === cardId || s.inCardId === pickBench)) return;
+    if (subs.some((sub) => sub.outCardId === cardId || sub.inCardId === pickBench)) return;
     const next = [...subs, { outCardId: cardId, inCardId: pickBench }];
     setSubs(next);
     setPickBench(null);
     sync(next, activations);
   };
-  const removeSub = (i: number) => {
-    const next = subs.filter((_, j) => j !== i);
+
+  const removeSub = (index: number) => {
+    const next = subs.filter((_, currentIndex) => currentIndex !== index);
     setSubs(next);
     sync(next, activations);
   };
+
   const toggleActivation = (instanceId: string) => {
-    const next = activations.includes(instanceId) ? activations.filter((id) => id !== instanceId) : [...activations, instanceId];
+    const next = activations.includes(instanceId)
+      ? activations.filter((id) => id !== instanceId)
+      : [...activations, instanceId];
     setActivations(next);
     sync(subs, next);
   };
 
-  const playerActivatable = view.player.actions.filter((a) => a.timing === 'activated' && !a.disabled && (a.remainingCharges ?? 1) > 0);
+  const playerActivatable = view.player.actions.filter(
+    (action) => action.timing === 'activated' && !action.disabled && (action.remainingCharges ?? 1) > 0,
+  );
   const benchViews = view.player.bench;
-  const nameOf = (cardId: string) => view.player.active.find((p) => p.cardId === cardId)?.shortName ?? view.player.bench.find((p) => p.cardId === cardId)?.shortName ?? cardId;
+  const nameOf = (cardId: string) => (
+    view.player.active.find((player) => player.cardId === cardId)?.shortName
+    ?? view.player.bench.find((player) => player.cardId === cardId)?.shortName
+    ?? cardId
+  );
 
   return (
     <div className="v7-lab">
       <h1 className="v7-h1">Kickoff Clash — V7 match lab</h1>
       <div className="v7-banner">
-        <span className="v7-tag">V7 auto-play slice</span>
+        <span className="v7-tag">V7 animated pitch slice</span>
         <span className="v7-muted">Entry <b>/lab/match-v7</b> · data <b>{diag.dataSource}</b> · V6 is still the default game.</span>
       </div>
 
@@ -317,6 +348,13 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         <div className="v7-team-name right">{view.opponent.managerName}</div>
       </div>
 
+      <V7Pitch
+        beat={currentBeat}
+        player={view.player}
+        opponent={view.opponent}
+        activeSector={activeSector}
+      />
+
       <CurrentMoment
         beat={currentBeat}
         autoPlay={autoPlay}
@@ -327,8 +365,24 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
       />
 
       <div className="v7-boards">
-        <TeamBoard team={view.player} score={presentedScore.player} isPlayer breaking={phase === 'break' && !presentationBusy} pickBench={pickBench} onPickActive={onPickActive} activeSector={activeSector} />
-        <TeamBoard team={view.opponent} score={presentedScore.opponent} isPlayer={false} breaking={false} pickBench={null} onPickActive={() => {}} activeSector={activeSector} />
+        <TeamBoard
+          team={view.player}
+          score={presentedScore.player}
+          isPlayer
+          breaking={phase === 'break' && !presentationBusy}
+          pickBench={pickBench}
+          onPickActive={onPickActive}
+          activeSector={activeSector}
+        />
+        <TeamBoard
+          team={view.opponent}
+          score={presentedScore.opponent}
+          isPlayer={false}
+          breaking={false}
+          pickBench={null}
+          onPickActive={() => {}}
+          activeSector={activeSector}
+        />
       </div>
 
       {recentMoments.length > 0 && (
@@ -357,11 +411,18 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
       {phase === 'break' && !presentationBusy && (
         <div className="v7-panel">
           <div className="v7-tag">{view.phaseLabel}</div>
-          <div className="v7-muted" style={{ marginBottom: 8 }}>Blind changes — the opponent has locked a hidden plan. Pick a bench card, then an active player, to substitute.</div>
+          <div className="v7-muted" style={{ marginBottom: 8 }}>
+            Blind changes — the opponent has locked a hidden plan. Pick a bench card, then an active player, to substitute.
+          </div>
 
           <div className="v7-tag">Bench (energy {[0, 3, 5, 7][view.period] ?? 3} at this break)</div>
           {benchViews.map((player) => (
-            <PlayerRow key={player.cardId} player={player} onPick={() => onPickBench(player.cardId)} selected={pickBench === player.cardId} />
+            <PlayerRow
+              key={player.cardId}
+              player={player}
+              onPick={() => onPickBench(player.cardId)}
+              selected={pickBench === player.cardId}
+            />
           ))}
 
           {playerActivatable.length > 0 && (
@@ -369,8 +430,13 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
               <div className="v7-tag">Actions</div>
               {playerActivatable.map((action: UiActionView) => (
                 <label className="v7-action" key={action.instanceId}>
-                  <input type="checkbox" checked={activations.includes(action.instanceId)} onChange={() => toggleActivation(action.instanceId)} />
-                  <b>{action.actionName}</b> <span className="v7-muted">{action.cardName} · {action.displayText}</span>
+                  <input
+                    type="checkbox"
+                    checked={activations.includes(action.instanceId)}
+                    onChange={() => toggleActivation(action.instanceId)}
+                  />
+                  <b>{action.actionName}</b>{' '}
+                  <span className="v7-muted">{action.cardName} · {action.displayText}</span>
                   <span className="v7-chip">{action.remainingCharges ?? '∞'}⚡</span>
                 </label>
               ))}
@@ -380,10 +446,10 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
           {subs.length > 0 && (
             <div className="v7-actions">
               <div className="v7-tag">Plan</div>
-              {subs.map((sub, i) => (
-                <div className="v7-plan-row" key={i}>
+              {subs.map((sub, index) => (
+                <div className="v7-plan-row" key={`${sub.outCardId}:${sub.inCardId}`}>
                   <span>{nameOf(sub.outCardId)} → <b>{nameOf(sub.inCardId)}</b></span>
-                  <button className="v7-btn" onClick={() => removeSub(i)}>remove</button>
+                  <button className="v7-btn" onClick={() => removeSub(index)}>remove</button>
                 </div>
               ))}
             </div>
