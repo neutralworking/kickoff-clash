@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   v7Fixture,
   type PresentationBeat,
@@ -148,13 +148,29 @@ export function V7PlayerCard({
   );
 }
 
-function Dice({ values, finalRoll }: { values: readonly number[]; finalRoll?: number }) {
+function Dice({ beat }: { beat: PresentationBeat }) {
+  const [settled, setSettled] = useState(false);
+  const values = beat.rolls ?? [];
+
+  useEffect(() => {
+    setSettled(false);
+    const timer = window.setTimeout(() => setSettled(true), values.length > 1 ? 850 : 680);
+    return () => window.clearTimeout(timer);
+  }, [beat.id, values.length]);
+
   return (
-    <div className="v7-dice-row" aria-label={`Rolled ${values.join(', ')}`}>
-      {values.map((value, index) => (
-        <span className={index === values.length - 1 ? 'final' : ''} key={`${value}:${index}`}>{value}</span>
-      ))}
-      {values.length === 0 && <span className="final">{finalRoll ?? '?'}</span>}
+    <div className={`v7-dice-stage${settled ? ' settled' : ' rolling'}`} aria-label={settled ? `Rolled ${values.join(', ')}` : 'Rolling the chance'}>
+      {!settled ? (
+        <span className="v7-die tumbling"><i>◆</i></span>
+      ) : (
+        <div className="v7-dice-row">
+          {values.map((value, index) => (
+            <span className={index === values.length - 1 ? 'final' : 'rerolled'} style={{ '--die-index': index } as CSSProperties} key={`${value}:${index}`}>{value}</span>
+          ))}
+          {values.length === 0 && <span className="final">{beat.finalRoll ?? '?'}</span>}
+        </div>
+      )}
+      <div className="v7-dice-target"><span>NEEDS</span><b>{beat.threshold}+</b></div>
     </div>
   );
 }
@@ -184,9 +200,11 @@ export function V7Pitch({
     : null;
   const isGoal = beat?.kind === 'goal';
   const isMiss = beat?.kind === 'miss' || beat?.kind === 'cancelled';
+  const calculating = Boolean(beat && ['lock', 'pressure', 'threshold', 'chances', 'overview'].includes(beat.kind));
+  const showOverlay = Boolean(beat && ['reveal', 'roll', 'goal', 'miss', 'cancelled', 'period_end', 'full_time'].includes(beat.kind));
 
   return (
-    <section className={`v7-formation-shell side-${side}${isGoal ? ' goal' : ''}${isMiss ? ' miss' : ''}`}>
+    <section className={`v7-formation-shell side-${side}${isGoal ? ' goal' : ''}${isMiss ? ' miss' : ''}${calculating ? ' calculating' : ''}`}>
       <div className="v7-formation-heading">
         <div>
           <span className="v7-tag">{side === 'player' ? 'Home XI' : 'Away XI'}</span>
@@ -207,6 +225,7 @@ export function V7Pitch({
         <div className="v7-pitch-goal top" />
         <div className="v7-pitch-goal bottom" />
         <div className="v7-lane-glow" />
+        {calculating && <div className="v7-calculation-scan" />}
 
         {selectedBenchId && canSelect && (
           <div className="v7-sub-instruction"><span>SUB SELECTED</span><strong>Tap the player to replace</strong></div>
@@ -233,14 +252,13 @@ export function V7Pitch({
           );
         })}
 
-        {beat && (
+        {beat && showOverlay && (
           <div className={`v7-pitch-event kind-${beat.kind}`} aria-live="polite">
-            {beat.kind === 'roll' && <Dice values={beat.rolls ?? []} finalRoll={beat.finalRoll} />}
+            {beat.kind === 'roll' && <Dice beat={beat} />}
             {beat.kind === 'goal' && <div className="v7-goal-word">GOAL!</div>}
-            {beat.kind === 'pressure' && <div className="v7-pressure-word">PRESSURE</div>}
-            {beat.kind === 'chances' && <div className="v7-chance-word">CHANCES</div>}
-            <strong>{beat.title}</strong>
-            {beat.detail && <span>{beat.detail}</span>}
+            {beat.kind === 'cancelled' && <div className="v7-cancelled-word">BLOCKED</div>}
+            {beat.kind !== 'roll' && <strong>{beat.title}</strong>}
+            {beat.kind !== 'roll' && beat.detail && <span>{beat.detail}</span>}
           </div>
         )}
       </div>
