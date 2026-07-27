@@ -1,7 +1,8 @@
 'use client';
 
 import type { TeamSide } from '@/engine-v7';
-import type { PresentationBeat, PressurePresentation } from '@/game-v7';
+import type { PresentationBeat, PressurePresentation, PressureSidePresentation } from '@/game-v7';
+import './v7chancecalc.css';
 
 function sideCopy(side: TeamSide): { short: string; possessive: string; className: string } {
   return side === 'player'
@@ -17,8 +18,22 @@ function thresholdCount(beats: readonly PresentationBeat[], side: TeamSide): num
   return beats.filter((beat) => beat.side === side && beat.kind === 'threshold').length;
 }
 
-function meterWidth(difference: number, scale: number): string {
-  return `${Math.max(0, Math.min(100, (difference / scale) * 100))}%`;
+function meterWidth(value: number, scale: number): string {
+  return `${Math.max(0, Math.min(100, (value / scale) * 100))}%`;
+}
+
+function pressureProgress(data: PressureSidePresentation, reached: number, baseShown: boolean): number {
+  const positiveDifference = Math.max(0, data.difference);
+  if (reached > 0) return Math.min(positiveDifference, reached * 5);
+  return baseShown && data.baseChances === 0 ? positiveDifference : 0;
+}
+
+function adjustmentText(data: PressureSidePresentation): string | null {
+  const parts = [
+    data.addedChances !== 0 ? `${data.addedChances >= 0 ? '+' : ''}${data.addedChances} added` : null,
+    data.cancelledChances > 0 ? `−${data.cancelledChances} blocked` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : null;
 }
 
 export function V7PressureBoard({
@@ -33,6 +48,7 @@ export function V7PressureBoard({
   const maxDifference = pressure
     ? Math.max(20, Math.ceil(Math.max(0, pressure.player.difference, pressure.opponent.difference) / 5) * 5)
     : 20;
+  const overviewShown = visibleBeats.some((beat) => beat.kind === 'overview');
 
   return (
     <div className="v7-pressure-board">
@@ -40,10 +56,17 @@ export function V7PressureBoard({
         const copy = sideCopy(side);
         const data = pressure?.[side];
         const pressureShown = hasBeat(visibleBeats, side, 'pressure');
-        const chancesShown = hasBeat(visibleBeats, side, 'chances');
+        const baseShown = hasBeat(visibleBeats, side, 'chances');
+        const adjustmentShown = hasBeat(visibleBeats, side, 'adjustment');
         const reached = thresholdCount(visibleBeats, side);
-        const active = currentBeat?.side === side && ['pressure', 'threshold', 'chances'].includes(currentBeat.kind);
-        const totalPips = data?.chances ?? 0;
+        const active = currentBeat?.side === side && ['pressure', 'threshold', 'chances', 'adjustment'].includes(currentBeat.kind);
+        const totalPips = data?.baseChances ?? 0;
+        const progress = data && pressureShown ? pressureProgress(data, reached, baseShown) : 0;
+        const finalShown = adjustmentShown || overviewShown;
+        const displayedChances = data && (baseShown || finalShown)
+          ? finalShown ? data.finalChances : data.baseChances
+          : null;
+        const adjustment = data ? adjustmentText(data) : null;
 
         return (
           <div className={`v7-pressure-row ${copy.className}${active ? ' active' : ''}`} key={side}>
@@ -54,20 +77,24 @@ export function V7PressureBoard({
                   <><b>{data.attack}</b><small>ATT</small><i>−</i><b>{data.enemyDefence}</b><small>DEF</small><em>= {data.difference >= 0 ? '+' : ''}{data.difference}</em></>
                 ) : <span>Waiting for kick-off</span>}
               </div>
-              <div className="v7-pressure-meter">
+              <div className="v7-pressure-meter" aria-label={`${progress} of ${Math.max(0, data?.difference ?? 0)} pressure counted`}>
                 <i
-                  key={`${side}:${pressureShown ? currentBeat?.period ?? 0 : 0}`}
-                  className={`${copy.className}${active && currentBeat?.kind === 'pressure' ? ' resolving' : ''}`}
-                  style={{ width: data && pressureShown ? meterWidth(data.difference, maxDifference) : '0%' }}
+                  className={`${copy.className}${active ? ' resolving' : ''}`}
+                  style={{ width: data ? meterWidth(progress, maxDifference) : '0%' }}
                 />
+                {data && Array.from({ length: data.baseChances }, (_, index) => {
+                  const boundary = Math.min((index + 1) * 5, Math.max(0, data.difference));
+                  return <span className={index < reached ? 'crossed' : ''} style={{ left: meterWidth(boundary, maxDifference) }} key={index} />;
+                })}
               </div>
-              <div className="v7-threshold-track" aria-label={`${reached} of ${totalPips} chance thresholds revealed`}>
+              <div className="v7-threshold-track" aria-label={`${reached} of ${totalPips} base chance bands revealed`}>
                 {totalPips > 0 ? Array.from({ length: totalPips }, (_, index) => (
                   <span className={index < reached ? 'reached' : ''} key={index}>◆</span>
-                )) : <span className="empty">NO THRESHOLD</span>}
+                )) : <span className="empty">NO BASE CHANCE</span>}
+                {adjustment && finalShown && <b className="v7-pressure-adjustment">{adjustment}</b>}
               </div>
             </div>
-            <strong className={chancesShown ? 'revealed' : ''}>{chancesShown && data ? data.chances : '–'}<small>CH</small></strong>
+            <strong className={displayedChances !== null ? 'revealed' : ''}>{displayedChances ?? '–'}<small>{finalShown ? 'FINAL' : 'BASE'}</small></strong>
           </div>
         );
       })}
@@ -85,26 +112,52 @@ function Formula({ beat }: { beat: PresentationBeat }) {
   );
 }
 
+function CauseList({ data, chanceOnly = false }: { data: PressureSidePresentation; chanceOnly?: boolean }) {
+  const modifiers = chanceOnly
+    ? data.modifiers.filter((modifier) => modifier.detail.includes('chance'))
+    : data.modifiers;
+  return (
+    <div className="v7-resolution-causes">
+      {modifiers.length ? modifiers.slice(0, 3).map((modifier) => (
+        <div className={modifier.tone} key={modifier.id}>
+          <span>{modifier.label}</span><b>{modifier.detail}</b>
+        </div>
+      )) : <div className="neutral"><span>Base lineup</span><b>No modifier changed this stage</b></div>}
+    </div>
+  );
+}
+
 export function V7ResolutionStrip({ beat }: { beat: PresentationBeat }) {
   const copy = beat.side ? sideCopy(beat.side) : null;
   const data = beat.side && beat.pressure ? beat.pressure[beat.side] : null;
 
-  if (beat.kind === 'pressure' || beat.kind === 'threshold' || beat.kind === 'chances') {
+  if ((beat.kind === 'pressure' || beat.kind === 'threshold' || beat.kind === 'chances') && data) {
+    const counted = beat.kind === 'threshold'
+      ? Math.min(Math.max(0, data.difference), (beat.thresholdIndex ?? 0) * 5)
+      : null;
     return (
       <section className={`v7-resolution-strip kind-${beat.kind} ${copy?.className ?? ''}`} aria-live="polite">
         <div className="v7-resolution-lead">
-          <span>{copy?.possessive} PRESSURE</span>
+          <span>{copy?.possessive} BASE PRESSURE</span>
           <Formula beat={beat} />
-          {beat.kind === 'threshold' && <strong>THRESHOLD {beat.thresholdIndex}<i>◆</i></strong>}
-          {beat.kind === 'chances' && <strong>{data?.chances ?? 0} {data?.chances === 1 ? 'CHANCE' : 'CHANCES'}</strong>}
+          {beat.kind === 'pressure' && <strong>CALCULATING…</strong>}
+          {beat.kind === 'threshold' && <strong>+{counted} COUNTED <i>◆</i></strong>}
+          {beat.kind === 'chances' && <strong>{data.baseChances} BASE {data.baseChances === 1 ? 'CHANCE' : 'CHANCES'}</strong>}
         </div>
-        <div className="v7-resolution-causes">
-          {data?.modifiers.length ? data.modifiers.slice(0, 3).map((modifier) => (
-            <div className={modifier.tone} key={modifier.id}>
-              <span>{modifier.label}</span><b>{modifier.detail}</b>
-            </div>
-          )) : <div className="neutral"><span>Base lineup</span><b>No active modifier changed this calculation</b></div>}
+        <CauseList data={data} />
+      </section>
+    );
+  }
+
+  if (beat.kind === 'adjustment' && data) {
+    return (
+      <section className={`v7-resolution-strip kind-adjustment ${copy?.className ?? ''}`} aria-live="polite">
+        <div className="v7-resolution-lead">
+          <span>{copy?.possessive} CHANCE ADJUSTMENTS</span>
+          <strong>{data.baseChances}<i>→</i>{data.finalChances} FINAL</strong>
+          <small>{adjustmentText(data)}</small>
         </div>
+        <CauseList data={data} chanceOnly />
       </section>
     );
   }
@@ -112,8 +165,8 @@ export function V7ResolutionStrip({ beat }: { beat: PresentationBeat }) {
   if (beat.kind === 'overview') {
     return (
       <section className="v7-resolution-strip kind-overview" aria-live="polite">
-        <div><span>PERIOD SHAPE</span><strong>{beat.pressure?.player.chances ?? 0}<i>–</i>{beat.pressure?.opponent.chances ?? 0}</strong></div>
-        <p>You created {beat.pressure?.player.chances ?? 0}; they created {beat.pressure?.opponent.chances ?? 0}. Now every chance rolls.</p>
+        <div><span>FINAL CHANCES</span><strong>{beat.pressure?.player.finalChances ?? 0}<i>–</i>{beat.pressure?.opponent.finalChances ?? 0}</strong></div>
+        <p>Base ATT–DEF pressure is complete. Added and cancelled chances are applied. Now every surviving chance rolls.</p>
       </section>
     );
   }
