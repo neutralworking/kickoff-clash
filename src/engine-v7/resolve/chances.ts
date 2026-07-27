@@ -9,10 +9,11 @@ import type { DeterministicRng } from '../core/rng';
 import type { EffectivePlayer } from './stats';
 
 // Chance CREATION for the upcoming period (not rolling — the dice come in the
-// next slice). From the post-break board: a global chance count of
-// ceil((teamATT − enemyDEF) / 5), allocated to sectors by remaining pressure,
-// then capped at the natural per-sector maximum (B1). Each token defaults to the
-// d6-only goal threshold (only a 6 scores); action effects such as
+// next slice). From the post-break board: a global chance count of one chance
+// for every complete five points of positive (teamATT − enemyDEF), allocated to
+// sectors by remaining pressure, then capped at the natural per-sector maximum
+// (B1). Partial five-point bands do not create a chance. Each token defaults to
+// the d6-only goal threshold (only a 6 scores); action effects such as
 // set_goal_threshold / add_reroll adjust tokens later.
 
 export const DEFAULT_GOAL_ROLL: ChanceToken['minimumGoalRoll'] = 6;
