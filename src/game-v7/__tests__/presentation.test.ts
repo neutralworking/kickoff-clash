@@ -7,6 +7,19 @@ import {
   v7Fixture,
 } from '@/game-v7';
 
+function completeFixtureMatch(seed: number): { score: string; rolls: number[][] } {
+  const controller = new V7MatchController({ ...v7Fixture(), seed });
+  while (controller.getPhase() !== 'fulltime') {
+    if (controller.getPhase() === 'period') controller.resolvePeriod();
+    else controller.resolveBreak();
+  }
+  const view = controller.getView();
+  return {
+    score: `${view.player.score}-${view.opponent.score}`,
+    rolls: controller.getSnapshots().flatMap((snapshot) => snapshot.tokenOutcomes.map((token) => [...token.rolls])),
+  };
+}
+
 describe('V7 structured presentation', () => {
   it('calculates the base bars from complete Home ATT v Away DEF bands and the reverse', () => {
     const controller = new V7MatchController(v7Fixture());
@@ -91,18 +104,14 @@ describe('V7 structured presentation', () => {
     expect(pressure.opponent.modifiers.length).toBeGreaterThan(0);
   });
 
-  it('supports different seeded outcomes while preserving exact same-seed replays', () => {
+  it('preserves exact same-seed replays and varies full matches across new seeds', () => {
     const seed = 20260724;
-    const otherSeed = 1410647606;
-    const first = new V7MatchController({ ...v7Fixture(), seed });
-    const replay = new V7MatchController({ ...v7Fixture(), seed });
-    const different = new V7MatchController({ ...v7Fixture(), seed: otherSeed });
-    first.resolvePeriod();
-    replay.resolvePeriod();
-    different.resolvePeriod();
+    const first = completeFixtureMatch(seed);
+    const replay = completeFixtureMatch(seed);
+    const newMatches = [20260723, 1410647606, 599558173, 1980918488, 17330263].map(completeFixtureMatch);
 
-    expect(first.getView().seed).toBe(seed);
-    expect(first.getSnapshots()[0]?.tokenOutcomes).toEqual(replay.getSnapshots()[0]?.tokenOutcomes);
-    expect(first.getSnapshots()[0]?.tokenOutcomes).not.toEqual(different.getSnapshots()[0]?.tokenOutcomes);
+    expect(first).toEqual(replay);
+    expect(new Set(newMatches.map((match) => match.score)).size).toBeGreaterThan(1);
+    expect(new Set(newMatches.map((match) => JSON.stringify(match.rolls))).size).toBe(newMatches.length);
   });
 });
