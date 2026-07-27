@@ -14,9 +14,14 @@ export interface SectorChanceAllocation {
   chances: number;
 }
 
+/**
+ * One chance is created for every complete five points by which ATT exceeds the
+ * opposing DEF. Partial bands do not create a chance: +4 = 0, +5 = 1,
+ * +9 = 1, +10 = 2, +13 = 2.
+ */
 export function calculatedChanceCount(totalAttack: number, opponentDefence: number): number {
   const difference = totalAttack - opponentDefence;
-  return difference <= 0 ? 0 : Math.ceil(difference / 5);
+  return difference <= 0 ? 0 : Math.floor(difference / 5);
 }
 
 export function allocateCalculatedChances(
