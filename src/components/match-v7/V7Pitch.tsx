@@ -1,61 +1,72 @@
 'use client';
 
 import type { CSSProperties, ReactNode } from 'react';
-import { v7Fixture, type BroadcastBeat, type UiPlayerView, type UiTeamView } from '@/game-v7';
+import {
+  v7Fixture,
+  type PresentationBeat,
+  type UiPlayerView,
+  type UiTeamView,
+} from '@/game-v7';
 import { portraitSrc } from '../cards/portrait';
 
-type Sector = 'left' | 'centre' | 'right';
 type Side = 'player' | 'opponent';
 
 interface CardMeta {
   cost: number;
   role: string;
+  actions: string[];
 }
 
+const fixture = v7Fixture();
+const ACTION_NAMES = new Map(fixture.actions.map((action) => [action.id, action.name]));
 const CARD_META = new Map<string, CardMeta>(
-  v7Fixture().cards.map((card) => [card.id, { cost: card.printedCost, role: card.role }]),
+  fixture.cards.map((card) => [card.id, {
+    cost: card.printedCost,
+    role: card.role,
+    actions: card.actionIds.map((id) => ACTION_NAMES.get(id)).filter((name): name is string => Boolean(name)),
+  }]),
 );
 
 export function cardMetaFor(cardId: string): CardMeta {
-  return CARD_META.get(cardId) ?? { cost: 0, role: 'Player' };
+  return CARD_META.get(cardId) ?? { cost: 0, role: 'Player', actions: [] };
 }
 
 const SLOT_POSITION: Record<string, { x: number; y: number }> = {
   gk: { x: 50, y: 90 },
-  lb: { x: 10, y: 72 },
-  lcb: { x: 32, y: 72 },
-  ccb: { x: 50, y: 72 },
-  rcb: { x: 68, y: 72 },
-  rb: { x: 90, y: 72 },
-  lwb: { x: 11, y: 54 },
-  dm: { x: 50, y: 57 },
+  lb: { x: 9, y: 73 },
+  lcb: { x: 31, y: 73 },
+  ccb: { x: 50, y: 73 },
+  rcb: { x: 69, y: 73 },
+  rb: { x: 91, y: 73 },
+  lwb: { x: 10, y: 53 },
+  dm: { x: 50, y: 58 },
   lm: { x: 18, y: 47 },
   cm: { x: 50, y: 47 },
   rm: { x: 82, y: 47 },
-  lw: { x: 15, y: 19 },
-  lf: { x: 32, y: 21 },
-  cf: { x: 50, y: 17 },
-  rf: { x: 68, y: 21 },
-  rw: { x: 85, y: 19 },
+  lw: { x: 14, y: 18 },
+  lf: { x: 31, y: 20 },
+  cf: { x: 50, y: 16 },
+  rf: { x: 69, y: 20 },
+  rw: { x: 86, y: 18 },
 };
 
 const FALLBACK_ROWS: Record<string, number> = {
   GK: 90,
-  LB: 72,
-  RB: 72,
-  CB: 72,
+  LB: 73,
+  RB: 73,
+  CB: 73,
   LWB: 54,
   RWB: 54,
-  DM: 57,
+  DM: 58,
   LM: 47,
   CM: 47,
   RM: 47,
-  LW: 19,
-  LF: 21,
+  LW: 18,
+  LF: 20,
   AM: 34,
-  CF: 17,
-  RF: 21,
-  RW: 19,
+  CF: 16,
+  RF: 20,
+  RW: 18,
 };
 
 function initials(name: string): string {
@@ -70,21 +81,13 @@ function initials(name: string): string {
 
 function fallbackPosition(player: UiPlayerView, index: number, total: number): { x: number; y: number } {
   const y = FALLBACK_ROWS[player.position ?? 'CM'] ?? 47;
-  const row = Math.max(1, total);
-  const x = row === 1 ? 50 : 10 + ((index % row) / Math.max(1, row - 1)) * 80;
+  const x = total <= 1 ? 50 : 9 + ((index % total) / Math.max(1, total - 1)) * 82;
   return { x, y };
 }
 
 function playerPosition(player: UiPlayerView, index: number, total: number): { x: number; y: number } {
   if (player.slotKey && SLOT_POSITION[player.slotKey]) return SLOT_POSITION[player.slotKey];
   return fallbackPosition(player, index, total);
-}
-
-function rollValue(beat: BroadcastBeat | null): string | null {
-  if (!beat || beat.kind !== 'roll') return null;
-  const text = `${beat.title} ${beat.detail ?? ''}`;
-  const matches = [...text.matchAll(/\b([1-6])\b/g)];
-  return matches.at(-1)?.[1] ?? '?';
 }
 
 export function V7PlayerCard({
@@ -106,7 +109,7 @@ export function V7PlayerCard({
   targetable?: boolean;
   disabled?: boolean;
   badge?: ReactNode;
-  onClick?: () => void;
+  onClick: () => void;
 }) {
   const portrait = portraitSrc({ id: player.cardId, name: player.name, position: player.position });
   const meta = cardMetaFor(player.cardId);
@@ -117,15 +120,14 @@ export function V7PlayerCard({
     dimmed ? 'dimmed' : '',
     highlighted ? 'highlighted' : '',
     targetable ? 'targetable' : '',
-    onClick ? 'interactive' : '',
   ].filter(Boolean).join(' ');
 
-  const body = (
-    <>
+  return (
+    <button type="button" className={className} onClick={onClick} disabled={disabled} aria-label={`Open ${player.name}`}>
       <div className="v7-card-portrait">
         <span className="v7-card-initials">{initials(player.name)}</span>
         {portrait && <img src={portrait} alt="" draggable={false} />}
-        <span className="v7-card-cost" aria-label={`Cost ${meta.cost}`}><b>{meta.cost}</b><i>⚡</i></span>
+        <span className="v7-card-cost" aria-label={`Cost ${meta.cost}`}><b>{meta.cost}</b></span>
         <span className="v7-card-position">{player.position ?? '—'}</span>
         {badge && <span className="v7-card-badge">{badge}</span>}
       </div>
@@ -137,17 +139,23 @@ export function V7PlayerCard({
           <i />
           <strong className="defence">{player.defence}</strong>
         </div>
+        {meta.actions[0] && <div className="v7-card-action">{meta.actions[0]}</div>}
       </div>
       {(player.outOfPosition || player.emergencyGoalkeeper) && (
         <div className="v7-card-warning">{player.emergencyGoalkeeper ? 'EMERGENCY GK' : 'OUT OF POSITION'}</div>
       )}
-    </>
+    </button>
   );
+}
 
-  return onClick ? (
-    <button type="button" className={className} onClick={onClick} disabled={disabled}>{body}</button>
-  ) : (
-    <div className={className}>{body}</div>
+function Dice({ values, finalRoll }: { values: readonly number[]; finalRoll?: number }) {
+  return (
+    <div className="v7-dice-row" aria-label={`Rolled ${values.join(', ')}`}>
+      {values.map((value, index) => (
+        <span className={index === values.length - 1 ? 'final' : ''} key={`${value}:${index}`}>{value}</span>
+      ))}
+      {values.length === 0 && <span className="final">{finalRoll ?? '?'}</span>}
+    </div>
   );
 }
 
@@ -155,34 +163,30 @@ export function V7Pitch({
   beat,
   team,
   side,
-  activeSector,
-  focusPlayer,
   canSelect,
   selectedBenchId,
   plannedOutIds,
   onPickActive,
+  onInspect,
 }: {
-  beat: BroadcastBeat | null;
+  beat: PresentationBeat | null;
   team: UiTeamView;
   side: Side;
-  activeSector: Sector | null;
-  focusPlayer: UiPlayerView | null;
   canSelect: boolean;
   selectedBenchId: string | null;
   plannedOutIds: readonly string[];
   onPickActive: (cardId: string) => void;
+  onInspect: (player: UiPlayerView) => void;
 }) {
-  const goal = beat?.kind === 'goal';
-  const miss = beat?.kind === 'miss';
-  const roll = beat?.kind === 'roll';
-  const currentRoll = rollValue(beat);
-  const attackingThisTeam = beat?.side === side;
-  const visibleFocus = focusPlayer?.cardId && team.active.some((player) => player.cardId === focusPlayer.cardId)
-    ? focusPlayer.cardId
+  const activeSector = beat?.sector ?? null;
+  const focusCardId = beat?.cardId && team.active.some((player) => player.cardId === beat.cardId)
+    ? beat.cardId
     : null;
+  const isGoal = beat?.kind === 'goal';
+  const isMiss = beat?.kind === 'miss' || beat?.kind === 'cancelled';
 
   return (
-    <section className={`v7-formation-shell side-${side}${goal ? ' goal' : ''}${miss ? ' miss' : ''}`}>
+    <section className={`v7-formation-shell side-${side}${isGoal ? ' goal' : ''}${isMiss ? ' miss' : ''}`}>
       <div className="v7-formation-heading">
         <div>
           <span className="v7-tag">{side === 'player' ? 'Home XI' : 'Away XI'}</span>
@@ -205,23 +209,25 @@ export function V7Pitch({
         <div className="v7-lane-glow" />
 
         {selectedBenchId && canSelect && (
-          <div className="v7-sub-instruction"><span>SUB SELECTED</span><strong>Choose the player to replace</strong></div>
+          <div className="v7-sub-instruction"><span>SUB SELECTED</span><strong>Tap the player to replace</strong></div>
         )}
 
         {team.active.map((player, index) => {
           const position = playerPosition(player, index, team.active.length);
           const style = { left: `${position.x}%`, top: `${position.y}%` } as CSSProperties;
           const plannedOut = plannedOutIds.includes(player.cardId);
-          const targetable = canSelect && !!selectedBenchId && !plannedOut;
+          const targetable = canSelect && Boolean(selectedBenchId) && !plannedOut;
+          const highlighted = focusCardId === player.cardId
+            || (beat?.side === side && activeSector === player.sector && ['roll', 'goal', 'miss', 'cancelled'].includes(beat.kind));
           return (
             <div className="v7-pitch-card-position" style={style} key={player.cardId}>
               <V7PlayerCard
                 player={player}
-                highlighted={visibleFocus === player.cardId || (attackingThisTeam && activeSector === player.sector)}
+                highlighted={highlighted}
                 targetable={targetable}
                 dimmed={plannedOut}
                 badge={plannedOut ? 'OUT' : undefined}
-                onClick={targetable ? () => onPickActive(player.cardId) : undefined}
+                onClick={() => (targetable ? onPickActive(player.cardId) : onInspect(player))}
               />
             </div>
           );
@@ -229,14 +235,12 @@ export function V7Pitch({
 
         {beat && (
           <div className={`v7-pitch-event kind-${beat.kind}`} aria-live="polite">
-            {roll && <div className="v7-roll-value">{currentRoll}</div>}
-            {goal && <div className="v7-goal-word">GOAL!</div>}
-            {!goal && !roll && <div className="v7-event-kicker">{beat.eyebrow}</div>}
-            {(goal || roll || miss) && focusPlayer && (
-              <div className="v7-event-card"><V7PlayerCard player={focusPlayer} highlighted /></div>
-            )}
-            <strong>{goal ? beat.detail ?? beat.title : beat.title}</strong>
-            {!goal && beat.detail && <span>{beat.detail}</span>}
+            {beat.kind === 'roll' && <Dice values={beat.rolls ?? []} finalRoll={beat.finalRoll} />}
+            {beat.kind === 'goal' && <div className="v7-goal-word">GOAL!</div>}
+            {beat.kind === 'pressure' && <div className="v7-pressure-word">PRESSURE</div>}
+            {beat.kind === 'chances' && <div className="v7-chance-word">CHANCES</div>}
+            <strong>{beat.title}</strong>
+            {beat.detail && <span>{beat.detail}</span>}
           </div>
         )}
       </div>
