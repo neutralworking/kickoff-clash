@@ -57,21 +57,27 @@ describe('V7 deterministic foundations', () => {
 
   it.each([
     [0, 0, 0],
-    [1, 0, 1],
+    [1, 0, 0],
+    [4, 0, 0],
     [5, 0, 1],
-    [6, 0, 2],
-    [80, 67, 3],
-  ])('creates chances from global difference %i - %i', (attack, defence, expected) => {
+    [6, 0, 1],
+    [9, 0, 1],
+    [10, 0, 2],
+    [13, 0, 2],
+    [80, 67, 2],
+  ])('creates chances from complete five-point bands in %i - %i', (attack, defence, expected) => {
     expect(calculatedChanceCount(attack, defence)).toBe(expected);
   });
 
   it.each([
     [10, 10, 0],
-    [11, 10, 1],
+    [11, 10, 0],
+    [14, 10, 0],
     [15, 10, 1],
-    [16, 10, 2],
-    [-4, -10, 2],
-  ])('uses the global attack-defence difference at five-point boundaries', (attack, defence, expected) => {
+    [19, 10, 1],
+    [20, 10, 2],
+    [-4, -10, 1],
+  ])('uses complete global attack-defence thresholds at five-point boundaries', (attack, defence, expected) => {
     expect(calculatedChanceCount(attack, defence)).toBe(expected);
   });
 
