@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './v7lab.css';
+import './v7choreography.css';
 import {
   FIXTURE_SEED,
   PresentationDirector,
@@ -19,6 +20,7 @@ import {
   type UiTeamView,
 } from '@/game-v7';
 import { cardMetaFor, V7Pitch, V7PlayerCard } from './V7Pitch';
+import { V7PressureBoard, V7ResolutionStrip } from './V7ResolutionStage';
 
 type DisplaySide = 'player' | 'opponent';
 
@@ -77,6 +79,24 @@ function delta(value: number): string {
 
 function nextSeed(seed: number): number {
   return (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+}
+
+function beatLabel(beat: PresentationBeat | null, period: number): string {
+  if (!beat) return `PERIOD ${period}`;
+  switch (beat.kind) {
+    case 'lock': return 'PERIOD LOCKED';
+    case 'pressure': return beat.side === 'player' ? 'YOUR PRESSURE' : 'THEIR PRESSURE';
+    case 'threshold': return `THRESHOLD ${beat.thresholdIndex ?? ''}`.trim();
+    case 'chances': return beat.side === 'player' ? 'YOUR CHANCES' : 'THEIR CHANCES';
+    case 'overview': return 'CHANCES SET';
+    case 'roll': return beat.side === 'player' ? 'YOUR ROLL' : 'THEIR ROLL';
+    case 'goal': return 'GOAL';
+    case 'miss': return 'MISS';
+    case 'cancelled': return 'CHANCE BLOCKED';
+    case 'full_time': return 'FULL TIME';
+    case 'period_end': return 'PERIOD COMPLETE';
+    default: return beat.kind.replace('_', ' ').toUpperCase();
+  }
 }
 
 export default function V7MatchLab() {
@@ -149,13 +169,9 @@ function V7MatchInner({
     () => [...allVisibleBeats].reverse().find((beat) => beat.pressure),
     [allVisibleBeats],
   );
-  const chancesRevealed = useMemo(() => {
-    if (!pressureBeat) return false;
-    return allVisibleBeats.some((beat) => beat.period === pressureBeat.period && beat.kind === 'chances');
-  }, [allVisibleBeats, pressureBeat]);
   const logBeats = useMemo(
     () => allVisibleBeats
-      .filter((beat) => !['pressure', 'chances'].includes(beat.kind))
+      .filter((beat) => !['lock', 'pressure', 'threshold', 'chances', 'overview'].includes(beat.kind))
       .slice(-3)
       .reverse(),
     [allVisibleBeats],
@@ -178,6 +194,10 @@ function V7MatchInner({
     const timer = window.setTimeout(advancePresentation, currentBeat.durationMs);
     return () => window.clearTimeout(timer);
   }, [advancePresentation, autoPlay, currentBeat, inspected]);
+
+  useEffect(() => {
+    if (presentationBusy && currentBeat?.side) setDisplaySide(currentBeat.side);
+  }, [currentBeat?.id, currentBeat?.side, presentationBusy]);
 
   useEffect(() => {
     if (phase === 'break' && !presentationBusy) setDisplaySide('player');
@@ -206,6 +226,7 @@ function V7MatchInner({
   const appendBeats = (beats: readonly PresentationBeat[]) => {
     director.append(beats);
     revealGoal(director.currentBeat());
+    setAutoPlay(true);
     bump();
   };
 
@@ -245,7 +266,7 @@ function V7MatchInner({
         cardId: action.cardId,
         title: `${action.actionName} activated`,
         detail: `${action.cardName} · ${action.displayText}`,
-        durationMs: 1000,
+        durationMs: 1100,
       }];
     });
 
@@ -312,11 +333,10 @@ function V7MatchInner({
       : { label: 'Kick off →', onClick: onKickoff, disabled: presentationBusy };
 
   const pressure = pressureBeat?.pressure;
-  const meterWidth = (difference: number) => `${Math.max(0, Math.min(100, (difference / 20) * 100))}%`;
   const otherSideLabel = displaySide === 'player' ? 'away' : 'home';
 
   return (
-    <main className="v7-lab">
+    <main className={`v7-lab${presentationBusy ? ' resolving' : ''}`}>
       <section className="v7-scoreboard">
         <div className="v7-score-top">
           <div className="v7-team-total home">
@@ -324,7 +344,7 @@ function V7MatchInner({
             <div><strong className="att">{homeTotals.attack}</strong><strong className="def">{homeTotals.defence}</strong></div>
           </div>
           <div className="v7-score-centre">
-            <span>{phase === 'fulltime' ? 'FULL TIME' : currentBeat ? currentBeat.kind.replace('_', ' ') : `PERIOD ${view.period}`}</span>
+            <span>{phase === 'fulltime' && !presentationBusy ? 'FULL TIME' : beatLabel(currentBeat, view.period)}</span>
             <strong>{presentedScore.player}<i>–</i>{presentedScore.opponent}</strong>
             <small>Seed {view.seed}</small>
           </div>
@@ -334,22 +354,7 @@ function V7MatchInner({
           </div>
         </div>
 
-        <div className="v7-score-bars">
-          <div className="v7-score-bar-row">
-            <span>HOME</span>
-            <div className="v7-pressure-meter" title={pressure ? `${pressure.player.attack} ATT vs ${pressure.player.enemyDefence} DEF` : 'Waiting for kick-off'}>
-              <i key={`${pressureBeat?.id ?? 'home'}:${currentBeat?.kind}`} className={currentBeat?.kind === 'pressure' ? 'home revealing' : 'home'} style={{ width: pressure ? meterWidth(pressure.player.difference) : '0%' }} />
-            </div>
-            <b>{pressure && chancesRevealed ? pressure.player.chances : '–'}◆</b>
-          </div>
-          <div className="v7-score-bar-row">
-            <span>AWAY</span>
-            <div className="v7-pressure-meter" title={pressure ? `${pressure.opponent.attack} ATT vs ${pressure.opponent.enemyDefence} DEF` : 'Waiting for kick-off'}>
-              <i key={`${pressureBeat?.id ?? 'away'}:${currentBeat?.kind}`} className={currentBeat?.kind === 'pressure' ? 'away revealing' : 'away'} style={{ width: pressure ? meterWidth(pressure.opponent.difference) : '0%' }} />
-            </div>
-            <b>{pressure && chancesRevealed ? pressure.opponent.chances : '–'}◆</b>
-          </div>
-        </div>
+        <V7PressureBoard currentBeat={currentBeat} visibleBeats={allVisibleBeats} pressure={pressure} />
       </section>
 
       <V7Pitch
@@ -388,7 +393,9 @@ function V7MatchInner({
         </div>
       </section>
 
-      {phase === 'break' && !presentationBusy && displaySide === 'player' ? (
+      {presentationBusy && currentBeat ? (
+        <V7ResolutionStrip beat={currentBeat} />
+      ) : phase === 'break' && displaySide === 'player' ? (
         <section className="v7-coach-strip">
           <div className="v7-impact-row">
             <span>PROJECTED</span>
@@ -421,7 +428,7 @@ function V7MatchInner({
           {logBeats.length === 0 ? (
             <div className="v7-log-empty">Your XI is set. Kick off to calculate pressure and chances.</div>
           ) : logBeats.map((beat) => (
-            <div className={`v7-log-row kind-${beat.kind}${beat.id === currentBeat?.id ? ' current' : ''}`} key={beat.id}>
+            <div className={`v7-log-row kind-${beat.kind}`} key={beat.id}>
               <span>{logIcon(beat)}</span>
               <b>{beat.side === 'player' ? 'HOME' : beat.side === 'opponent' ? 'AWAY' : 'MATCH'}</b>
               <div><strong>{beat.title}</strong>{beat.detail && <small>{beat.detail}</small>}</div>
@@ -431,11 +438,11 @@ function V7MatchInner({
       )}
 
       <footer className={`v7-bottom-actions${phase === 'fulltime' ? ' fulltime' : ''}`}>
-        <button type="button" className="v7-icon-action" onClick={() => setDisplaySide((side) => side === 'player' ? 'opponent' : 'player')} aria-label={`Show ${otherSideLabel} team`} title={`Show ${otherSideLabel} team`}>
+        <button type="button" className="v7-icon-action" disabled={presentationBusy} onClick={() => setDisplaySide((side) => side === 'player' ? 'opponent' : 'player')} aria-label={`Show ${otherSideLabel} team`} title={`Show ${otherSideLabel} team`}>
           <TeamSwitchIcon />
         </button>
         <button type="button" className="v7-primary-action" disabled={primary.disabled} onClick={primary.onClick}>
-          {presentationBusy ? `${currentBeat?.title ?? 'Playing'}…` : primary.label}
+          {presentationBusy ? 'Resolving period…' : primary.label}
         </button>
         {phase === 'fulltime' ? (
           <button type="button" className="v7-icon-action" disabled={presentationBusy} onClick={onReplay} aria-label="Replay the same seed" title="Replay same seed"><ReplayIcon /></button>
