@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './v7lab.css';
 import {
-  buildBroadcastBeats,
-  MatchDirector,
+  FIXTURE_SEED,
+  PresentationDirector,
   V7MatchController,
+  buildPeriodPresentation,
+  buildSubstitutionRevealBeats,
+  previewSubstitutions,
   v7Fixture,
   type BreakDecision,
-  type BroadcastBeat,
-  type MatchEvent,
+  type PresentationBeat,
   type SubDecision,
   type UiActionView,
   type UiMatchView,
@@ -18,19 +20,9 @@ import {
 } from '@/game-v7';
 import { cardMetaFor, V7Pitch, V7PlayerCard } from './V7Pitch';
 
-type Sector = 'left' | 'centre' | 'right';
 type DisplaySide = 'player' | 'opponent';
 
 const BREAK_ENERGY = [0, 3, 5, 7];
-
-function sectorForBeat(beat: BroadcastBeat | null): Sector | null {
-  if (!beat) return null;
-  const text = `${beat.title} ${beat.detail ?? ''}`.toLowerCase();
-  if (text.includes('left')) return 'left';
-  if (text.includes('right')) return 'right';
-  if (text.includes('centre') || text.includes('center')) return 'centre';
-  return null;
-}
 
 function totals(team: UiTeamView): { attack: number; defence: number } {
   return team.active.reduce(
@@ -42,63 +34,6 @@ function totals(team: UiTeamView): { attack: number; defence: number } {
   );
 }
 
-function chanceCount(
-  events: readonly MatchEvent[],
-  side: DisplaySide,
-  period: number,
-  visibleEventIds: ReadonlySet<string>,
-): number {
-  return events.filter((event) => (
-    visibleEventIds.has(event.id)
-    && event.kind === 'chance_created'
-    && event.side === side
-    && event.period === period
-  )).length;
-}
-
-function beatText(beat: BroadcastBeat): string {
-  return `${beat.title} ${beat.detail ?? ''}`.toLowerCase();
-}
-
-function focusPlayerForBeat(
-  beat: BroadcastBeat | null,
-  sector: Sector | null,
-  player: UiTeamView,
-  opponent: UiTeamView,
-): UiPlayerView | null {
-  if (!beat?.side) return null;
-  const team = beat.side === 'player' ? player : opponent;
-  const text = beatText(beat);
-  const named = team.active.find((card) => {
-    const names = [card.name, card.shortName, card.name.split(/\s+/).at(-1) ?? ''];
-    return names.some((name) => name.length > 2 && text.includes(name.toLowerCase()));
-  });
-  if (named) return named;
-
-  const sectorPlayers = sector
-    ? team.active.filter((card) => (card.sector ?? 'centre') === sector)
-    : team.active;
-  const pool = sectorPlayers.length > 0 ? sectorPlayers : team.active;
-  return [...pool].sort((a, b) => b.attack - a.attack)[0] ?? null;
-}
-
-function isLoggable(beat: BroadcastBeat): boolean {
-  return ['kickoff', 'action', 'change', 'chance', 'roll', 'goal', 'miss', 'period_end', 'full_time'].includes(beat.kind);
-}
-
-function logIcon(beat: BroadcastBeat): string {
-  switch (beat.kind) {
-    case 'goal': return '⚽';
-    case 'miss': return '×';
-    case 'roll': return '◆';
-    case 'action': return '⚡';
-    case 'change': return '↔';
-    case 'period_end': return '■';
-    case 'full_time': return '■';
-    default: return '•';
-  }
-}
-
 function TeamSwitchIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -107,80 +42,129 @@ function TeamSwitchIcon() {
   );
 }
 
+function ReplayIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 7v5h5M6.6 17A8 8 0 1 0 6 7.5L5 12" />
+    </svg>
+  );
+}
+
+function NewSeedIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3l1.4 4.1L18 8.5l-3.7 2.6.1 4.6-3.7-2.7-3.7 2.7.1-4.6L3.4 8.5 8 7.1 9.3 3l2.7 3 2.7-3" />
+    </svg>
+  );
+}
+
+function logIcon(beat: PresentationBeat): string {
+  switch (beat.kind) {
+    case 'goal': return '⚽';
+    case 'miss': return '×';
+    case 'cancelled': return '⊘';
+    case 'roll': return '◆';
+    case 'reveal': return '↔';
+    case 'full_time': return '■';
+    case 'period_end': return '■';
+    default: return '•';
+  }
+}
+
+function delta(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value}`;
+}
+
+function nextSeed(seed: number): number {
+  return (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+}
+
 export default function V7MatchLab() {
-  const [init] = useState<{ controller?: V7MatchController; error?: string }>(() => {
+  const [session, setSession] = useState({ seed: FIXTURE_SEED, replay: 0 });
+  const init = useMemo<{ controller?: V7MatchController; error?: string }>(() => {
     try {
-      return { controller: new V7MatchController(v7Fixture()) };
+      return { controller: new V7MatchController({ ...v7Fixture(), seed: session.seed }) };
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
     }
-  });
+  }, [session]);
 
   if (init.error || !init.controller) {
-    return (
-      <div className="v7-lab">
-        <div className="v7-err">Failed to initialise the V7 match: {init.error ?? 'unknown error'}</div>
-      </div>
-    );
+    return <main className="v7-lab"><div className="v7-err">Failed to initialise V7: {init.error ?? 'unknown error'}</div></main>;
   }
 
-  return <V7MatchInner controller={init.controller} />;
+  return (
+    <V7MatchInner
+      key={`${session.seed}:${session.replay}`}
+      controller={init.controller}
+      onReplay={() => setSession((current) => ({ ...current, replay: current.replay + 1 }))}
+      onNewMatch={() => setSession((current) => ({ seed: nextSeed(current.seed), replay: 0 }))}
+    />
+  );
 }
 
-function V7MatchInner({ controller }: { controller: V7MatchController }) {
+function V7MatchInner({
+  controller,
+  onReplay,
+  onNewMatch,
+}: {
+  controller: V7MatchController;
+  onReplay: () => void;
+  onNewMatch: () => void;
+}) {
   const [, setTick] = useState(0);
   const bump = () => setTick((tick) => tick + 1);
-  const [director] = useState(() => new MatchDirector());
+  const [director] = useState(() => new PresentationDirector());
   const [autoPlay, setAutoPlay] = useState(true);
   const [displaySide, setDisplaySide] = useState<DisplaySide>('player');
-  const [presentedScore, setPresentedScore] = useState(() => {
-    const initialView = controller.getView();
-    return { player: initialView.player.score, opponent: initialView.opponent.score };
-  });
+  const [presentedScore, setPresentedScore] = useState({ player: 0, opponent: 0 });
   const revealedGoalIds = useRef(new Set<string>());
   const [pickBench, setPickBench] = useState<string | null>(null);
   const [subs, setSubs] = useState<SubDecision[]>([]);
   const [activations, setActivations] = useState<string[]>([]);
+  const [inspected, setInspected] = useState<UiPlayerView | null>(null);
 
   const phase = controller.getPhase();
   const view: UiMatchView = controller.getView();
-  const events = controller.getEvents();
   const diag = controller.getDiagnostics();
   const presentation = director.snapshot();
   const currentBeat = presentation.currentBeat;
   const presentationBusy = presentation.isPlaying;
-  const activeSector = sectorForBeat(currentBeat);
   const displayTeam = displaySide === 'player' ? view.player : view.opponent;
   const homeTotals = totals(view.player);
   const awayTotals = totals(view.opponent);
-  const homeEdge = homeTotals.attack / Math.max(1, homeTotals.attack + awayTotals.defence);
-  const awayEdge = awayTotals.attack / Math.max(1, awayTotals.attack + homeTotals.defence);
-  const focusPlayer = focusPlayerForBeat(currentBeat, activeSector, view.player, view.opponent);
   const plannedOutIds = subs.map((sub) => sub.outCardId);
   const plannedInIds = new Set(subs.map((sub) => sub.inCardId));
   const canEditHome = phase === 'break' && !presentationBusy && displaySide === 'player';
   const energyBudget = phase === 'break' ? BREAK_ENERGY[view.period] ?? 0 : 0;
   const energySpent = subs.reduce((total, sub) => total + cardMetaFor(sub.inCardId).cost, 0);
   const energyRemaining = Math.max(0, energyBudget - energySpent);
+  const substitutionPreview = previewSubstitutions(view, subs);
 
-  const presentedBeats = useMemo(
+  const allVisibleBeats = useMemo(
     () => [...presentation.history, ...(currentBeat ? [currentBeat] : [])],
     [currentBeat, presentation.history],
   );
-  const visibleEventIds = useMemo(
-    () => new Set(presentedBeats.flatMap((beat) => beat.sourceEventIds)),
-    [presentedBeats],
+  const pressureBeat = useMemo(
+    () => [...allVisibleBeats].reverse().find((beat) => beat.pressure),
+    [allVisibleBeats],
   );
+  const chancesRevealed = useMemo(() => {
+    if (!pressureBeat) return false;
+    return allVisibleBeats.some((beat) => beat.period === pressureBeat.period && beat.kind === 'chances');
+  }, [allVisibleBeats, pressureBeat]);
   const logBeats = useMemo(
-    () => presentedBeats.filter(isLoggable).slice(-6).reverse(),
-    [presentedBeats],
+    () => allVisibleBeats
+      .filter((beat) => !['pressure', 'chances'].includes(beat.kind))
+      .slice(-3)
+      .reverse(),
+    [allVisibleBeats],
   );
 
-  const revealGoal = useCallback((beat: BroadcastBeat | null) => {
+  const revealGoal = useCallback((beat: PresentationBeat | null) => {
     if (!beat || beat.kind !== 'goal' || !beat.side || revealedGoalIds.current.has(beat.id)) return;
     revealedGoalIds.current.add(beat.id);
-    const side = beat.side;
-    setPresentedScore((score) => ({ ...score, [side]: score[side] + 1 }));
+    setPresentedScore((score) => ({ ...score, [beat.side!]: score[beat.side!] + 1 }));
   }, []);
 
   const advancePresentation = useCallback(() => {
@@ -190,16 +174,16 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   }, [director, revealGoal]);
 
   useEffect(() => {
-    if (!autoPlay || !currentBeat) return;
+    if (!autoPlay || !currentBeat || inspected) return;
     const timer = window.setTimeout(advancePresentation, currentBeat.durationMs);
     return () => window.clearTimeout(timer);
-  }, [advancePresentation, autoPlay, currentBeat]);
+  }, [advancePresentation, autoPlay, currentBeat, inspected]);
 
   useEffect(() => {
     if (phase === 'break' && !presentationBusy) setDisplaySide('player');
   }, [phase, presentationBusy]);
 
-  const resetLocal = () => {
+  const resetPlan = () => {
     setPickBench(null);
     setSubs([]);
     setActivations([]);
@@ -219,50 +203,54 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     })),
   });
 
-  const appendNewEvents = (beforeCount: number) => {
-    const nextEvents = controller.getEvents().slice(beforeCount);
-    director.append(buildBroadcastBeats(nextEvents));
+  const appendBeats = (beats: readonly PresentationBeat[]) => {
+    director.append(beats);
     revealGoal(director.currentBeat());
-  };
-
-  const sync = (nextSubs: SubDecision[], nextActivations: string[]) => {
-    if (phase === 'break') controller.setPlayerDecision(buildDecision(nextSubs, nextActivations));
     bump();
   };
 
-  const onResolvePeriod = () => {
-    if (presentationBusy) return;
-    const beforeCount = controller.getEvents().length;
+  const resolveCurrentPeriod = (prefix: readonly PresentationBeat[] = []) => {
     controller.resolvePeriod();
-    appendNewEvents(beforeCount);
-    resetLocal();
+    const snapshot = controller.getSnapshots().at(-1);
+    if (!snapshot) throw new Error('V7 resolved a period without producing a snapshot.');
+    const nextView = controller.getView();
+    const periodBeats = buildPeriodPresentation(snapshot, nextView, controller.getPhase() === 'fulltime');
+    appendBeats([...prefix, ...periodBeats]);
+    resetPlan();
     bump();
   };
 
-  const onResolveBreak = () => {
-    if (presentationBusy) return;
+  const onKickoff = () => {
+    if (presentationBusy || phase !== 'period') return;
+    resolveCurrentPeriod();
+  };
+
+  const onContinueBreak = () => {
+    if (presentationBusy || phase !== 'break') return;
     const result = controller.setPlayerDecision(buildDecision(subs, activations));
     if (!result.ok) {
       bump();
       return;
     }
-    const beforeCount = controller.getEvents().length;
-    controller.resolveBreak();
-    appendNewEvents(beforeCount);
-    resetLocal();
-    bump();
-  };
 
-  const onRestart = () => {
-    controller.restart();
-    director.reset();
-    revealedGoalIds.current.clear();
-    const restartedView = controller.getView();
-    setPresentedScore({ player: restartedView.player.score, opponent: restartedView.opponent.score });
-    setAutoPlay(true);
-    setDisplaySide('player');
-    resetLocal();
-    bump();
+    const revealBeats = buildSubstitutionRevealBeats(view.period, view, subs);
+    const activationBeats: PresentationBeat[] = activations.flatMap((instanceId, index) => {
+      const action = view.player.actions.find((candidate) => candidate.instanceId === instanceId);
+      if (!action) return [];
+      return [{
+        id: `presentation:${view.period}:activation:${index}:${instanceId}`,
+        kind: 'reveal',
+        period: view.period,
+        side: 'player',
+        cardId: action.cardId,
+        title: `${action.actionName} activated`,
+        detail: `${action.cardName} · ${action.displayText}`,
+        durationMs: 1000,
+      }];
+    });
+
+    controller.resolveBreak();
+    resolveCurrentPeriod([...revealBeats, ...activationBeats]);
   };
 
   const onSkipMoments = () => {
@@ -271,10 +259,15 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     bump();
   };
 
-  const onPickBench = (cardId: string) => {
-    const cost = cardMetaFor(cardId).cost;
-    if (!canEditHome || plannedInIds.has(cardId) || (pickBench !== cardId && cost > energyRemaining)) return;
-    setPickBench((current) => (current === cardId ? null : cardId));
+  const onPickBench = (player: UiPlayerView) => {
+    const cost = cardMetaFor(player.cardId).cost;
+    const spent = plannedInIds.has(player.cardId);
+    const unaffordable = cost > energyRemaining;
+    if (!canEditHome || spent || unaffordable) {
+      setInspected(player);
+      return;
+    }
+    setPickBench((current) => (current === player.cardId ? null : player.cardId));
   };
 
   const onPickActive = (cardId: string) => {
@@ -283,13 +276,15 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     const next = [...subs, { outCardId: cardId, inCardId: pickBench }];
     setSubs(next);
     setPickBench(null);
-    sync(next, activations);
+    controller.setPlayerDecision(buildDecision(next, activations));
+    bump();
   };
 
   const removeSub = (index: number) => {
     const next = subs.filter((_, currentIndex) => currentIndex !== index);
     setSubs(next);
-    sync(next, activations);
+    controller.setPlayerDecision(buildDecision(next, activations));
+    bump();
   };
 
   const toggleActivation = (instanceId: string) => {
@@ -297,7 +292,8 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
       ? activations.filter((id) => id !== instanceId)
       : [...activations, instanceId];
     setActivations(next);
-    sync(subs, next);
+    controller.setPlayerDecision(buildDecision(subs, next));
+    bump();
   };
 
   const playerActivatable = view.player.actions.filter(
@@ -310,17 +306,13 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   );
 
   const primary = phase === 'fulltime'
-    ? { label: 'Play again →', onClick: onRestart, disabled: presentationBusy }
+    ? { label: 'New match →', onClick: onNewMatch, disabled: presentationBusy }
     : phase === 'break'
-      ? { label: 'Continue →', onClick: onResolveBreak, disabled: presentationBusy }
-      : {
-          label: view.period === 1 ? 'Kick off →' : `Play period ${view.period} →`,
-          onClick: onResolvePeriod,
-          disabled: presentationBusy,
-        };
+      ? { label: subs.length || activations.length ? 'Lock changes →' : 'Continue →', onClick: onContinueBreak, disabled: presentationBusy }
+      : { label: 'Kick off →', onClick: onKickoff, disabled: presentationBusy };
 
-  const homeChances = chanceCount(events, 'player', view.period, visibleEventIds);
-  const awayChances = chanceCount(events, 'opponent', view.period, visibleEventIds);
+  const pressure = pressureBeat?.pressure;
+  const meterWidth = (difference: number) => `${Math.max(0, Math.min(100, (difference / 20) * 100))}%`;
   const otherSideLabel = displaySide === 'player' ? 'away' : 'home';
 
   return (
@@ -329,30 +321,33 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         <div className="v7-score-top">
           <div className="v7-team-total home">
             <span>HOME</span>
-            <div aria-label={`${homeTotals.attack} attack, ${homeTotals.defence} defence`}>
-              <strong className="att">{homeTotals.attack}</strong><strong className="def">{homeTotals.defence}</strong>
-            </div>
-            <small>{view.player.managerName}</small>
+            <div><strong className="att">{homeTotals.attack}</strong><strong className="def">{homeTotals.defence}</strong></div>
           </div>
           <div className="v7-score-centre">
-            <span>{phase === 'fulltime' ? 'FULL TIME' : `PERIOD ${view.period}`}</span>
+            <span>{phase === 'fulltime' ? 'FULL TIME' : currentBeat ? currentBeat.kind.replace('_', ' ') : `PERIOD ${view.period}`}</span>
             <strong>{presentedScore.player}<i>–</i>{presentedScore.opponent}</strong>
-            <small>{presentationBusy ? currentBeat?.eyebrow ?? 'Playing' : view.phaseLabel}</small>
+            <small>Seed {view.seed}</small>
           </div>
           <div className="v7-team-total away">
             <span>AWAY</span>
-            <div aria-label={`${awayTotals.attack} attack, ${awayTotals.defence} defence`}>
-              <strong className="att">{awayTotals.attack}</strong><strong className="def">{awayTotals.defence}</strong>
-            </div>
-            <small>{view.opponent.managerName}</small>
+            <div><strong className="att">{awayTotals.attack}</strong><strong className="def">{awayTotals.defence}</strong></div>
           </div>
         </div>
+
         <div className="v7-score-bars">
           <div className="v7-score-bar-row">
-            <span>HOME</span><div><i className="home" style={{ width: `${homeEdge * 100}%` }} /></div><b>{homeChances}◆</b>
+            <span>HOME</span>
+            <div className="v7-pressure-meter" title={pressure ? `${pressure.player.attack} ATT vs ${pressure.player.enemyDefence} DEF` : 'Waiting for kick-off'}>
+              <i key={`${pressureBeat?.id ?? 'home'}:${currentBeat?.kind}`} className={currentBeat?.kind === 'pressure' ? 'home revealing' : 'home'} style={{ width: pressure ? meterWidth(pressure.player.difference) : '0%' }} />
+            </div>
+            <b>{pressure && chancesRevealed ? pressure.player.chances : '–'}◆</b>
           </div>
           <div className="v7-score-bar-row">
-            <span>AWAY</span><div><i className="away" style={{ width: `${awayEdge * 100}%` }} /></div><b>{awayChances}◆</b>
+            <span>AWAY</span>
+            <div className="v7-pressure-meter" title={pressure ? `${pressure.opponent.attack} ATT vs ${pressure.opponent.enemyDefence} DEF` : 'Waiting for kick-off'}>
+              <i key={`${pressureBeat?.id ?? 'away'}:${currentBeat?.kind}`} className={currentBeat?.kind === 'pressure' ? 'away revealing' : 'away'} style={{ width: pressure ? meterWidth(pressure.opponent.difference) : '0%' }} />
+            </div>
+            <b>{pressure && chancesRevealed ? pressure.opponent.chances : '–'}◆</b>
           </div>
         </div>
       </section>
@@ -361,32 +356,23 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         beat={currentBeat}
         team={displayTeam}
         side={displaySide}
-        activeSector={activeSector}
-        focusPlayer={focusPlayer}
         canSelect={canEditHome}
         selectedBenchId={pickBench}
         plannedOutIds={plannedOutIds}
         onPickActive={onPickActive}
+        onInspect={setInspected}
       />
 
-      <section className="v7-bench-section">
-        <div className="v7-section-heading">
-          <div>
-            <span className="v7-tag">{displaySide === 'player' ? 'Home bench' : 'Away bench'}</span>
-            <strong>{canEditHome ? (pickBench ? 'Choose who comes off' : 'Choose a substitute') : 'Available players'}</strong>
-          </div>
-          {phase === 'break' && displaySide === 'player' && (
-            <div className="v7-energy" aria-label={`${energyRemaining} of ${energyBudget} energy remaining`}>
-              <strong>{energyRemaining}</strong><span>/ {energyBudget}</span><i>⚡</i>
-            </div>
-          )}
+      <section className="v7-bench-section" style={{ '--bench-count': Math.max(1, displayTeam.bench.length) } as React.CSSProperties}>
+        <div className="v7-bench-heading">
+          <div><span className="v7-tag">{displaySide === 'player' ? 'Home bench' : 'Away bench'}</span><strong>{canEditHome ? 'Tap a card, then a player' : 'Tap any card to inspect'}</strong></div>
+          {phase === 'break' && displaySide === 'player' && <div className="v7-energy"><strong>{energyRemaining}</strong><span>/{energyBudget}</span><i>⚡</i></div>}
         </div>
         <div className="v7-bench-row">
           {displayTeam.bench.map((player) => {
             const cost = cardMetaFor(player.cardId).cost;
             const spent = plannedInIds.has(player.cardId);
-            const unaffordable = canEditHome && !spent && pickBench !== player.cardId && cost > energyRemaining;
-            const interactive = canEditHome && !spent && !unaffordable;
+            const unaffordable = canEditHome && !spent && cost > energyRemaining;
             return (
               <V7PlayerCard
                 key={player.cardId}
@@ -394,108 +380,96 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
                 compact
                 selected={pickBench === player.cardId}
                 dimmed={spent || unaffordable}
-                disabled={!interactive}
-                badge={spent ? 'IN' : unaffordable ? 'LOCKED' : undefined}
-                onClick={interactive ? () => onPickBench(player.cardId) : undefined}
+                badge={spent ? 'IN' : unaffordable ? 'LOCK' : undefined}
+                onClick={() => onPickBench(player)}
               />
             );
           })}
         </div>
       </section>
 
-      {phase === 'break' && !presentationBusy && displaySide === 'player' && (
-        <section className="v7-coaching-panel">
-          <div className="v7-section-heading">
-            <div><span className="v7-tag">Coaching break</span><strong>Make changes before continuing</strong></div>
+      {phase === 'break' && !presentationBusy && displaySide === 'player' ? (
+        <section className="v7-coach-strip">
+          <div className="v7-impact-row">
+            <span>PROJECTED</span>
+            <b>{delta(substitutionPreview.attackDelta)} ATT</b>
+            <b>{delta(substitutionPreview.defenceDelta)} DEF</b>
+            <strong>{substitutionPreview.nextHomeChances} chances {substitutionPreview.homeChanceDelta !== 0 ? `(${delta(substitutionPreview.homeChanceDelta)})` : ''}</strong>
           </div>
-
-          {playerActivatable.length > 0 && (
-            <div className="v7-action-list">
-              {playerActivatable.map((action: UiActionView) => (
-                <label className={`v7-action-chip${activations.includes(action.instanceId) ? ' selected' : ''}`} key={action.instanceId}>
-                  <input type="checkbox" checked={activations.includes(action.instanceId)} onChange={() => toggleActivation(action.instanceId)} />
-                  <span><b>{action.actionName}</b><small>{action.cardName} · {action.displayText}</small></span>
-                  <strong>{action.remainingCharges ?? '∞'}⚡</strong>
-                </label>
-              ))}
-            </div>
-          )}
-
-          {subs.length > 0 && (
-            <div className="v7-sub-plan">
-              {subs.map((sub, index) => (
-                <button type="button" key={`${sub.outCardId}:${sub.inCardId}`} onClick={() => removeSub(index)}>
-                  {nameOf(sub.outCardId)} <span>→</span> <b>{nameOf(sub.inCardId)}</b><i>×</i>
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="v7-plan-row">
+            {subs.map((sub, index) => (
+              <button type="button" key={`${sub.outCardId}:${sub.inCardId}`} onClick={() => removeSub(index)}>
+                {nameOf(sub.outCardId)} <span>→</span> {nameOf(sub.inCardId)} <i>×</i>
+              </button>
+            ))}
+            {playerActivatable.map((action: UiActionView) => (
+              <button
+                type="button"
+                className={activations.includes(action.instanceId) ? 'active' : ''}
+                key={action.instanceId}
+                onClick={() => toggleActivation(action.instanceId)}
+              >
+                ⚡ {action.actionName}
+              </button>
+            ))}
+            {subs.length === 0 && playerActivatable.length === 0 && <span className="v7-plan-empty">No changes selected.</span>}
+          </div>
           {diag.validationErrors.length > 0 && <div className="v7-err">{diag.validationErrors.join(' ')}</div>}
         </section>
-      )}
-
-      <section className="v7-match-log">
-        <div className="v7-log-heading">
-          <div><span className="v7-tag">Match log</span><strong>{presentationBusy ? 'Live sequence' : 'Recent events'}</strong></div>
-          {presentationBusy && (
-            <div className="v7-playback-controls">
-              <button type="button" onClick={() => setAutoPlay((playing) => !playing)}>{autoPlay ? 'Pause' : 'Play'}</button>
-              <button type="button" onClick={advancePresentation}>Next</button>
-              <button type="button" onClick={onSkipMoments}>Skip</button>
-            </div>
-          )}
-        </div>
-        <div className="v7-log-list">
+      ) : (
+        <section className="v7-match-log">
           {logBeats.length === 0 ? (
-            <div className="v7-log-empty">The teams are set. Kick off to start the match.</div>
+            <div className="v7-log-empty">Your XI is set. Kick off to calculate pressure and chances.</div>
           ) : logBeats.map((beat) => (
             <div className={`v7-log-row kind-${beat.kind}${beat.id === currentBeat?.id ? ' current' : ''}`} key={beat.id}>
-              <span className="v7-log-icon">{logIcon(beat)}</span>
-              <span className="v7-log-side">{beat.side === 'player' ? 'HOME' : beat.side === 'opponent' ? 'AWAY' : 'MATCH'}</span>
+              <span>{logIcon(beat)}</span>
+              <b>{beat.side === 'player' ? 'HOME' : beat.side === 'opponent' ? 'AWAY' : 'MATCH'}</b>
               <div><strong>{beat.title}</strong>{beat.detail && <small>{beat.detail}</small>}</div>
             </div>
           ))}
-        </div>
-      </section>
-
-      {phase === 'fulltime' && view.result && !presentationBusy && (
-        <section className={`v7-result ${view.result}`}>
-          <span>FULL TIME</span><strong>{view.result}</strong><b>{presentedScore.player}–{presentedScore.opponent}</b>
         </section>
       )}
 
-      <div className="v7-bottom-actions">
-        <button
-          type="button"
-          className="v7-view-toggle"
-          onClick={() => setDisplaySide((side) => (side === 'player' ? 'opponent' : 'player'))}
-          aria-label={`Show ${otherSideLabel} team`}
-          title={`Show ${otherSideLabel} team`}
-        >
+      <footer className={`v7-bottom-actions${phase === 'fulltime' ? ' fulltime' : ''}`}>
+        <button type="button" className="v7-icon-action" onClick={() => setDisplaySide((side) => side === 'player' ? 'opponent' : 'player')} aria-label={`Show ${otherSideLabel} team`} title={`Show ${otherSideLabel} team`}>
           <TeamSwitchIcon />
         </button>
         <button type="button" className="v7-primary-action" disabled={primary.disabled} onClick={primary.onClick}>
-          {presentationBusy ? `${currentBeat?.eyebrow ?? 'Match'} · playing…` : primary.label}
+          {presentationBusy ? `${currentBeat?.title ?? 'Playing'}…` : primary.label}
         </button>
-      </div>
+        {phase === 'fulltime' ? (
+          <button type="button" className="v7-icon-action" disabled={presentationBusy} onClick={onReplay} aria-label="Replay the same seed" title="Replay same seed"><ReplayIcon /></button>
+        ) : (
+          <button type="button" className="v7-icon-action seed" disabled={presentationBusy} onClick={onNewMatch} aria-label="Start a new seeded match" title="New seed"><NewSeedIcon /></button>
+        )}
+      </footer>
 
-      <details className="v7-diagnostics">
-        <summary>Diagnostics</summary>
-        <dl>
-          <dt>seed</dt><dd>{diag.seed}</dd>
-          <dt>phase</dt><dd>{diag.phase}</dd>
-          <dt>period</dt><dd>{diag.period}</dd>
-          <dt>state</dt><dd>{diag.stateId}</dd>
-          <dt>receipts</dt><dd>{diag.receiptCount}</dd>
-          <dt>events</dt><dd>{diag.eventCount}</dd>
-          <dt>validation</dt><dd>{diag.validationErrors.length ? diag.validationErrors.join(' ') : 'ok'}</dd>
-        </dl>
-        <div className="v7-raw-feed">
-          {[...events].slice(-50).reverse().map((event: MatchEvent) => (
-            <div key={event.id}><b>{event.kind.replace(/_/g, ' ')}</b><span>{event.text}</span></div>
-          ))}
+      {presentationBusy && (
+        <div className="v7-playback-controls">
+          <button type="button" onClick={() => setAutoPlay((playing) => !playing)}>{autoPlay ? 'Pause' : 'Play'}</button>
+          <button type="button" onClick={advancePresentation}>Next</button>
+          <button type="button" onClick={onSkipMoments}>Skip</button>
         </div>
-      </details>
+      )}
+
+      {inspected && (
+        <div className="v7-inspector-backdrop" role="presentation" onClick={() => setInspected(null)}>
+          <section className="v7-inspector" role="dialog" aria-modal="true" aria-label={`${inspected.name} details`} onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="v7-inspector-close" onClick={() => setInspected(null)} aria-label="Close player details">×</button>
+            <V7PlayerCard player={inspected} highlighted onClick={() => {}} />
+            <div className="v7-inspector-copy">
+              <span>{inspected.position} · {cardMetaFor(inspected.cardId).role} · Cost {cardMetaFor(inspected.cardId).cost}</span>
+              <h2>{inspected.name}</h2>
+              <div className="v7-inspector-stats"><b>{inspected.attack}<small>ATT</small></b><b>{inspected.defence}<small>DEF</small></b></div>
+              <div className="v7-inspector-actions">
+                {cardMetaFor(inspected.cardId).actions.length
+                  ? cardMetaFor(inspected.cardId).actions.map((action) => <span key={action}>⚡ {action}</span>)
+                  : <span>No active ability</span>}
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
