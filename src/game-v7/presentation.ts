@@ -4,8 +4,11 @@ import type { UiMatchView, UiPlayerView } from './adapter/match';
 
 export type PresentationBeatKind =
   | 'reveal'
+  | 'lock'
   | 'pressure'
+  | 'threshold'
   | 'chances'
+  | 'overview'
   | 'roll'
   | 'cancelled'
   | 'goal'
@@ -19,12 +22,21 @@ export interface SectorChanceCounts {
   right: number;
 }
 
+export interface PressureModifier {
+  id: string;
+  cardId?: string;
+  label: string;
+  detail: string;
+  tone: 'positive' | 'negative' | 'neutral';
+}
+
 export interface PressureSidePresentation {
   attack: number;
   enemyDefence: number;
   difference: number;
   chances: number;
   sectors: SectorChanceCounts;
+  modifiers: PressureModifier[];
 }
 
 export interface PressurePresentation {
@@ -47,6 +59,10 @@ export interface PresentationBeat {
   finalRoll?: number;
   threshold?: number;
   scored?: boolean;
+  thresholdIndex?: number;
+  thresholdTotal?: number;
+  chanceIndex?: number;
+  chanceTotal?: number;
   substitution?: {
     outCardId: string;
     inCardId: string;
@@ -66,7 +82,68 @@ function sumActive(snapshot: PeriodSnapshot, side: TeamSide, stat: 'attack' | 'd
     .reduce((total, player) => total + Math.max(0, player[stat]), 0);
 }
 
-function sidePressure(snapshot: PeriodSnapshot, side: TeamSide): PressureSidePresentation {
+function allPlayers(view?: UiMatchView): UiPlayerView[] {
+  return view
+    ? [...view.player.active, ...view.player.bench, ...view.opponent.active, ...view.opponent.bench]
+    : [];
+}
+
+function playerName(view: UiMatchView | undefined, cardId?: string): string | undefined {
+  if (!view || !cardId) return undefined;
+  return allPlayers(view).find((player) => player.cardId === cardId)?.shortName;
+}
+
+function signed(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value}`;
+}
+
+function statModifierDetail(effect: Extract<PeriodSnapshot['ledger'][number]['effect'], { type: 'modify_stat' }>): string {
+  const label = effect.stat === 'attack' ? 'ATT' : 'DEF';
+  if (effect.mode === 'set') return `${label} set to ${effect.amount}`;
+  if (effect.mode === 'multiply') return `${label} ×${effect.amount}`;
+  return `${signed(effect.amount)} ${label}`;
+}
+
+function modifiersForSide(
+  snapshot: PeriodSnapshot,
+  side: TeamSide,
+  view?: UiMatchView,
+): PressureModifier[] {
+  const active = snapshot.effective[side].filter((player) => player.zone === 'active');
+  const activeIds = new Set(active.map((player) => player.cardId));
+  const modifiers: PressureModifier[] = [];
+
+  for (const entry of snapshot.ledger) {
+    if (entry.effect.type !== 'modify_stat') continue;
+    const appliesHere = entry.targetIds.some((cardId) => activeIds.has(cardId));
+    if (!appliesHere) continue;
+    const source = playerName(view, entry.sourceCardId) ?? 'Team effect';
+    const amount = entry.effect.mode === 'flat' ? entry.effect.amount : 0;
+    modifiers.push({
+      id: entry.id,
+      cardId: entry.sourceCardId,
+      label: `${source} · ${entry.actionName}`,
+      detail: statModifierDetail(entry.effect),
+      tone: entry.effect.mode === 'flat' && amount < 0 ? 'negative' : 'positive',
+    });
+  }
+
+  for (const player of active) {
+    if (!player.outOfPosition && !player.emergencyGoalkeeper) continue;
+    const name = playerName(view, player.cardId) ?? player.cardId;
+    modifiers.push({
+      id: `position:${side}:${player.cardId}`,
+      cardId: player.cardId,
+      label: `${name} · ${player.emergencyGoalkeeper ? 'Emergency goalkeeper' : 'Out of position'}`,
+      detail: player.emergencyGoalkeeper ? 'Placement penalty applied' : '−2 ATT · −2 DEF',
+      tone: 'negative',
+    });
+  }
+
+  return modifiers;
+}
+
+function sidePressure(snapshot: PeriodSnapshot, side: TeamSide, view?: UiMatchView): PressureSidePresentation {
   const enemy: TeamSide = side === 'player' ? 'opponent' : 'player';
   const attack = sumActive(snapshot, side, 'attack');
   const enemyDefence = sumActive(snapshot, enemy, 'defence');
@@ -79,25 +156,73 @@ function sidePressure(snapshot: PeriodSnapshot, side: TeamSide): PressureSidePre
     difference: attack - enemyDefence,
     chances: tokens.length,
     sectors,
+    modifiers: modifiersForSide(snapshot, side, view),
   };
 }
 
-export function pressureFromSnapshot(snapshot: PeriodSnapshot): PressurePresentation {
+export function pressureFromSnapshot(snapshot: PeriodSnapshot, view?: UiMatchView): PressurePresentation {
   return {
-    player: sidePressure(snapshot, 'player'),
-    opponent: sidePressure(snapshot, 'opponent'),
+    player: sidePressure(snapshot, 'player', view),
+    opponent: sidePressure(snapshot, 'opponent', view),
   };
 }
 
-function playerName(view: UiMatchView, cardId?: string): string | undefined {
-  if (!cardId) return undefined;
-  const all = [
-    ...view.player.active,
-    ...view.player.bench,
-    ...view.opponent.active,
-    ...view.opponent.bench,
-  ];
-  return all.find((player) => player.cardId === cardId)?.shortName;
+function activeAttackerFor(snapshot: PeriodSnapshot, side: TeamSide, sector: Sector): string | undefined {
+  const inSector = snapshot.effective[side]
+    .filter((player) => player.zone === 'active' && player.sector === sector)
+    .sort((a, b) => b.attack - a.attack || a.cardId.localeCompare(b.cardId));
+  return inSector[0]?.cardId;
+}
+
+function pressureSequence(
+  snapshot: PeriodSnapshot,
+  pressure: PressurePresentation,
+  side: TeamSide,
+): PresentationBeat[] {
+  const sidePressure = pressure[side];
+  const sideLabel = side === 'player' ? 'Your' : 'Their';
+  const beats: PresentationBeat[] = [{
+    id: `presentation:${snapshot.period}:pressure:${side}`,
+    kind: 'pressure',
+    period: snapshot.period,
+    side,
+    title: `${sideLabel} pressure`,
+    detail: `${sidePressure.attack} ATT − ${sidePressure.enemyDefence} DEF = ${signed(sidePressure.difference)}`,
+    durationMs: 1200,
+    pressure,
+  }];
+
+  for (let index = 1; index <= sidePressure.chances; index += 1) {
+    beats.push({
+      id: `presentation:${snapshot.period}:threshold:${side}:${index}`,
+      kind: 'threshold',
+      period: snapshot.period,
+      side,
+      title: `Chance threshold ${index}`,
+      detail: `Every five points of positive pressure creates a chance.`,
+      durationMs: 330,
+      pressure,
+      thresholdIndex: index,
+      thresholdTotal: sidePressure.chances,
+    });
+  }
+
+  beats.push({
+    id: `presentation:${snapshot.period}:chances:${side}`,
+    kind: 'chances',
+    period: snapshot.period,
+    side,
+    title: `${sidePressure.chances} ${sidePressure.chances === 1 ? 'chance' : 'chances'}`,
+    detail: sidePressure.chances > 0
+      ? `${sideLabel} pressure has crossed ${sidePressure.chances} scoring ${sidePressure.chances === 1 ? 'threshold' : 'thresholds'}.`
+      : `${sideLabel} attack did not clear the first five-point threshold.`,
+    durationMs: 900,
+    pressure,
+    thresholdIndex: sidePressure.chances,
+    thresholdTotal: sidePressure.chances,
+  });
+
+  return beats;
 }
 
 export function buildPeriodPresentation(
@@ -105,37 +230,43 @@ export function buildPeriodPresentation(
   view: UiMatchView,
   fullTime = false,
 ): PresentationBeat[] {
-  const pressure = pressureFromSnapshot(snapshot);
-  const beats: PresentationBeat[] = [
-    {
-      id: `presentation:${snapshot.period}:pressure`,
-      kind: 'pressure',
-      period: snapshot.period,
-      title: 'Pressure building',
-      detail: 'ATT pushes against the opposing DEF in five-point steps.',
-      durationMs: 1050,
-      pressure,
-    },
-    {
-      id: `presentation:${snapshot.period}:chances`,
-      kind: 'chances',
-      period: snapshot.period,
-      title: `${pressure.player.chances}–${pressure.opponent.chances} chances`,
-      detail: 'The bars lock. Each surviving chance now rolls.',
-      durationMs: 1150,
-      pressure,
-    },
-  ];
+  const pressure = pressureFromSnapshot(snapshot, view);
+  const beats: PresentationBeat[] = [{
+    id: `presentation:${snapshot.period}:lock`,
+    kind: 'lock',
+    period: snapshot.period,
+    title: `Period ${snapshot.period} locked`,
+    detail: 'Lineups are set. Calculating the chances created by each side.',
+    durationMs: 600,
+    pressure,
+  }];
+
+  beats.push(...pressureSequence(snapshot, pressure, 'player'));
+  beats.push(...pressureSequence(snapshot, pressure, 'opponent'));
+  beats.push({
+    id: `presentation:${snapshot.period}:overview`,
+    kind: 'overview',
+    period: snapshot.period,
+    title: `${pressure.player.chances}–${pressure.opponent.chances} chances`,
+    detail: 'Pressure resolved. Each chance now rolls separately.',
+    durationMs: 950,
+    pressure,
+  });
 
   const outcomes = [...snapshot.tokenOutcomes].sort((a, b) => (
     (a.side === b.side ? 0 : a.side === 'player' ? -1 : 1)
     || ({ left: 0, centre: 1, right: 2 }[a.sector] - { left: 0, centre: 1, right: 2 }[b.sector])
     || a.order - b.order
   ));
+  const chanceIndex: Record<TeamSide, number> = { player: 0, opponent: 0 };
 
   for (const token of outcomes) {
-    const sideLabel = token.side === 'player' ? 'Home' : 'Away';
+    chanceIndex[token.side] += 1;
+    const sideLabel = token.side === 'player' ? 'Your' : 'Their';
     const sectorLabel = token.sector[0]!.toUpperCase() + token.sector.slice(1);
+    const total = pressure[token.side].chances;
+    const cardId = token.scorerId ?? activeAttackerFor(snapshot, token.side, token.sector);
+
     if (token.cancelled) {
       beats.push({
         id: `presentation:${snapshot.period}:${token.tokenId}:cancelled`,
@@ -143,9 +274,12 @@ export function buildPeriodPresentation(
         period: snapshot.period,
         side: token.side,
         sector: token.sector,
+        cardId,
         title: `${sideLabel} chance cancelled`,
         detail: `${sectorLabel} lane shut down before the roll.`,
-        durationMs: 800,
+        durationMs: 950,
+        chanceIndex: chanceIndex[token.side],
+        chanceTotal: total,
       });
       continue;
     }
@@ -156,14 +290,16 @@ export function buildPeriodPresentation(
       period: snapshot.period,
       side: token.side,
       sector: token.sector,
-      cardId: token.scorerId,
-      title: `${sideLabel} roll`,
-      detail: `${sectorLabel} chance · needs ${token.threshold}+`,
-      durationMs: token.rerollsUsed > 0 ? 1450 : 1150,
+      cardId,
+      title: `${sideLabel} chance ${chanceIndex[token.side]} of ${total}`,
+      detail: `${sectorLabel} attack · needs ${token.threshold}+`,
+      durationMs: token.rerollsUsed > 0 ? 1900 : 1650,
       rolls: [...token.rolls],
       finalRoll: token.finalRoll,
       threshold: token.threshold,
       scored: token.scored,
+      chanceIndex: chanceIndex[token.side],
+      chanceTotal: total,
     });
 
     if (token.scored) {
@@ -174,7 +310,7 @@ export function buildPeriodPresentation(
         period: snapshot.period,
         side: token.side,
         sector: token.sector,
-        cardId: token.scorerId,
+        cardId,
         title: 'GOAL!',
         detail: `${scorer} converts from the ${token.sector}.`,
         durationMs: 1900,
@@ -182,6 +318,8 @@ export function buildPeriodPresentation(
         finalRoll: token.finalRoll,
         threshold: token.threshold,
         scored: true,
+        chanceIndex: chanceIndex[token.side],
+        chanceTotal: total,
       });
     } else {
       beats.push({
@@ -190,13 +328,16 @@ export function buildPeriodPresentation(
         period: snapshot.period,
         side: token.side,
         sector: token.sector,
+        cardId,
         title: 'Chance missed',
         detail: `${token.finalRoll} was below the ${token.threshold}+ target.`,
-        durationMs: 850,
+        durationMs: 900,
         rolls: [...token.rolls],
         finalRoll: token.finalRoll,
         threshold: token.threshold,
         scored: false,
+        chanceIndex: chanceIndex[token.side],
+        chanceTotal: total,
       });
     }
   }
@@ -207,7 +348,7 @@ export function buildPeriodPresentation(
     period: snapshot.period,
     title: fullTime ? 'Full time' : `Period ${snapshot.period} complete`,
     detail: `${snapshot.score.player}–${snapshot.score.opponent}`,
-    durationMs: fullTime ? 1400 : 750,
+    durationMs: fullTime ? 1500 : 850,
   });
 
   return beats;
@@ -284,7 +425,7 @@ export function buildSubstitutionRevealBeats(
       cardId: incoming.cardId,
       title: `${incoming.shortName} replaces ${outgoing.shortName}`,
       detail: `${attackDelta >= 0 ? '+' : ''}${attackDelta} ATT · ${defenceDelta >= 0 ? '+' : ''}${defenceDelta} DEF${outOfPositionPenalty ? ' · −2/−2 out of position' : ''}`,
-      durationMs: 1050,
+      durationMs: 1100,
       substitution: {
         outCardId: outgoing.cardId,
         inCardId: incoming.cardId,
