@@ -16,7 +16,7 @@ import {
   type UiPlayerView,
   type UiTeamView,
 } from '@/game-v7';
-import { V7Pitch, V7PlayerCard } from './V7Pitch';
+import { cardMetaFor, V7Pitch, V7PlayerCard } from './V7Pitch';
 
 type Sector = 'left' | 'centre' | 'right';
 type DisplaySide = 'player' | 'opponent';
@@ -34,13 +34,26 @@ function sectorForBeat(beat: BroadcastBeat | null): Sector | null {
 
 function totals(team: UiTeamView): { attack: number; defence: number } {
   return team.active.reduce(
-    (sum, player) => ({ attack: sum.attack + Math.max(0, player.attack), defence: sum.defence + Math.max(0, player.defence) }),
+    (sum, player) => ({
+      attack: sum.attack + Math.max(0, player.attack),
+      defence: sum.defence + Math.max(0, player.defence),
+    }),
     { attack: 0, defence: 0 },
   );
 }
 
-function chanceCount(events: readonly MatchEvent[], side: DisplaySide, period: number): number {
-  return events.filter((event) => event.kind === 'chance_created' && event.side === side && event.period === period).length;
+function chanceCount(
+  events: readonly MatchEvent[],
+  side: DisplaySide,
+  period: number,
+  visibleEventIds: ReadonlySet<string>,
+): number {
+  return events.filter((event) => (
+    visibleEventIds.has(event.id)
+    && event.kind === 'chance_created'
+    && event.side === side
+    && event.period === period
+  )).length;
 }
 
 function beatText(beat: BroadcastBeat): string {
@@ -62,7 +75,9 @@ function focusPlayerForBeat(
   });
   if (named) return named;
 
-  const sectorPlayers = sector ? team.active.filter((card) => (card.sector ?? 'centre') === sector) : team.active;
+  const sectorPlayers = sector
+    ? team.active.filter((card) => (card.sector ?? 'centre') === sector)
+    : team.active;
   const pool = sectorPlayers.length > 0 ? sectorPlayers : team.active;
   return [...pool].sort((a, b) => b.attack - a.attack)[0] ?? null;
 }
@@ -82,6 +97,14 @@ function logIcon(beat: BroadcastBeat): string {
     case 'full_time': return '■';
     default: return '•';
   }
+}
+
+function TeamSwitchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 7h11l-3-3m3 3-3 3M17 17H6l3 3m-3-3 3-3" />
+    </svg>
+  );
 }
 
 export default function V7MatchLab() {
@@ -136,11 +159,22 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const plannedOutIds = subs.map((sub) => sub.outCardId);
   const plannedInIds = new Set(subs.map((sub) => sub.inCardId));
   const canEditHome = phase === 'break' && !presentationBusy && displaySide === 'player';
+  const energyBudget = phase === 'break' ? BREAK_ENERGY[view.period] ?? 0 : 0;
+  const energySpent = subs.reduce((total, sub) => total + cardMetaFor(sub.inCardId).cost, 0);
+  const energyRemaining = Math.max(0, energyBudget - energySpent);
 
-  const logBeats = useMemo(() => {
-    const all = [...presentation.history, ...(currentBeat ? [currentBeat] : [])];
-    return all.filter(isLoggable).slice(-8).reverse();
-  }, [currentBeat, presentation.history]);
+  const presentedBeats = useMemo(
+    () => [...presentation.history, ...(currentBeat ? [currentBeat] : [])],
+    [currentBeat, presentation.history],
+  );
+  const visibleEventIds = useMemo(
+    () => new Set(presentedBeats.flatMap((beat) => beat.sourceEventIds)),
+    [presentedBeats],
+  );
+  const logBeats = useMemo(
+    () => presentedBeats.filter(isLoggable).slice(-6).reverse(),
+    [presentedBeats],
+  );
 
   const revealGoal = useCallback((beat: BroadcastBeat | null) => {
     if (!beat || beat.kind !== 'goal' || !beat.side || revealedGoalIds.current.has(beat.id)) return;
@@ -160,6 +194,10 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     const timer = window.setTimeout(advancePresentation, currentBeat.durationMs);
     return () => window.clearTimeout(timer);
   }, [advancePresentation, autoPlay, currentBeat]);
+
+  useEffect(() => {
+    if (phase === 'break' && !presentationBusy) setDisplaySide('player');
+  }, [phase, presentationBusy]);
 
   const resetLocal = () => {
     setPickBench(null);
@@ -234,7 +272,8 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   };
 
   const onPickBench = (cardId: string) => {
-    if (!canEditHome || plannedInIds.has(cardId)) return;
+    const cost = cardMetaFor(cardId).cost;
+    if (!canEditHome || plannedInIds.has(cardId) || (pickBench !== cardId && cost > energyRemaining)) return;
     setPickBench((current) => (current === cardId ? null : cardId));
   };
 
@@ -274,10 +313,15 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     ? { label: 'Play again →', onClick: onRestart, disabled: presentationBusy }
     : phase === 'break'
       ? { label: 'Continue →', onClick: onResolveBreak, disabled: presentationBusy }
-      : { label: `Play period ${view.period} →`, onClick: onResolvePeriod, disabled: presentationBusy };
+      : {
+          label: view.period === 1 ? 'Kick off →' : `Play period ${view.period} →`,
+          onClick: onResolvePeriod,
+          disabled: presentationBusy,
+        };
 
-  const homeChances = chanceCount(events, 'player', view.period);
-  const awayChances = chanceCount(events, 'opponent', view.period);
+  const homeChances = chanceCount(events, 'player', view.period, visibleEventIds);
+  const awayChances = chanceCount(events, 'opponent', view.period, visibleEventIds);
+  const otherSideLabel = displaySide === 'player' ? 'away' : 'home';
 
   return (
     <main className="v7-lab">
@@ -285,7 +329,9 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         <div className="v7-score-top">
           <div className="v7-team-total home">
             <span>HOME</span>
-            <div><strong className="att">{homeTotals.attack}</strong><strong className="def">{homeTotals.defence}</strong></div>
+            <div aria-label={`${homeTotals.attack} attack, ${homeTotals.defence} defence`}>
+              <strong className="att">{homeTotals.attack}</strong><strong className="def">{homeTotals.defence}</strong>
+            </div>
             <small>{view.player.managerName}</small>
           </div>
           <div className="v7-score-centre">
@@ -295,7 +341,9 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
           </div>
           <div className="v7-team-total away">
             <span>AWAY</span>
-            <div><strong className="att">{awayTotals.attack}</strong><strong className="def">{awayTotals.defence}</strong></div>
+            <div aria-label={`${awayTotals.attack} attack, ${awayTotals.defence} defence`}>
+              <strong className="att">{awayTotals.attack}</strong><strong className="def">{awayTotals.defence}</strong>
+            </div>
             <small>{view.opponent.managerName}</small>
           </div>
         </div>
@@ -325,22 +373,33 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         <div className="v7-section-heading">
           <div>
             <span className="v7-tag">{displaySide === 'player' ? 'Home bench' : 'Away bench'}</span>
-            <strong>{canEditHome ? (pickBench ? 'Now pick a player on the pitch' : 'Pick a substitute') : 'Available players'}</strong>
+            <strong>{canEditHome ? (pickBench ? 'Choose who comes off' : 'Choose a substitute') : 'Available players'}</strong>
           </div>
-          {phase === 'break' && displaySide === 'player' && <b>{BREAK_ENERGY[view.period] ?? 3}⚡</b>}
+          {phase === 'break' && displaySide === 'player' && (
+            <div className="v7-energy" aria-label={`${energyRemaining} of ${energyBudget} energy remaining`}>
+              <strong>{energyRemaining}</strong><span>/ {energyBudget}</span><i>⚡</i>
+            </div>
+          )}
         </div>
         <div className="v7-bench-row">
-          {displayTeam.bench.map((player) => (
-            <V7PlayerCard
-              key={player.cardId}
-              player={player}
-              compact
-              selected={pickBench === player.cardId}
-              dimmed={plannedInIds.has(player.cardId)}
-              badge={plannedInIds.has(player.cardId) ? 'IN' : undefined}
-              onClick={canEditHome ? () => onPickBench(player.cardId) : undefined}
-            />
-          ))}
+          {displayTeam.bench.map((player) => {
+            const cost = cardMetaFor(player.cardId).cost;
+            const spent = plannedInIds.has(player.cardId);
+            const unaffordable = canEditHome && !spent && pickBench !== player.cardId && cost > energyRemaining;
+            const interactive = canEditHome && !spent && !unaffordable;
+            return (
+              <V7PlayerCard
+                key={player.cardId}
+                player={player}
+                compact
+                selected={pickBench === player.cardId}
+                dimmed={spent || unaffordable}
+                disabled={!interactive}
+                badge={spent ? 'IN' : unaffordable ? 'LOCKED' : undefined}
+                onClick={interactive ? () => onPickBench(player.cardId) : undefined}
+              />
+            );
+          })}
         </div>
       </section>
 
@@ -388,7 +447,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
         </div>
         <div className="v7-log-list">
           {logBeats.length === 0 ? (
-            <div className="v7-log-empty">The teams are set. Play the first period to start the match.</div>
+            <div className="v7-log-empty">The teams are set. Kick off to start the match.</div>
           ) : logBeats.map((beat) => (
             <div className={`v7-log-row kind-${beat.kind}${beat.id === currentBeat?.id ? ' current' : ''}`} key={beat.id}>
               <span className="v7-log-icon">{logIcon(beat)}</span>
@@ -410,11 +469,10 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
           type="button"
           className="v7-view-toggle"
           onClick={() => setDisplaySide((side) => (side === 'player' ? 'opponent' : 'player'))}
-          aria-label="Toggle between home and away team"
+          aria-label={`Show ${otherSideLabel} team`}
+          title={`Show ${otherSideLabel} team`}
         >
-          <span className={displaySide === 'player' ? 'active' : ''}>HOME</span>
-          <i>↔</i>
-          <span className={displaySide === 'opponent' ? 'active' : ''}>AWAY</span>
+          <TeamSwitchIcon />
         </button>
         <button type="button" className="v7-primary-action" disabled={primary.disabled} onClick={primary.onClick}>
           {presentationBusy ? `${currentBeat?.eyebrow ?? 'Match'} · playing…` : primary.label}
