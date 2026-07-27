@@ -16,90 +16,12 @@ import {
   type UiPlayerView,
   type UiTeamView,
 } from '@/game-v7';
-import { V7Pitch } from './V7Pitch';
+import { V7Pitch, V7PlayerCard } from './V7Pitch';
 
 type Sector = 'left' | 'centre' | 'right';
+type DisplaySide = 'player' | 'opponent';
 
-const SECTORS: Array<{ key: Sector; label: string }> = [
-  { key: 'left', label: 'Left' },
-  { key: 'centre', label: 'Centre' },
-  { key: 'right', label: 'Right' },
-];
-
-function PlayerRow({
-  player,
-  onPick,
-  selected,
-}: {
-  player: UiPlayerView;
-  onPick?: () => void;
-  selected?: boolean;
-}) {
-  const className = `v7-card${onPick ? ' pick' : ''}${selected ? ' selected' : ''}`;
-  const body = (
-    <>
-      <span>
-        <span className="nm">{player.shortName}</span>{' '}
-        <span className="meta">{player.position}</span>
-        {player.emergencyGoalkeeper ? (
-          <span className="v7-oop"> · GK!</span>
-        ) : player.outOfPosition ? (
-          <span className="v7-oop"> · OOP</span>
-        ) : null}
-      </span>
-      <span className="stat">{player.attack}A / {player.defence}D</span>
-    </>
-  );
-
-  return onPick ? (
-    <button type="button" className={className} onClick={onPick}>{body}</button>
-  ) : (
-    <div className={className}>{body}</div>
-  );
-}
-
-function TeamBoard({
-  team,
-  score,
-  isPlayer,
-  breaking,
-  pickBench,
-  onPickActive,
-  activeSector,
-}: {
-  team: UiTeamView;
-  score: number;
-  isPlayer: boolean;
-  breaking: boolean;
-  pickBench: string | null;
-  onPickActive: (cardId: string) => void;
-  activeSector: Sector | null;
-}) {
-  const bySector = (key: Sector) => team.active.filter((player) => (player.sector ?? 'centre') === key);
-
-  return (
-    <div className="v7-board">
-      <h3>{team.managerName} <span className="v7-muted">· {score}</span></h3>
-      <div className="sub">{team.formationName}</div>
-      {SECTORS.map((sector) => {
-        const players = bySector(sector.key);
-        if (players.length === 0) return null;
-        return (
-          <div className={`v7-sector${activeSector === sector.key ? ' active' : ''}`} key={sector.key}>
-            <div className="v7-sector-label">{sector.label}</div>
-            {players.map((player) => (
-              <PlayerRow
-                key={player.cardId}
-                player={player}
-                {...(isPlayer && breaking && pickBench ? { onPick: () => onPickActive(player.cardId) } : {})}
-              />
-            ))}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+const BREAK_ENERGY = [0, 3, 5, 7];
 
 function sectorForBeat(beat: BroadcastBeat | null): Sector | null {
   if (!beat) return null;
@@ -110,54 +32,56 @@ function sectorForBeat(beat: BroadcastBeat | null): Sector | null {
   return null;
 }
 
-function CurrentMoment({
-  beat,
-  autoPlay,
-  pending,
-  onAdvance,
-  onToggleAutoPlay,
-  onSkip,
-}: {
-  beat: BroadcastBeat | null;
-  autoPlay: boolean;
-  pending: number;
-  onAdvance: () => void;
-  onToggleAutoPlay: () => void;
-  onSkip: () => void;
-}) {
-  if (!beat) {
-    return (
-      <section className="v7-moment empty">
-        <div>
-          <div className="v7-tag">Current moment</div>
-          <div className="v7-moment-title">Ready for the next phase</div>
-          <div className="v7-muted">Resolve the period or confirm your coaching decisions to continue.</div>
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className={`v7-moment kind-${beat.kind} emphasis-${beat.emphasis}`} aria-live="polite">
-      <div className="v7-moment-copy">
-        <div className="v7-tag">{beat.eyebrow}</div>
-        {beat.kind === 'roll' && <div className="v7-dice">◆</div>}
-        <div className="v7-moment-title">{beat.title}</div>
-        {beat.detail && <div className="v7-moment-detail">{beat.detail}</div>}
-      </div>
-      <div className="v7-moment-controls">
-        <div className={`v7-playback-status${autoPlay ? ' active' : ''}`}>
-          <span className="v7-playback-dot" aria-hidden="true" />
-          {autoPlay ? 'Auto-playing' : 'Paused'} · {pending} {pending === 1 ? 'moment' : 'moments'} remaining
-        </div>
-        <div className="v7-moment-buttons">
-          <button className="v7-btn" onClick={onToggleAutoPlay}>{autoPlay ? 'Pause' : 'Play'}</button>
-          <button className="v7-btn cta" onClick={onAdvance}>Next →</button>
-          <button className="v7-btn subtle" onClick={onSkip}>Skip sequence</button>
-        </div>
-      </div>
-    </section>
+function totals(team: UiTeamView): { attack: number; defence: number } {
+  return team.active.reduce(
+    (sum, player) => ({ attack: sum.attack + Math.max(0, player.attack), defence: sum.defence + Math.max(0, player.defence) }),
+    { attack: 0, defence: 0 },
   );
+}
+
+function chanceCount(events: readonly MatchEvent[], side: DisplaySide, period: number): number {
+  return events.filter((event) => event.kind === 'chance_created' && event.side === side && event.period === period).length;
+}
+
+function beatText(beat: BroadcastBeat): string {
+  return `${beat.title} ${beat.detail ?? ''}`.toLowerCase();
+}
+
+function focusPlayerForBeat(
+  beat: BroadcastBeat | null,
+  sector: Sector | null,
+  player: UiTeamView,
+  opponent: UiTeamView,
+): UiPlayerView | null {
+  if (!beat?.side) return null;
+  const team = beat.side === 'player' ? player : opponent;
+  const text = beatText(beat);
+  const named = team.active.find((card) => {
+    const names = [card.name, card.shortName, card.name.split(/\s+/).at(-1) ?? ''];
+    return names.some((name) => name.length > 2 && text.includes(name.toLowerCase()));
+  });
+  if (named) return named;
+
+  const sectorPlayers = sector ? team.active.filter((card) => (card.sector ?? 'centre') === sector) : team.active;
+  const pool = sectorPlayers.length > 0 ? sectorPlayers : team.active;
+  return [...pool].sort((a, b) => b.attack - a.attack)[0] ?? null;
+}
+
+function isLoggable(beat: BroadcastBeat): boolean {
+  return ['kickoff', 'action', 'change', 'chance', 'roll', 'goal', 'miss', 'period_end', 'full_time'].includes(beat.kind);
+}
+
+function logIcon(beat: BroadcastBeat): string {
+  switch (beat.kind) {
+    case 'goal': return '⚽';
+    case 'miss': return '×';
+    case 'roll': return '◆';
+    case 'action': return '⚡';
+    case 'change': return '↔';
+    case 'period_end': return '■';
+    case 'full_time': return '■';
+    default: return '•';
+  }
 }
 
 export default function V7MatchLab() {
@@ -172,7 +96,6 @@ export default function V7MatchLab() {
   if (init.error || !init.controller) {
     return (
       <div className="v7-lab">
-        <h1 className="v7-h1">Kickoff Clash — V7 match lab</h1>
         <div className="v7-err">Failed to initialise the V7 match: {init.error ?? 'unknown error'}</div>
       </div>
     );
@@ -186,6 +109,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const bump = () => setTick((tick) => tick + 1);
   const [director] = useState(() => new MatchDirector());
   const [autoPlay, setAutoPlay] = useState(true);
+  const [displaySide, setDisplaySide] = useState<DisplaySide>('player');
   const [presentedScore, setPresentedScore] = useState(() => {
     const initialView = controller.getView();
     return { player: initialView.player.score, opponent: initialView.opponent.score };
@@ -203,7 +127,20 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const currentBeat = presentation.currentBeat;
   const presentationBusy = presentation.isPlaying;
   const activeSector = sectorForBeat(currentBeat);
-  const recentMoments = [...presentation.history].slice(-5).reverse();
+  const displayTeam = displaySide === 'player' ? view.player : view.opponent;
+  const homeTotals = totals(view.player);
+  const awayTotals = totals(view.opponent);
+  const homeEdge = homeTotals.attack / Math.max(1, homeTotals.attack + awayTotals.defence);
+  const awayEdge = awayTotals.attack / Math.max(1, awayTotals.attack + homeTotals.defence);
+  const focusPlayer = focusPlayerForBeat(currentBeat, activeSector, view.player, view.opponent);
+  const plannedOutIds = subs.map((sub) => sub.outCardId);
+  const plannedInIds = new Set(subs.map((sub) => sub.inCardId));
+  const canEditHome = phase === 'break' && !presentationBusy && displaySide === 'player';
+
+  const logBeats = useMemo(() => {
+    const all = [...presentation.history, ...(currentBeat ? [currentBeat] : [])];
+    return all.filter(isLoggable).slice(-8).reverse();
+  }, [currentBeat, presentation.history]);
 
   const revealGoal = useCallback((beat: BroadcastBeat | null) => {
     if (!beat || beat.kind !== 'goal' || !beat.side || revealedGoalIds.current.has(beat.id)) return;
@@ -285,6 +222,7 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     const restartedView = controller.getView();
     setPresentedScore({ player: restartedView.player.score, opponent: restartedView.opponent.score });
     setAutoPlay(true);
+    setDisplaySide('player');
     resetLocal();
     bump();
   };
@@ -295,10 +233,13 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
     bump();
   };
 
-  const onPickBench = (cardId: string) => setPickBench((current) => (current === cardId ? null : cardId));
+  const onPickBench = (cardId: string) => {
+    if (!canEditHome || plannedInIds.has(cardId)) return;
+    setPickBench((current) => (current === cardId ? null : cardId));
+  };
 
   const onPickActive = (cardId: string) => {
-    if (!pickBench || presentationBusy) return;
+    if (!pickBench || !canEditHome) return;
     if (subs.some((sub) => sub.outCardId === cardId || sub.inCardId === pickBench)) return;
     const next = [...subs, { outCardId: cardId, inCardId: pickBench }];
     setSubs(next);
@@ -323,179 +264,180 @@ function V7MatchInner({ controller }: { controller: V7MatchController }) {
   const playerActivatable = view.player.actions.filter(
     (action) => action.timing === 'activated' && !action.disabled && (action.remainingCharges ?? 1) > 0,
   );
-  const benchViews = view.player.bench;
   const nameOf = (cardId: string) => (
     view.player.active.find((player) => player.cardId === cardId)?.shortName
     ?? view.player.bench.find((player) => player.cardId === cardId)?.shortName
     ?? cardId
   );
 
-  return (
-    <div className="v7-lab">
-      <h1 className="v7-h1">Kickoff Clash — V7 match lab</h1>
-      <div className="v7-banner">
-        <span className="v7-tag">V7 animated pitch slice</span>
-        <span className="v7-muted">Entry <b>/lab/match-v7</b> · data <b>{diag.dataSource}</b> · V6 is still the default game.</span>
-      </div>
+  const primary = phase === 'fulltime'
+    ? { label: 'Play again →', onClick: onRestart, disabled: presentationBusy }
+    : phase === 'break'
+      ? { label: 'Continue →', onClick: onResolveBreak, disabled: presentationBusy }
+      : { label: `Play period ${view.period} →`, onClick: onResolvePeriod, disabled: presentationBusy };
 
-      <div className="v7-scorebar">
-        <div className="v7-team-name">{view.player.managerName}</div>
-        <div>
-          <div className="v7-score">{presentedScore.player}–{presentedScore.opponent}</div>
-          <div className="v7-phase">{presentationBusy ? 'Live match' : view.phaseLabel}</div>
-          <div className="v7-priority">Priority: {view.priority === 'player' ? view.player.managerName : view.opponent.managerName}</div>
+  const homeChances = chanceCount(events, 'player', view.period);
+  const awayChances = chanceCount(events, 'opponent', view.period);
+
+  return (
+    <main className="v7-lab">
+      <section className="v7-scoreboard">
+        <div className="v7-score-top">
+          <div className="v7-team-total home">
+            <span>HOME</span>
+            <div><strong className="att">{homeTotals.attack}</strong><strong className="def">{homeTotals.defence}</strong></div>
+            <small>{view.player.managerName}</small>
+          </div>
+          <div className="v7-score-centre">
+            <span>{phase === 'fulltime' ? 'FULL TIME' : `PERIOD ${view.period}`}</span>
+            <strong>{presentedScore.player}<i>–</i>{presentedScore.opponent}</strong>
+            <small>{presentationBusy ? currentBeat?.eyebrow ?? 'Playing' : view.phaseLabel}</small>
+          </div>
+          <div className="v7-team-total away">
+            <span>AWAY</span>
+            <div><strong className="att">{awayTotals.attack}</strong><strong className="def">{awayTotals.defence}</strong></div>
+            <small>{view.opponent.managerName}</small>
+          </div>
         </div>
-        <div className="v7-team-name right">{view.opponent.managerName}</div>
-      </div>
+        <div className="v7-score-bars">
+          <div className="v7-score-bar-row">
+            <span>HOME</span><div><i className="home" style={{ width: `${homeEdge * 100}%` }} /></div><b>{homeChances}◆</b>
+          </div>
+          <div className="v7-score-bar-row">
+            <span>AWAY</span><div><i className="away" style={{ width: `${awayEdge * 100}%` }} /></div><b>{awayChances}◆</b>
+          </div>
+        </div>
+      </section>
 
       <V7Pitch
         beat={currentBeat}
-        player={view.player}
-        opponent={view.opponent}
+        team={displayTeam}
+        side={displaySide}
         activeSector={activeSector}
+        focusPlayer={focusPlayer}
+        canSelect={canEditHome}
+        selectedBenchId={pickBench}
+        plannedOutIds={plannedOutIds}
+        onPickActive={onPickActive}
       />
 
-      <CurrentMoment
-        beat={currentBeat}
-        autoPlay={autoPlay}
-        pending={presentation.pending}
-        onAdvance={advancePresentation}
-        onToggleAutoPlay={() => setAutoPlay((playing) => !playing)}
-        onSkip={onSkipMoments}
-      />
-
-      <div className="v7-boards">
-        <TeamBoard
-          team={view.player}
-          score={presentedScore.player}
-          isPlayer
-          breaking={phase === 'break' && !presentationBusy}
-          pickBench={pickBench}
-          onPickActive={onPickActive}
-          activeSector={activeSector}
-        />
-        <TeamBoard
-          team={view.opponent}
-          score={presentedScore.opponent}
-          isPlayer={false}
-          breaking={false}
-          pickBench={null}
-          onPickActive={() => {}}
-          activeSector={activeSector}
-        />
-      </div>
-
-      {recentMoments.length > 0 && (
-        <section className="v7-recent">
-          <div className="v7-tag">Recent moments</div>
-          {recentMoments.map((beat) => (
-            <div className={`v7-recent-item kind-${beat.kind}`} key={beat.id}>
-              <span>{beat.eyebrow}</span>
-              <b>{beat.title}</b>
-            </div>
-          ))}
-        </section>
-      )}
-
-      {phase === 'period' && !presentationBusy && (
-        <div className="v7-panel v7-row">
+      <section className="v7-bench-section">
+        <div className="v7-section-heading">
           <div>
-            <div className="v7-tag">Ready</div>
-            <div className="v7-muted">Resolve period {view.period}: create chances → roll → goals.</div>
+            <span className="v7-tag">{displaySide === 'player' ? 'Home bench' : 'Away bench'}</span>
+            <strong>{canEditHome ? (pickBench ? 'Now pick a player on the pitch' : 'Pick a substitute') : 'Available players'}</strong>
           </div>
-          <span className="v7-spacer" />
-          <button className="v7-btn cta" onClick={onResolvePeriod}>Resolve Period {view.period} →</button>
+          {phase === 'break' && displaySide === 'player' && <b>{BREAK_ENERGY[view.period] ?? 3}⚡</b>}
         </div>
-      )}
-
-      {phase === 'break' && !presentationBusy && (
-        <div className="v7-panel">
-          <div className="v7-tag">{view.phaseLabel}</div>
-          <div className="v7-muted" style={{ marginBottom: 8 }}>
-            Blind changes — the opponent has locked a hidden plan. Pick a bench card, then an active player, to substitute.
-          </div>
-
-          <div className="v7-tag">Bench (energy {[0, 3, 5, 7][view.period] ?? 3} at this break)</div>
-          {benchViews.map((player) => (
-            <PlayerRow
+        <div className="v7-bench-row">
+          {displayTeam.bench.map((player) => (
+            <V7PlayerCard
               key={player.cardId}
               player={player}
-              onPick={() => onPickBench(player.cardId)}
+              compact
               selected={pickBench === player.cardId}
+              dimmed={plannedInIds.has(player.cardId)}
+              badge={plannedInIds.has(player.cardId) ? 'IN' : undefined}
+              onClick={canEditHome ? () => onPickBench(player.cardId) : undefined}
             />
           ))}
+        </div>
+      </section>
+
+      {phase === 'break' && !presentationBusy && displaySide === 'player' && (
+        <section className="v7-coaching-panel">
+          <div className="v7-section-heading">
+            <div><span className="v7-tag">Coaching break</span><strong>Make changes before continuing</strong></div>
+          </div>
 
           {playerActivatable.length > 0 && (
-            <div className="v7-actions">
-              <div className="v7-tag">Actions</div>
+            <div className="v7-action-list">
               {playerActivatable.map((action: UiActionView) => (
-                <label className="v7-action" key={action.instanceId}>
-                  <input
-                    type="checkbox"
-                    checked={activations.includes(action.instanceId)}
-                    onChange={() => toggleActivation(action.instanceId)}
-                  />
-                  <b>{action.actionName}</b>{' '}
-                  <span className="v7-muted">{action.cardName} · {action.displayText}</span>
-                  <span className="v7-chip">{action.remainingCharges ?? '∞'}⚡</span>
+                <label className={`v7-action-chip${activations.includes(action.instanceId) ? ' selected' : ''}`} key={action.instanceId}>
+                  <input type="checkbox" checked={activations.includes(action.instanceId)} onChange={() => toggleActivation(action.instanceId)} />
+                  <span><b>{action.actionName}</b><small>{action.cardName} · {action.displayText}</small></span>
+                  <strong>{action.remainingCharges ?? '∞'}⚡</strong>
                 </label>
               ))}
             </div>
           )}
 
           {subs.length > 0 && (
-            <div className="v7-actions">
-              <div className="v7-tag">Plan</div>
+            <div className="v7-sub-plan">
               {subs.map((sub, index) => (
-                <div className="v7-plan-row" key={`${sub.outCardId}:${sub.inCardId}`}>
-                  <span>{nameOf(sub.outCardId)} → <b>{nameOf(sub.inCardId)}</b></span>
-                  <button className="v7-btn" onClick={() => removeSub(index)}>remove</button>
-                </div>
+                <button type="button" key={`${sub.outCardId}:${sub.inCardId}`} onClick={() => removeSub(index)}>
+                  {nameOf(sub.outCardId)} <span>→</span> <b>{nameOf(sub.inCardId)}</b><i>×</i>
+                </button>
               ))}
             </div>
           )}
-
           {diag.validationErrors.length > 0 && <div className="v7-err">{diag.validationErrors.join(' ')}</div>}
-
-          <div className="v7-row" style={{ marginTop: 10 }}>
-            <span className="v7-spacer" />
-            <button className="v7-btn cta" onClick={onResolveBreak}>Ready — Resolve Break →</button>
-          </div>
-        </div>
+        </section>
       )}
 
-      {phase === 'fulltime' && view.result && !presentationBusy && (
-        <div className={`v7-result ${view.result}`}>
-          <div className="big">{presentedScore.player}–{presentedScore.opponent}</div>
-          <div className="verdict">{view.result}</div>
-          <button className="v7-btn cta" onClick={onRestart}>Restart (same seed)</button>
+      <section className="v7-match-log">
+        <div className="v7-log-heading">
+          <div><span className="v7-tag">Match log</span><strong>{presentationBusy ? 'Live sequence' : 'Recent events'}</strong></div>
+          {presentationBusy && (
+            <div className="v7-playback-controls">
+              <button type="button" onClick={() => setAutoPlay((playing) => !playing)}>{autoPlay ? 'Pause' : 'Play'}</button>
+              <button type="button" onClick={advancePresentation}>Next</button>
+              <button type="button" onClick={onSkipMoments}>Skip</button>
+            </div>
+          )}
         </div>
-      )}
-
-      <details className="v7-panel v7-diag" style={{ marginTop: 12 }}>
-        <summary>Diagnostics and raw events</summary>
-        <dl className="v7-diag-grid">
-          <dt>seed</dt><dd>{diag.seed}</dd>
-          <dt>phase</dt><dd>{diag.phase}</dd>
-          <dt>period</dt><dd>{diag.period}</dd>
-          <dt>breakIndex</dt><dd>{diag.breakIndex}</dd>
-          <dt>priority</dt><dd>{diag.priority}</dd>
-          <dt>stateId</dt><dd>{diag.stateId}</dd>
-          <dt>receipts</dt><dd>{diag.receiptCount}</dd>
-          <dt>latest receipt</dt><dd>{diag.latestReceiptType ?? '—'}</dd>
-          <dt>events</dt><dd>{diag.eventCount}</dd>
-          <dt>data source</dt><dd>{diag.dataSource}</dd>
-          <dt>validation</dt><dd>{diag.validationErrors.length ? diag.validationErrors.join(' ') : 'ok'}</dd>
-        </dl>
-        <div className="v7-feed">
-          {[...events].slice(-80).reverse().map((event: MatchEvent) => (
-            <div className={`v7-feed-item k-${event.kind}`} key={event.id}>
-              <span className="v7-feed-kind">{event.kind.replace(/_/g, ' ')}</span>
-              <span>{event.text}</span>
+        <div className="v7-log-list">
+          {logBeats.length === 0 ? (
+            <div className="v7-log-empty">The teams are set. Play the first period to start the match.</div>
+          ) : logBeats.map((beat) => (
+            <div className={`v7-log-row kind-${beat.kind}${beat.id === currentBeat?.id ? ' current' : ''}`} key={beat.id}>
+              <span className="v7-log-icon">{logIcon(beat)}</span>
+              <span className="v7-log-side">{beat.side === 'player' ? 'HOME' : beat.side === 'opponent' ? 'AWAY' : 'MATCH'}</span>
+              <div><strong>{beat.title}</strong>{beat.detail && <small>{beat.detail}</small>}</div>
             </div>
           ))}
         </div>
+      </section>
+
+      {phase === 'fulltime' && view.result && !presentationBusy && (
+        <section className={`v7-result ${view.result}`}>
+          <span>FULL TIME</span><strong>{view.result}</strong><b>{presentedScore.player}–{presentedScore.opponent}</b>
+        </section>
+      )}
+
+      <div className="v7-bottom-actions">
+        <button
+          type="button"
+          className="v7-view-toggle"
+          onClick={() => setDisplaySide((side) => (side === 'player' ? 'opponent' : 'player'))}
+          aria-label="Toggle between home and away team"
+        >
+          <span className={displaySide === 'player' ? 'active' : ''}>HOME</span>
+          <i>↔</i>
+          <span className={displaySide === 'opponent' ? 'active' : ''}>AWAY</span>
+        </button>
+        <button type="button" className="v7-primary-action" disabled={primary.disabled} onClick={primary.onClick}>
+          {presentationBusy ? `${currentBeat?.eyebrow ?? 'Match'} · playing…` : primary.label}
+        </button>
+      </div>
+
+      <details className="v7-diagnostics">
+        <summary>Diagnostics</summary>
+        <dl>
+          <dt>seed</dt><dd>{diag.seed}</dd>
+          <dt>phase</dt><dd>{diag.phase}</dd>
+          <dt>period</dt><dd>{diag.period}</dd>
+          <dt>state</dt><dd>{diag.stateId}</dd>
+          <dt>receipts</dt><dd>{diag.receiptCount}</dd>
+          <dt>events</dt><dd>{diag.eventCount}</dd>
+          <dt>validation</dt><dd>{diag.validationErrors.length ? diag.validationErrors.join(' ') : 'ok'}</dd>
+        </dl>
+        <div className="v7-raw-feed">
+          {[...events].slice(-50).reverse().map((event: MatchEvent) => (
+            <div key={event.id}><b>{event.kind.replace(/_/g, ' ')}</b><span>{event.text}</span></div>
+          ))}
+        </div>
       </details>
-    </div>
+    </main>
   );
 }
