@@ -24,8 +24,11 @@ function meterWidth(value: number, scale: number): string {
 
 function pressureProgress(data: PressureSidePresentation, reached: number, baseShown: boolean): number {
   const positiveDifference = Math.max(0, data.difference);
+  // Each threshold beat advances through one complete five-point band. The base
+  // result beat then fills any remainder without turning it into another chance.
+  if (baseShown) return positiveDifference;
   if (reached > 0) return Math.min(positiveDifference, reached * 5);
-  return baseShown && data.baseChances === 0 ? positiveDifference : 0;
+  return 0;
 }
 
 function adjustmentText(data: PressureSidePresentation): string | null {
@@ -83,7 +86,7 @@ export function V7PressureBoard({
                   style={{ width: data ? meterWidth(progress, maxDifference) : '0%' }}
                 />
                 {data && Array.from({ length: data.baseChances }, (_, index) => {
-                  const boundary = Math.min((index + 1) * 5, Math.max(0, data.difference));
+                  const boundary = (index + 1) * 5;
                   return <span className={index < reached ? 'crossed' : ''} style={{ left: meterWidth(boundary, maxDifference) }} key={index} />;
                 })}
               </div>
