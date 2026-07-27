@@ -8,13 +8,19 @@ import {
 } from '@/game-v7';
 
 describe('V7 structured presentation', () => {
-  it('calculates the base bars from Home ATT v Away DEF and the reverse', () => {
+  it('calculates the base bars from complete Home ATT v Away DEF bands and the reverse', () => {
     const controller = new V7MatchController(v7Fixture());
     controller.resolvePeriod();
     const snapshot = controller.getSnapshots()[0]!;
     const view = controller.getView();
     const pressure = pressureFromSnapshot(snapshot, view);
 
+    expect(calculatedChanceCount(59, 46)).toBe(2);
+    expect(calculatedChanceCount(53, 42)).toBe(2);
+    expect(pressure.player.difference).toBe(13);
+    expect(pressure.opponent.difference).toBe(11);
+    expect(pressure.player.baseChances).toBe(2);
+    expect(pressure.opponent.baseChances).toBe(2);
     expect(pressure.player.baseChances).toBe(
       calculatedChanceCount(pressure.player.attack, pressure.player.enemyDefence),
     );
@@ -29,7 +35,7 @@ describe('V7 structured presentation', () => {
     );
   });
 
-  it('stages each base chance band before adjustments, overview and rolls', () => {
+  it('stages each complete base chance band before the unconverted remainder, adjustments and rolls', () => {
     const controller = new V7MatchController(v7Fixture());
     controller.resolvePeriod();
     const snapshot = controller.getSnapshots()[0]!;
@@ -47,12 +53,15 @@ describe('V7 structured presentation', () => {
     const overviewIndex = beats.findIndex((beat) => beat.kind === 'overview');
     const firstRollIndex = beats.findIndex((beat) => beat.kind === 'roll');
 
-    expect(homeThresholds).toHaveLength(pressure.player.baseChances);
-    expect(awayThresholds).toHaveLength(pressure.opponent.baseChances);
-    expect(homeChanceBeat?.thresholdTotal).toBe(pressure.player.baseChances);
+    expect(homeThresholds).toHaveLength(2);
+    expect(awayThresholds).toHaveLength(2);
+    expect(homeThresholds.map((beat) => beat.thresholdIndex)).toEqual([1, 2]);
+    expect(homeChanceBeat?.thresholdTotal).toBe(2);
     expect(awayPressureBeat).toBeDefined();
     expect(overviewIndex).toBeGreaterThan(beats.findIndex((beat) => beat.kind === 'chances' && beat.side === 'opponent'));
     expect(firstRollIndex).toBeGreaterThan(overviewIndex);
+    expect(pressure.player.difference % 5).toBe(3);
+    expect(pressure.opponent.difference % 5).toBe(1);
   });
 
   it('uses the structured final roll and surviving chance total', () => {
@@ -82,14 +91,18 @@ describe('V7 structured presentation', () => {
     expect(pressure.opponent.modifiers.length).toBeGreaterThan(0);
   });
 
-  it('supports a new seed while preserving exact same-seed replays', () => {
+  it('supports different seeded outcomes while preserving exact same-seed replays', () => {
     const seed = 20260724;
+    const otherSeed = 1410647606;
     const first = new V7MatchController({ ...v7Fixture(), seed });
     const replay = new V7MatchController({ ...v7Fixture(), seed });
+    const different = new V7MatchController({ ...v7Fixture(), seed: otherSeed });
     first.resolvePeriod();
     replay.resolvePeriod();
+    different.resolvePeriod();
 
     expect(first.getView().seed).toBe(seed);
     expect(first.getSnapshots()[0]?.tokenOutcomes).toEqual(replay.getSnapshots()[0]?.tokenOutcomes);
+    expect(first.getSnapshots()[0]?.tokenOutcomes).not.toEqual(different.getSnapshots()[0]?.tokenOutcomes);
   });
 });
