@@ -1,4 +1,10 @@
-import type { PeriodNumber, PeriodSnapshot, Sector, TeamSide } from '@/engine-v7';
+import {
+  calculatedChanceCount,
+  type PeriodNumber,
+  type PeriodSnapshot,
+  type Sector,
+  type TeamSide,
+} from '@/engine-v7';
 import type { SubDecision } from './adapter/lineup';
 import type { UiMatchView, UiPlayerView } from './adapter/match';
 
@@ -8,6 +14,7 @@ export type PresentationBeatKind =
   | 'pressure'
   | 'threshold'
   | 'chances'
+  | 'adjustment'
   | 'overview'
   | 'roll'
   | 'cancelled'
@@ -34,6 +41,15 @@ export interface PressureSidePresentation {
   attack: number;
   enemyDefence: number;
   difference: number;
+  /** Pure design-rule result: ceil((ATT - enemy DEF) / 5), minimum zero. */
+  baseChances: number;
+  /** Chances introduced after the base ATT-v-DEF calculation. */
+  addedChances: number;
+  /** Generated chances removed before rolling. */
+  cancelledChances: number;
+  /** Actual surviving chances that will roll. */
+  finalChances: number;
+  /** Compatibility alias for finalChances. */
   chances: number;
   sectors: SectorChanceCounts;
   modifiers: PressureModifier[];
@@ -104,6 +120,12 @@ function statModifierDetail(effect: Extract<PeriodSnapshot['ledger'][number]['ef
   return `${signed(effect.amount)} ${label}`;
 }
 
+function chanceTargetSide(entry: PeriodSnapshot['ledger'][number]): TeamSide | undefined {
+  if (!entry.tokenTarget) return undefined;
+  if (entry.tokenTarget.side === 'own') return entry.side;
+  return entry.side === 'player' ? 'opponent' : 'player';
+}
+
 function modifiersForSide(
   snapshot: PeriodSnapshot,
   side: TeamSide,
@@ -114,18 +136,41 @@ function modifiersForSide(
   const modifiers: PressureModifier[] = [];
 
   for (const entry of snapshot.ledger) {
-    if (entry.effect.type !== 'modify_stat') continue;
-    const appliesHere = entry.targetIds.some((cardId) => activeIds.has(cardId));
-    if (!appliesHere) continue;
     const source = playerName(view, entry.sourceCardId) ?? 'Team effect';
-    const amount = entry.effect.mode === 'flat' ? entry.effect.amount : 0;
-    modifiers.push({
-      id: entry.id,
-      cardId: entry.sourceCardId,
-      label: `${source} · ${entry.actionName}`,
-      detail: statModifierDetail(entry.effect),
-      tone: entry.effect.mode === 'flat' && amount < 0 ? 'negative' : 'positive',
-    });
+    if (entry.effect.type === 'modify_stat') {
+      const appliesHere = entry.targetIds.some((cardId) => activeIds.has(cardId));
+      if (!appliesHere) continue;
+      const amount = entry.effect.mode === 'flat' ? entry.effect.amount : 0;
+      modifiers.push({
+        id: entry.id,
+        cardId: entry.sourceCardId,
+        label: `${source} · ${entry.actionName}`,
+        detail: statModifierDetail(entry.effect),
+        tone: entry.effect.mode === 'flat' && amount < 0 ? 'negative' : 'positive',
+      });
+      continue;
+    }
+
+    if (entry.effect.type === 'add_chance' && entry.side === side) {
+      modifiers.push({
+        id: entry.id,
+        cardId: entry.sourceCardId,
+        label: `${source} · ${entry.actionName}`,
+        detail: `+${entry.effect.count} ${entry.effect.count === 1 ? 'chance' : 'chances'}`,
+        tone: 'positive',
+      });
+      continue;
+    }
+
+    if (entry.effect.type === 'cancel_chance' && chanceTargetSide(entry) === side) {
+      modifiers.push({
+        id: entry.id,
+        cardId: entry.sourceCardId,
+        label: `${source} · ${entry.actionName}`,
+        detail: `−${entry.effect.count} ${entry.effect.count === 1 ? 'chance' : 'chances'}`,
+        tone: 'negative',
+      });
+    }
   }
 
   for (const player of active) {
@@ -147,14 +192,26 @@ function sidePressure(snapshot: PeriodSnapshot, side: TeamSide, view?: UiMatchVi
   const enemy: TeamSide = side === 'player' ? 'opponent' : 'player';
   const attack = sumActive(snapshot, side, 'attack');
   const enemyDefence = sumActive(snapshot, enemy, 'defence');
+  const difference = attack - enemyDefence;
+  const baseChances = calculatedChanceCount(attack, enemyDefence);
+  const generated = snapshot.tokenOutcomes.filter((token) => token.side === side);
+  const cancelledChances = generated.filter((token) => token.cancelled).length;
+  const finalChances = generated.length - cancelledChances;
+  const addedChances = generated.length - baseChances;
   const sectors = emptySectors();
-  const tokens = snapshot.tokenOutcomes.filter((token) => token.side === side);
-  for (const token of tokens) sectors[token.sector] += 1;
+  for (const token of generated) {
+    if (!token.cancelled) sectors[token.sector] += 1;
+  }
+
   return {
     attack,
     enemyDefence,
-    difference: attack - enemyDefence,
-    chances: tokens.length,
+    difference,
+    baseChances,
+    addedChances,
+    cancelledChances,
+    finalChances,
+    chances: finalChances,
     sectors,
     modifiers: modifiersForSide(snapshot, side, view),
   };
@@ -168,10 +225,9 @@ export function pressureFromSnapshot(snapshot: PeriodSnapshot, view?: UiMatchVie
 }
 
 function activeAttackerFor(snapshot: PeriodSnapshot, side: TeamSide, sector: Sector): string | undefined {
-  const inSector = snapshot.effective[side]
+  return snapshot.effective[side]
     .filter((player) => player.zone === 'active' && player.sector === sector)
-    .sort((a, b) => b.attack - a.attack || a.cardId.localeCompare(b.cardId));
-  return inSector[0]?.cardId;
+    .sort((a, b) => b.attack - a.attack || a.cardId.localeCompare(b.cardId))[0]?.cardId;
 }
 
 function pressureSequence(
@@ -179,7 +235,7 @@ function pressureSequence(
   pressure: PressurePresentation,
   side: TeamSide,
 ): PresentationBeat[] {
-  const sidePressure = pressure[side];
+  const data = pressure[side];
   const sideLabel = side === 'player' ? 'Your' : 'Their';
   const beats: PresentationBeat[] = [{
     id: `presentation:${snapshot.period}:pressure:${side}`,
@@ -187,23 +243,24 @@ function pressureSequence(
     period: snapshot.period,
     side,
     title: `${sideLabel} pressure`,
-    detail: `${sidePressure.attack} ATT − ${sidePressure.enemyDefence} DEF = ${signed(sidePressure.difference)}`,
-    durationMs: 1200,
+    detail: `${data.attack} ATT − ${data.enemyDefence} DEF`,
+    durationMs: 720,
     pressure,
   }];
 
-  for (let index = 1; index <= sidePressure.chances; index += 1) {
+  for (let index = 1; index <= data.baseChances; index += 1) {
+    const visiblePressure = Math.min(Math.max(0, data.difference), index * 5);
     beats.push({
       id: `presentation:${snapshot.period}:threshold:${side}:${index}`,
       kind: 'threshold',
       period: snapshot.period,
       side,
-      title: `Chance threshold ${index}`,
-      detail: `Every five points of positive pressure creates a chance.`,
-      durationMs: 330,
+      title: `Chance band ${index}`,
+      detail: `${visiblePressure} of ${Math.max(0, data.difference)} positive pressure counted.`,
+      durationMs: 500,
       pressure,
       thresholdIndex: index,
-      thresholdTotal: sidePressure.chances,
+      thresholdTotal: data.baseChances,
     });
   }
 
@@ -212,15 +269,30 @@ function pressureSequence(
     kind: 'chances',
     period: snapshot.period,
     side,
-    title: `${sidePressure.chances} ${sidePressure.chances === 1 ? 'chance' : 'chances'}`,
-    detail: sidePressure.chances > 0
-      ? `${sideLabel} pressure has crossed ${sidePressure.chances} scoring ${sidePressure.chances === 1 ? 'threshold' : 'thresholds'}.`
-      : `${sideLabel} attack did not clear the first five-point threshold.`,
+    title: `${data.baseChances} base ${data.baseChances === 1 ? 'chance' : 'chances'}`,
+    detail: `${data.attack} ATT − ${data.enemyDefence} DEF = ${signed(data.difference)} → ${data.baseChances}.`,
     durationMs: 900,
     pressure,
-    thresholdIndex: sidePressure.chances,
-    thresholdTotal: sidePressure.chances,
+    thresholdIndex: data.baseChances,
+    thresholdTotal: data.baseChances,
   });
+
+  if (data.addedChances !== 0 || data.cancelledChances > 0) {
+    const adjustments = [
+      data.addedChances !== 0 ? `${signed(data.addedChances)} added` : null,
+      data.cancelledChances > 0 ? `−${data.cancelledChances} cancelled` : null,
+    ].filter(Boolean).join(' · ');
+    beats.push({
+      id: `presentation:${snapshot.period}:adjustment:${side}`,
+      kind: 'adjustment',
+      period: snapshot.period,
+      side,
+      title: `${data.finalChances} final ${data.finalChances === 1 ? 'chance' : 'chances'}`,
+      detail: `${data.baseChances} base · ${adjustments}`,
+      durationMs: 1000,
+      pressure,
+    });
+  }
 
   return beats;
 }
@@ -236,8 +308,8 @@ export function buildPeriodPresentation(
     kind: 'lock',
     period: snapshot.period,
     title: `Period ${snapshot.period} locked`,
-    detail: 'Lineups are set. Calculating the chances created by each side.',
-    durationMs: 600,
+    detail: 'Lineups are set. Calculating Home ATT against Away DEF, then Away ATT against Home DEF.',
+    durationMs: 650,
     pressure,
   }];
 
@@ -247,9 +319,9 @@ export function buildPeriodPresentation(
     id: `presentation:${snapshot.period}:overview`,
     kind: 'overview',
     period: snapshot.period,
-    title: `${pressure.player.chances}–${pressure.opponent.chances} chances`,
-    detail: 'Pressure resolved. Each chance now rolls separately.',
-    durationMs: 950,
+    title: `${pressure.player.finalChances}–${pressure.opponent.finalChances} chances`,
+    detail: 'Base pressure and action adjustments are resolved. Each surviving chance now rolls.',
+    durationMs: 1050,
     pressure,
   });
 
@@ -258,13 +330,12 @@ export function buildPeriodPresentation(
     || ({ left: 0, centre: 1, right: 2 }[a.sector] - { left: 0, centre: 1, right: 2 }[b.sector])
     || a.order - b.order
   ));
-  const chanceIndex: Record<TeamSide, number> = { player: 0, opponent: 0 };
+  const rollIndex: Record<TeamSide, number> = { player: 0, opponent: 0 };
 
   for (const token of outcomes) {
-    chanceIndex[token.side] += 1;
     const sideLabel = token.side === 'player' ? 'Your' : 'Their';
     const sectorLabel = token.sector[0]!.toUpperCase() + token.sector.slice(1);
-    const total = pressure[token.side].chances;
+    const total = pressure[token.side].finalChances;
     const cardId = token.scorerId ?? activeAttackerFor(snapshot, token.side, token.sector);
 
     if (token.cancelled) {
@@ -277,13 +348,12 @@ export function buildPeriodPresentation(
         cardId,
         title: `${sideLabel} chance cancelled`,
         detail: `${sectorLabel} lane shut down before the roll.`,
-        durationMs: 950,
-        chanceIndex: chanceIndex[token.side],
-        chanceTotal: total,
+        durationMs: 850,
       });
       continue;
     }
 
+    rollIndex[token.side] += 1;
     beats.push({
       id: `presentation:${snapshot.period}:${token.tokenId}:roll`,
       kind: 'roll',
@@ -291,14 +361,14 @@ export function buildPeriodPresentation(
       side: token.side,
       sector: token.sector,
       cardId,
-      title: `${sideLabel} chance ${chanceIndex[token.side]} of ${total}`,
+      title: `${sideLabel} chance ${rollIndex[token.side]} of ${total}`,
       detail: `${sectorLabel} attack · needs ${token.threshold}+`,
       durationMs: token.rerollsUsed > 0 ? 1900 : 1650,
       rolls: [...token.rolls],
       finalRoll: token.finalRoll,
       threshold: token.threshold,
       scored: token.scored,
-      chanceIndex: chanceIndex[token.side],
+      chanceIndex: rollIndex[token.side],
       chanceTotal: total,
     });
 
@@ -318,7 +388,7 @@ export function buildPeriodPresentation(
         finalRoll: token.finalRoll,
         threshold: token.threshold,
         scored: true,
-        chanceIndex: chanceIndex[token.side],
+        chanceIndex: rollIndex[token.side],
         chanceTotal: total,
       });
     } else {
@@ -336,7 +406,7 @@ export function buildPeriodPresentation(
         finalRoll: token.finalRoll,
         threshold: token.threshold,
         scored: false,
-        chanceIndex: chanceIndex[token.side],
+        chanceIndex: rollIndex[token.side],
         chanceTotal: total,
       });
     }
@@ -359,8 +429,7 @@ function findPlayer(view: UiMatchView, cardId: string): UiPlayerView | undefined
 }
 
 function chanceCount(attack: number, defence: number): number {
-  const difference = attack - defence;
-  return difference <= 0 ? 0 : Math.ceil(difference / 5);
+  return calculatedChanceCount(attack, defence);
 }
 
 export interface SubstitutionPreview {
@@ -424,7 +493,7 @@ export function buildSubstitutionRevealBeats(
       sector: outgoing.sector,
       cardId: incoming.cardId,
       title: `${incoming.shortName} replaces ${outgoing.shortName}`,
-      detail: `${attackDelta >= 0 ? '+' : ''}${attackDelta} ATT · ${defenceDelta >= 0 ? '+' : ''}${defenceDelta} DEF${outOfPositionPenalty ? ' · −2/−2 out of position' : ''}`,
+      detail: `${signed(attackDelta)} ATT · ${signed(defenceDelta)} DEF${outOfPositionPenalty ? ' · −2/−2 out of position' : ''}`,
       durationMs: 1100,
       substitution: {
         outCardId: outgoing.cardId,
