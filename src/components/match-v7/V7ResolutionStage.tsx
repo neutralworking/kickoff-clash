@@ -1,10 +1,7 @@
 'use client';
 
-import type {
-  PresentationBeat,
-  PressurePresentation,
-  TeamSide,
-} from '@/game-v7';
+import type { TeamSide } from '@/engine-v7';
+import type { PresentationBeat, PressurePresentation } from '@/game-v7';
 
 function sideCopy(side: TeamSide): { short: string; possessive: string; className: string } {
   return side === 'player'
