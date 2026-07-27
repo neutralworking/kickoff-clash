@@ -9,5 +9,6 @@ export * from './adapter/lineup';
 export * from './adapter/match';
 export * from './receipts';
 export * from './broadcast';
+export * from './presentation';
 export * from './fixtures';
 export * from './controller';
