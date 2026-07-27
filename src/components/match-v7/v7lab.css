@@ -543,6 +543,7 @@ button.v7-player-card:disabled { cursor: default; }
   padding: 14px;
   text-align: center;
   transform: translate(-50%, -50%);
+  animation-name: v7-event-centre-in;
 }
 .v7-pitch-event.kind-goal {
   border-color: var(--v7-gold-2);
@@ -785,6 +786,10 @@ button.v7-player-card:disabled { cursor: default; }
 @keyframes v7-event-in {
   from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.97); }
   to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+@keyframes v7-event-centre-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 10px)) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 @keyframes v7-instruction-in {
   from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
