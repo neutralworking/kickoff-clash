@@ -7,6 +7,7 @@ export * from './adapter/cards';
 export * from './adapter/actions';
 export * from './adapter/lineup';
 export * from './adapter/match';
+export * from './adapter/opponent';
 export * from './receipts';
 export * from './broadcast';
 export * from './presentation';
