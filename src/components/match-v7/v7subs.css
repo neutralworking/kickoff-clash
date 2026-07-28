@@ -8,6 +8,7 @@
     var(--v7-surface);
   box-shadow: 0 8px 18px rgba(0,0,0,.25);
 }
+.v7-sub-panel.locked { border-color: rgba(113,231,149,.42); background: linear-gradient(105deg, rgba(113,231,149,.08), transparent 42%), var(--v7-surface); }
 
 .v7-sub-impact {
   display: grid;
@@ -32,6 +33,21 @@
 .v7-sub-impact .threshold-down { background: rgba(255,97,112,.08); }
 .v7-sub-impact .threshold-down strong,
 .v7-sub-impact .threshold-down small { color: var(--v7-danger); }
+
+.v7-sub-locked-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(113,231,149,.18);
+  background: rgba(113,231,149,.055);
+}
+.v7-sub-locked-row > div { min-width: 0; }
+.v7-sub-locked-row span { display: block; color: var(--v7-success); font-size: 5.5px; font-weight: 1000; letter-spacing: .1em; }
+.v7-sub-locked-row strong { display: block; margin-top: 1px; font-size: 8px; }
+.v7-sub-locked-row small { display: block; overflow: hidden; margin-top: 1px; color: var(--v7-muted); font-size: 5.5px; text-overflow: ellipsis; white-space: nowrap; }
+.v7-sub-locked-row button { flex: 0 0 auto; padding: 4px 8px; border: 1px solid rgba(113,231,149,.42); border-radius: 7px; background: rgba(113,231,149,.08); color: var(--v7-success); font-size: 7px; font-weight: 950; cursor: pointer; }
 
 .v7-sub-plan-list {
   display: flex;
@@ -69,6 +85,7 @@
 .v7-sub-plan-card.natural { border-color: rgba(113,231,149,.42); }
 .v7-sub-plan-card.lane { border-color: rgba(255,211,99,.38); }
 .v7-sub-plan-card.risk { border-color: rgba(255,97,112,.4); }
+.v7-sub-plan-card:disabled { cursor: default; opacity: .78; }
 .v7-sub-plan-card span { overflow: hidden; max-width: 70px; font-size: 6.5px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
 .v7-sub-plan-card > b { color: var(--v7-gold); font-size: 8px; }
 .v7-sub-plan-card small { grid-column: 1 / 4; color: var(--v7-muted); font-size: 5.5px; }
@@ -130,5 +147,6 @@
   .v7-sub-panel { min-height: 64px; }
   .v7-sub-impact > div { padding-block: 3px 2px; }
   .v7-sub-plan-list { min-height: 27px; }
-  .v7-sub-best > small { display: none; }
+  .v7-sub-best > small,
+  .v7-sub-locked-row small { display: none; }
 }
