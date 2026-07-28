@@ -17,7 +17,6 @@ import type { V7Fixture } from './fixtures';
 import {
   buildBreakPlan,
   noopBreakPlan,
-  scriptedOpponentPlan,
   type BreakDecision,
 } from './adapter/lineup';
 import {
@@ -27,6 +26,7 @@ import {
   type MatchResult,
   type UiMatchView,
 } from './adapter/match';
+import { buildOpponentPlan, type OpponentDecisionSummary } from './adapter/opponent';
 import { expect as expectResult, type AdapterResult } from './adapter/result';
 import { syntheticEvent, translateReceipts, type MatchEvent } from './receipts';
 
@@ -67,6 +67,8 @@ export class V7MatchController {
   private snapshots!: PeriodSnapshot[];
   private pendingPlan: BreakPlan | null = null;
   private pendingDecision: BreakDecision | null = null;
+  private pendingOpponentPlan: BreakPlan | null = null;
+  private pendingOpponentDecision: OpponentDecisionSummary | null = null;
   private validationErrors: string[] = [];
   private latestReceiptType: string | null = null;
   private resultValue: MatchResult | null = null;
@@ -88,6 +90,8 @@ export class V7MatchController {
     this.snapshots = [];
     this.pendingPlan = null;
     this.pendingDecision = null;
+    this.pendingOpponentPlan = null;
+    this.pendingOpponentDecision = null;
     this.validationErrors = [];
     this.resultValue = null;
     this.events = [syntheticEvent('kickoff', 'kickoff', 1, `Kickoff — ${this.teamName('player')} vs ${this.teamName('opponent')}.`)];
@@ -169,6 +173,10 @@ export class V7MatchController {
     return this.pendingDecision;
   }
 
+  getPendingOpponentDecision(): OpponentDecisionSummary | null {
+    return this.pendingOpponentDecision;
+  }
+
   getBenchIds(side: TeamSide = 'player'): string[] {
     const team = side === 'player' ? this.state.player : this.state.opponent;
     return team.players.filter((player) => player.zone === 'bench').map((player) => player.cardId);
@@ -199,6 +207,8 @@ export class V7MatchController {
       return { ok: false, error: { code: 'illegal_plan', message: this.validationErrors[0]! } };
     }
     const result = buildBreakPlan('player', this.state.player, decision, this.state.period as BreakIndex, this.registry, this.state.seed);
+    this.pendingOpponentPlan = null;
+    this.pendingOpponentDecision = null;
     if (result.ok) {
       this.pendingPlan = result.value;
       this.pendingDecision = decision;
@@ -212,9 +222,38 @@ export class V7MatchController {
     return result;
   }
 
+  /** Build the opponent's legal response to the submitted player lineup. */
+  prepareOpponentDecision(): AdapterResult<OpponentDecisionSummary> {
+    if (this.phase !== 'break') {
+      return { ok: false, error: { code: 'illegal_plan', message: 'The opponent can only plan during a break.' } };
+    }
+    if (this.pendingOpponentDecision) return { ok: true, value: this.pendingOpponentDecision };
+
+    const result = buildOpponentPlan(
+      this.state,
+      this.ledger,
+      this.pendingDecision ?? { subs: [], activations: [] },
+      this.state.period as BreakIndex,
+      this.registry,
+    );
+    if (result.ok) {
+      this.pendingOpponentDecision = result.value;
+      this.pendingOpponentPlan = result.value.plan;
+      this.validationErrors = [];
+    } else {
+      this.pendingOpponentDecision = null;
+      this.pendingOpponentPlan = null;
+      this.validationErrors = [result.error.message];
+    }
+    this.version += 1;
+    return result;
+  }
+
   clearPlan(): void {
     this.pendingPlan = null;
     this.pendingDecision = null;
+    this.pendingOpponentPlan = null;
+    this.pendingOpponentDecision = null;
     this.validationErrors = [];
     this.version += 1;
   }
@@ -246,12 +285,14 @@ export class V7MatchController {
       this.phase = 'break';
       this.pendingPlan = null;
       this.pendingDecision = null;
+      this.pendingOpponentPlan = null;
+      this.pendingOpponentDecision = null;
       this.validationErrors = [];
     }
     this.version += 1;
   }
 
-  /** Resolve the break (pending plan or a no-op) against the scripted opponent plan. */
+  /** Resolve the break against the opponent's prepared coaching decision. */
   resolveBreak(): AdapterResult<void> {
     if (this.phase !== 'break') {
       throw new Error(`Cannot resolve a break in phase "${this.phase}".`);
@@ -259,7 +300,9 @@ export class V7MatchController {
     const breakIndex = this.state.period as BreakIndex;
     const upcomingPeriod = (this.state.period + 1) as PeriodNumber;
     const playerPlan = this.pendingPlan ?? noopBreakPlan('player', this.state.player, breakIndex);
-    const opponentPlan = scriptedOpponentPlan(this.state.opponent, breakIndex);
+    const prepared = this.prepareOpponentDecision();
+    if (!prepared.ok) return { ok: false, error: prepared.error };
+    const opponentPlan = this.pendingOpponentPlan ?? prepared.value.plan;
 
     const resolved = resolveBreakEngine({
       state: this.state,
@@ -278,6 +321,8 @@ export class V7MatchController {
     this.phase = 'period';
     this.pendingPlan = null;
     this.pendingDecision = null;
+    this.pendingOpponentPlan = null;
+    this.pendingOpponentDecision = null;
     this.validationErrors = [];
     this.version += 1;
     return { ok: true, value: undefined };
