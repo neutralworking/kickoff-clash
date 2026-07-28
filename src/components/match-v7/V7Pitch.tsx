@@ -8,7 +8,6 @@ import {
   type UiTeamView,
 } from '@/game-v7';
 import { portraitSrc } from '../cards/portrait';
-import './v7roll.css';
 
 type Side = 'player' | 'opponent';
 
@@ -16,6 +15,12 @@ interface CardMeta {
   cost: number;
   role: string;
   actions: string[];
+}
+
+export interface V7ReplacementHint {
+  label: string;
+  tone: 'boost' | 'natural' | 'lane' | 'risk';
+  detail: string;
 }
 
 const fixture = v7Fixture();
@@ -70,8 +75,6 @@ const FALLBACK_ROWS: Record<string, number> = {
   RW: 18,
 };
 
-const DIE_FACE = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-
 function initials(name: string): string {
   return name
     .split(/\s+/)
@@ -100,6 +103,7 @@ export function V7PlayerCard({
   dimmed = false,
   highlighted = false,
   targetable = false,
+  targetTone,
   disabled = false,
   badge,
   onClick,
@@ -110,13 +114,13 @@ export function V7PlayerCard({
   dimmed?: boolean;
   highlighted?: boolean;
   targetable?: boolean;
+  targetTone?: V7ReplacementHint['tone'];
   disabled?: boolean;
   badge?: ReactNode;
   onClick: () => void;
 }) {
   const portrait = portraitSrc({ id: player.cardId, name: player.name, position: player.position });
   const meta = cardMetaFor(player.cardId);
-  const position = player.position ?? '—';
   const className = [
     'v7-player-card',
     compact ? 'compact' : '',
@@ -124,20 +128,21 @@ export function V7PlayerCard({
     dimmed ? 'dimmed' : '',
     highlighted ? 'highlighted' : '',
     targetable ? 'targetable' : '',
+    targetable && targetTone ? `target-${targetTone}` : '',
   ].filter(Boolean).join(' ');
 
   return (
-    <button type="button" className={className} onClick={onClick} disabled={disabled} aria-label={`Open ${player.name}, ${position}, ${meta.role}`}>
+    <button type="button" className={className} onClick={onClick} disabled={disabled} aria-label={`Open ${player.name}`}>
       <div className="v7-card-portrait">
         <span className="v7-card-initials">{initials(player.name)}</span>
         {portrait && <img src={portrait} alt="" draggable={false} />}
         <span className="v7-card-cost" aria-label={`Cost ${meta.cost}`}><b>{meta.cost}</b></span>
-        <span className="v7-card-position">{position}</span>
+        <span className="v7-card-position">{player.position ?? '—'}</span>
         {badge && <span className="v7-card-badge">{badge}</span>}
       </div>
       <div className="v7-card-copy">
         <div className="v7-card-name" title={player.name}>{player.shortName}</div>
-        <div className="v7-card-role" title={`${position} · ${meta.role}`}><b>{position}</b><span>·</span><em>{meta.role}</em></div>
+        <div className="v7-card-role" title={meta.role}>{compact ? `${player.position ?? '—'} · ${meta.role}` : meta.role}</div>
         <div className="v7-card-stats" aria-label={`${player.attack} attack, ${player.defence} defence`}>
           <strong className="attack">{player.attack}</strong>
           <i />
@@ -152,49 +157,42 @@ export function V7PlayerCard({
   );
 }
 
-function ChanceRoll({ beat }: { beat: PresentationBeat }) {
+function Dice({ beat }: { beat: PresentationBeat }) {
   const [settled, setSettled] = useState(false);
-  const values = beat.rolls?.length ? beat.rolls : beat.finalRoll ? [beat.finalRoll] : [];
-  const finalRoll = beat.finalRoll ?? values.at(-1) ?? 0;
-  const priorRolls = values.slice(0, -1);
+  const values = beat.rolls ?? [];
+  const finalValue = values.at(-1) ?? beat.finalRoll;
   const scored = Boolean(beat.scored);
-  const sideLabel = beat.side === 'player' ? 'YOUR CHANCE' : 'THEIR CHANCE';
-  const sectorLabel = `${beat.sector?.toUpperCase() ?? 'CENTRE'} ATTACK`;
 
   useEffect(() => {
     setSettled(false);
-    const timer = window.setTimeout(() => setSettled(true), priorRolls.length > 0 ? 920 : 760);
+    const timer = window.setTimeout(() => setSettled(true), values.length > 1 ? 850 : 680);
     return () => window.clearTimeout(timer);
-  }, [beat.id, priorRolls.length]);
+  }, [beat.id, values.length]);
 
   return (
-    <div className={`v7-chance-stage${settled ? ` settled ${scored ? 'scored' : 'stopped'}` : ' rolling'}`} aria-label={settled ? `Rolled ${finalRoll}, ${scored ? 'goal' : 'no goal'}` : 'Rolling the chance'}>
-      <div className="v7-chance-heading">
-        <span>{sideLabel}</span>
-        <strong>{beat.chanceIndex} <i>OF</i> {beat.chanceTotal}</strong>
-        <b>{sectorLabel}</b>
+    <div className={`v7-dice-stage${settled ? ' settled' : ' rolling'}${settled ? scored ? ' scored' : ' missed' : ''}`} aria-label={settled ? `Rolled ${values.join(', ')}` : 'Rolling the chance'}>
+      <div className="v7-roll-context">
+        <span>{beat.side === 'player' ? 'HOME' : 'AWAY'} CHANCE {beat.chanceIndex} OF {beat.chanceTotal}</span>
+        <strong>{beat.sector?.toUpperCase()} ATTACK</strong>
       </div>
-
-      <div className="v7-chance-resolution">
-        <div className="v7-chance-die" key={`${beat.id}:${settled ? 'settled' : 'rolling'}`}>
-          {settled ? (DIE_FACE[Math.max(1, finalRoll) - 1] ?? finalRoll) : <i>◆</i>}
+      {!settled ? (
+        <span className="v7-die tumbling"><i>◆</i></span>
+      ) : (
+        <div className="v7-roll-result">
+          {values.length > 1 && (
+            <div className="v7-reroll-history" aria-label="Previous rolls">
+              {values.slice(0, -1).map((value, index) => <span key={`${value}:${index}`}>{value}</span>)}
+            </div>
+          )}
+          <span className="v7-die final">{finalValue ?? '?'}</span>
         </div>
-        <div className="v7-chance-comparison">
-          <span>ROLL</span>
-          <strong>{settled ? finalRoll : '–'}</strong>
-          <i>{settled ? (finalRoll >= (beat.threshold ?? 6) ? '≥' : '<') : 'VS'}</i>
-          <strong>{beat.threshold ?? 6}</strong>
-          <span>TARGET</span>
-        </div>
-      </div>
-
-      {priorRolls.length > 0 && (
-        <div className="v7-reroll-history"><span>REROLL</span>{priorRolls.map((roll, index) => <b key={`${roll}:${index}`}>{DIE_FACE[roll - 1] ?? roll}</b>)}</div>
       )}
-
-      <div className="v7-chance-outcome">
-        {!settled ? 'ROLLING…' : scored ? 'GOAL' : 'NO GOAL'}
+      <div className="v7-roll-comparison">
+        <div><span>ROLL</span><b>{settled ? finalValue ?? '?' : '–'}</b></div>
+        <i>{settled ? scored ? '≥' : '<' : 'VS'}</i>
+        <div><span>TARGET</span><b>{beat.threshold}+</b></div>
       </div>
+      {settled && <strong className={`v7-roll-outcome ${scored ? 'goal' : 'miss'}`}>{scored ? 'GOAL' : 'NO GOAL'}</strong>}
     </div>
   );
 }
@@ -206,6 +204,7 @@ export function V7Pitch({
   canSelect,
   selectedBenchId,
   plannedOutIds,
+  replacementHints = {},
   onPickActive,
   onInspect,
 }: {
@@ -215,6 +214,7 @@ export function V7Pitch({
   canSelect: boolean;
   selectedBenchId: string | null;
   plannedOutIds: readonly string[];
+  replacementHints?: Readonly<Record<string, V7ReplacementHint>>;
   onPickActive: (cardId: string) => void;
   onInspect: (player: UiPlayerView) => void;
 }) {
@@ -224,12 +224,11 @@ export function V7Pitch({
     : null;
   const isGoal = beat?.kind === 'goal';
   const isMiss = beat?.kind === 'miss' || beat?.kind === 'cancelled';
-  const isRolling = beat?.kind === 'roll';
   const calculating = Boolean(beat && ['lock', 'pressure', 'threshold', 'chances', 'overview'].includes(beat.kind));
   const showOverlay = Boolean(beat && ['reveal', 'roll', 'goal', 'miss', 'cancelled', 'period_end', 'full_time'].includes(beat.kind));
 
   return (
-    <section className={`v7-formation-shell side-${side}${isGoal ? ' goal' : ''}${isMiss ? ' miss' : ''}${isRolling ? ' rolling' : ''}${calculating ? ' calculating' : ''}`}>
+    <section className={`v7-formation-shell side-${side}${isGoal ? ' goal' : ''}${isMiss ? ' miss' : ''}${calculating ? ' calculating' : ''}`}>
       <div className="v7-formation-heading">
         <div>
           <span className="v7-tag">{side === 'player' ? 'Home XI' : 'Away XI'}</span>
@@ -253,7 +252,7 @@ export function V7Pitch({
         {calculating && <div className="v7-calculation-scan" />}
 
         {selectedBenchId && canSelect && (
-          <div className="v7-sub-instruction"><span>SUB SELECTED</span><strong>Tap the player to replace</strong></div>
+          <div className="v7-sub-instruction"><span>SUB SELECTED</span><strong>Compare the impact badges, then tap a player</strong></div>
         )}
 
         {team.active.map((player, index) => {
@@ -261,16 +260,18 @@ export function V7Pitch({
           const style = { left: `${position.x}%`, top: `${position.y}%` } as CSSProperties;
           const plannedOut = plannedOutIds.includes(player.cardId);
           const targetable = canSelect && Boolean(selectedBenchId) && !plannedOut;
+          const hint = targetable ? replacementHints[player.cardId] : undefined;
           const highlighted = focusCardId === player.cardId
             || (beat?.side === side && activeSector === player.sector && ['roll', 'goal', 'miss', 'cancelled'].includes(beat.kind));
           return (
-            <div className={`v7-pitch-card-position${highlighted ? ' focused' : ''}`} style={style} key={player.cardId}>
+            <div className="v7-pitch-card-position" style={style} key={player.cardId} title={hint?.detail}>
               <V7PlayerCard
                 player={player}
                 highlighted={highlighted}
                 targetable={targetable}
+                targetTone={hint?.tone}
                 dimmed={plannedOut}
-                badge={plannedOut ? 'OUT' : undefined}
+                badge={plannedOut ? 'OUT' : hint?.label}
                 onClick={() => (targetable ? onPickActive(player.cardId) : onInspect(player))}
               />
             </div>
@@ -279,7 +280,7 @@ export function V7Pitch({
 
         {beat && showOverlay && (
           <div className={`v7-pitch-event kind-${beat.kind}`} aria-live="polite">
-            {beat.kind === 'roll' && <ChanceRoll beat={beat} />}
+            {beat.kind === 'roll' && <Dice beat={beat} />}
             {beat.kind === 'goal' && <div className="v7-goal-word">GOAL!</div>}
             {beat.kind === 'cancelled' && <div className="v7-cancelled-word">BLOCKED</div>}
             {beat.kind !== 'roll' && <strong>{beat.title}</strong>}
