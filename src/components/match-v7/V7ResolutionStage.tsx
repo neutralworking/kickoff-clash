@@ -175,13 +175,21 @@ export function V7ResolutionStrip({ beat }: { beat: PresentationBeat }) {
   }
 
   if (beat.kind === 'roll') {
+    const total = Math.max(1, beat.chanceTotal ?? 1);
+    const current = Math.max(1, beat.chanceIndex ?? 1);
     return (
       <section className={`v7-resolution-strip kind-roll ${copy?.className ?? ''}`} aria-live="polite">
-        <div>
-          <span>{copy?.possessive} CHANCE {beat.chanceIndex} OF {beat.chanceTotal}</span>
-          <strong>{beat.sector?.toUpperCase()} ATTACK</strong>
+        <div className="v7-roll-progress">
+          <div>
+            <span>{copy?.possessive} CHANCE {current} OF {total}</span>
+            <strong>{beat.sector?.toUpperCase()} attack resolving on the pitch</strong>
+          </div>
+          <div className="v7-roll-pips" aria-label={`Chance ${current} of ${total}`}>
+            {Array.from({ length: total }, (_, index) => (
+              <i className={index < current - 1 ? 'done' : index === current - 1 ? 'current' : ''} key={index} />
+            ))}
+          </div>
         </div>
-        <div className="v7-roll-target"><span>NEEDS</span><b>{beat.threshold}+</b></div>
       </section>
     );
   }
