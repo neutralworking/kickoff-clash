@@ -11,5 +11,6 @@ export * from './adapter/opponent';
 export * from './receipts';
 export * from './broadcast';
 export * from './presentation';
+export * from './coaching';
 export * from './fixtures';
 export * from './controller';
