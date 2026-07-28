@@ -7,7 +7,7 @@ import type {
   V7ManagerCard,
   V7PlayerCard,
 } from '@/engine-v7';
-import { getFormation, type Formation, type FormationSlot } from '@/lib/formations';
+import { getFormation, positionFitsSlot, type Formation, type FormationSlot } from '@/lib/formations';
 import type { HandState } from '@/lib/hand';
 import type { JokerCard } from '@/lib/jokers';
 import { generateOpponentXI, cupMatchPower } from '@/lib/opponent';
@@ -22,14 +22,11 @@ const rarityOf = (rarity: string | undefined): Rarity => {
   return 'common';
 };
 
-function sectorForSlot(slot: FormationSlot, siblings: readonly FormationSlot[]): Sector {
-  if (slot.type === 'FB' || slot.type === 'WM' || slot.type === 'WF') return slot.x < 50 ? 'left' : 'right';
-  if (slot.type === 'AM' && siblings.filter((candidate) => candidate.type === 'AM').length > 1) {
-    return slot.x < 40 ? 'left' : slot.x > 60 ? 'right' : 'centre';
-  }
-  if (slot.type === 'CF' && siblings.filter((candidate) => candidate.type === 'CF').length > 1) {
-    return slot.x < 50 ? 'left' : 'right';
-  }
+/** Live formation coordinates become the same three pressure lanes V7 uses. */
+function sectorForSlot(slot: FormationSlot): Sector {
+  if (slot.type === 'GK') return 'centre';
+  if (slot.x < 40) return 'left';
+  if (slot.x > 60) return 'right';
   return 'centre';
 }
 
@@ -77,7 +74,7 @@ export function adaptLiveFormation(formation: Formation): FormationDefinition {
     slots: formation.slots.map((slot, index): V7FormationSlot => ({
       slotKey: slotKey(slot, index, formation.slots),
       positionCode: positionForSlot(slot, formation.slots),
-      sector: sectorForSlot(slot, formation.slots),
+      sector: sectorForSlot(slot),
       xOrder: Math.round(slot.x),
       yOrder: Math.round(slot.y),
       adjacentSlotKeys: [],
@@ -115,8 +112,15 @@ function adaptCard(card: Card, id: string, naturalSector?: Sector): V7PlayerCard
   };
 }
 
+/** Preserve the SquadScreen slot choice. A naturally eligible player adopts that
+ * lane; a genuine misfit keeps their natural lane so V7 applies its −2/−2 receipt. */
 function adaptStartingXI(cards: readonly Card[], formation: Formation, prefix: string): V7PlayerCard[] {
-  return cards.map((card, index) => adaptCard(card, `${prefix}-${card.id}`, sectorForSlot(formation.slots[index]!, formation.slots)));
+  return cards.map((card, index) => {
+    const slot = formation.slots[index]!;
+    const placedSector = sectorForSlot(slot);
+    const adapted = adaptCard(card, `${prefix}-${card.id}`, positionFitsSlot(card.position, slot) ? placedSector : undefined);
+    return { ...adapted, positionCodes: [positionForSlot(slot, formation.slots)] };
+  });
 }
 
 function adaptBench(cards: readonly Card[], prefix: string, owned = false): V7PlayerCard[] {
