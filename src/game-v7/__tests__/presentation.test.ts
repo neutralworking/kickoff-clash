@@ -104,6 +104,12 @@ describe('V7 structured presentation', () => {
     expect(pressure.opponent.modifiers.length).toBeGreaterThan(0);
   });
 
+  it('exposes natural positions for every visible bench player', () => {
+    const view = new V7MatchController(v7Fixture()).getView();
+    expect([...view.player.bench, ...view.opponent.bench]).not.toHaveLength(0);
+    expect([...view.player.bench, ...view.opponent.bench].every((player) => Boolean(player.position))).toBe(true);
+  });
+
   it('preserves exact same-seed replays and varies full matches across new seeds', () => {
     const seed = 20260724;
     const first = completeFixtureMatch(seed);
