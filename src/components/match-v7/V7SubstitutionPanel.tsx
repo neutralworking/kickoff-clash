@@ -148,7 +148,9 @@ export function V7SubstitutionPanel({
   selectedBench,
   energyBudget,
   energyRemaining,
+  locked = false,
   onCancelSelection,
+  onEdit,
   onRemove,
 }: {
   view: UiMatchView;
@@ -156,7 +158,9 @@ export function V7SubstitutionPanel({
   selectedBench: UiPlayerView | null;
   energyBudget: number;
   energyRemaining: number;
+  locked?: boolean;
   onCancelSelection: () => void;
+  onEdit: () => void;
   onRemove: (index: number) => void;
 }) {
   const home = totals(view.player.active);
@@ -181,7 +185,7 @@ export function V7SubstitutionPanel({
   const selectedMeta = selectedBench ? cardMetaFor(selectedBench.cardId) : null;
   const energySpent = energyBudget - energyRemaining;
 
-  if (selectedBench && selectedMeta) {
+  if (selectedBench && selectedMeta && !locked) {
     const availableTargets = view.player.active.filter(
       (player) => !substitutions.some((sub) => sub.outCardId === player.cardId),
     );
@@ -232,7 +236,7 @@ export function V7SubstitutionPanel({
   }
 
   return (
-    <section className={`v7-sub-panel${rows.length ? ' planned' : ''}`} aria-live="polite">
+    <section className={`v7-sub-panel${rows.length ? ' planned' : ''}${locked ? ' locked' : ''}`} aria-live="polite">
       <div className="v7-sub-impact">
         <div><span>ATT</span><strong>{home.attack}<i>→</i>{home.attack + attackDelta}</strong><small>{signed(attackDelta)}</small></div>
         <div><span>DEF</span><strong>{home.defence}<i>→</i>{home.defence + defenceDelta}</strong><small>{signed(defenceDelta)}</small></div>
@@ -242,15 +246,28 @@ export function V7SubstitutionPanel({
         </div>
       </div>
 
+      {locked && (
+        <div className="v7-sub-locked-row">
+          <div><span>CHANGES LOCKED</span><strong>{rows.length} {rows.length === 1 ? 'substitution' : 'substitutions'} ready</strong><small>The next pressure calculation will use these values.</small></div>
+          <button type="button" onClick={onEdit}>Edit</button>
+        </div>
+      )}
+
       <div className="v7-sub-plan-list">
         <div className="v7-sub-energy"><b>{energyRemaining}</b><span>/{energyBudget} ⚡</span><small>{energySpent} spent</small></div>
         {rows.map(({ index, incoming, outgoing, impact, cost }) => (
-          <button type="button" className={`v7-sub-plan-card ${impact.fit}`} key={`${outgoing.cardId}:${incoming.cardId}`} onClick={() => onRemove(index)}>
+          <button
+            type="button"
+            className={`v7-sub-plan-card ${impact.fit}`}
+            key={`${outgoing.cardId}:${incoming.cardId}`}
+            disabled={locked}
+            onClick={() => onRemove(index)}
+          >
             <span>{outgoing.position ?? '—'} {outgoing.shortName}</span>
             <b>→</b>
             <span>{incoming.position ?? '—'} {incoming.shortName}</span>
             <small>{signed(impact.attackDelta)} ATT · {signed(impact.defenceDelta)} DEF · {cost}⚡</small>
-            <i>×</i>
+            {!locked && <i>×</i>}
           </button>
         ))}
         {rows.length === 0 && <p>Tap a bench card to compare replacements. A substitution only changes chances when it crosses a five-point pressure band.</p>}
