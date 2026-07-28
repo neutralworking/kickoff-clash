@@ -52,19 +52,16 @@ describe('controller lifecycle', () => {
 describe('break plans through the controller', () => {
   it('accepts a legal player plan and rejects an illegal one before resolution', () => {
     const c = fresh();
-    c.resolvePeriod(); // → break 1
+    c.resolvePeriod();
     expect(c.canResolveBreak()).toBe(true);
     const cf = c.getView().player.active.find((p) => p.position === 'CF')!;
 
-    // Illegal: a cost-4 bench card cannot come on at break 1 (energy 3).
     const illegal = c.setPlayerDecision({ subs: [{ outCardId: cf.cardId, inCardId: 'h_b1' }] });
     expect(illegal.ok).toBe(false);
     expect(c.getDiagnostics().validationErrors.length).toBeGreaterThan(0);
-    // The illegal plan did not advance the match.
     expect(c.getView().period).toBe(1);
     expect(c.getPhase()).toBe('break');
 
-    // Legal: a cost-2 bench card is affordable.
     const legal = c.setPlayerDecision({ subs: [{ outCardId: cf.cardId, inCardId: 'h_b3' }] });
     expect(legal.ok).toBe(true);
     expect(c.getDiagnostics().validationErrors).toHaveLength(0);
@@ -79,6 +76,28 @@ describe('break plans through the controller', () => {
     const active = c.getView().player.active.map((p) => p.cardId);
     expect(active).toContain('h_b3');
     expect(active).not.toContain(cf.cardId);
+  });
+
+  it('prepares and applies a deterministic opponent coaching response', () => {
+    const c = fresh();
+    c.resolvePeriod();
+    c.setPlayerDecision({ subs: [], activations: [] });
+    const prepared = c.prepareOpponentDecision();
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+
+    expect(prepared.value.decision.subs).toHaveLength(1);
+    expect(c.getPendingOpponentDecision()?.decision).toEqual(prepared.value.decision);
+    const substitution = prepared.value.decision.subs[0]!;
+    const before = c.getView().opponent.active.map((player) => player.cardId);
+    expect(before).toContain(substitution.outCardId);
+    expect(before).not.toContain(substitution.inCardId);
+
+    const result = c.resolveBreak();
+    expect(result.ok).toBe(true);
+    const after = c.getView().opponent.active.map((player) => player.cardId);
+    expect(after).toContain(substitution.inCardId);
+    expect(after).not.toContain(substitution.outCardId);
   });
 });
 
