@@ -45,22 +45,19 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
   return out;
 }
 
-
 // ---------------------------------------------------------------------------
 // Starter rip (current flow): three fixed packs opened at New Season.
-//   - Player pack:  16 players — the starting squad (field 11 + 5 subs, all used)
+//   - Player pack:  18 players — 11 starters + a seven-player V7 bench
 //   - Manager pack: 2 managers (pick 1; the other is discarded)
 //   - Tactical pack: 3 tactics (pick 1 to carry into the run)
 // All formations are made available so the manager can pick a shape.
 // ---------------------------------------------------------------------------
 
-export const RIP_COUNTS = { players: 16, managers: 2, tactics: 3 } as const;
+export const RIP_COUNTS = { players: 18, managers: 2, tactics: 3 } as const;
 // The starter rip is deliberately SCRAPPY: Common-heavy with only a few Rare anchors and
-// NO Epic/Legendary. A full-pool rip starts the player ~maxed (XI avg ~74, can roll a
-// Legendary) so there's nothing to chase; capping at Common+Rare drops the opening XI to a
-// winnable-but-thin ~70 (still clears cup 1 ~80%+) and makes the shop's Epics/Legendaries
-// the real upgrade path. Tuned on scripts/starter-probe.ts.
-const RIP_RARES = 4; // of 16; the remainder are Common
+// NO Epic/Legendary. A full-pool rip starts the player ~maxed, so the shop's
+// Epics/Legendaries remain the upgrade chase. Tuned on scripts/starter-probe.ts.
+const RIP_RARES = 4; // of 18; the remainder are Common
 
 // ---------------------------------------------------------------------------
 // Shop card packs — the SEALED acquisition (economy.ts SCOUT_PACK / ELITE_PACK).
@@ -116,9 +113,8 @@ export function ripCardPack(tier: PackTier, seed: number): Card[] {
 
 export function ripStarterPacks(seed: number): PackContents {
   const scrappy = (c: Card) => c.rarity === 'Common' || c.rarity === 'Rare';
-  // Guarantee a keeper: a legal XI needs a GK, and a 16-card random rip lands
-  // ZERO GKs ~28% of the time. Reserve one Common/Rare GK, then fill the rest
-  // normally (more GKs can still surface at random for a backup).
+  // Guarantee a keeper: a legal XI needs a GK. Reserve one Common/Rare GK, then
+  // fill the rest normally (more GKs can still surface for bench cover).
   const gk = seededShuffle(ALL_CARDS.filter((c) => c.position === 'GK' && scrappy(c)), seed + 21).slice(0, 1);
   const rares = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Rare' && !gk.includes(c)), seed + 11).slice(0, RIP_RARES);
   const need = RIP_COUNTS.players - rares.length - gk.length;
