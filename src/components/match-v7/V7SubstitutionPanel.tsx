@@ -23,6 +23,11 @@ export interface SubstitutionImpact {
   chancesBefore: number;
   chancesAfter: number;
   chanceDelta: number;
+  opponentPressureBefore: number;
+  opponentPressureAfter: number;
+  opponentChancesBefore: number;
+  opponentChancesAfter: number;
+  opponentChanceDelta: number;
 }
 
 function signed(value: number): string {
@@ -85,6 +90,10 @@ export function substitutionImpactFor(
   const pressureAfter = pressureBefore + change.attack;
   const chancesBefore = calculatedChanceCount(home.attack + existing.attack, away.defence);
   const chancesAfter = calculatedChanceCount(home.attack + existing.attack + change.attack, away.defence);
+  const opponentPressureBefore = away.attack - (home.defence + existing.defence);
+  const opponentPressureAfter = away.attack - (home.defence + existing.defence + change.defence);
+  const opponentChancesBefore = calculatedChanceCount(away.attack, home.defence + existing.defence);
+  const opponentChancesAfter = calculatedChanceCount(away.attack, home.defence + existing.defence + change.defence);
 
   return {
     attackDelta: change.attack,
@@ -96,7 +105,23 @@ export function substitutionImpactFor(
     chancesBefore,
     chancesAfter,
     chanceDelta: chancesAfter - chancesBefore,
+    opponentPressureBefore,
+    opponentPressureAfter,
+    opponentChancesBefore,
+    opponentChancesAfter,
+    opponentChanceDelta: opponentChancesAfter - opponentChancesBefore,
   };
+}
+
+function impactDetail(impact: SubstitutionImpact, incoming: UiPlayerView, outgoing: UiPlayerView): string {
+  return [
+    `${signed(impact.attackDelta)} ATT`,
+    `${signed(impact.defenceDelta)} DEF`,
+    `for ${impact.chancesBefore}→${impact.chancesAfter}`,
+    `against ${impact.opponentChancesBefore}→${impact.opponentChancesAfter}`,
+    `${incoming.position ?? '—'} into ${outgoing.position ?? '—'}`,
+    impact.penalty ? `−${impact.penalty}/−${impact.penalty} OOP` : null,
+  ].filter(Boolean).join(' · ');
 }
 
 export function replacementHintFor(
@@ -106,28 +131,26 @@ export function replacementHintFor(
   existingSubs: readonly SubDecision[],
 ): ReplacementHint {
   const impact = substitutionImpactFor(view, incoming, outgoing, existingSubs);
+  const detail = impactDetail(impact, incoming, outgoing);
 
+  if (impact.chanceDelta > 0 && impact.opponentChanceDelta > 0) {
+    return { label: `F+${impact.chanceDelta} A+${impact.opponentChanceDelta}`, tone: 'risk', detail };
+  }
   if (impact.chanceDelta > 0) {
-    return {
-      label: `+${impact.chanceDelta} CHANCE`,
-      tone: 'boost',
-      detail: `${signed(impact.attackDelta)} ATT · ${incoming.position ?? '—'} into ${outgoing.position ?? '—'}`,
-    };
+    return { label: `+${impact.chanceDelta} CHANCE`, tone: 'boost', detail };
+  }
+  if (impact.opponentChanceDelta > 0) {
+    return { label: `+${impact.opponentChanceDelta} AGAINST`, tone: 'risk', detail };
   }
   if (impact.chanceDelta < 0) {
-    return {
-      label: `${impact.chanceDelta} CHANCE`,
-      tone: 'risk',
-      detail: `${signed(impact.attackDelta)} ATT · ${incoming.position ?? '—'} into ${outgoing.position ?? '—'}`,
-    };
+    return { label: `${impact.chanceDelta} CHANCE`, tone: 'risk', detail };
   }
-  if (impact.fit === 'natural') {
-    return { label: 'NATURAL', tone: 'natural', detail: `${signed(impact.attackDelta)} ATT · ${signed(impact.defenceDelta)} DEF` };
+  if (impact.opponentChanceDelta < 0) {
+    return { label: `${impact.opponentChanceDelta} AGAINST`, tone: 'boost', detail };
   }
-  if (impact.fit === 'lane') {
-    return { label: 'SAME LANE', tone: 'lane', detail: `${signed(impact.attackDelta)} ATT · ${signed(impact.defenceDelta)} DEF` };
-  }
-  return { label: '−2 OOP', tone: 'risk', detail: `${signed(impact.attackDelta)} ATT · ${signed(impact.defenceDelta)} DEF` };
+  if (impact.fit === 'natural') return { label: 'NATURAL', tone: 'natural', detail };
+  if (impact.fit === 'lane') return { label: 'SAME LANE', tone: 'lane', detail };
+  return { label: '−2 OOP', tone: 'risk', detail };
 }
 
 function pointsToNextChance(pressure: number): number {
@@ -140,6 +163,10 @@ function fitRank(fit: SubstitutionImpact['fit']): number {
   if (fit === 'natural') return 2;
   if (fit === 'lane') return 1;
   return 0;
+}
+
+function chanceSwing(impact: SubstitutionImpact): number {
+  return impact.chanceDelta - impact.opponentChanceDelta;
 }
 
 export function V7SubstitutionPanel({
@@ -182,6 +209,10 @@ export function V7SubstitutionPanel({
   const afterPressure = home.attack + attackDelta - away.defence;
   const beforeChances = calculatedChanceCount(home.attack, away.defence);
   const afterChances = calculatedChanceCount(home.attack + attackDelta, away.defence);
+  const beforeOpponentPressure = away.attack - home.defence;
+  const afterOpponentPressure = away.attack - (home.defence + defenceDelta);
+  const beforeOpponentChances = calculatedChanceCount(away.attack, home.defence);
+  const afterOpponentChances = calculatedChanceCount(away.attack, home.defence + defenceDelta);
   const selectedMeta = selectedBench ? cardMetaFor(selectedBench.cardId) : null;
   const energySpent = energyBudget - energyRemaining;
 
@@ -193,7 +224,9 @@ export function V7SubstitutionPanel({
       outgoing,
       impact: substitutionImpactFor(view, selectedBench, outgoing, substitutions),
     })).sort((a, b) => (
-      b.impact.chanceDelta - a.impact.chanceDelta
+      chanceSwing(b.impact) - chanceSwing(a.impact)
+      || b.impact.chanceDelta - a.impact.chanceDelta
+      || a.impact.opponentChanceDelta - b.impact.opponentChanceDelta
       || fitRank(b.impact.fit) - fitRank(a.impact.fit)
       || b.impact.attackDelta - a.impact.attackDelta
       || b.impact.defenceDelta - a.impact.defenceDelta
@@ -217,11 +250,11 @@ export function V7SubstitutionPanel({
         <div className="v7-sub-target-summary">
           <strong>Tap a highlighted player to replace</strong>
           {best ? (
-            <div className={`v7-sub-best ${best.impact.chanceDelta > 0 ? 'boost' : best.impact.fit}`}>
-              <span>BEST IMPACT</span>
+            <div className={`v7-sub-best ${chanceSwing(best.impact) > 0 ? 'boost' : best.impact.fit}`}>
+              <span>BEST NET IMPACT</span>
               <b>{best.outgoing.position ?? '—'} {best.outgoing.shortName}</b>
               <small>
-                {signed(best.impact.attackDelta)} ATT · {signed(best.impact.defenceDelta)} DEF · {best.impact.chancesBefore}→{best.impact.chancesAfter} chances
+                {signed(best.impact.attackDelta)} ATT · {signed(best.impact.defenceDelta)} DEF · for {best.impact.chancesBefore}→{best.impact.chancesAfter} · against {best.impact.opponentChancesBefore}→{best.impact.opponentChancesAfter}{best.impact.penalty ? ' · −2/−2 OOP' : ''}
               </small>
             </div>
           ) : <div className="v7-sub-best risk"><span>NO TARGET</span><b>No available player</b></div>}
@@ -240,15 +273,22 @@ export function V7SubstitutionPanel({
       <div className="v7-sub-impact">
         <div><span>ATT</span><strong>{home.attack}<i>→</i>{home.attack + attackDelta}</strong><small>{signed(attackDelta)}</small></div>
         <div><span>DEF</span><strong>{home.defence}<i>→</i>{home.defence + defenceDelta}</strong><small>{signed(defenceDelta)}</small></div>
-        <div><span>PRESSURE</span><strong>{signed(beforePressure)}<i>→</i>{signed(afterPressure)}</strong><small>{pointsToNextChance(afterPressure)} TO NEXT</small></div>
         <div className={afterChances > beforeChances ? 'threshold-up' : afterChances < beforeChances ? 'threshold-down' : ''}>
-          <span>CHANCES</span><strong>{beforeChances}<i>→</i>{afterChances}</strong><small>{afterChances === beforeChances ? 'NO CHANGE' : `${signed(afterChances - beforeChances)} THRESHOLD`}</small>
+          <span>YOUR CHANCES</span><strong>{beforeChances}<i>→</i>{afterChances}</strong><small>{pointsToNextChance(afterPressure)} PRESSURE TO NEXT</small>
         </div>
+        <div className={afterOpponentChances > beforeOpponentChances ? 'threshold-down' : afterOpponentChances < beforeOpponentChances ? 'threshold-up' : ''}>
+          <span>THEIR CHANCES</span><strong>{beforeOpponentChances}<i>→</i>{afterOpponentChances}</strong><small>{pointsToNextChance(afterOpponentPressure)} PRESSURE TO NEXT</small>
+        </div>
+      </div>
+
+      <div className="v7-sub-pressure-summary">
+        <span>Your pressure <b>{signed(beforePressure)}→{signed(afterPressure)}</b></span>
+        <span>Their pressure <b>{signed(beforeOpponentPressure)}→{signed(afterOpponentPressure)}</b></span>
       </div>
 
       {locked && (
         <div className="v7-sub-locked-row">
-          <div><span>CHANGES LOCKED</span><strong>{rows.length} {rows.length === 1 ? 'substitution' : 'substitutions'} ready</strong><small>The next pressure calculation will use these values.</small></div>
+          <div><span>CHANGES LOCKED</span><strong>{rows.length} {rows.length === 1 ? 'substitution' : 'substitutions'} ready</strong><small>Both chance projections will be recalculated after the opponent responds.</small></div>
           <button type="button" onClick={onEdit}>Edit</button>
         </div>
       )}
@@ -266,11 +306,13 @@ export function V7SubstitutionPanel({
             <span>{outgoing.position ?? '—'} {outgoing.shortName}</span>
             <b>→</b>
             <span>{incoming.position ?? '—'} {incoming.shortName}</span>
-            <small>{signed(impact.attackDelta)} ATT · {signed(impact.defenceDelta)} DEF · {cost}⚡</small>
+            <small>
+              {signed(impact.attackDelta)} ATT · {signed(impact.defenceDelta)} DEF · F {impact.chancesBefore}→{impact.chancesAfter} · A {impact.opponentChancesBefore}→{impact.opponentChancesAfter} · {cost}⚡{impact.penalty ? ' · OOP' : ''}
+            </small>
             {!locked && <i>×</i>}
           </button>
         ))}
-        {rows.length === 0 && <p>Tap a bench card to compare replacements. A substitution only changes chances when it crosses a five-point pressure band.</p>}
+        {rows.length === 0 && <p>Tap a bench card to compare replacements. Every option shows both chances for and chances against.</p>}
       </div>
     </section>
   );
