@@ -119,11 +119,12 @@ function adaptStartingXI(cards: readonly Card[], formation: Formation, prefix: s
   return cards.map((card, index) => adaptCard(card, `${prefix}-${card.id}`, sectorForSlot(formation.slots[index]!, formation.slots)));
 }
 
-function adaptBench(cards: readonly Card[], prefix: string): V7PlayerCard[] {
+function adaptBench(cards: readonly Card[], prefix: string, owned = false): V7PlayerCard[] {
   return cards.map((card, index) => {
     const wide = card.position === 'WD' || card.position === 'WM' || card.position === 'WF';
     const sector: Sector | undefined = wide ? (index % 2 === 0 ? 'left' : 'right') : undefined;
-    return adaptCard(card, `${prefix}-${card.id}-${index}`, sector);
+    const id = owned ? `live-${card.id}` : `${prefix}-${card.id}-${index}`;
+    return adaptCard(card, id, sector);
   });
 }
 
@@ -165,7 +166,7 @@ export function buildLiveV7Fixture(runState: RunState, hand: HandState): V7Fixtu
   const opponentFormation = adaptLiveFormation(opponentMain.formation);
 
   const playerXI = adaptStartingXI(hand.xi, playerFormationSource, 'live');
-  const playerBench = adaptBench(hand.bench, 'live-bench');
+  const playerBench = adaptBench(hand.bench, 'live-bench', true);
   const opponentXI = adaptStartingXI(opponentMain.xi, opponentMain.formation, 'opponent');
   const opponentBench = adaptBench(opponentBenchSource.xi.slice(0, 7), 'opponent-bench');
 
