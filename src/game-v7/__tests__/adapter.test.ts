@@ -5,7 +5,7 @@ import {
   adaptPlayerCard,
   buildBreakPlan,
   buildInitialMatch,
-  scriptedOpponentPlan,
+  buildOpponentPlan,
   translateReceipts,
   v7Fixture,
 } from '@/game-v7';
@@ -33,7 +33,7 @@ describe('card adapter', () => {
     expect(card.id).toBe('live-42');
     expect(card.positionCodes).toEqual(['CF']);
     expect(card.naturalSector).toBe('centre');
-    expect(card.printedAttack).toBeGreaterThan(card.printedDefence); // CF leans attack
+    expect(card.printedAttack).toBeGreaterThan(card.printedDefence);
     expect(card.printedAttack).toBeLessThanOrEqual(12);
     expect(card.printedCost).toBeGreaterThanOrEqual(1);
     expect(card.rarity).toBe('epic');
@@ -65,7 +65,6 @@ describe('initial match adapter', () => {
     expect(state.opponent.players.filter((p) => p.zone === 'active')).toHaveLength(11);
     expect(state.player.players.filter((p) => p.zone === 'bench')).toHaveLength(7);
     expect(state.opponent.players.filter((p) => p.zone === 'bench')).toHaveLength(7);
-    // Game-start talisman took effect at kickoff → ledger carries a whole-match effect.
     expect(result.value.ledger.some((e) => e.origin === 'game_start')).toBe(true);
   });
 
@@ -100,7 +99,6 @@ describe('lineup adapter', () => {
 
   it('rejects an over-budget substitution before resolution', () => {
     if (!initial) throw new Error('fixture failed');
-    // A cost-4 bench card cannot come on at break 1 (energy 3).
     const activeCf = initial.state.player.players.find((p) => p.zone === 'active' && p.currentSlotKey === 'cf');
     const plan = buildBreakPlan('player', initial.state.player, { subs: [{ outCardId: activeCf!.cardId, inCardId: 'h_b1' }] }, 1, initial.registry, initial.state.seed);
     expect(plan.ok).toBe(false);
@@ -118,12 +116,20 @@ describe('lineup adapter', () => {
     expect(plan.value.incomingAssignments[0]!.cardId).toBe('h_b3');
   });
 
-  it('produces a deterministic opponent plan', () => {
+  it('builds a deterministic, affordable opponent response', () => {
     if (!initial) throw new Error('fixture failed');
-    const a = scriptedOpponentPlan(initial.state.opponent, 1);
-    const b = scriptedOpponentPlan(initial.state.opponent, 1);
-    expect(a).toEqual(b);
-    expect(a.outgoingCardIds).toEqual([]);
+    const a = buildOpponentPlan(initial.state, initial.ledger, { subs: [], activations: [] }, 1, initial.registry);
+    const b = buildOpponentPlan(initial.state, initial.ledger, { subs: [], activations: [] }, 1, initial.registry);
+    expect(a.ok).toBe(true);
+    expect(b.ok).toBe(true);
+    if (!a.ok || !b.ok) return;
+
+    expect(a.value.decision).toEqual(b.value.decision);
+    expect(a.value.decision.subs).toHaveLength(1);
+    expect(a.value.plan.side).toBe('opponent');
+    expect(a.value.plan.submittedBudget.legalAtSubmission).toBe(true);
+    expect(a.value.plan.submittedBudget.netIncomingCost).toBeLessThanOrEqual(3);
+    expect(a.value.rationale).toContain('chances');
   });
 });
 
