@@ -63,8 +63,28 @@ describe('initial match adapter', () => {
     expect(state.period).toBe(1);
     expect(state.player.players.filter((p) => p.zone === 'active')).toHaveLength(11);
     expect(state.opponent.players.filter((p) => p.zone === 'active')).toHaveLength(11);
+    expect(state.player.players.filter((p) => p.zone === 'bench')).toHaveLength(7);
+    expect(state.opponent.players.filter((p) => p.zone === 'bench')).toHaveLength(7);
     // Game-start talisman took effect at kickoff → ledger carries a whole-match effect.
     expect(result.value.ledger.some((e) => e.origin === 'game_start')).toBe(true);
+  });
+
+  it('exposes balanced seven-player bench coverage to the match view', () => {
+    const result = buildInitialMatch(v7Fixture());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const playerBench = result.value.state.player.players
+      .filter((player) => player.zone === 'bench')
+      .map((player) => result.value.registry.cards.get(player.cardId)?.positionCodes[0]);
+    const opponentBench = result.value.state.opponent.players
+      .filter((player) => player.zone === 'bench')
+      .map((player) => result.value.registry.cards.get(player.cardId)?.positionCodes[0]);
+
+    expect(playerBench).toHaveLength(7);
+    expect(playerBench).toEqual(expect.arrayContaining(['GK', 'LB', 'CB', 'CM', 'RM', 'LW', 'CF']));
+    expect(opponentBench).toHaveLength(7);
+    expect(opponentBench).toEqual(expect.arrayContaining(['GK', 'CB', 'CM', 'LWB', 'RWB', 'RF', 'CF']));
   });
 });
 
