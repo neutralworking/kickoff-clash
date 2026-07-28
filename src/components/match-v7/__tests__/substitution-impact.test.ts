@@ -41,7 +41,24 @@ describe('V7 substitution impact previews', () => {
     expect(replacementHintFor(match, leftWing, rightBack, []).tone).toBe('risk');
   });
 
-  it('calculates threshold impact after already planned substitutions', () => {
+  it('shows both sides when a CM-for-CB trade creates a chance at each end', () => {
+    const match = view();
+    const centreMid = player(match, 'h_b3');
+    const centreBack = player(match, 'h_lcb');
+    const impact = substitutionImpactFor(match, centreMid, centreBack, []);
+    const hint = replacementHintFor(match, centreMid, centreBack, []);
+
+    expect(impact.fit).toBe('lane');
+    expect(impact.attackDelta).toBeGreaterThan(0);
+    expect(impact.defenceDelta).toBeLessThan(0);
+    expect(impact.chanceDelta).toBe(1);
+    expect(impact.opponentChanceDelta).toBe(1);
+    expect(hint.label).toBe('F+1 A+1');
+    expect(hint.tone).toBe('risk');
+    expect(hint.detail).toContain('against 2→3');
+  });
+
+  it('calculates both thresholds after already planned substitutions', () => {
     const match = view();
     const firstIncoming = player(match, 'h_b2');
     const firstOutgoing = player(match, 'h_lw');
@@ -56,5 +73,8 @@ describe('V7 substitution impact previews', () => {
     expect(second.chancesBefore).toBe(calculatedChanceCount(home.attack + first.attackDelta, away.defence));
     expect(second.chancesAfter).toBe(calculatedChanceCount(home.attack + first.attackDelta + second.attackDelta, away.defence));
     expect(second.chanceDelta).toBe(second.chancesAfter - second.chancesBefore);
+    expect(second.opponentChancesBefore).toBe(calculatedChanceCount(away.attack, home.defence + first.defenceDelta));
+    expect(second.opponentChancesAfter).toBe(calculatedChanceCount(away.attack, home.defence + first.defenceDelta + second.defenceDelta));
+    expect(second.opponentChanceDelta).toBe(second.opponentChancesAfter - second.opponentChancesBefore);
   });
 });
