@@ -137,7 +137,9 @@ export function effectivePlayers(
       result.push({
         cardId: player.cardId,
         zone: 'bench',
+        position: card.positionCodes[0],
         naturalSector: card.naturalSector,
+        sector: card.naturalSector,
         attack: Math.max(0, stats.attack.effective),
         defence: Math.max(0, stats.defence.effective),
         cost,
