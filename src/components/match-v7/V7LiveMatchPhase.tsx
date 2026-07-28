@@ -86,8 +86,16 @@ export default function V7LiveMatchPhase({
       }
     }
 
+    const ownedCards = new Map([...hand.xi, ...hand.bench].map((card) => [card.id, card]));
+    const cardsFromView = (players: UiPlayers): Card[] => players
+      .map((player) => liveCardId(player.cardId))
+      .map((id) => id == null ? undefined : ownedCards.get(id))
+      .filter((card): card is Card => Boolean(card));
+    const finalXI = cardsFromView(view.player.active);
+    const finalBench = cardsFromView(view.player.bench);
+
     let playerOfMatch: MatchResultPayload['playerOfMatch'] = null;
-    for (const card of [...hand.xi, ...hand.bench]) {
+    for (const card of ownedCards.values()) {
       const goals = scored[card.id]?.goals ?? 0;
       if (goals > 0 && (!playerOfMatch || goals > playerOfMatch.goals)) {
         playerOfMatch = { card, goals, assists: 0, rating: 6 + goals };
@@ -108,7 +116,13 @@ export default function V7LiveMatchPhase({
       sentOffIds: [],
       scored,
       playerOfMatch,
-      handState: { ...hand, yourGoals, opponentGoals },
+      handState: {
+        ...hand,
+        xi: finalXI.length === 11 ? finalXI : hand.xi,
+        bench: finalBench,
+        yourGoals,
+        opponentGoals,
+      },
     });
   };
 
@@ -122,3 +136,5 @@ export default function V7LiveMatchPhase({
     />
   );
 }
+
+type UiPlayers = ReturnType<V7MatchController['getView']>['player']['active'];
