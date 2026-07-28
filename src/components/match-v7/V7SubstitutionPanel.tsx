@@ -13,6 +13,18 @@ export interface ReplacementHint {
   detail: string;
 }
 
+export interface SubstitutionImpact {
+  attackDelta: number;
+  defenceDelta: number;
+  penalty: number;
+  fit: 'natural' | 'lane' | 'risk';
+  pressureBefore: number;
+  pressureAfter: number;
+  chancesBefore: number;
+  chancesAfter: number;
+  chanceDelta: number;
+}
+
 function signed(value: number): string {
   return `${value >= 0 ? '+' : ''}${value}`;
 }
@@ -45,52 +57,89 @@ function pairDelta(incoming: UiPlayerView, outgoing: UiPlayerView): {
   };
 }
 
+function existingDeltas(view: UiMatchView, existingSubs: readonly SubDecision[]): { attack: number; defence: number } {
+  let attack = 0;
+  let defence = 0;
+  for (const sub of existingSubs) {
+    const incoming = playerById(view, sub.inCardId);
+    const outgoing = playerById(view, sub.outCardId);
+    if (!incoming || !outgoing) continue;
+    const change = pairDelta(incoming, outgoing);
+    attack += change.attack;
+    defence += change.defence;
+  }
+  return { attack, defence };
+}
+
+export function substitutionImpactFor(
+  view: UiMatchView,
+  incoming: UiPlayerView,
+  outgoing: UiPlayerView,
+  existingSubs: readonly SubDecision[],
+): SubstitutionImpact {
+  const home = totals(view.player.active);
+  const away = totals(view.opponent.active);
+  const existing = existingDeltas(view, existingSubs);
+  const change = pairDelta(incoming, outgoing);
+  const pressureBefore = home.attack + existing.attack - away.defence;
+  const pressureAfter = pressureBefore + change.attack;
+  const chancesBefore = calculatedChanceCount(home.attack + existing.attack, away.defence);
+  const chancesAfter = calculatedChanceCount(home.attack + existing.attack + change.attack, away.defence);
+
+  return {
+    attackDelta: change.attack,
+    defenceDelta: change.defence,
+    penalty: change.penalty,
+    fit: change.fit,
+    pressureBefore,
+    pressureAfter,
+    chancesBefore,
+    chancesAfter,
+    chanceDelta: chancesAfter - chancesBefore,
+  };
+}
+
 export function replacementHintFor(
   view: UiMatchView,
   incoming: UiPlayerView,
   outgoing: UiPlayerView,
   existingSubs: readonly SubDecision[],
 ): ReplacementHint {
-  const home = totals(view.player.active);
-  const away = totals(view.opponent.active);
-  let existingAttackDelta = 0;
-  let existingDefenceDelta = 0;
+  const impact = substitutionImpactFor(view, incoming, outgoing, existingSubs);
 
-  for (const sub of existingSubs) {
-    const currentIncoming = playerById(view, sub.inCardId);
-    const currentOutgoing = playerById(view, sub.outCardId);
-    if (!currentIncoming || !currentOutgoing) continue;
-    const change = pairDelta(currentIncoming, currentOutgoing);
-    existingAttackDelta += change.attack;
-    existingDefenceDelta += change.defence;
-  }
-
-  const change = pairDelta(incoming, outgoing);
-  const beforeChances = calculatedChanceCount(home.attack + existingAttackDelta, away.defence);
-  const afterChances = calculatedChanceCount(home.attack + existingAttackDelta + change.attack, away.defence);
-  const chanceDelta = afterChances - beforeChances;
-
-  if (chanceDelta > 0) {
+  if (impact.chanceDelta > 0) {
     return {
-      label: `+${chanceDelta} CHANCE`,
+      label: `+${impact.chanceDelta} CHANCE`,
       tone: 'boost',
-      detail: `${signed(change.attack)} ATT · ${incoming.position ?? '—'} into ${outgoing.position ?? '—'}`,
+      detail: `${signed(impact.attackDelta)} ATT · ${incoming.position ?? '—'} into ${outgoing.position ?? '—'}`,
     };
   }
-  if (chanceDelta < 0) {
+  if (impact.chanceDelta < 0) {
     return {
-      label: `${chanceDelta} CHANCE`,
+      label: `${impact.chanceDelta} CHANCE`,
       tone: 'risk',
-      detail: `${signed(change.attack)} ATT · ${incoming.position ?? '—'} into ${outgoing.position ?? '—'}`,
+      detail: `${signed(impact.attackDelta)} ATT · ${incoming.position ?? '—'} into ${outgoing.position ?? '—'}`,
     };
   }
-  if (change.fit === 'natural') {
-    return { label: 'NATURAL', tone: 'natural', detail: `${signed(change.attack)} ATT · ${signed(change.defence)} DEF` };
+  if (impact.fit === 'natural') {
+    return { label: 'NATURAL', tone: 'natural', detail: `${signed(impact.attackDelta)} ATT · ${signed(impact.defenceDelta)} DEF` };
   }
-  if (change.fit === 'lane') {
-    return { label: 'SAME LANE', tone: 'lane', detail: `${signed(change.attack)} ATT · ${signed(change.defence)} DEF` };
+  if (impact.fit === 'lane') {
+    return { label: 'SAME LANE', tone: 'lane', detail: `${signed(impact.attackDelta)} ATT · ${signed(impact.defenceDelta)} DEF` };
   }
-  return { label: '−2 OOP', tone: 'risk', detail: `${signed(change.attack)} ATT · ${signed(change.defence)} DEF` };
+  return { label: '−2 OOP', tone: 'risk', detail: `${signed(impact.attackDelta)} ATT · ${signed(impact.defenceDelta)} DEF` };
+}
+
+function pointsToNextChance(pressure: number): number {
+  if (pressure < 0) return Math.abs(pressure) + 5;
+  const remainder = pressure % 5;
+  return remainder === 0 ? 5 : 5 - remainder;
+}
+
+function fitRank(fit: SubstitutionImpact['fit']): number {
+  if (fit === 'natural') return 2;
+  if (fit === 'lane') return 1;
+  return 0;
 }
 
 export function V7SubstitutionPanel({
@@ -119,10 +168,10 @@ export function V7SubstitutionPanel({
     const incoming = playerById(view, sub.inCardId);
     const outgoing = playerById(view, sub.outCardId);
     if (!incoming || !outgoing) return [];
-    const change = pairDelta(incoming, outgoing);
-    attackDelta += change.attack;
-    defenceDelta += change.defence;
-    return [{ sub, index, incoming, outgoing, change }];
+    const impact = substitutionImpactFor(view, incoming, outgoing, substitutions.slice(0, index));
+    attackDelta += impact.attackDelta;
+    defenceDelta += impact.defenceDelta;
+    return [{ sub, index, incoming, outgoing, impact, cost: cardMetaFor(incoming.cardId).cost }];
   });
 
   const beforePressure = home.attack - away.defence;
@@ -130,15 +179,25 @@ export function V7SubstitutionPanel({
   const beforeChances = calculatedChanceCount(home.attack, away.defence);
   const afterChances = calculatedChanceCount(home.attack + attackDelta, away.defence);
   const selectedMeta = selectedBench ? cardMetaFor(selectedBench.cardId) : null;
+  const energySpent = energyBudget - energyRemaining;
 
   if (selectedBench && selectedMeta) {
     const availableTargets = view.player.active.filter(
       (player) => !substitutions.some((sub) => sub.outCardId === player.cardId),
     );
-    const natural = availableTargets.filter((player) => player.position === selectedBench.position).length;
-    const sameLane = availableTargets.filter(
-      (player) => player.position !== selectedBench.position && player.sector === selectedBench.sector,
-    ).length;
+    const options = availableTargets.map((outgoing) => ({
+      outgoing,
+      impact: substitutionImpactFor(view, selectedBench, outgoing, substitutions),
+    })).sort((a, b) => (
+      b.impact.chanceDelta - a.impact.chanceDelta
+      || fitRank(b.impact.fit) - fitRank(a.impact.fit)
+      || b.impact.attackDelta - a.impact.attackDelta
+      || b.impact.defenceDelta - a.impact.defenceDelta
+    ));
+    const best = options[0];
+    const natural = options.filter((option) => option.impact.fit === 'natural').length;
+    const sameLane = options.filter((option) => option.impact.fit === 'lane').length;
+    const energyAfter = Math.max(0, energyRemaining - selectedMeta.cost);
 
     return (
       <section className="v7-sub-panel choosing" aria-live="polite">
@@ -146,15 +205,27 @@ export function V7SubstitutionPanel({
           <div>
             <span>BRING ON</span>
             <strong>{selectedBench.shortName}</strong>
-            <small>{selectedBench.position ?? '—'} · {selectedMeta.role} · Cost {selectedMeta.cost}</small>
+            <small>{selectedBench.position ?? '—'} · {selectedMeta.role}</small>
           </div>
+          <div className="v7-sub-choice-cost"><b>{selectedMeta.cost}</b><span>⚡</span><small>{energyAfter} left</small></div>
           <button type="button" onClick={onCancelSelection} aria-label="Cancel substitute selection">×</button>
         </div>
         <div className="v7-sub-target-summary">
           <strong>Tap a highlighted player to replace</strong>
-          <span className="natural">{natural} natural</span>
-          <span className="lane">{sameLane} same lane</span>
-          <span className="risk">others −2/−2</span>
+          {best ? (
+            <div className={`v7-sub-best ${best.impact.chanceDelta > 0 ? 'boost' : best.impact.fit}`}>
+              <span>BEST IMPACT</span>
+              <b>{best.outgoing.position ?? '—'} {best.outgoing.shortName}</b>
+              <small>
+                {signed(best.impact.attackDelta)} ATT · {signed(best.impact.defenceDelta)} DEF · {best.impact.chancesBefore}→{best.impact.chancesAfter} chances
+              </small>
+            </div>
+          ) : <div className="v7-sub-best risk"><span>NO TARGET</span><b>No available player</b></div>}
+          <div className="v7-sub-fit-counts">
+            <span className="natural">{natural} natural</span>
+            <span className="lane">{sameLane} same lane</span>
+            <span className="risk">others −2/−2</span>
+          </div>
         </div>
       </section>
     );
@@ -165,24 +236,24 @@ export function V7SubstitutionPanel({
       <div className="v7-sub-impact">
         <div><span>ATT</span><strong>{home.attack}<i>→</i>{home.attack + attackDelta}</strong><small>{signed(attackDelta)}</small></div>
         <div><span>DEF</span><strong>{home.defence}<i>→</i>{home.defence + defenceDelta}</strong><small>{signed(defenceDelta)}</small></div>
-        <div><span>PRESSURE</span><strong>{signed(beforePressure)}<i>→</i>{signed(afterPressure)}</strong><small>{signed(afterPressure - beforePressure)}</small></div>
+        <div><span>PRESSURE</span><strong>{signed(beforePressure)}<i>→</i>{signed(afterPressure)}</strong><small>{pointsToNextChance(afterPressure)} TO NEXT</small></div>
         <div className={afterChances > beforeChances ? 'threshold-up' : afterChances < beforeChances ? 'threshold-down' : ''}>
           <span>CHANCES</span><strong>{beforeChances}<i>→</i>{afterChances}</strong><small>{afterChances === beforeChances ? 'NO CHANGE' : `${signed(afterChances - beforeChances)} THRESHOLD`}</small>
         </div>
       </div>
 
       <div className="v7-sub-plan-list">
-        <div className="v7-sub-energy"><b>{energyRemaining}</b><span>/{energyBudget} ⚡</span></div>
-        {rows.map(({ index, incoming, outgoing, change }) => (
-          <button type="button" className={`v7-sub-plan-card ${change.fit}`} key={`${outgoing.cardId}:${incoming.cardId}`} onClick={() => onRemove(index)}>
+        <div className="v7-sub-energy"><b>{energyRemaining}</b><span>/{energyBudget} ⚡</span><small>{energySpent} spent</small></div>
+        {rows.map(({ index, incoming, outgoing, impact, cost }) => (
+          <button type="button" className={`v7-sub-plan-card ${impact.fit}`} key={`${outgoing.cardId}:${incoming.cardId}`} onClick={() => onRemove(index)}>
             <span>{outgoing.position ?? '—'} {outgoing.shortName}</span>
             <b>→</b>
             <span>{incoming.position ?? '—'} {incoming.shortName}</span>
-            <small>{signed(change.attack)} ATT · {signed(change.defence)} DEF</small>
+            <small>{signed(impact.attackDelta)} ATT · {signed(impact.defenceDelta)} DEF · {cost}⚡</small>
             <i>×</i>
           </button>
         ))}
-        {rows.length === 0 && <p>Tap a bench card to plan a substitution. The chance threshold impact will appear here before you lock it.</p>}
+        {rows.length === 0 && <p>Tap a bench card to compare replacements. A substitution only changes chances when it crosses a five-point pressure band.</p>}
       </div>
     </section>
   );
