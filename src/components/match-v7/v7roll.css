@@ -1,0 +1,326 @@
+/* Chance resolution and compact-card legibility. Loaded by V7Pitch after the base lab styles. */
+
+.v7-card-role {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.v7-card-role b {
+  flex: 0 0 auto;
+  color: var(--v7-gold-2);
+  font-size: inherit;
+  font-weight: 1000;
+}
+
+.v7-card-role span {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.34);
+}
+
+.v7-card-role em {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: inherit;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v7-player-card.compact .v7-card-position {
+  min-width: 23px;
+  padding: 2px 4px;
+  border-color: rgba(255, 211, 99, 0.34);
+  background: rgba(7, 8, 12, 0.94);
+  color: #ffe19a;
+  font-size: 8px;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.55);
+}
+
+.v7-player-card.compact .v7-card-role {
+  margin-top: 2px;
+  color: #c5cad4;
+  font-size: 6.5px;
+  letter-spacing: 0.02em;
+}
+
+.v7-player-card.compact .v7-card-role b {
+  font-size: 7px;
+  letter-spacing: 0.04em;
+}
+
+.v7-formation-shell.rolling .v7-pitch-card-position {
+  opacity: 0.28;
+  filter: saturate(0.55) brightness(0.7);
+}
+
+.v7-formation-shell.rolling .v7-pitch-card-position.focused {
+  z-index: 9;
+  opacity: 1;
+  filter: none;
+  transform: translate(-50%, -50%) scale(1.07);
+}
+
+.v7-pitch-event.kind-roll {
+  top: 50%;
+  width: min(286px, calc(100% - 24px));
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border-color: rgba(255, 211, 99, 0.56);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 50% 0, rgba(255, 188, 62, 0.14), transparent 44%),
+    linear-gradient(180deg, rgba(25, 28, 37, 0.98), rgba(7, 9, 13, 0.98));
+  box-shadow: 0 22px 55px rgba(0, 0, 0, 0.78), 0 0 45px rgba(255, 183, 47, 0.14);
+}
+
+.v7-chance-stage {
+  width: 100%;
+  padding: 10px 12px 11px;
+}
+
+.v7-chance-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+
+.v7-chance-heading > span {
+  color: var(--v7-gold);
+  font-size: 7px;
+  font-weight: 1000;
+  letter-spacing: 0.14em;
+}
+
+.v7-chance-heading > strong {
+  grid-row: span 2;
+  color: var(--v7-ink);
+  font-size: 17px;
+  line-height: 1;
+  font-weight: 1000;
+}
+
+.v7-chance-heading > strong i {
+  color: var(--v7-muted);
+  font-size: 7px;
+  font-style: normal;
+  letter-spacing: 0.08em;
+}
+
+.v7-chance-heading > b {
+  color: #d8dce4;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+.v7-chance-resolution {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding: 10px 4px 7px;
+}
+
+.v7-chance-die {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border: 1px solid rgba(255, 243, 204, 0.7);
+  border-radius: 15px;
+  background: linear-gradient(145deg, #fff9e8, #ddc48d 72%, #a87b33);
+  color: #171007;
+  font-size: 51px;
+  line-height: 1;
+  box-shadow: inset 0 -5px rgba(77, 48, 13, 0.25), 0 10px 22px rgba(0, 0, 0, 0.55);
+}
+
+.v7-chance-stage.rolling .v7-chance-die {
+  animation: v7-readable-roll 620ms cubic-bezier(0.2, 0.8, 0.3, 1) infinite;
+}
+
+.v7-chance-stage.rolling .v7-chance-die i {
+  color: rgba(28, 18, 7, 0.66);
+  font-size: 30px;
+  font-style: normal;
+}
+
+.v7-chance-stage.settled .v7-chance-die {
+  animation: v7-readable-land 380ms cubic-bezier(0.16, 1.35, 0.32, 1) both;
+}
+
+.v7-chance-stage.scored .v7-chance-die {
+  border-color: #ffe27e;
+  box-shadow: inset 0 -5px rgba(77, 48, 13, 0.25), 0 0 31px rgba(255, 201, 76, 0.7), 0 10px 22px rgba(0, 0, 0, 0.55);
+}
+
+.v7-chance-comparison {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  align-items: end;
+  gap: 2px 7px;
+  min-width: 0;
+  text-align: center;
+}
+
+.v7-chance-comparison span {
+  grid-row: 2;
+  color: var(--v7-muted);
+  font-size: 6px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+}
+
+.v7-chance-comparison strong {
+  color: var(--v7-ink);
+  font-size: 30px;
+  line-height: 0.85;
+  font-weight: 1000;
+}
+
+.v7-chance-comparison i {
+  align-self: center;
+  color: var(--v7-gold-2);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 1000;
+}
+
+.v7-reroll-history {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 18px;
+  margin-top: -2px;
+}
+
+.v7-reroll-history span {
+  color: var(--v7-muted);
+  font-size: 6px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+}
+
+.v7-reroll-history b {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 16px;
+  line-height: 1;
+  text-decoration: line-through;
+}
+
+.v7-chance-outcome {
+  min-height: 26px;
+  padding: 6px 8px 3px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--v7-muted);
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 1000;
+  letter-spacing: 0.09em;
+}
+
+.v7-chance-stage.scored .v7-chance-outcome {
+  color: var(--v7-gold-2);
+  font-size: 21px;
+  text-shadow: 0 0 16px rgba(255, 203, 77, 0.55);
+}
+
+.v7-chance-stage.stopped .v7-chance-outcome {
+  color: #c6cbd5;
+}
+
+.v7-resolution-strip.kind-roll {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 7px 9px;
+}
+
+.v7-roll-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.v7-roll-progress > div {
+  min-width: 0;
+}
+
+.v7-roll-progress span {
+  color: var(--v7-gold);
+  font-size: 6px;
+  font-weight: 1000;
+  letter-spacing: 0.12em;
+}
+
+.v7-roll-progress strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--v7-ink);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v7-roll-pips {
+  display: flex;
+  gap: 4px;
+}
+
+.v7-roll-pips i {
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.v7-roll-pips i.done {
+  border-color: var(--v7-gold-2);
+  background: var(--v7-gold-2);
+  box-shadow: 0 0 8px rgba(255, 211, 99, 0.55);
+}
+
+.v7-roll-pips i.current {
+  border-color: var(--v7-gold-2);
+  animation: v7-roll-pip-pulse 500ms ease-in-out infinite alternate;
+}
+
+@keyframes v7-readable-roll {
+  0% { transform: rotate(-9deg) scale(0.9); }
+  35% { transform: rotate(11deg) scale(1.03); }
+  70% { transform: rotate(-5deg) scale(0.96); }
+  100% { transform: rotate(8deg) scale(1); }
+}
+
+@keyframes v7-readable-land {
+  0% { opacity: 0.35; transform: rotate(-14deg) scale(0.72); }
+  70% { opacity: 1; transform: rotate(3deg) scale(1.1); }
+  100% { transform: rotate(0) scale(1); }
+}
+
+@keyframes v7-roll-pip-pulse {
+  from { transform: scale(0.82); opacity: 0.5; }
+  to { transform: scale(1.15); opacity: 1; }
+}
+
+@media (max-height: 720px) {
+  .v7-chance-stage { padding: 8px 10px; }
+  .v7-chance-resolution { grid-template-columns: 58px minmax(0, 1fr); padding: 7px 4px 5px; }
+  .v7-chance-die { width: 58px; height: 58px; font-size: 43px; }
+  .v7-chance-comparison strong { font-size: 25px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v7-chance-stage.rolling .v7-chance-die,
+  .v7-chance-stage.settled .v7-chance-die,
+  .v7-roll-pips i.current { animation: none; }
+}
