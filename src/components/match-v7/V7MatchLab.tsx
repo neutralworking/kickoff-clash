@@ -136,6 +136,7 @@ function V7MatchInner({
   const revealedGoalIds = useRef(new Set<string>());
   const [pickBench, setPickBench] = useState<string | null>(null);
   const [subs, setSubs] = useState<SubDecision[]>([]);
+  const [planLocked, setPlanLocked] = useState(false);
   const [inspected, setInspected] = useState<UiPlayerView | null>(null);
 
   const phase = controller.getPhase();
@@ -149,7 +150,7 @@ function V7MatchInner({
   const awayTotals = totals(view.opponent);
   const plannedOutIds = subs.map((sub) => sub.outCardId);
   const plannedInIds = new Set(subs.map((sub) => sub.inCardId));
-  const canEditHome = phase === 'break' && !presentationBusy && displaySide === 'player';
+  const canEditHome = phase === 'break' && !presentationBusy && displaySide === 'player' && !planLocked;
   const energyBudget = phase === 'break' ? BREAK_ENERGY[view.period] ?? 0 : 0;
   const energySpent = subs.reduce((total, sub) => total + cardMetaFor(sub.inCardId).cost, 0);
   const energyRemaining = Math.max(0, energyBudget - energySpent);
@@ -212,6 +213,7 @@ function V7MatchInner({
   const resetPlan = () => {
     setPickBench(null);
     setSubs([]);
+    setPlanLocked(false);
   };
 
   const buildDecision = (nextSubs: SubDecision[]): BreakDecision => ({
@@ -242,8 +244,20 @@ function V7MatchInner({
     resolveCurrentPeriod();
   };
 
+  const onLockBreak = () => {
+    if (presentationBusy || phase !== 'break' || subs.length === 0) return;
+    const result = controller.setPlayerDecision(buildDecision(subs));
+    if (!result.ok) {
+      bump();
+      return;
+    }
+    setPickBench(null);
+    setPlanLocked(true);
+    bump();
+  };
+
   const onContinueBreak = () => {
-    if (presentationBusy || phase !== 'break') return;
+    if (presentationBusy || phase !== 'break' || (subs.length > 0 && !planLocked)) return;
     const result = controller.setPlayerDecision(buildDecision(subs));
     if (!result.ok) {
       bump();
@@ -278,13 +292,16 @@ function V7MatchInner({
     const next = [...subs, { outCardId: cardId, inCardId: pickBench }];
     setSubs(next);
     setPickBench(null);
+    setPlanLocked(false);
     controller.setPlayerDecision(buildDecision(next));
     bump();
   };
 
   const removeSub = (index: number) => {
+    if (planLocked) return;
     const next = subs.filter((_, currentIndex) => currentIndex !== index);
     setSubs(next);
+    setPlanLocked(false);
     controller.setPlayerDecision(buildDecision(next));
     bump();
   };
@@ -292,14 +309,16 @@ function V7MatchInner({
   const primary = phase === 'fulltime'
     ? { label: 'New match →', onClick: onNewMatch, disabled: presentationBusy }
     : phase === 'break'
-      ? { label: subs.length ? 'Lock substitutions →' : 'Continue →', onClick: onContinueBreak, disabled: presentationBusy }
+      ? subs.length > 0 && !planLocked
+        ? { label: 'Review changes →', onClick: onLockBreak, disabled: presentationBusy }
+        : { label: planLocked ? 'Play next period →' : 'Continue →', onClick: onContinueBreak, disabled: presentationBusy }
       : { label: 'Kick off →', onClick: onKickoff, disabled: presentationBusy };
 
   const pressure = pressureBeat?.pressure;
   const otherSideLabel = displaySide === 'player' ? 'away' : 'home';
 
   return (
-    <main className={`v7-lab${presentationBusy ? ' resolving' : ''}`}>
+    <main className={`v7-lab${presentationBusy ? ' resolving' : ''}${planLocked ? ' plan-locked' : ''}`}>
       <section className="v7-scoreboard">
         <div className="v7-score-top">
           <div className="v7-team-total home">
@@ -336,7 +355,7 @@ function V7MatchInner({
         <div className="v7-bench-heading">
           <div>
             <span className="v7-tag">{displaySide === 'player' ? 'Home bench' : 'Away bench'}</span>
-            <strong>{canEditHome ? selectedBench ? 'Choose the player to replace' : 'Tap a substitute to compare options' : 'Tap any card to inspect'}</strong>
+            <strong>{planLocked && displaySide === 'player' ? 'Substitutions locked for the next period' : canEditHome ? selectedBench ? 'Choose the player to replace' : 'Tap a substitute to compare options' : 'Tap any card to inspect'}</strong>
           </div>
           {phase === 'break' && displaySide === 'player' && <div className="v7-energy"><strong>{energyRemaining}</strong><span>/{energyBudget}</span><i>⚡</i></div>}
         </div>
@@ -351,7 +370,7 @@ function V7MatchInner({
                 player={player}
                 compact
                 selected={pickBench === player.cardId}
-                dimmed={spent || unaffordable}
+                dimmed={spent || unaffordable || (planLocked && displaySide === 'player')}
                 badge={spent ? 'IN' : unaffordable ? 'LOCK' : undefined}
                 onClick={() => onPickBench(player)}
               />
@@ -370,7 +389,9 @@ function V7MatchInner({
             selectedBench={selectedBench}
             energyBudget={energyBudget}
             energyRemaining={energyRemaining}
+            locked={planLocked}
             onCancelSelection={() => setPickBench(null)}
+            onEdit={() => setPlanLocked(false)}
             onRemove={removeSub}
           />
           {diag.validationErrors.length > 0 && <div className="v7-sub-validation">{diag.validationErrors.join(' ')}</div>}
