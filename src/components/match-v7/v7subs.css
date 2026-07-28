@@ -44,9 +44,10 @@
 }
 .v7-sub-plan-list::-webkit-scrollbar { display: none; }
 .v7-sub-plan-list > p { margin: 0; color: var(--v7-muted); font-size: 7px; line-height: 1.25; }
-.v7-sub-energy { display: flex; flex: 0 0 auto; align-items: baseline; padding: 3px 5px; border: 1px solid rgba(255,203,92,.27); border-radius: 7px; background: rgba(255,176,43,.08); }
+.v7-sub-energy { display: grid; grid-template-columns: auto auto; flex: 0 0 auto; align-items: baseline; padding: 3px 5px; border: 1px solid rgba(255,203,92,.27); border-radius: 7px; background: rgba(255,176,43,.08); }
 .v7-sub-energy b { color: var(--v7-gold-2); font-size: 12px; }
 .v7-sub-energy span { color: var(--v7-muted); font-size: 6px; }
+.v7-sub-energy small { grid-column: 1 / 3; color: #c9baa0; font-size: 5px; font-weight: 850; }
 .v7-sub-plan-card {
   position: relative;
   display: grid;
@@ -73,19 +74,34 @@
 .v7-sub-plan-card small { grid-column: 1 / 4; color: var(--v7-muted); font-size: 5.5px; }
 .v7-sub-plan-card > i { position: absolute; right: 5px; top: 50%; color: var(--v7-danger); font-size: 10px; font-style: normal; transform: translateY(-50%); }
 
-.v7-sub-panel.choosing { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.4fr); align-items: stretch; }
-.v7-sub-choice { display: flex; align-items: center; justify-content: space-between; gap: 5px; min-width: 0; padding: 6px 7px; border-right: 1px solid var(--v7-line); background: rgba(244,166,44,.07); }
-.v7-sub-choice > div { min-width: 0; }
+.v7-sub-panel.choosing { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr); align-items: stretch; }
+.v7-sub-choice { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 5px; min-width: 0; padding: 6px 7px; border-right: 1px solid var(--v7-line); background: rgba(244,166,44,.07); }
+.v7-sub-choice > div:first-child { min-width: 0; }
 .v7-sub-choice span { display: block; color: var(--v7-gold); font-size: 5.5px; font-weight: 1000; letter-spacing: .1em; }
 .v7-sub-choice strong { display: block; overflow: hidden; margin-top: 1px; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .v7-sub-choice small { display: block; overflow: hidden; margin-top: 2px; color: var(--v7-muted); font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
-.v7-sub-choice button { flex: 0 0 auto; width: 24px; height: 24px; padding: 0; border: 1px solid var(--v7-line); border-radius: 50%; background: #11141a; color: var(--v7-ink); font-size: 15px; cursor: pointer; }
-.v7-sub-target-summary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); align-content: center; gap: 3px; min-width: 0; padding: 5px 6px; }
-.v7-sub-target-summary > strong { grid-column: 1 / 4; overflow: hidden; color: var(--v7-ink); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
-.v7-sub-target-summary span { padding: 3px 2px; border: 1px solid var(--v7-line); border-radius: 5px; font-size: 5.5px; font-weight: 950; text-align: center; white-space: nowrap; }
-.v7-sub-target-summary span.natural { border-color: rgba(113,231,149,.42); color: var(--v7-success); }
-.v7-sub-target-summary span.lane { border-color: rgba(255,211,99,.38); color: var(--v7-gold-2); }
-.v7-sub-target-summary span.risk { border-color: rgba(255,97,112,.38); color: var(--v7-danger); }
+.v7-sub-choice-cost { display: grid; grid-template-columns: auto auto; align-items: baseline; justify-content: center; min-width: 34px; padding: 3px 4px; border: 1px solid rgba(255,203,92,.28); border-radius: 7px; background: rgba(255,176,43,.08); text-align: center; }
+.v7-sub-choice-cost b { color: var(--v7-gold-2); font-size: 12px; line-height: 1; }
+.v7-sub-choice-cost > span { margin-left: 1px; font-size: 6px; }
+.v7-sub-choice-cost small { grid-column: 1 / 3; font-size: 5px; }
+.v7-sub-choice > button { flex: 0 0 auto; width: 24px; height: 24px; padding: 0; border: 1px solid var(--v7-line); border-radius: 50%; background: #11141a; color: var(--v7-ink); font-size: 15px; cursor: pointer; }
+.v7-sub-target-summary { display: grid; grid-template-columns: minmax(0,1fr); align-content: center; gap: 3px; min-width: 0; padding: 4px 6px; }
+.v7-sub-target-summary > strong { overflow: hidden; color: var(--v7-ink); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.v7-sub-best { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: baseline; gap: 1px 5px; min-width: 0; padding: 3px 5px; border: 1px solid var(--v7-line); border-radius: 6px; background: rgba(255,255,255,.025); }
+.v7-sub-best > span { color: var(--v7-muted); font-size: 5px; font-weight: 1000; letter-spacing: .08em; }
+.v7-sub-best > b { overflow: hidden; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.v7-sub-best > small { grid-column: 1 / 3; color: var(--v7-muted); font-size: 5.5px; white-space: nowrap; }
+.v7-sub-best.boost { border-color: rgba(113,231,149,.5); background: rgba(113,231,149,.08); }
+.v7-sub-best.boost > span,
+.v7-sub-best.boost > b { color: var(--v7-success); }
+.v7-sub-best.natural { border-color: rgba(113,231,149,.32); }
+.v7-sub-best.lane { border-color: rgba(255,211,99,.32); }
+.v7-sub-best.risk { border-color: rgba(255,97,112,.34); }
+.v7-sub-fit-counts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 3px; }
+.v7-sub-fit-counts span { padding: 2px; border: 1px solid var(--v7-line); border-radius: 5px; font-size: 5px; font-weight: 950; text-align: center; white-space: nowrap; }
+.v7-sub-fit-counts span.natural { border-color: rgba(113,231,149,.42); color: var(--v7-success); }
+.v7-sub-fit-counts span.lane { border-color: rgba(255,211,99,.38); color: var(--v7-gold-2); }
+.v7-sub-fit-counts span.risk { border-color: rgba(255,97,112,.38); color: var(--v7-danger); }
 
 .v7-player-card.targetable.target-boost { border-color: var(--v7-success); box-shadow: 0 0 0 2px rgba(113,231,149,.32), 0 0 22px rgba(113,231,149,.28), 0 5px 11px rgba(0,0,0,.58); }
 .v7-player-card.targetable.target-natural { border-color: rgba(113,231,149,.88); }
@@ -114,4 +130,5 @@
   .v7-sub-panel { min-height: 64px; }
   .v7-sub-impact > div { padding-block: 3px 2px; }
   .v7-sub-plan-list { min-height: 27px; }
+  .v7-sub-best > small { display: none; }
 }
