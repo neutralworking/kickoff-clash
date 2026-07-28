@@ -48,6 +48,13 @@ const BEAT_KIND: Partial<Record<MatchEventKind, BroadcastBeatKind>> = {
   full_time: 'full_time',
 };
 
+const HIDDEN_STANDALONE_EVENTS = new Set<MatchEventKind>([
+  'effect_applied',
+  'effect_expired',
+  'info',
+  'priority_change',
+]);
+
 function labelFor(event: MatchEvent): Pick<BroadcastBeat, 'eyebrow' | 'title' | 'emphasis'> {
   switch (event.kind) {
     case 'action_activation': return { eyebrow: 'Your action', title: event.text, emphasis: 'positive' };
@@ -97,6 +104,11 @@ export function buildBroadcastBeats(events: readonly MatchEvent[]): BroadcastBea
       current.detail = current.detail ? `${current.detail} · ${event.text}` : event.text;
       continue;
     }
+
+    // Passive upkeep is still retained in receipts and diagnostics, but it is not
+    // a match moment. Ongoing effects such as "Wall is active" should live on the
+    // relevant card rather than interrupting goals, chances and coaching changes.
+    if (HIDDEN_STANDALONE_EVENTS.has(event.kind)) continue;
 
     const kind = BEAT_KIND[event.kind] ?? 'info';
     const label = labelFor(event);
