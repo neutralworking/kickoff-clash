@@ -1,23 +1,13 @@
 'use client';
 
 /**
- * V6MatchPhase — the live card-deployment match in the team-selection look, with a
- * choreographed period resolution (owner direction). Layout, top → bottom:
- *   • controls: Tactics · Formation · Manager + the YOU/OPP team switch
- *   • the SCOREBOARD: a running clock, the score, both teams' ATT/DEF counters, and
- *     two binary chance bars (HOME = its ATT vs the other's DEF, and AWAY likewise)
- *   • the active team on a formation pitch (portraits + big ATT/DEF) + its bench
- *   • the match log (goals, saves, keeper denials)
- *
- * Pressing Continue resolves the coming period as an ANIMATION: the ATT/DEF counters
- * glow → the bars fill → the chance count pops → the dice roll for each side (each
- * pre-allocated to an unseen player) → a goal flashes the scorer's card and ticks the
- * score. No per-period breakdown; the log carries the colour. The engine + the
- * onMatchComplete contract are unchanged.
+ * Live V6 match presentation. The V6 engine and GameShell result contract remain
+ * authoritative; this component only stages coaching decisions and receipts.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import './v6lab.css';
+import './v6match-review.css';
 import type { Card } from '../../lib/scoring';
 import type { RunState } from '../../lib/run';
 import { getOpponent, buildMatchSeed, cupSize } from '../../lib/run';
@@ -40,6 +30,7 @@ import {
   type BoardReceipt,
   type CardInPlay,
   type ChanceRoll,
+  type RevealEvent,
   type SubPair,
   type TeamSide,
   type V6Card,
@@ -49,6 +40,7 @@ import type { RngState } from '../../lib/match-v6';
 import { portraitSrc } from '../cards/portrait';
 import { V6FormationPitch, type SlotStat } from './V6FormationPitch';
 import { V6PitchCard } from './V6PitchCard';
+import { previewPlayerPlan, recommendOutgoing, type V6PlanProjection } from './v6MatchPreview';
 
 interface MatchResultPayload {
   yourGoals: number;
@@ -63,7 +55,7 @@ interface MatchResultPayload {
 
 type Phase = 'break' | 'resolving' | 'ended';
 type View = 'you' | 'opp';
-type Stage = 'glow' | 'bars' | 'chances' | 'dice' | 'over';
+type Stage = 'reveal' | 'glow' | 'bars' | 'chances' | 'dice' | 'over';
 
 const BREAK_NAME = ['Kick-off', 'First break', 'Half-time', 'Final break'];
 const DIE = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
@@ -71,6 +63,8 @@ const DIE = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 interface Resolve {
   fromBoards: { player: BoardReceipt; opponent: BoardReceipt };
   rolls: ChanceRoll[];
+  reveals: RevealEvent[];
+  revealIdx: number;
   toState: V6MatchState;
   rng: RngState;
   preP: number;
@@ -81,264 +75,404 @@ interface Resolve {
 
 function receiptsOf(board: BoardReceipt): Record<string, SlotStat> {
   const out: Record<string, SlotStat> = {};
-  for (const sec of SECTORS) for (const c of board[sec].cards) out[c.cardId] = { attack: c.attack, defence: c.defence, outOfPosition: c.outOfPosition };
+  for (const sec of SECTORS) {
+    for (const card of board[sec].cards) {
+      out[card.cardId] = { attack: card.attack, defence: card.defence, outOfPosition: card.outOfPosition };
+    }
+  }
   return out;
 }
+
 function totalsOf(board: BoardReceipt): { att: number; def: number } {
   let att = 0;
   let def = 0;
-  for (const sec of SECTORS) { att += Math.max(0, board[sec].attack); def += Math.max(0, board[sec].defence); }
+  for (const sec of SECTORS) {
+    att += Math.max(0, board[sec].attack);
+    def += Math.max(0, board[sec].defence);
+  }
   return { att, def };
 }
-function slotCardsFor(formationId: string, starterIds: string[], active: CardInPlay[], pool: Record<string, V6Card>): (V6Card | null)[] {
-  const sectors = getFormation(formationId).slots.map((s) => sectorFromSlot(s.x));
-  return assignSlots(starterIds, sectors, active.map((c) => ({ cardId: c.cardId, sector: c.sector }))).map((id) => (id ? pool[id] ?? null : null));
+
+function slotCardsFor(
+  formationId: string,
+  starterIds: string[],
+  active: CardInPlay[],
+  pool: Record<string, V6Card>,
+): (V6Card | null)[] {
+  const sectors = getFormation(formationId).slots.map((slot) => sectorFromSlot(slot.x));
+  return assignSlots(starterIds, sectors, active.map((card) => ({ cardId: card.cardId, sector: card.sector })))
+    .map((id) => (id ? pool[id] ?? null : null));
 }
 
-interface LogRow { kind: 'goal' | 'save' | 'reveal' | 'period'; side?: TeamSide; text: string; }
+interface LogRow {
+  kind: 'goal' | 'save' | 'reveal' | 'period';
+  side?: TeamSide;
+  text: string;
+}
+
 function logRows(log: MatchLogEvent[], pool: Record<string, V6Card>, playerName: string, oppName: string): LogRow[] {
   const rows: LogRow[] = [];
-  let period = 1;
-  for (const e of log) {
-    if (e.type === 'reveal' && (e.event.kind === 'reveal' || e.event.kind === 'sub_off')) {
-      rows.push({ kind: 'reveal', side: e.event.side, text: e.event.text });
-    } else if (e.type === 'goal') {
-      const who = e.scorerCardId ? pool[e.scorerCardId]?.shortName ?? '' : '';
-      rows.push({ kind: 'goal', side: e.side, text: `⚽ ${e.side === 'player' ? playerName : oppName}${who ? ` — ${who}` : ''} · ${e.sector}` });
-    } else if (e.type === 'period_end') {
-      period += 1;
+  for (const event of log) {
+    if (event.type === 'reveal' && (event.event.kind === 'reveal' || event.event.kind === 'sub_off')) {
+      rows.push({ kind: 'reveal', side: event.event.side, text: event.event.text });
+    } else if (event.type === 'goal') {
+      const who = event.scorerCardId ? pool[event.scorerCardId]?.shortName ?? '' : '';
+      rows.push({
+        kind: 'goal',
+        side: event.side,
+        text: `⚽ ${event.side === 'player' ? playerName : oppName}${who ? ` — ${who}` : ''} · ${event.sector}`,
+      });
     }
   }
-  return rows.reverse(); // newest first
+  return rows.reverse();
 }
 
-/** Colour a non-scoring roll for the log — a keeper claim / clearance (the save layer). */
 function saveLine(roll: ChanceRoll, pool: Record<string, V6Card>): string {
   const saver = roll.saverCardId ? pool[roll.saverCardId]?.shortName : undefined;
   const six = roll.rolls.includes(6);
   if (saver) return six ? `🧤 ${saver} claws away a certain goal!` : `${saver} clears the danger`;
-  return 'the chance goes begging';
+  return 'The chance goes begging';
 }
 
-export default function V6MatchPhase({ runState, onMatchComplete }: { runState: RunState; onMatchComplete: (r: MatchResultPayload) => void }) {
+function metricTone(delta: number, inverse = false): string {
+  if (delta === 0) return '';
+  const positive = inverse ? delta < 0 : delta > 0;
+  return positive ? ' good' : ' bad';
+}
+
+function projectionWarning(projection: V6PlanProjection, pool: Record<string, V6Card>): string | null {
+  const warnings = projection.incomingReceipts.flatMap((receipt) => {
+    if (!receipt.outOfPosition) return [];
+    const penalty = receipt.mods.find((mod) => mod.label === 'Out of position');
+    const name = pool[receipt.cardId]?.shortName ?? receipt.name;
+    return [`${name} out of position: ${penalty?.attack ?? 0} ATT / ${penalty?.defence ?? 0} DEF`];
+  });
+  return warnings.length ? warnings.join(' · ') : null;
+}
+
+export default function V6MatchPhase({
+  runState,
+  onMatchComplete,
+}: {
+  runState: RunState;
+  onMatchComplete: (result: MatchResultPayload) => void;
+}) {
   const formation = getFormation(runState.activeFormation);
   const matchSeed = buildMatchSeed(runState.seed, runState.round, runState.matchInCup);
   const opponentName = getOpponent(runState.round).name;
 
   const hand = useMemo<HandState>(() => {
     const suspended = new Set(runState.suspendedIds ?? []);
-    const eligible = runState.deck.filter((c) => !suspended.has(c.id));
+    const eligible = runState.deck.filter((card) => !suspended.has(card.id));
     return (
-      handFromSelection(eligible, (runState.startingXI ?? []).filter((id) => !suspended.has(id)), (runState.benchIds ?? []).filter((id) => !suspended.has(id)), formation) ??
-      rollXI(eligible, formation, matchSeed)
+      handFromSelection(
+        eligible,
+        (runState.startingXI ?? []).filter((id) => !suspended.has(id)),
+        (runState.benchIds ?? []).filter((id) => !suspended.has(id)),
+        formation,
+      ) ?? rollXI(eligible, formation, matchSeed)
     );
   }, [runState, formation, matchSeed]);
 
   const playerSquad = useMemo(() => {
-    const squad = bridgePlayerSquad('Home', hand.xi, hand.bench, formation);
+    const squad = bridgePlayerSquad('Your XI', hand.xi, hand.bench, formation);
     return {
       ...squad,
-      xi: squad.xi.map((c, i) => ({ ...c, portrait: portraitSrc(hand.xi[i]) ?? undefined })),
-      bench: squad.bench.map((c, i) => ({ ...c, portrait: portraitSrc(hand.bench[i]) ?? undefined })),
+      xi: squad.xi.map((card, index) => ({ ...card, portrait: portraitSrc(hand.xi[index]) ?? undefined })),
+      bench: squad.bench.map((card, index) => ({ ...card, portrait: portraitSrc(hand.bench[index]) ?? undefined })),
     };
   }, [hand, formation]);
 
   const opponentSquad = useMemo(() => {
-    const opp = getOpponent(runState.round);
+    const opponent = getOpponent(runState.round);
     const power = cupMatchPower(runState.round, runState.matchInCup, cupSize(runState.round));
-    const sq = bridgeOpponentSquad({ name: 'Away', round: runState.round, style: opp.style, seed: matchSeed, power });
-    // Give the opponent real portraits too (keyed off its card id/position) so its
-    // cards read like the player's — not the CSS-avatar fallback blob.
-    const withPortrait = (c: V6Card): V6Card => ({ ...c, portrait: portraitSrc({ id: c.id, name: c.name, position: c.position }) ?? undefined });
-    return { ...sq, xi: sq.xi.map(withPortrait), bench: sq.bench.map(withPortrait) };
-  }, [runState.round, runState.matchInCup, matchSeed]);
+    const squad = bridgeOpponentSquad({
+      name: opponentName,
+      round: runState.round,
+      style: opponent.style,
+      seed: matchSeed,
+      power,
+    });
+    const withPortrait = (card: V6Card): V6Card => ({
+      ...card,
+      portrait: portraitSrc({ id: card.id, name: card.name, position: card.position }) ?? undefined,
+    });
+    return { ...squad, xi: squad.xi.map(withPortrait), bench: squad.bench.map(withPortrait) };
+  }, [runState.round, runState.matchInCup, matchSeed, opponentName]);
 
   const [step, setStep] = useState<MatchStep>(() => startMatchFromSquads(playerSquad, opponentSquad, matchSeed));
   const [phase, setPhase] = useState<Phase>('break');
   const [view, setView] = useState<View>('you');
   const [plan, setPlan] = useState<SubPair[]>([]);
   const [pick, setPick] = useState<string | null>(null);
-  const [panel, setPanel] = useState<'formation' | 'manager' | 'tactics' | null>(null);
+  const [planLocked, setPlanLocked] = useState(false);
+  const [panel, setPanel] = useState<'formation' | 'manager' | null>(null);
   const [resolve, setResolve] = useState<Resolve | null>(null);
 
-  const st = step.state;
-  const pool = st.cardPool;
-  const boards = useMemo(() => effectiveBoards(st), [st]);
+  const state = step.state;
+  const pool = state.cardPool;
+  const boards = useMemo(() => effectiveBoards(state), [state]);
+  const planProjection = useMemo(() => previewPlayerPlan(state, plan), [state, plan]);
+  const selectedRecommendation = useMemo(
+    () => (pick ? recommendOutgoing(state, plan, pick) : null),
+    [state, plan, pick],
+  );
+  const reviewProjection = selectedRecommendation?.projection ?? (plan.length > 0 ? planProjection : null);
 
-  // ── Resolve state machine (glow → bars → chances → dice → over) ──────────────
   useEffect(() => {
     if (!resolve) return;
-    const r = resolve;
-    const set = (patch: Partial<Resolve>) => setResolve((cur) => (cur ? { ...cur, ...patch } : cur));
-    if (r.stage === 'glow') { const t = setTimeout(() => set({ stage: 'bars' }), 650); return () => clearTimeout(t); }
-    if (r.stage === 'bars') { const t = setTimeout(() => set({ stage: 'chances' }), 850); return () => clearTimeout(t); }
-    if (r.stage === 'chances') { const t = setTimeout(() => set({ stage: 'dice', dieIdx: 0 }), 750); return () => clearTimeout(t); }
-    if (r.stage === 'dice') {
-      if (r.dieIdx >= r.rolls.length) { const t = setTimeout(() => set({ stage: 'over' }), 400); return () => clearTimeout(t); }
-      const dwell = r.rolls[r.dieIdx]?.scored ? 1500 : 560;
-      const t = setTimeout(() => set({ dieIdx: r.dieIdx + 1 }), dwell);
-      return () => clearTimeout(t);
+    const current = resolve;
+    const patch = (next: Partial<Resolve>) => setResolve((value) => (value ? { ...value, ...next } : value));
+
+    if (current.stage === 'reveal') {
+      const reveal = current.reveals[current.revealIdx];
+      if (!reveal) {
+        patch({ stage: 'glow' });
+        return;
+      }
+      setView(reveal.side === 'player' ? 'you' : 'opp');
+      const timer = window.setTimeout(() => patch({ revealIdx: current.revealIdx + 1 }), 900);
+      return () => window.clearTimeout(timer);
     }
-    if (r.stage === 'over') {
-      const to = r.toState;
-      const next = to.period < 4 ? openBreak(to) : to;
-      const t = setTimeout(() => {
-        setStep({ state: next, rng: r.rng });
-        setPhase(to.period < 4 ? 'break' : 'ended');
+    if (current.stage === 'glow') {
+      const timer = window.setTimeout(() => patch({ stage: 'bars' }), 650);
+      return () => window.clearTimeout(timer);
+    }
+    if (current.stage === 'bars') {
+      const timer = window.setTimeout(() => patch({ stage: 'chances' }), 850);
+      return () => window.clearTimeout(timer);
+    }
+    if (current.stage === 'chances') {
+      const timer = window.setTimeout(() => patch({ stage: 'dice', dieIdx: 0 }), 750);
+      return () => window.clearTimeout(timer);
+    }
+    if (current.stage === 'dice') {
+      if (current.dieIdx >= current.rolls.length) {
+        const timer = window.setTimeout(() => patch({ stage: 'over' }), 400);
+        return () => window.clearTimeout(timer);
+      }
+      const dwell = current.rolls[current.dieIdx]?.scored ? 1500 : 650;
+      const timer = window.setTimeout(() => patch({ dieIdx: current.dieIdx + 1 }), dwell);
+      return () => window.clearTimeout(timer);
+    }
+    if (current.stage === 'over') {
+      const nextState = current.toState.period < 4 ? openBreak(current.toState) : current.toState;
+      const timer = window.setTimeout(() => {
+        setStep({ state: nextState, rng: current.rng });
+        setPhase(current.toState.period < 4 ? 'break' : 'ended');
         setPlan([]);
         setPick(null);
+        setPlanLocked(false);
+        setView('you');
         setResolve(null);
       }, 350);
-      return () => clearTimeout(t);
+      return () => window.clearTimeout(timer);
     }
   }, [resolve]);
 
   const startResolve = useCallback(() => {
-    let fromState = st;
-    if (st.breakIndex > 0) {
-      fromState = commitBreak(st, { side: 'player', pairs: plan }, defaultOpponentAI.plan(st, 'opponent')).state;
+    if (state.breakIndex > 0 && plan.length > 0 && !planLocked) return;
+
+    let fromState = state;
+    let reveals: RevealEvent[] = [];
+    if (state.breakIndex > 0) {
+      const opponentPlan = defaultOpponentAI.plan(state, 'opponent');
+      const committed = commitBreak(state, { side: 'player', pairs: plan }, opponentPlan);
+      fromState = committed.state;
+      reveals = committed.reveals.filter((reveal) => reveal.kind === 'reveal');
     }
-    const adv = advancePeriod(fromState, step.rng);
-    setStep({ state: fromState, rng: step.rng }); // pitch shows the post-sub board, pre-period score
+
+    const advanced = advancePeriod(fromState, step.rng);
+    setStep({ state: fromState, rng: step.rng });
     setResolve({
       fromBoards: effectiveBoards(fromState),
-      rolls: adv.result.rolls,
-      toState: adv.state,
-      rng: adv.rng,
+      rolls: advanced.result.rolls,
+      reveals,
+      revealIdx: 0,
+      toState: advanced.state,
+      rng: advanced.rng,
       preP: fromState.player.score,
       preO: fromState.opponent.score,
-      stage: 'glow',
+      stage: reveals.length > 0 ? 'reveal' : 'glow',
       dieIdx: -1,
     });
     setPhase('resolving');
     setPick(null);
-  }, [st, step.rng, plan]);
+  }, [state, step.rng, plan, planLocked]);
 
   const finish = useCallback(() => {
-    const yourGoals = st.player.score;
-    const opponentGoals = st.opponent.score;
+    const yourGoals = state.player.score;
+    const opponentGoals = state.opponent.score;
     const result: 'win' | 'draw' | 'loss' = yourGoals > opponentGoals ? 'win' : yourGoals < opponentGoals ? 'loss' : 'draw';
     const scored: Record<number, { goals: number; assists: number }> = {};
-    for (const e of st.log) {
-      if (e.type === 'goal' && e.side === 'player' && e.scorerCardId) {
-        const m = /^live_(\d+)$/.exec(e.scorerCardId);
-        if (m) (scored[Number(m[1])] ??= { goals: 0, assists: 0 }).goals += 1;
+    for (const event of state.log) {
+      if (event.type === 'goal' && event.side === 'player' && event.scorerCardId) {
+        const match = /^live_(\d+)$/.exec(event.scorerCardId);
+        if (match) (scored[Number(match[1])] ??= { goals: 0, assists: 0 }).goals += 1;
       }
     }
     let playerOfMatch: MatchResultPayload['playerOfMatch'] = null;
-    for (const c of hand.xi) {
-      const g = scored[c.id]?.goals ?? 0;
-      if (g > 0 && (!playerOfMatch || g > playerOfMatch.goals)) playerOfMatch = { card: c, goals: g, assists: 0, rating: 6 + g };
+    for (const card of hand.xi) {
+      const goals = scored[card.id]?.goals ?? 0;
+      if (goals > 0 && (!playerOfMatch || goals > playerOfMatch.goals)) {
+        playerOfMatch = { card, goals, assists: 0, rating: 6 + goals };
+      }
     }
-    const headline = result === 'win' ? `Won ${yourGoals}–${opponentGoals} on the deployment board` : result === 'loss' ? `Lost ${yourGoals}–${opponentGoals}` : `Drew ${yourGoals}–${opponentGoals}`;
-    onMatchComplete({ yourGoals, opponentGoals, result, verdict: { headline, factors: [] }, sentOffIds: [], scored, playerOfMatch, handState: { ...hand, yourGoals, opponentGoals } });
-  }, [st, hand, onMatchComplete]);
+    const headline = result === 'win'
+      ? `Won ${yourGoals}–${opponentGoals} on the deployment board`
+      : result === 'loss'
+        ? `Lost ${yourGoals}–${opponentGoals}`
+        : `Drew ${yourGoals}–${opponentGoals}`;
+    onMatchComplete({
+      yourGoals,
+      opponentGoals,
+      result,
+      verdict: { headline, factors: [] },
+      sentOffIds: [],
+      scored,
+      playerOfMatch,
+      handState: { ...hand, yourGoals, opponentGoals },
+    });
+  }, [state, hand, onMatchComplete]);
 
-  // ── Break interaction ────────────────────────────────────────────────────────
-  const discounts = st.player.effects.filter((e) => e.kind === 'discount');
-  const spent = plan.reduce((n, p) => n + cardEffectiveCost(pool[p.inCardId], discounts), 0);
-  const plannedOut = useMemo(() => plan.map((p) => p.outCardId), [plan]);
-  const plannedIn = useMemo(() => new Set(plan.map((p) => p.inCardId)), [plan]);
-  const canSub = phase === 'break' && view === 'you' && st.energy > 0;
+  const discounts = state.player.effects.filter((effect) => effect.kind === 'discount');
+  const spent = plan.reduce((sum, pair) => sum + cardEffectiveCost(pool[pair.inCardId], discounts), 0);
+  const plannedOut = useMemo(() => plan.map((pair) => pair.outCardId), [plan]);
+  const plannedIn = useMemo(() => new Set(plan.map((pair) => pair.inCardId)), [plan]);
+  const canSub = phase === 'break' && view === 'you' && state.energy > 0 && !planLocked;
 
   const selectBench = useCallback((id: string) => {
     if (plannedIn.has(id)) return;
-    if (spent + cardEffectiveCost(pool[id], discounts) > st.energy && pick !== id) return;
-    setPick((cur) => (cur === id ? null : id));
-  }, [plannedIn, spent, pool, discounts, st.energy, pick]);
+    if (spent + cardEffectiveCost(pool[id], discounts) > state.energy && pick !== id) return;
+    setPick((current) => (current === id ? null : id));
+  }, [plannedIn, spent, pool, discounts, state.energy, pick]);
+
   const pickActive = useCallback((outId: string) => {
     if (!pick || plannedOut.includes(outId)) return;
-    if (spent + cardEffectiveCost(pool[pick], discounts) > st.energy) { setPick(null); return; }
-    setPlan((p) => [...p, { outCardId: outId, inCardId: pick }]);
+    if (spent + cardEffectiveCost(pool[pick], discounts) > state.energy) {
+      setPick(null);
+      return;
+    }
+    setPlan((current) => [...current, { outCardId: outId, inCardId: pick }]);
     setPick(null);
-  }, [pick, plannedOut, spent, pool, discounts, st.energy]);
-  const undoPair = (inId: string) => setPlan((p) => p.filter((x) => x.inCardId !== inId));
+    setPlanLocked(false);
+  }, [pick, plannedOut, spent, pool, discounts, state.energy]);
 
-  // ── Derived view data ────────────────────────────────────────────────────────
+  const undoPair = (inId: string) => {
+    if (planLocked) return;
+    setPlan((current) => current.filter((pair) => pair.inCardId !== inId));
+  };
+
   const viewingYou = view === 'you';
   const activeSquad = viewingYou ? playerSquad : opponentSquad;
-  const active = (viewingYou ? st.player : st.opponent).cards.filter((c) => c.zone === 'active');
-  const starterIds = (viewingYou ? playerSquad : opponentSquad).xi.map((c) => c.id);
+  const active = (viewingYou ? state.player : state.opponent).cards.filter((card) => card.zone === 'active');
+  const starterIds = activeSquad.xi.map((card) => card.id);
   const slotCards = slotCardsFor(activeSquad.formationId, starterIds, active, pool);
   const receipts = receiptsOf(viewingYou ? boards.player : boards.opponent);
-  const benchIds = (viewingYou ? st.player : st.opponent).cards.filter((c) => c.zone === 'bench').map((c) => c.cardId);
+  const benchIds = (viewingYou ? state.player : state.opponent).cards
+    .filter((card) => card.zone === 'bench')
+    .map((card) => card.cardId);
 
-  // Scoreboard numbers (bars use the resolving snapshot so they reflect the played board).
   const barBoards = resolve ? resolve.fromBoards : boards;
-  const homeT = totalsOf(barBoards.player);
-  const awayT = totalsOf(barBoards.opponent);
-  const homeSplit = homeT.att / Math.max(1, homeT.att + awayT.def); // HOME chances = its ATT vs their DEF
-  const awaySplit = awayT.att / Math.max(1, awayT.att + homeT.def);
-  const barsLive = !!resolve && resolve.stage !== 'glow';
+  const homeTotals = totalsOf(barBoards.player);
+  const awayTotals = totalsOf(barBoards.opponent);
+  const homeSplit = homeTotals.att / Math.max(1, homeTotals.att + awayTotals.def);
+  const awaySplit = awayTotals.att / Math.max(1, awayTotals.att + homeTotals.def);
+  const barsLive = Boolean(resolve && !['reveal', 'glow'].includes(resolve.stage));
   const glowing = resolve?.stage === 'glow';
 
-  // Running score + current die during the dice stage.
   const diceOn = resolve?.stage === 'dice' || resolve?.stage === 'chances' || resolve?.stage === 'over';
   const rolls = resolve?.rolls ?? [];
-  const homeChances = rolls.filter((r) => r.side === 'player').length;
-  const awayChances = rolls.filter((r) => r.side === 'opponent').length;
+  const homeChances = rolls.filter((roll) => roll.side === 'player').length;
+  const awayChances = rolls.filter((roll) => roll.side === 'opponent').length;
   const dieIdx = resolve?.stage === 'dice' ? Math.min(resolve.dieIdx, rolls.length - 1) : -1;
-  let showP = resolve ? resolve.preP : st.player.score;
-  let showO = resolve ? resolve.preO : st.opponent.score;
-  if (resolve && resolve.stage === 'dice') {
-    for (let k = 0; k <= resolve.dieIdx && k < rolls.length; k++) if (rolls[k].scored) { if (rolls[k].side === 'player') showP++; else showO++; }
-  } else if (resolve && resolve.stage === 'over') { showP = resolve.toState.player.score; showO = resolve.toState.opponent.score; }
-  const curRoll = dieIdx >= 0 ? rolls[dieIdx] : null;
-  const goalCard = curRoll?.scored && curRoll.attackerCardId ? pool[curRoll.attackerCardId] : null;
+  let shownPlayerScore = resolve ? resolve.preP : state.player.score;
+  let shownOpponentScore = resolve ? resolve.preO : state.opponent.score;
+  if (resolve?.stage === 'dice') {
+    for (let index = 0; index <= resolve.dieIdx && index < rolls.length; index += 1) {
+      if (!rolls[index].scored) continue;
+      if (rolls[index].side === 'player') shownPlayerScore += 1;
+      else shownOpponentScore += 1;
+    }
+  } else if (resolve?.stage === 'over') {
+    shownPlayerScore = resolve.toState.player.score;
+    shownOpponentScore = resolve.toState.opponent.score;
+  }
+  const currentRoll = dieIdx >= 0 ? rolls[dieIdx] : null;
+  const goalCard = currentRoll?.scored && currentRoll.attackerCardId ? pool[currentRoll.attackerCardId] : null;
+  const currentReveal = resolve?.stage === 'reveal' ? resolve.reveals[resolve.revealIdx] ?? null : null;
+  const revealCard = currentReveal?.cardId ? pool[currentReveal.cardId] : null;
 
-  // Match clock (deterministic minute from period + dice progress).
-  const resolvedPeriods = st.log.filter((e) => e.type === 'period_end').length;
-  const baseMin = resolvedPeriods * 22 + (resolve ? 1 : 0) * 0;
-  const diceMin = resolve && rolls.length ? Math.round((Math.max(0, resolve.dieIdx) / rolls.length) * 22) : 0;
-  const minute = Math.min(90, resolve ? (resolvedPeriods * 22) + diceMin : baseMin);
+  const resolvedPeriods = state.log.filter((event) => event.type === 'period_end').length;
+  const diceMinute = resolve && rolls.length ? Math.round((Math.max(0, resolve.dieIdx) / rolls.length) * 22) : 0;
+  const minute = Math.min(90, resolve ? resolvedPeriods * 22 + diceMinute : resolvedPeriods * 22);
 
-  const log = useMemo(() => logRows(st.log, pool, 'Home', 'Away'), [st.log, pool]);
-
+  const log = useMemo(() => logRows(state.log, pool, 'Your XI', opponentName), [state.log, pool, opponentName]);
   const managerName = runState.jokers?.[0]?.name ?? '—';
-  const panelText = panel === 'formation' ? `Formation · ${formation.name}` : panel === 'manager' ? `Manager · ${managerName}` : panel === 'tactics' ? `Tactics · ${(runState.tacticsDeck ?? []).map((t) => t.name).join(', ') || 'none'}` : '';
+  const panelText = panel === 'formation'
+    ? `Formation · ${formation.name}`
+    : panel === 'manager'
+      ? `Manager · ${managerName}`
+      : '';
 
-  const cta = phase === 'ended'
-    ? { label: 'Full time →', on: finish }
-    : { label: st.breakIndex === 0 ? 'Kick off →' : 'Continue →', on: startResolve };
+  const selectedIncoming = pick ? pool[pick] : null;
+  const recommendedOutgoing = selectedRecommendation ? pool[selectedRecommendation.outCardId] : null;
+  const reviewWarning = reviewProjection ? projectionWarning(reviewProjection, pool) : null;
+
+  const primary = phase === 'ended'
+    ? { label: 'Full time →', onClick: finish, disabled: false }
+    : state.breakIndex === 0
+      ? { label: 'Kick off →', onClick: startResolve, disabled: false }
+      : plan.length > 0 && !planLocked
+        ? {
+            label: 'Review changes →',
+            onClick: () => setPlanLocked(true),
+            disabled: !planProjection.legal,
+          }
+        : {
+            label: planLocked ? 'Play next period →' : 'Continue →',
+            onClick: startResolve,
+            disabled: false,
+          };
 
   return (
-    <div className="v6-lab v6-match">
-      {/* controls */}
+    <div className={`v6-lab v6-match${planLocked ? ' plan-locked' : ''}`}>
       <div className="v6-mrow">
         <div className="v6-mbtns">
-          <button className={panel === 'tactics' ? 'on' : ''} onClick={() => setPanel((p) => (p === 'tactics' ? null : 'tactics'))}>Tactics</button>
-          <button className={panel === 'formation' ? 'on' : ''} onClick={() => setPanel((p) => (p === 'formation' ? null : 'formation'))}>Formation</button>
-          <button className={panel === 'manager' ? 'on' : ''} onClick={() => setPanel((p) => (p === 'manager' ? null : 'manager'))}>Manager</button>
+          <button className={panel === 'formation' ? 'on' : ''} onClick={() => setPanel((current) => (current === 'formation' ? null : 'formation'))}>Formation</button>
+          <button className={panel === 'manager' ? 'on' : ''} onClick={() => setPanel((current) => (current === 'manager' ? null : 'manager'))}>Manager</button>
         </div>
         <div className="v6-teamtoggle" role="tablist" aria-label="Switch team">
-          <button className={viewingYou ? 'on' : ''} onClick={() => setView('you')}>HOME</button>
-          <button className={!viewingYou ? 'on' : ''} onClick={() => setView('opp')}>AWAY</button>
+          <button className={viewingYou ? 'on' : ''} onClick={() => setView('you')}>YOU</button>
+          <button className={!viewingYou ? 'on' : ''} onClick={() => setView('opp')}>OPP</button>
         </div>
       </div>
       {panel && <div className="v6-mpanel" onClick={() => setPanel(null)}>{panelText}</div>}
 
-      {/* scoreboard: clock · score · ATT/DEF counters · chance bars */}
       <div className="v6-sb">
         <div className="v6-sb-top">
-          <div className={`v6-sb-cnt${glowing ? ' glow' : ''}`}><span className="lbl">HOME</span><span className="v6-att">{homeT.att}</span><span className="v6-def">{homeT.def}</span></div>
-          <div className="v6-sb-mid"><div className="v6-clock">{minute}′</div><div className="v6-sb-score">{showP}<span>–</span>{showO}</div></div>
-          <div className={`v6-sb-cnt right${glowing ? ' glow' : ''}`}><span className="v6-att">{awayT.att}</span><span className="v6-def">{awayT.def}</span><span className="lbl">AWAY</span></div>
+          <div className={`v6-sb-cnt${glowing ? ' glow' : ''}`}>
+            <span className="lbl">YOU</span><span className="v6-att">{homeTotals.att}</span><span className="v6-def">{homeTotals.def}</span>
+          </div>
+          <div className="v6-sb-mid"><div className="v6-clock">{minute}′</div><div className="v6-sb-score">{shownPlayerScore}<span>–</span>{shownOpponentScore}</div></div>
+          <div className={`v6-sb-cnt right${glowing ? ' glow' : ''}`}>
+            <span className="v6-att">{awayTotals.att}</span><span className="v6-def">{awayTotals.def}</span><span className="lbl v6-team-name">{opponentName}</span>
+          </div>
         </div>
         <div className="v6-bars">
           <div className="v6-bar-row">
-            <span className="v6-bar-tag">HOME</span>
+            <span className="v6-bar-tag">YOU</span>
             <div className="v6-bar"><i className="fill home" style={{ width: `${barsLive ? homeSplit * 100 : 0}%` }} /></div>
             {diceOn && <span className={`v6-bar-ch${resolve?.stage === 'chances' ? ' pop' : ''}`}>{homeChances}⚀</span>}
           </div>
           <div className="v6-bar-row">
-            <span className="v6-bar-tag">AWAY</span>
+            <span className="v6-bar-tag">OPP</span>
             <div className="v6-bar"><i className="fill away" style={{ width: `${barsLive ? awaySplit * 100 : 0}%` }} /></div>
             {diceOn && <span className={`v6-bar-ch${resolve?.stage === 'chances' ? ' pop' : ''}`}>{awayChances}⚀</span>}
           </div>
         </div>
       </div>
 
-      {/* pitch + bench, with the dice / goal overlay during resolve */}
       <div className="v6-mpitch">
         <div className="v6-pitchwrap">
           <V6FormationPitch
@@ -350,11 +484,19 @@ export default function V6MatchPhase({ runState, onMatchComplete }: { runState: 
             plannedOutIds={plannedOut}
             onPick={canSub ? pickActive : undefined}
           />
-          {resolve?.stage === 'dice' && curRoll && (
+          {currentReveal && revealCard && (
+            <div className="v6-reveal-overlay" aria-live="polite">
+              <div className="side">{currentReveal.side === 'player' ? 'Your change' : `${opponentName} change`}</div>
+              <div className="change">Substitution</div>
+              <div className="card"><V6PitchCard card={revealCard} /></div>
+              <div className="detail">{currentReveal.text}</div>
+            </div>
+          )}
+          {resolve?.stage === 'dice' && currentRoll && (
             <div className="v6-diebox">
-              <div className="v6-dielabel">{curRoll.side === 'player' ? 'HOME' : 'AWAY'} · {curRoll.sector}</div>
-              <div key={dieIdx} className={`v6-die-big${curRoll.scored ? ' hot' : ''}`}>{DIE[curRoll.rolls[curRoll.rolls.length - 1] - 1]}</div>
-              {!curRoll.scored && <div className="v6-outcome miss">{saveLine(curRoll, pool)}</div>}
+              <div className="v6-dielabel">{currentRoll.side === 'player' ? 'YOU' : opponentName.toUpperCase()} · {currentRoll.sector}</div>
+              <div key={dieIdx} className={`v6-die-big${currentRoll.scored ? ' hot' : ''}`}>{DIE[currentRoll.rolls[currentRoll.rolls.length - 1] - 1]}</div>
+              {!currentRoll.scored && <div className="v6-outcome miss">{saveLine(currentRoll, pool)}</div>}
             </div>
           )}
           {goalCard && (
@@ -364,44 +506,80 @@ export default function V6MatchPhase({ runState, onMatchComplete }: { runState: 
             </div>
           )}
         </div>
+
         <div className="v6-mbenchwrap">
-          {canSub && <div className="v6-mbenchhint">{pick ? 'Tap a player to swap' : `Bench · pick a sub  ·  ${st.energy - spent}⚡ left`}</div>}
+          {state.breakIndex > 0 && viewingYou && (
+            <div className={`v6-mbenchhint${planLocked ? ' locked' : ''}`}>
+              {planLocked
+                ? 'Changes locked · opponent response will reveal next'
+                : pick
+                  ? 'Tap the player to replace'
+                  : `Bench · pick a substitute · ${state.energy - spent}⚡ left`}
+            </div>
+          )}
           <div className="v6-mbench">
             {benchIds.map((id) => {
-              const c = pool[id];
-              if (!c) return null;
-              const cost = cardEffectiveCost(c, discounts);
+              const card = pool[id];
+              if (!card) return null;
+              const cost = cardEffectiveCost(card, discounts);
               return (
                 <V6PitchCard
                   key={id}
-                  card={c}
+                  card={card}
                   selected={canSub && pick === id}
-                  spent={canSub && plannedIn.has(id)}
-                  dim={canSub && spent + cost > st.energy && pick !== id && !plannedIn.has(id)}
+                  spent={viewingYou && plannedIn.has(id)}
+                  dim={viewingYou && ((canSub && spent + cost > state.energy && pick !== id && !plannedIn.has(id)) || planLocked)}
                   onClick={canSub ? () => selectBench(id) : undefined}
                 />
               );
             })}
           </div>
-          {canSub && plan.length > 0 && (
+
+          {viewingYou && plan.length > 0 && (
             <div className="v6-mplan">
-              {plan.map((p) => (
-                <button key={p.inCardId} className="v6-mplan-row" onClick={() => undoPair(p.inCardId)}>{pool[p.outCardId]?.shortName} → {pool[p.inCardId]?.shortName} <span className="x">×</span></button>
+              {plan.map((pair) => (
+                <button key={pair.inCardId} className={`v6-mplan-row${planLocked ? ' locked' : ''}`} onClick={() => undoPair(pair.inCardId)}>
+                  {pool[pair.outCardId]?.shortName} → {pool[pair.inCardId]?.shortName}
+                  {!planLocked && <span className="x">×</span>}
+                </button>
               ))}
+            </div>
+          )}
+
+          {viewingYou && reviewProjection && (
+            <div className="v6-review-strip">
+              <div className="v6-review-head">
+                <span>{selectedRecommendation ? 'Best available swap' : planLocked ? 'Submitted lineup' : 'Plan impact'}</span>
+                <strong>
+                  {selectedRecommendation && selectedIncoming && recommendedOutgoing
+                    ? `${selectedIncoming.shortName} for ${recommendedOutgoing.shortName}`
+                    : `${reviewProjection.cost}/${state.energy} energy`}
+                </strong>
+              </div>
+              <div className="v6-review-grid">
+                <div className={`v6-review-metric att${metricTone(reviewProjection.deltas.attack)}`}><span>ATT</span><b>{reviewProjection.before.player.attack}→{reviewProjection.after.player.attack}</b></div>
+                <div className={`v6-review-metric def${metricTone(reviewProjection.deltas.defence)}`}><span>DEF</span><b>{reviewProjection.before.player.defence}→{reviewProjection.after.player.defence}</b></div>
+                <div className={`v6-review-metric${metricTone(reviewProjection.deltas.chancesFor)}`}><span>For</span><b>{reviewProjection.before.player.chances}→{reviewProjection.after.player.chances}</b></div>
+                <div className={`v6-review-metric${metricTone(reviewProjection.deltas.chancesAgainst, true)}`}><span>Against</span><b>{reviewProjection.before.opponent.chances}→{reviewProjection.after.opponent.chances}</b></div>
+              </div>
+              {reviewWarning && <div className="v6-review-warning">{reviewWarning}</div>}
+              <div className="v6-review-note">Projection is your submitted lineup before the opponent makes its hidden V6 coaching decision.</div>
+              {planLocked && (
+                <div className="v6-review-actions"><span className="v6-lock-chip">Locked</span><button type="button" onClick={() => setPlanLocked(false)}>Edit changes</button></div>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* match log */}
       <div className="v6-mlog">
-        {log.length === 0 ? <div className="v6-mlog-empty">Kick-off — the board is set. Press {st.breakIndex === 0 ? 'Kick off' : 'Continue'}.</div> : log.map((r, i) => (
-          <div key={i} className={`v6-mlog-row ${r.kind}${r.side ? ` ${r.side}` : ''}`}>{r.text}</div>
-        ))}
+        {log.length === 0
+          ? <div className="v6-mlog-empty">Kick-off — the board is set. Press {state.breakIndex === 0 ? 'Kick off' : 'Continue'}.</div>
+          : log.map((row, index) => <div key={`${row.text}:${index}`} className={`v6-mlog-row ${row.kind}${row.side ? ` ${row.side}` : ''}`}>{row.text}</div>)}
       </div>
 
-      {phase !== 'resolving' && <button className="v6-cta v6-mcta" onClick={cta.on}>{cta.label}</button>}
-      {phase === 'resolving' && <div className="v6-cta v6-mcta ghost">{BREAK_NAME[st.breakIndex]} · playing…</div>}
+      {phase !== 'resolving' && <button className="v6-cta v6-mcta" disabled={primary.disabled} onClick={primary.onClick}>{primary.label}</button>}
+      {phase === 'resolving' && <div className="v6-cta v6-mcta ghost">{resolve?.stage === 'reveal' ? 'Coaching changes · revealing…' : `${BREAK_NAME[state.breakIndex]} · playing…`}</div>}
     </div>
   );
 }
