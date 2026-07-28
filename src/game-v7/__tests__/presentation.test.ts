@@ -106,8 +106,9 @@ describe('V7 structured presentation', () => {
 
   it('exposes natural positions for every visible bench player', () => {
     const view = new V7MatchController(v7Fixture()).getView();
-    expect([...view.player.bench, ...view.opponent.bench]).not.toHaveLength(0);
-    expect([...view.player.bench, ...view.opponent.bench].every((player) => Boolean(player.position))).toBe(true);
+    const bench = [...view.player.bench, ...view.opponent.bench];
+    expect(bench.length).toBeGreaterThan(0);
+    expect(bench.every((player) => Boolean(player.position))).toBe(true);
   });
 
   it('preserves exact same-seed replays and varies full matches across new seeds', () => {
