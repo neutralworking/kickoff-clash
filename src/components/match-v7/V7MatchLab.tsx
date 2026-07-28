@@ -7,8 +7,8 @@ import {
   FIXTURE_SEED,
   PresentationDirector,
   V7MatchController,
+  buildCoachingRevealBeats,
   buildPeriodPresentation,
-  buildSubstitutionRevealBeats,
   v7Fixture,
   type BreakDecision,
   type PresentationBeat,
@@ -251,6 +251,11 @@ function V7MatchInner({
       bump();
       return;
     }
+    const opponent = controller.prepareOpponentDecision();
+    if (!opponent.ok) {
+      bump();
+      return;
+    }
     setPickBench(null);
     setPlanLocked(true);
     bump();
@@ -263,9 +268,18 @@ function V7MatchInner({
       bump();
       return;
     }
+    const opponent = controller.prepareOpponentDecision();
+    if (!opponent.ok) {
+      bump();
+      return;
+    }
 
-    const revealBeats = buildSubstitutionRevealBeats(view.period, view, subs);
-    controller.resolveBreak();
+    const revealBeats = buildCoachingRevealBeats(view.period, view, subs, opponent.value.decision.subs);
+    const breakResult = controller.resolveBreak();
+    if (!breakResult.ok) {
+      bump();
+      return;
+    }
     resolveCurrentPeriod(revealBeats);
   };
 
@@ -355,7 +369,7 @@ function V7MatchInner({
         <div className="v7-bench-heading">
           <div>
             <span className="v7-tag">{displaySide === 'player' ? 'Home bench' : 'Away bench'}</span>
-            <strong>{planLocked && displaySide === 'player' ? 'Substitutions locked for the next period' : canEditHome ? selectedBench ? 'Choose the player to replace' : 'Tap a substitute to compare options' : 'Tap any card to inspect'}</strong>
+            <strong>{planLocked && displaySide === 'player' ? 'Substitutions locked; the opponent is preparing its response' : canEditHome ? selectedBench ? 'Choose the player to replace' : 'Tap a substitute to compare options' : 'Tap any card to inspect'}</strong>
           </div>
           {phase === 'break' && displaySide === 'player' && <div className="v7-energy"><strong>{energyRemaining}</strong><span>/{energyBudget}</span><i>⚡</i></div>}
         </div>
