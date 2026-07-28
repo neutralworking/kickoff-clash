@@ -17,8 +17,8 @@ import type {
  * is self-contained and deterministic: the same fixture + seed replays exactly.
  *
  * It supplies everything one V7 match needs: two managers, two legal formations,
- * two full XIs + benches, and a small set of actions the merged V7 engine already
- * supports (game_start / ongoing / activated + a chance-targeting cancel).
+ * two full XIs + seven-player benches, and a small set of actions the merged V7
+ * engine already supports (game_start / ongoing / activated + chance cancellation).
  */
 
 export const FIXTURE_SEED = 20260723;
@@ -167,12 +167,15 @@ const HOME_SPECS: CardSpec[] = [
   { id: 'h_lw', name: 'Rai Okonkwo', position: 'LW', sector: 'left', attack: 9, defence: 2, cost: 5, role: 'Winger' },
   { id: 'h_cf', name: 'Niko Vale', position: 'CF', sector: 'centre', attack: 9, defence: 2, cost: 5, role: 'Finisher', actionIds: ['act_talisman'] },
   { id: 'h_rw', name: 'Juno Pike', position: 'RW', sector: 'right', attack: 9, defence: 2, cost: 4, role: 'Winger' },
-  // Bench — includes cheap options so a break-1 sub (energy 3) is affordable.
+  // Seven-player bench: goalkeeper, defenders, midfielders and attackers, with
+  // affordable early-break options as well as stronger late-break choices.
   { id: 'h_b1', name: 'Sol Voss', position: 'CF', sector: 'centre', attack: 8, defence: 2, cost: 4, role: 'Poacher', actionIds: ['act_talisman'] },
   { id: 'h_b2', name: 'Umi Vale', position: 'LW', sector: 'left', attack: 7, defence: 2, cost: 3, role: 'Creator', actionIds: ['act_spark'] },
   { id: 'h_b3', name: 'Deni Ferro', position: 'CM', sector: 'centre', attack: 5, defence: 3, cost: 2, role: 'Carrier' },
   { id: 'h_b4', name: 'Pao Lin', position: 'CB', sector: 'centre', attack: 2, defence: 5, cost: 3, role: 'Marker', actionIds: ['act_wall'] },
   { id: 'h_b5', name: 'Milo Ray', position: 'RM', sector: 'right', attack: 5, defence: 2, cost: 2, role: 'Runner' },
+  { id: 'h_b6', name: 'Eli Moss', position: 'GK', sector: 'centre', attack: 1, defence: 5, cost: 2, role: 'Keeper' },
+  { id: 'h_b7', name: 'Sacha Neri', position: 'LB', sector: 'left', attack: 4, defence: 4, cost: 3, role: 'Fullback' },
 ];
 
 // Away squad — "Iron Vale" on a 3-5-2. Active ATT ≈ 53 vs opposing DEF ≈ 42.
@@ -188,12 +191,14 @@ const AWAY_SPECS: CardSpec[] = [
   { id: 'a_lf', name: 'Bo Marsh', position: 'LF', sector: 'left', attack: 8, defence: 2, cost: 4, role: 'Winger' },
   { id: 'a_cf', name: 'Coby Wren', position: 'CF', sector: 'centre', attack: 9, defence: 2, cost: 5, role: 'Finisher', actionIds: ['act_talisman'] },
   { id: 'a_rf', name: 'Ravi Tuck', position: 'RF', sector: 'right', attack: 8, defence: 2, cost: 4, role: 'Winger' },
-  // Bench — includes cheap options for an affordable break-1 sub.
+  // Seven-player bench mirrors the wider squad coverage available to the player.
   { id: 'a_b1', name: 'Mira Kaine', position: 'CB', sector: 'centre', attack: 2, defence: 6, cost: 3, role: 'Wall', actionIds: ['act_wall'] },
   { id: 'a_b2', name: 'Dex Falk', position: 'RF', sector: 'right', attack: 7, defence: 2, cost: 3, role: 'Creator', actionIds: ['act_spark'] },
   { id: 'a_b3', name: 'Levi Ash', position: 'CM', sector: 'centre', attack: 7, defence: 3, cost: 3, role: 'Engine' },
   { id: 'a_b4', name: 'Otis Kane', position: 'LWB', sector: 'left', attack: 4, defence: 3, cost: 2, role: 'Wingback' },
   { id: 'a_b5', name: 'Enzo Cai', position: 'CF', sector: 'centre', attack: 6, defence: 3, cost: 3, role: 'Ten', actionIds: ['act_talisman'] },
+  { id: 'a_b6', name: 'Noa Flint', position: 'GK', sector: 'centre', attack: 1, defence: 5, cost: 2, role: 'Keeper' },
+  { id: 'a_b7', name: 'Zed Orra', position: 'RWB', sector: 'right', attack: 5, defence: 3, cost: 3, role: 'Wingback' },
 ];
 
 export const FIXTURE_CARDS: V7PlayerCard[] = [...HOME_SPECS, ...AWAY_SPECS].map(card);
