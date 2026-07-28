@@ -48,6 +48,11 @@ describe('live run → improved V7 match', () => {
     expect(fixture.away.manager.name).toBe(getOpponent(1).name);
     expect(fixture.home.benchIds.every((id) => /^live-\d+$/.test(id))).toBe(true);
 
+    const liveFormation = fixture.formations.find((item) => item.id === fixture.home.formationId);
+    expect(liveFormation?.slots.find((slot) => slot.slotKey === 'lcb')?.sector).toBe('left');
+    expect(liveFormation?.slots.find((slot) => slot.slotKey === 'rcb')?.sector).toBe('right');
+    expect(liveFormation?.slots.find((slot) => slot.slotKey === 'cm')?.sector).toBe('centre');
+
     const controller = new V7MatchController(fixture);
     const view = controller.getView();
     expect(view.player.active).toHaveLength(11);
