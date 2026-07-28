@@ -7,7 +7,7 @@ import type {
   V7ManagerCard,
   V7PlayerCard,
 } from '@/engine-v7';
-import type { Formation, FormationSlot } from '@/lib/formations';
+import { getFormation, type Formation, type FormationSlot } from '@/lib/formations';
 import type { HandState } from '@/lib/hand';
 import type { JokerCard } from '@/lib/jokers';
 import { generateOpponentXI, cupMatchPower } from '@/lib/opponent';
@@ -155,8 +155,8 @@ export function buildLiveV7Fixture(runState: RunState, hand: HandState): V7Fixtu
   if (hand.bench.length !== 7) throw new Error(`V7 requires seven substitutes; received ${hand.bench.length}.`);
 
   const seed = buildMatchSeed(runState.seed, runState.round, runState.matchInCup);
-  const playerFormationSource = runState.activeFormation;
-  const playerFormation = adaptLiveFormation((awaitFormation => awaitFormation)(requireFormation(playerFormationSource)));
+  const playerFormationSource = getFormation(runState.activeFormation);
+  const playerFormation = adaptLiveFormation(playerFormationSource);
 
   const opponent = getOpponent(runState.round);
   const power = cupMatchPower(runState.round, runState.matchInCup, cupSize(runState.round));
@@ -164,7 +164,7 @@ export function buildLiveV7Fixture(runState: RunState, hand: HandState): V7Fixtu
   const opponentBenchSource = generateOpponentXI(runState.round, opponent.style, seed + 7919, power);
   const opponentFormation = adaptLiveFormation(opponentMain.formation);
 
-  const playerXI = adaptStartingXI(hand.xi, requireFormation(playerFormationSource), 'live');
+  const playerXI = adaptStartingXI(hand.xi, playerFormationSource, 'live');
   const playerBench = adaptBench(hand.bench, 'live-bench');
   const opponentXI = adaptStartingXI(opponentMain.xi, opponentMain.formation, 'opponent');
   const opponentBench = adaptBench(opponentBenchSource.xi.slice(0, 7), 'opponent-bench');
@@ -182,11 +182,4 @@ export function buildLiveV7Fixture(runState: RunState, hand: HandState): V7Fixtu
     away: squad(awayManager, opponentFormation, opponentXI, opponentBench),
     source: 'fixture',
   };
-}
-
-function requireFormation(id: string): Formation {
-  // Kept local to make the bridge fail loudly rather than silently falling back to
-  // a different shape than the one selected on SquadScreen.
-  const { getFormation } = require('@/lib/formations') as typeof import('@/lib/formations');
-  return getFormation(id);
 }
