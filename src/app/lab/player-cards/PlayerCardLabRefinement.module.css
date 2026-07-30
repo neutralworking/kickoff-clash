@@ -1,0 +1,64 @@
+.refined {
+  display: contents;
+}
+
+/*
+ * Second grooming pass: separate the lower card into three non-overlapping bands.
+ * The original prototype let the 23%-tall stat badges share space with the action
+ * strip. These scoped overrides keep the experiment isolated from production cards.
+ */
+.refined :global([class*="portraitLayer"]) {
+  bottom: 23%;
+}
+
+.refined :global([class*="nameplate"]) {
+  bottom: 29.7%;
+  height: 13.5%;
+  padding-inline: 6%;
+  font-size: 10.8cqw;
+}
+
+.refined :global([class*="actionPanel"]) {
+  left: 4.5%;
+  right: 4.5%;
+  bottom: 17.8%;
+  height: 11.3%;
+  padding-inline: 5%;
+  font-size: 6.7cqw;
+}
+
+.refined :global([class*="statBadge"]) {
+  bottom: 0.8%;
+  width: 25.5%;
+  height: 16%;
+  place-content: center;
+  justify-items: center;
+  padding: 0;
+  border-width: 0.7cqw;
+  box-shadow: 0 0.8cqw 0 rgba(0, 0, 0, 0.65);
+}
+
+.refined :global([class*="statLeft"]) {
+  left: 0.8%;
+  padding-left: 0;
+  clip-path: polygon(0 0, 72% 0, 100% 38%, 100% 100%, 0 100%);
+}
+
+.refined :global([class*="statRight"]) {
+  right: 0.8%;
+  padding-right: 0;
+  clip-path: polygon(28% 0, 100% 0, 100% 100%, 0 100%, 0 38%);
+}
+
+.refined :global([class*="statBadge"]) b {
+  min-width: 0;
+  font-size: 12.6cqw;
+  line-height: 0.82;
+  letter-spacing: -0.045em;
+}
+
+.refined :global([class*="statBadge"]) small {
+  margin-top: 0.55cqw;
+  font-size: 4.35cqw;
+  line-height: 1;
+}
