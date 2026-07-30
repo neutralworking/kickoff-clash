@@ -1,4 +1,5 @@
 import PlayerCardLab from '@/components/player-cards/PlayerCardLab';
+import refinement from './PlayerCardLabRefinement.module.css';
 
 /**
  * Unlinked grooming route for the shared player-card anatomy.
@@ -9,5 +10,9 @@ import PlayerCardLab from '@/components/player-cards/PlayerCardLab';
  * renderers yet. It proves the mobile card family before production migration.
  */
 export default function PlayerCardsLabPage() {
-  return <PlayerCardLab />;
+  return (
+    <div className={refinement.refined}>
+      <PlayerCardLab />
+    </div>
+  );
 }
