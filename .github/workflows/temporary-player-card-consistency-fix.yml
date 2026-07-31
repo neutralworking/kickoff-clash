@@ -1,0 +1,130 @@
+name: Temporary player-card consistency fix
+
+on:
+  push:
+    branches:
+      - agent/player-card-v7-match
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/player-card-v7-match
+          fetch-depth: 0
+
+      - name: Apply exact source patches
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {count}')
+              return text.replace(old, new, 1)
+
+          pitch_path = Path('src/components/match-v7/V7Pitch.tsx')
+          pitch = pitch_path.read_text()
+          pitch = replace_once(
+              pitch,
+              """  printedAttack: number;
+  printedDefence: number;
+  rarity: V7PlayerDefinition['rarity'];""",
+              """  printedAttack: number;
+  printedDefence: number;
+  primaryPosition: V7PlayerDefinition['positionCodes'][number] | '—';
+  rarity: V7PlayerDefinition['rarity'];""",
+              'card meta type',
+          )
+          pitch = replace_once(
+              pitch,
+              """      printedAttack: card.printedAttack,
+      printedDefence: card.printedDefence,
+      rarity: card.rarity,""",
+              """      printedAttack: card.printedAttack,
+      printedDefence: card.printedDefence,
+      primaryPosition: card.positionCodes[0] ?? '—',
+      rarity: card.rarity,""",
+              'registered primary position',
+          )
+          pitch = replace_once(
+              pitch,
+              """    printedAttack: 0,
+    printedDefence: 0,
+    rarity: 'common',""",
+              """    printedAttack: 0,
+    printedDefence: 0,
+    primaryPosition: '—',
+    rarity: 'common',""",
+              'fallback primary position',
+          )
+          pitch = replace_once(
+              pitch,
+              """  const portrait = portraitSrc({ id: player.cardId, name: player.name, position: player.position });
+  const meta = cardMetaFor(player.cardId);""",
+              """  const meta = cardMetaFor(player.cardId);
+  const portrait = portraitSrc({ id: player.cardId, name: player.name, position: meta.primaryPosition });""",
+              'portrait position source',
+          )
+          pitch = replace_once(
+              pitch,
+              """      aria-label={`Open ${player.name}. ${player.attack} attack, ${player.defence} defence.`}""",
+              """      aria-label={`Open ${player.name}. ${meta.primaryPosition}. ${player.attack} attack, ${player.defence} defence.`}""",
+              'accessible position label',
+          )
+          pitch = replace_once(
+              pitch,
+              """        <span className=\"v7-token-position\">{player.position ?? '—'}</span>""",
+              """        <span className=\"v7-token-position\">{meta.primaryPosition}</span>""",
+              'visible position badge',
+          )
+          pitch_path.write_text(pitch)
+
+          squad_path = Path('src/components/SquadScreen.tsx')
+          squad = squad_path.read_text()
+          squad = replace_once(
+              squad,
+              """          <GhostTile card={dragCard} />""",
+              """          <GhostTile card={dragCard} stats={v6Of(dragCard)} />""",
+              'drag ghost call',
+          )
+          squad = replace_once(
+              squad,
+              """function GhostTile({ card }: { card: Card }) {""",
+              """function GhostTile({ card, stats }: { card: Card; stats: { attack: number; defence: number } }) {""",
+              'drag ghost props',
+          )
+          squad = replace_once(
+              squad,
+              """          {(() => {
+            const st = deriveStats(card);
+            return (
+              <span style={{ fontFamily: PIXEL, fontSize: 10, lineHeight: 1, color: 'var(--cream)', fontVariantNumeric: 'tabular-nums' }}>
+                {st.atk}/{st.def}
+              </span>
+            );
+          })()}""",
+              """          <span style={{ fontFamily: PIXEL, fontSize: 10, lineHeight: 1, color: 'var(--cream)', fontVariantNumeric: 'tabular-nums' }}>
+            {stats.attack}/{stats.defence}
+          </span>""",
+              'drag ghost stats',
+          )
+          squad_path.write_text(squad)
+          PY
+
+      - name: Commit source changes and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/temporary-player-card-consistency-fix.yml
+          git add src/components/match-v7/V7Pitch.tsx src/components/SquadScreen.tsx
+          git commit -m "Keep match positions and drag stats consistent"
+          git push origin HEAD:agent/player-card-v7-match
