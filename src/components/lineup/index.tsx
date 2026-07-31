@@ -11,9 +11,27 @@ import { fitnessColor as fitnessColorForPct, HERO } from '../cards/portrait';
 import TeamSelectionPlayerCard from '../player-cards/TeamSelectionPlayerCard';
 
 const SLOT_CARD_W = 72;
-const SLOT_CARD_H = 108;
+const SLOT_CARD_H = 96;
 export const SLOT_INSET_X = SLOT_CARD_W / 2 + 6;
-export const SLOT_INSET_Y = SLOT_CARD_H / 2 + 3;
+// Formation y-values never use the literal 0/100 edges. A small fixed inset lets
+// the cards use the full pitch height instead of compressing every line into a
+// half-card-safe band, which caused the GK/defence/DM collisions.
+export const SLOT_INSET_Y = 12;
+
+/** Snap authored formation coordinates onto cleaner visual rows for the larger
+ * card silhouette. This changes presentation only; formation identity, slot
+ * eligibility and match geometry remain untouched. */
+export function lineupPitchY(y: number): number {
+  if (y >= 88) return 94; // goalkeeper
+  if (y >= 76) return 76; // centre/full backs
+  if (y >= 68) return 68; // wing-backs
+  if (y >= 56) return 58; // defensive midfield / high wide mids
+  if (y >= 50) return 51; // main midfield line
+  if (y >= 44) return 46; // deeper/offset central mids
+  if (y >= 30) return 34; // attacking midfield
+  if (y >= 20) return 21; // wide forwards
+  return 11; // strikers
+}
 
 export interface DragPointerHandlers {
   onPointerDown?: PointerEventHandler<HTMLButtonElement>;
@@ -124,7 +142,7 @@ export function LineupSlot({
       className="absolute flex flex-col items-center active:scale-95"
       style={{
         left: pitchAxis(slot.x, SLOT_INSET_X),
-        top: pitchAxis(slot.y, SLOT_INSET_Y),
+        top: pitchAxis(lineupPitchY(slot.y), SLOT_INSET_Y),
         width: SLOT_CARD_W,
         padding: 0,
         border: 0,
