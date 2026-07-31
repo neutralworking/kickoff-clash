@@ -7,8 +7,9 @@ import {
   type UiPlayerView,
   type UiTeamView,
 } from '@/game-v7';
-import type { V7ActionDefinition, V7PlayerCard } from '@/engine-v7';
+import type { V7ActionDefinition, V7PlayerCard as V7PlayerDefinition } from '@/engine-v7';
 import { portraitSrc } from '../cards/portrait';
+import './v7matchcards.css';
 
 type Side = 'player' | 'opponent';
 
@@ -16,6 +17,10 @@ interface CardMeta {
   cost: number;
   role: string;
   actions: string[];
+  printedAttack: number;
+  printedDefence: number;
+  primaryPosition: V7PlayerDefinition['positionCodes'][number] | '—';
+  rarity: V7PlayerDefinition['rarity'];
 }
 
 export interface V7ReplacementHint {
@@ -25,11 +30,19 @@ export interface V7ReplacementHint {
 }
 
 const CARD_META = new Map<string, CardMeta>();
+const PIP_CELLS: Record<number, number[]> = {
+  1: [5],
+  2: [1, 9],
+  3: [1, 5, 9],
+  4: [1, 3, 7, 9],
+  5: [1, 3, 5, 7, 9],
+  6: [1, 3, 4, 6, 7, 9],
+};
 
 /** Register the cards used by the current match. The lab fixture is registered by
  * default; the live run registers its adapted collection before rendering. */
 export function registerV7CardMeta(
-  cards: readonly V7PlayerCard[],
+  cards: readonly V7PlayerDefinition[],
   actions: readonly V7ActionDefinition[],
 ): void {
   const actionNames = new Map(actions.map((action) => [action.id, action.name]));
@@ -38,6 +51,10 @@ export function registerV7CardMeta(
       cost: card.printedCost,
       role: card.role,
       actions: card.actionIds.map((id) => actionNames.get(id)).filter((name): name is string => Boolean(name)),
+      printedAttack: card.printedAttack,
+      printedDefence: card.printedDefence,
+      primaryPosition: card.positionCodes[0] ?? '—',
+      rarity: card.rarity,
     });
   }
 }
@@ -46,7 +63,15 @@ const fixture = v7Fixture();
 registerV7CardMeta(fixture.cards, fixture.actions);
 
 export function cardMetaFor(cardId: string): CardMeta {
-  return CARD_META.get(cardId) ?? { cost: 0, role: 'Player', actions: [] };
+  return CARD_META.get(cardId) ?? {
+    cost: 0,
+    role: 'Player',
+    actions: [],
+    printedAttack: 0,
+    printedDefence: 0,
+    primaryPosition: '—',
+    rarity: 'common',
+  };
 }
 
 const SLOT_POSITION: Record<string, { x: number; y: number }> = {
@@ -116,6 +141,25 @@ function playerPosition(player: UiPlayerView, index: number, total: number): { x
   return fallbackPosition(player, index, total);
 }
 
+function statTone(value: number, printed: number): 'boosted' | 'reduced' | 'neutral' {
+  if (value > printed) return 'boosted';
+  if (value < printed) return 'reduced';
+  return 'neutral';
+}
+
+function pipStyle(cell: number): CSSProperties {
+  const index = cell - 1;
+  return {
+    gridColumn: (index % 3) + 1,
+    gridRow: Math.floor(index / 3) + 1,
+  };
+}
+
+function actionNameFromModifier(label: string): string {
+  const parts = label.split('·');
+  return (parts.at(-1) ?? label).trim();
+}
+
 export function V7PlayerCard({
   player,
   compact = false,
@@ -126,6 +170,7 @@ export function V7PlayerCard({
   targetTone,
   disabled = false,
   badge,
+  eventLabel,
   onClick,
 }: {
   player: UiPlayerView;
@@ -137,13 +182,19 @@ export function V7PlayerCard({
   targetTone?: V7ReplacementHint['tone'];
   disabled?: boolean;
   badge?: ReactNode;
+  eventLabel?: string;
   onClick: () => void;
 }) {
-  const portrait = portraitSrc({ id: player.cardId, name: player.name, position: player.position });
   const meta = cardMetaFor(player.cardId);
+  const portrait = portraitSrc({ id: player.cardId, name: player.name, position: meta.primaryPosition });
+  const attackTone = statTone(player.attack, meta.printedAttack);
+  const defenceTone = statTone(player.defence, meta.printedDefence);
+  const cost = Math.max(1, Math.min(6, meta.cost));
   const className = [
     'v7-player-card',
-    compact ? 'compact' : '',
+    'v7-match-card',
+    compact ? 'compact bench-card' : 'pitch-token',
+    `rarity-${meta.rarity}`,
     selected ? 'selected' : '',
     dimmed ? 'dimmed' : '',
     highlighted ? 'highlighted' : '',
@@ -152,26 +203,40 @@ export function V7PlayerCard({
   ].filter(Boolean).join(' ');
 
   return (
-    <button type="button" className={className} onClick={onClick} disabled={disabled} aria-label={`Open ${player.name}`}>
-      <div className="v7-card-portrait">
-        <span className="v7-card-initials">{initials(player.name)}</span>
-        {portrait && <img src={portrait} alt="" draggable={false} />}
-        <span className="v7-card-cost" aria-label={`Cost ${meta.cost}`}><b>{meta.cost}</b></span>
-        <span className="v7-card-position">{player.position ?? '—'}</span>
-        {badge && <span className="v7-card-badge">{badge}</span>}
-      </div>
-      <div className="v7-card-copy">
-        <div className="v7-card-name" title={player.name}>{player.shortName}</div>
-        <div className="v7-card-role" title={meta.role}>{compact ? `${player.position ?? '—'} · ${meta.role}` : meta.role}</div>
-        <div className="v7-card-stats" aria-label={`${player.attack} attack, ${player.defence} defence`}>
-          <strong className="attack">{player.attack}</strong>
-          <i />
-          <strong className="defence">{player.defence}</strong>
+    <button
+      type="button"
+      className={className}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={`Open ${player.name}. ${meta.primaryPosition}. ${player.attack} attack, ${player.defence} defence.`}
+    >
+      <div className="v7-token-face">
+        <span className="v7-token-kc" aria-hidden="true">KC</span>
+        <div className="v7-token-portrait">
+          <span className="v7-token-initials">{initials(player.name)}</span>
+          {portrait && <img src={portrait} alt="" draggable={false} />}
         </div>
-        {meta.actions[0] && <div className="v7-card-action">{meta.actions[0]}</div>}
+
+        {compact && (
+          <span className="v7-token-cost" aria-label={`Cost ${cost}`}>
+            <span className="v7-token-pips">
+              {(PIP_CELLS[cost] ?? PIP_CELLS[1]).map((cell) => <i key={cell} style={pipStyle(cell)} />)}
+            </span>
+          </span>
+        )}
+
+        <span className="v7-token-position">{meta.primaryPosition}</span>
+        <span className="v7-token-name" title={player.name}>{player.shortName}</span>
+        {compact && meta.actions[0] && <span className="v7-token-action" title={meta.actions[0]}>{meta.actions[0]}</span>}
+
+        <span className={`v7-token-stat attack ${attackTone}`}>{player.attack}</span>
+        <span className={`v7-token-stat defence ${defenceTone}`}>{player.defence}</span>
       </div>
+
+      {badge && <span className="v7-context-badge">{badge}</span>}
+      {eventLabel && <span className="v7-action-ribbon">{eventLabel}</span>}
       {(player.outOfPosition || player.emergencyGoalkeeper) && (
-        <div className="v7-card-warning">{player.emergencyGoalkeeper ? 'EMERGENCY GK' : 'OUT OF POSITION'}</div>
+        <span className="v7-token-warning">{player.emergencyGoalkeeper ? 'EMERGENCY GK' : 'OOP'}</span>
       )}
     </button>
   );
@@ -242,6 +307,17 @@ export function V7Pitch({
   const focusCardId = beat?.cardId && team.active.some((player) => player.cardId === beat.cardId)
     ? beat.cardId
     : null;
+  const actionModifier = beat
+    && beat.side === side
+    && beat.pressure
+    && ['pressure', 'adjustment'].includes(beat.kind)
+    ? beat.pressure[side].modifiers.find((modifier) => (
+      Boolean(modifier.cardId) && team.active.some((player) => player.cardId === modifier.cardId)
+    ))
+    : undefined;
+  const actionEvent = actionModifier?.cardId
+    ? { cardId: actionModifier.cardId, label: actionNameFromModifier(actionModifier.label) }
+    : null;
   const isGoal = beat?.kind === 'goal';
   const isMiss = beat?.kind === 'miss' || beat?.kind === 'cancelled';
   const calculating = Boolean(beat && ['lock', 'pressure', 'threshold', 'chances', 'overview'].includes(beat.kind));
@@ -282,6 +358,7 @@ export function V7Pitch({
           const targetable = canSelect && Boolean(selectedBenchId) && !plannedOut;
           const hint = targetable ? replacementHints[player.cardId] : undefined;
           const highlighted = focusCardId === player.cardId
+            || actionEvent?.cardId === player.cardId
             || (beat?.side === side && activeSector === player.sector && ['roll', 'goal', 'miss', 'cancelled'].includes(beat.kind));
           return (
             <div className="v7-pitch-card-position" style={style} key={player.cardId} title={hint?.detail}>
@@ -292,6 +369,7 @@ export function V7Pitch({
                 targetTone={hint?.tone}
                 dimmed={plannedOut}
                 badge={plannedOut ? 'OUT' : hint?.label}
+                eventLabel={actionEvent?.cardId === player.cardId ? actionEvent.label : undefined}
                 onClick={() => (targetable ? onPickActive(player.cardId) : onInspect(player))}
               />
             </div>

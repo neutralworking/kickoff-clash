@@ -1097,6 +1097,7 @@ function PitchMarkings() {
 
 function GhostTile({ card }: { card: Card }) {
   const accent = RARITY_COLOR[card.rarity] ?? 'var(--dust)';
+  const stats = toDisplayV6Card(card);
   return (
     <div
       style={{
@@ -1113,14 +1114,9 @@ function GhostTile({ card }: { card: Card }) {
       <div style={{ padding: '4px 5px 5px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 3 }}>
           <PosTag position={card.position} />
-          {(() => {
-            const st = deriveStats(card);
-            return (
-              <span style={{ fontFamily: PIXEL, fontSize: 10, lineHeight: 1, color: 'var(--cream)', fontVariantNumeric: 'tabular-nums' }}>
-                {st.atk}/{st.def}
-              </span>
-            );
-          })()}
+          <span style={{ fontFamily: PIXEL, fontSize: 10, lineHeight: 1, color: 'var(--cream)', fontVariantNumeric: 'tabular-nums' }}>
+            {stats.attack}/{stats.defence}
+          </span>
         </div>
         <div
           style={{
