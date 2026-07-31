@@ -100,13 +100,11 @@ export default function TeamSelectionPlayerCard({
         <div className={styles.nameplate} title={card.name}>{lastName(card.name).toUpperCase()}</div>
         <div className={styles.actionPanel} title={actionName}>{actionName.toUpperCase()}</div>
 
-        <div className={`${styles.statBadge} ${styles.statLeft}`}>
+        <div className={`${styles.statBadge} ${styles.statLeft}`} aria-label={`${attack} attack`}>
           <b>{attack}</b>
-          <small>ATT</small>
         </div>
-        <div className={`${styles.statBadge} ${styles.statRight}`}>
+        <div className={`${styles.statBadge} ${styles.statRight}`} aria-label={`${defence} defence`}>
           <b>{defence}</b>
-          <small>DEF</small>
         </div>
       </div>
 
