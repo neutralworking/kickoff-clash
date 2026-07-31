@@ -340,13 +340,23 @@ export default function PlayerDossier({
               <span>IDENTITY</span>
               <strong>POSITIONS & ROLE</strong>
             </div>
-            <div className={styles.positionRow}>
+            <div className={styles.positionRow} style={{ paddingBottom: 13 }}>
               <span className={styles.primaryPosition} style={{ '--position-colour': POSITION_COLOR[data.primaryPosition] ?? '#9aa0a8' } as CSSProperties}>{data.primaryPosition}</span>
               {data.secondaryPositions.map((position) => (
                 <span key={position} style={{ '--position-colour': POSITION_COLOR[position] ?? '#9aa0a8' } as CSSProperties}>{position}</span>
               ))}
+              <strong
+                style={{
+                  marginLeft: 'auto',
+                  color: '#eee3cd',
+                  fontFamily: 'var(--font-heavy, sans-serif)',
+                  fontSize: 13,
+                  textAlign: 'right',
+                }}
+              >
+                {data.role}
+              </strong>
             </div>
-            <div className={styles.roleRow}><span>ROLE</span><strong>{data.role}</strong></div>
           </section>
 
           {data.record && (
