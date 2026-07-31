@@ -9,7 +9,7 @@
 
 .pitch {
   width: 72px;
-  height: 108px;
+  height: 96px;
 }
 
 .bench {
@@ -254,6 +254,37 @@
   letter-spacing: 0.03em;
 }
 
+/* On-pitch cards sacrifice a little lower-card furniture so the formation can
+   use more of the pitch vertically. Bench cards retain the fuller proportions. */
+.pitch .portrait {
+  inset-bottom: 20%;
+}
+
+.pitch .nameplate {
+  bottom: 26.2%;
+  height: 10.5%;
+  padding-inline: 5%;
+  font-size: 9.8cqw;
+}
+
+.pitch .actionPanel {
+  bottom: 16.2%;
+  height: 9.5%;
+  font-size: 6cqw;
+}
+
+.pitch .statBadge {
+  height: 14.3%;
+}
+
+.pitch .statBadge b {
+  font-size: 11.6cqw;
+}
+
+.pitch .statBadge small {
+  font-size: 4cqw;
+}
+
 .misfitReceipt {
   position: absolute;
   left: 50%;
@@ -287,8 +318,6 @@
     0 0 20px rgba(232, 178, 60, 0.7);
 }
 
-/* SquadScreen still owns the bench markup. Turn its seven equal columns into
-   the approved horizontally swipeable card tray without changing run logic. */
 :global([data-kc="bench"]) {
   display: flex !important;
   align-items: flex-start;
