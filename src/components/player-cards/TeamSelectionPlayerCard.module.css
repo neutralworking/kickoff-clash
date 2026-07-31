@@ -215,8 +215,7 @@
   width: 25.5%;
   height: 16%;
   display: grid;
-  place-content: center;
-  justify-items: center;
+  place-items: center;
   padding: 0;
   color: #fbf7ec;
   background:
@@ -239,19 +238,13 @@
 .statBadge b {
   min-width: 0;
   font-family: var(--font-heavy, sans-serif);
-  font-size: 12.4cqw;
-  line-height: 0.82;
-  letter-spacing: -0.045em;
+  font-size: 15cqw;
+  line-height: 0.75;
+  letter-spacing: -0.055em;
   text-align: center;
-}
-
-.statBadge small {
-  margin-top: 0.5cqw;
-  color: #c9bb95;
-  font-family: var(--font-pixel, monospace);
-  font-size: 4.25cqw;
-  line-height: 1;
-  letter-spacing: 0.03em;
+  text-shadow:
+    0 0.65cqw 0 #080502,
+    0 0 2cqw rgba(255, 245, 215, 0.18);
 }
 
 /* On-pitch cards sacrifice a little lower-card furniture so the formation can
@@ -275,8 +268,8 @@
 
 .pitch .statBadge {
   bottom: 0.6%;
-  width: 29%;
-  height: 17.8%;
+  width: 30.5%;
+  height: 18.3%;
   border-width: 0.8cqw;
   box-shadow:
     0 0.9cqw 0 rgba(0, 0, 0, 0.78),
@@ -292,21 +285,12 @@
 }
 
 .pitch .statBadge b {
-  font-size: 15cqw;
-  line-height: 0.76;
-  letter-spacing: -0.065em;
+  font-size: 18cqw;
+  line-height: 0.72;
+  letter-spacing: -0.07em;
   text-shadow:
-    0 0.7cqw 0 #080502,
-    0 0 2.2cqw rgba(255, 245, 215, 0.2);
-}
-
-.pitch .statBadge small {
-  margin-top: 0.8cqw;
-  color: #f0e4c6;
-  font-size: 5.4cqw;
-  font-weight: 700;
-  letter-spacing: 0.015em;
-  text-shadow: 0 0.55cqw 0 #080502;
+    0 0.75cqw 0 #080502,
+    0 0 2.4cqw rgba(255, 245, 215, 0.24);
 }
 
 .misfitReceipt {
