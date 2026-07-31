@@ -19,6 +19,7 @@ interface CardMeta {
   actions: string[];
   printedAttack: number;
   printedDefence: number;
+  primaryPosition: V7PlayerDefinition['positionCodes'][number] | '—';
   rarity: V7PlayerDefinition['rarity'];
 }
 
@@ -52,6 +53,7 @@ export function registerV7CardMeta(
       actions: card.actionIds.map((id) => actionNames.get(id)).filter((name): name is string => Boolean(name)),
       printedAttack: card.printedAttack,
       printedDefence: card.printedDefence,
+      primaryPosition: card.positionCodes[0] ?? '—',
       rarity: card.rarity,
     });
   }
@@ -67,6 +69,7 @@ export function cardMetaFor(cardId: string): CardMeta {
     actions: [],
     printedAttack: 0,
     printedDefence: 0,
+    primaryPosition: '—',
     rarity: 'common',
   };
 }
@@ -182,8 +185,8 @@ export function V7PlayerCard({
   eventLabel?: string;
   onClick: () => void;
 }) {
-  const portrait = portraitSrc({ id: player.cardId, name: player.name, position: player.position });
   const meta = cardMetaFor(player.cardId);
+  const portrait = portraitSrc({ id: player.cardId, name: player.name, position: meta.primaryPosition });
   const attackTone = statTone(player.attack, meta.printedAttack);
   const defenceTone = statTone(player.defence, meta.printedDefence);
   const cost = Math.max(1, Math.min(6, meta.cost));
@@ -205,7 +208,7 @@ export function V7PlayerCard({
       className={className}
       onClick={onClick}
       disabled={disabled}
-      aria-label={`Open ${player.name}. ${player.attack} attack, ${player.defence} defence.`}
+      aria-label={`Open ${player.name}. ${meta.primaryPosition}. ${player.attack} attack, ${player.defence} defence.`}
     >
       <div className="v7-token-face">
         <span className="v7-token-kc" aria-hidden="true">KC</span>
@@ -222,7 +225,7 @@ export function V7PlayerCard({
           </span>
         )}
 
-        <span className="v7-token-position">{player.position ?? '—'}</span>
+        <span className="v7-token-position">{meta.primaryPosition}</span>
         <span className="v7-token-name" title={player.name}>{player.shortName}</span>
         {compact && meta.actions[0] && <span className="v7-token-action" title={meta.actions[0]}>{meta.actions[0]}</span>}
 
