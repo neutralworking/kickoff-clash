@@ -20,6 +20,12 @@ A manager determines the formation selector; they do not merely prefer one shape
 - the existing `preferredFormation` and formation-adherence implementation is legacy data/logic and must be migrated rather than surfaced as the V1 rule
 - final formation pools are roster and balance data; the manager-card lab uses representative one/two/three-formation examples only
 
+## Manager starting-XI cost
+
+A manager also carries the maximum total cost allowed in the starting XI. This value must be visible on the manager card before team selection.
+
+The current live game uses the global `MAX_XI_COST` value of 45. The groomed card therefore shows 45 as the truthful fallback and accepts an explicit override. The manager roster needs a dedicated maximum-starting-XI-cost field before managers can receive individual balance values.
+
 ## Manager-card face
 
 Manager cards use their own anatomy rather than player-card corners or tactic-card resources.
@@ -31,7 +37,9 @@ Permanent face hierarchy:
 3. Full manager name
 4. Named manager action
 5. Readable manager action text
-6. Rarity at the bottom of the card
+6. Maximum starting-XI cost and rarity across the bottom divider
+
+The rarity label intersects the bottom divider rather than sitting beneath it. The starting-XI cost occupies the opposite side of the same divider.
 
 Managers do not have a style, archetype or class identity in V1. Do not show the legacy manager class crest, archetype line, `PREFERS` wording or formation-adherence copy.
 
@@ -46,6 +54,7 @@ Cards that are large enoughâ€”including the normal two-choice manager-pack cardâ
 - activation condition
 - available formations
 - explanation that store consumables can expand the formation pool
+- maximum starting-XI cost
 - economy hooks where applicable
 
 Manager portraits remain provisional until the curated portrait set is final.
