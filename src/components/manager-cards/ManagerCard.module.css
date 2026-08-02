@@ -142,12 +142,7 @@ button.card:active {
   left: 4%;
   right: 4%;
   z-index: 8;
-  min-height: 14%;
-  padding: 2.5cqw 3.2cqw 2.7cqw;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2.4cqw;
+  padding: 2.2cqw 2.6cqw;
   color: #f7edda;
   background: linear-gradient(160deg, rgba(67, 50, 26, 0.95), rgba(14, 9, 4, 0.96));
   border: 0.7cqw solid var(--manager-edge);
@@ -155,32 +150,34 @@ button.card:active {
   box-shadow: 0 1.1cqw 0 rgba(0, 0, 0, 0.72);
 }
 
-.formationBadge small {
-  flex: 0 0 auto;
-  color: #b5a584;
-  font-family: var(--font-pixel, monospace);
-  font-size: 4.1cqw;
-  letter-spacing: 0.09em;
-  line-height: 1;
-}
-
 .formationList {
+  width: 100%;
   min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1.5cqw;
 }
 
+.formationList[data-count="1"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.formationList[data-count="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .formationList strong {
-  padding: 1.5cqw 2cqw 1.3cqw;
+  min-width: 0;
+  padding: 2cqw 1.4cqw 1.8cqw;
   color: #f9efd9;
   background: rgba(255, 255, 255, 0.06);
   border: 0.45cqw solid color-mix(in srgb, var(--manager-edge) 58%, transparent);
   border-radius: 1.8cqw;
   font-family: var(--font-heavy, sans-serif);
-  font-size: 5.7cqw;
+  font-size: 6.1cqw;
   line-height: 1;
+  letter-spacing: -0.02em;
+  text-align: center;
   white-space: nowrap;
 }
 
