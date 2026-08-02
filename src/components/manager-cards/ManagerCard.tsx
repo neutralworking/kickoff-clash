@@ -87,7 +87,7 @@ function cardContents(
           <p className={styles.actionText}>{actionText}</p>
           <div className={styles.cardFooter}>
             <span className={styles.xiCostBadge}>
-              <small>XI MAX</small>
+              <small>START XI</small>
               <strong>{maxStartingXiCost}</strong>
             </span>
             <span className={styles.rarityBadge}>{rarity.toUpperCase()}</span>
