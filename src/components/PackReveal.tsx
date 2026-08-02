@@ -1,280 +1,161 @@
 'use client';
 
 /**
- * Pack opening — the design-handoff pack screen (1C "Foil Premium"), CLASSIC game.
+ * V1 starter opening: manager first, then one grouped player reveal.
  *
- * Three packs in sequence (players → managers → tactics), each: a sealed
- * foil-shimmering pack (packPulse loop, TAP TO OPEN) → a white flash → the cards
- * cascade in (dealIn stagger 70ms/card, one-shot rarity flare, Legendary ✦
- * spark — the per-card animation lives in FoilCard). Player cards render as the
- * handoff's whole-card-colour foil cards (Bronze/Silver/Gold/Onyx) in a 3-column
- * grid, rows as needed (the classic player pack is 16 cards, not the handoff's
- * 9 — the grid scrolls internally; the page itself never scrolls). Tapping any
- * card opens the EXISTING CardModal for inspection.
- *
- * Manager / tactic stages keep their pick-one flow (GameCard tiles + PICK
- * buttons) under the same screen chrome: step dots, title, PACK n/3, the
- * one-line info pill, and the amber NEXT CTA.
- *
- * Props contract with GameShell is unchanged: `contents` (PackContents) in,
- * `onContinue(managerId, tacticId)` out after the tactic pick.
+ * Tactic cards are intentionally absent. The callback keeps its legacy second
+ * argument only while GameShell is migrated; a non-matching sentinel makes the
+ * existing adapter carry zero tactics into the run.
  */
 
 import { useMemo, useState } from 'react';
 import type { PackContents } from '../lib/packs';
 import type { Card } from '../lib/scoring';
 import type { JokerCard } from '../lib/jokers';
-import type { TacticCard } from '../lib/tactics';
+import { managerFormationsV1 } from '../lib/manager-v1';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import { PIXEL } from './cards/cardTokens';
+import ManagerCard from './manager-cards/ManagerCard';
+import ManagerDossier from './manager-cards/ManagerDossier';
 
-// ---------------------------------------------------------------------------
-// Screen tokens (handoff values, mapped onto the game's palette where a token
-// exists). The phone screen stays dark: a pitch-green-tinted radial over near-
-// black — the foil cards are the light source.
-// ---------------------------------------------------------------------------
+const NO_TACTIC_V1_ID = '__v1_no_tactic__';
+const SCREEN_BG = 'radial-gradient(ellipse at 50% 16%, #18301f 0%, #0a0f0b 58%, #060806 100%)';
+const GOLD = '#f5c542';
+const BLUE = '#72b7ff';
 
-const SCREEN_BG = 'radial-gradient(ellipse at 50% 18%, #14281a 0%, #0a0f0b 60%, #070907 100%)';
-const GOLD_HI = '#f5c542';
-const DOT_OFF = 'rgba(244,236,216,0.22)';
-const INFO_BORDER = 'rgba(212,160,53,0.28)';
-const INFO_BG = 'rgba(212,160,53,0.06)';
-
-type Stage = 'players' | 'managers' | 'tactics';
+type Stage = 'manager' | 'players';
 type Phase = 'sealed' | 'open';
 
-interface StageMeta {
-  key: Stage;
-  index: number;
-  packLabel: string;
-  /** Sealed-pack + step-dot accent. */
-  accent: string;
-  /** The one-line info pill under the header (handoff: one line only). */
-  info: string;
+const ANIMATION_CSS = `
+@keyframes kcv1PackPulse {
+  0%, 100% { transform: scale(1) rotate(-1.4deg); }
+  50% { transform: scale(1.035) rotate(-1.4deg); }
 }
-
-const STAGE_META: Record<Stage, StageMeta> = {
-  players: {
-    key: 'players',
-    index: 1,
-    packLabel: 'PLAYER PACK',
-    accent: GOLD_HI,
-    info: 'Your starting squad — tap any card to inspect.',
-  },
-  managers: {
-    key: 'managers',
-    index: 2,
-    packLabel: 'MANAGER PACK',
-    accent: '#3aa0ff',
-    info: 'Tap to inspect, then pick ONE gaffer to lead the run.',
-  },
-  tactics: {
-    key: 'tactics',
-    index: 3,
-    packLabel: 'TACTICAL PACK',
-    accent: '#b06cff',
-    info: 'Tap to inspect, then pick ONE play to carry into the run.',
-  },
-};
-
-// Screen-level one-shot animations (kcfcp-prefixed; FoilCard owns the per-card
-// kcfc* keyframes). Reduced motion kills everything under the shell.
-const KCFCP_CSS = `
-@keyframes kcfcpPackPulse {
-  0%, 100% { transform: scale(1) rotate(-1.5deg); }
-  50%      { transform: scale(1.035) rotate(-1.5deg); }
-}
-@keyframes kcfcpHint {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.45; }
-}
-@keyframes kcfcpFlash {
-  0%   { opacity: 0; }
-  18%  { opacity: .85; }
-  100% { opacity: 0; }
-}
-@keyframes kcfcpShimmer {
-  0%   { background-position: -160% 0; }
+@keyframes kcv1PackShimmer {
+  0% { background-position: -180% 0; }
   100% { background-position: 260% 0; }
 }
+@keyframes kcv1Deal {
+  from { opacity: 0; transform: translateY(18px) scale(.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .kcfcp, .kcfcp * { animation: none !important; }
+  .kcv1-pack, .kcv1-pack * { animation: none !important; }
 }
 `;
 
-// ===========================================================================
-// Sealed pack — foil-shimmering pack card, TAP TO OPEN
-// ===========================================================================
-
-function SealedPack({ meta, count, countNoun, onOpen }: { meta: StageMeta; count: number; countNoun: string; onOpen: () => void }) {
+function SealedPack({
+  label,
+  count,
+  accent,
+  onOpen,
+}: {
+  label: string;
+  count: string;
+  accent: string;
+  onOpen: () => void;
+}) {
   return (
-    <div className="flex-1 min-h-0 flex flex-col items-center justify-center" style={{ gap: 22 }}>
+    <div className="flex-1 min-h-0 flex flex-col items-center justify-center" style={{ gap: 20 }}>
       <button
         type="button"
         onClick={onOpen}
-        aria-label={`Open ${meta.packLabel}`}
+        aria-label={`Open ${label}`}
         style={{
+          position: 'relative',
           width: 196,
           height: 288,
-          borderRadius: 16,
-          cursor: 'pointer',
-          background: 'linear-gradient(160deg, #2a1a10 0%, #140b06 100%)',
-          border: `3px solid ${meta.accent}`,
-          position: 'relative',
           overflow: 'hidden',
-          boxShadow: `0 10px 26px rgba(0,0,0,0.6), 0 0 30px ${meta.accent}66`,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 10,
-          animation: 'kcfcpPackPulse 1.7s ease-in-out infinite',
-        }}
-      >
-        {/* travelling foil shimmer */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
-            mixBlendMode: 'overlay',
-            opacity: 0.45,
-            background: 'linear-gradient(115deg, transparent 30%, rgba(255,255,255,.6) 48%, transparent 66%)',
-            backgroundSize: '250% 100%',
-            animation: 'kcfcpShimmer 3.5s linear infinite',
-          }}
-        />
-        {/* accent inner glow */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
-            background: `radial-gradient(circle at 50% 40%, ${meta.accent}33 0%, transparent 65%)`,
-          }}
-        />
-        <span
-          style={{
-            fontFamily: PIXEL,
-            fontSize: 52,
-            lineHeight: 0.9,
-            color: 'var(--cream)',
-            transform: 'rotate(-11deg)',
-            textShadow: '3px 3px 0 rgba(0,0,0,0.55)',
-            zIndex: 2,
-          }}
-        >
-          KC
-        </span>
-        <span style={{ fontFamily: PIXEL, fontSize: 11, letterSpacing: '.16em', color: meta.accent, zIndex: 2, marginTop: 8 }}>
-          {meta.packLabel}
-        </span>
-        <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: '.12em', color: 'var(--cream-soft)', zIndex: 2 }}>
-          {count} {countNoun.toUpperCase()}
-        </span>
-      </button>
-
-      <span
-        style={{
-          fontFamily: PIXEL,
-          fontSize: 11,
-          letterSpacing: '.2em',
+          gap: 11,
           color: 'var(--cream)',
-          animation: 'kcfcpHint 1.3s ease-in-out infinite',
+          background: 'linear-gradient(155deg, #2b1c10, #100805)',
+          border: `3px solid ${accent}`,
+          borderRadius: 16,
+          boxShadow: `0 12px 28px rgba(0,0,0,.62), 0 0 30px ${accent}55`,
+          cursor: 'pointer',
+          animation: 'kcv1PackPulse 1.8s ease-in-out infinite',
         }}
       >
-        TAP TO OPEN
-      </span>
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            opacity: .42,
+            background: 'linear-gradient(115deg, transparent 30%, rgba(255,255,255,.65) 48%, transparent 66%)',
+            backgroundSize: '250% 100%',
+            animation: 'kcv1PackShimmer 3.6s linear infinite',
+          }}
+        />
+        <span style={{ position: 'relative', fontFamily: PIXEL, fontSize: 54, lineHeight: .9, transform: 'rotate(-10deg)', textShadow: '3px 3px 0 #000' }}>KC</span>
+        <strong style={{ position: 'relative', fontFamily: PIXEL, fontSize: 11, letterSpacing: '.15em', color: accent }}>{label}</strong>
+        <span style={{ position: 'relative', fontFamily: PIXEL, fontSize: 8, letterSpacing: '.1em', color: 'var(--cream-soft)' }}>{count}</span>
+      </button>
+      <span style={{ fontFamily: PIXEL, fontSize: 10, letterSpacing: '.2em', color: 'var(--cream)' }}>TAP TO OPEN</span>
     </div>
   );
 }
 
-// ===========================================================================
-// Stage bodies
-// ===========================================================================
-
-/** Player stage — the handoff grid: 3 columns, gap 7, rows as needed. The
- *  classic pack is 16 cards (not 9), so the grid scrolls internally; every card
- *  is a fixed-height 234 foil card and the cascade staggers 70ms per card. */
-function PlayerGrid({ players, onOpen }: { players: Card[]; onOpen: (c: Card) => void }) {
-  return (
-    <div
-      className="flex-1 min-h-0 overflow-y-auto"
-      style={{ overscrollBehavior: 'contain', padding: '8px 0 12px' }}
-    >
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', alignItems: 'start', gap: 7 }}
-      >
-        {players.map((c, i) => (
-          <GameCard key={c.id} model={{ variant: 'player', card: c }} size="grid" delay={i * 70} onClick={() => onOpen(c)} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** A PICK button under a manager/tactic tile. */
-function PickBtn({ picked, accent, small, onClick, label }: { picked: boolean; accent: string; small?: boolean; onClick: () => void; label: string }) {
+function PickButton({ selected, onClick }: { selected: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className="active:scale-95"
       style={{
+        width: '100%',
+        minHeight: 42,
+        color: selected ? '#160d04' : 'var(--cream)',
+        background: selected ? 'linear-gradient(180deg, #ffe49b, #c9922f)' : 'linear-gradient(180deg, #2d2416, #171006)',
+        border: selected ? '2px solid #f0cb70' : '2px solid #070401',
+        borderRadius: 7,
+        boxShadow: '0 3px 0 #070401',
         fontFamily: PIXEL,
-        fontSize: small ? 9 : 11,
-        letterSpacing: 0.4,
-        color: picked ? '#0b0703' : 'var(--cream)',
-        padding: small ? '7px 0' : '10px 0',
-        borderRadius: 'var(--radius-sm)',
-        border: picked ? `2px solid ${accent}` : '2px solid var(--ink-black)',
-        background: picked ? accent : 'var(--surface)',
-        boxShadow: picked ? `0 3px 0 0 var(--ink-black), 0 0 16px ${accent}55` : '0 3px 0 0 var(--ink-black)',
-        transition: 'transform 0.12s ease',
+        fontSize: 8,
+        lineHeight: 1.2,
         cursor: 'pointer',
       }}
     >
-      {picked ? 'PICKED ✓' : label}
+      {selected ? 'SELECTED ✓' : 'PICK MANAGER'}
     </button>
   );
 }
 
-function ManagerGrid({
+function ManagerSelection({
   managers,
   pickedId,
-  accent,
-  onOpen,
   onPick,
+  onInspect,
 }: {
   managers: JokerCard[];
   pickedId: string | null;
-  accent: string;
-  onOpen: (m: JokerCard) => void;
   onPick: (id: string) => void;
+  onInspect: (manager: JokerCard) => void;
 }) {
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto" style={{ overscrollBehavior: 'contain', padding: '8px 0 12px' }}>
-      <div
-        className="grid mx-auto w-full"
-        style={{ gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12, alignContent: 'start', maxWidth: 340 }}
-      >
-        {managers.map((m, i) => {
-          const picked = pickedId === m.id;
+    <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: '6px 0 12px', overscrollBehavior: 'contain' }}>
+      <div className="grid mx-auto" style={{ width: '100%', maxWidth: 350, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, alignItems: 'start' }}>
+        {managers.map((manager, index) => {
+          const selected = pickedId === manager.id;
           return (
-            <div key={m.id} className="flex flex-col" style={{ gap: 8, minWidth: 0 }}>
-              <GameCard
-                model={{ variant: 'manager', manager: m }}
-                delay={i * 120}
-                selected={picked}
-                onClick={() => onOpen(m)}
-                ariaLabel={`Inspect ${m.name}`}
+            <article
+              key={manager.id}
+              className="flex flex-col"
+              style={{ minWidth: 0, gap: 9, opacity: pickedId && !selected ? .54 : 1, animation: `kcv1Deal 280ms ease-out ${index * 70}ms both` }}
+            >
+              <ManagerCard
+                manager={manager}
+                formations={managerFormationsV1(manager)}
+                selected={selected}
+                onClick={() => onInspect(manager)}
               />
-              <PickBtn picked={picked} accent={accent} onClick={() => onPick(m.id)} label="PICK MANAGER" />
-            </div>
+              <PickButton selected={selected} onClick={() => onPick(manager.id)} />
+            </article>
           );
         })}
       </div>
@@ -282,49 +163,19 @@ function ManagerGrid({
   );
 }
 
-function TacticGrid({
-  tactics,
-  pickedId,
-  accent,
-  onOpen,
-  onPick,
-}: {
-  tactics: TacticCard[];
-  pickedId: string | null;
-  accent: string;
-  onOpen: (t: TacticCard) => void;
-  onPick: (id: string) => void;
-}) {
+function PlayerReveal({ players, onInspect }: { players: Card[]; onInspect: (card: Card) => void }) {
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto" style={{ overscrollBehavior: 'contain', padding: '8px 0 12px' }}>
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 7, alignContent: 'start' }}
-      >
-        {tactics.map((t, i) => {
-          const picked = pickedId === t.id;
-          return (
-            <div key={t.id} className="flex flex-col" style={{ gap: 6, minWidth: 0 }}>
-              <GameCard
-                // A freshly-ripped tactic arrives with a single charge (see tactics.ts).
-                model={{ variant: 'tactic', tactic: t, charges: 1 }}
-                delay={i * 70}
-                selected={picked}
-                onClick={() => onOpen(t)}
-                ariaLabel={`Inspect ${t.name}`}
-              />
-              <PickBtn picked={picked} accent={accent} small onClick={() => onPick(t.id)} label="PICK" />
-            </div>
-          );
-        })}
+    <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: '6px 0 12px', overscrollBehavior: 'contain' }}>
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 7, alignItems: 'start' }}>
+        {players.map((card, index) => (
+          <div key={card.id} style={{ minWidth: 0, animation: `kcv1Deal 260ms ease-out ${index * 45}ms both` }}>
+            <GameCard model={{ variant: 'player', card }} size="grid" onClick={() => onInspect(card)} />
+          </div>
+        ))}
       </div>
     </div>
   );
 }
-
-// ===========================================================================
-// Main component — props contract with GameShell preserved exactly.
-// ===========================================================================
 
 interface PackRevealProps {
   contents: PackContents;
@@ -332,211 +183,122 @@ interface PackRevealProps {
 }
 
 export default function PackReveal({ contents, onContinue }: PackRevealProps) {
-  const [stage, setStage] = useState<Stage>('players');
+  const [stage, setStage] = useState<Stage>('manager');
   const [phase, setPhase] = useState<Phase>('sealed');
   const [pickedManagerId, setPickedManagerId] = useState<string | null>(null);
-  const [pickedTacticId, setPickedTacticId] = useState<string | null>(null);
-  const [modal, setModal] = useState<GameCardModel | null>(null);
+  const [playerModal, setPlayerModal] = useState<GameCardModel | null>(null);
+  const [managerModal, setManagerModal] = useState<JokerCard | null>(null);
 
-  // Players sorted strongest-first so pulls feel rewarding (display only).
   const sortedPlayers = useMemo(
     () => [...contents.players].sort((a, b) => b.power - a.power),
     [contents.players],
   );
+  const accent = stage === 'manager' ? BLUE : GOLD;
+  const title = stage === 'manager' ? 'PICK YOUR MANAGER' : 'YOUR PLAYER PACK';
+  const info = stage === 'manager'
+    ? 'Your manager sets your formations, starting-XI cost and run action.'
+    : 'All players reveal together. Tap any card to inspect it.';
+  const gated = stage === 'manager' && pickedManagerId === null;
 
-  const meta = STAGE_META[stage];
-  const count =
-    stage === 'players' ? contents.players.length : stage === 'managers' ? contents.managers.length : contents.tactics.length;
-  const countNoun = stage === 'players' ? 'players' : stage === 'managers' ? 'managers' : 'tactics';
-
-  // The manager and tactic stages each gate the continue button on a pick.
-  const managerGated = stage === 'managers' && pickedManagerId === null;
-  const tacticGated = stage === 'tactics' && pickedTacticId === null;
-  const gated = managerGated || tacticGated;
-  const continueLabel =
-    stage === 'tactics'
-      ? tacticGated ? 'PICK A TACTIC' : 'PICK YOUR TEAM →'
-      : stage === 'managers'
-        ? managerGated ? 'PICK A MANAGER' : 'NEXT PACK →'
-        : 'NEXT PACK →';
-
-  function advanceStage() {
-    if (stage === 'players') {
-      setStage('managers');
+  function continueFlow() {
+    if (stage === 'manager') {
+      if (!pickedManagerId) return;
+      setStage('players');
       setPhase('sealed');
-    } else if (stage === 'managers') {
-      setStage('tactics');
-      setPhase('sealed');
-    } else {
-      onContinue(pickedManagerId, pickedTacticId);
+      return;
     }
+    onContinue(pickedManagerId, NO_TACTIC_V1_ID);
   }
 
   return (
     <div
-      className="kcfcp flex flex-col overflow-hidden relative"
+      className="kcv1-pack flex flex-col overflow-hidden relative"
       style={{
         height: '100dvh',
+        color: 'var(--cream)',
         background: SCREEN_BG,
-        paddingTop: 'max(env(safe-area-inset-top), 14px)',
-        paddingBottom: 'max(env(safe-area-inset-bottom), 14px)',
-        paddingLeft: 16,
-        paddingRight: 16,
+        paddingTop: 'max(env(safe-area-inset-top), 12px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom), 10px)',
       }}
     >
-      <style href="kcfcp-styles" precedence="medium">
-        {KCFCP_CSS}
-      </style>
+      <style>{ANIMATION_CSS}</style>
 
-      {/* open flash — a one-shot white burst as the pack tears (keyed per stage) */}
-      {phase === 'open' && (
-        <div
-          key={`flash-${stage}`}
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 40,
-            pointerEvents: 'none',
-            background: '#fff',
-            opacity: 0,
-            animation: 'kcfcpFlash .6s ease-out both',
-          }}
-        />
-      )}
-
-      {/* Header — step dots (active = wide pill), title, PACK n / 3 */}
-      <div className="shrink-0 relative" style={{ zIndex: 2 }}>
-        <div className="flex items-center justify-center" style={{ gap: 6, marginBottom: 10 }}>
-          {(['players', 'managers', 'tactics'] as Stage[]).map((s) => {
-            const active = STAGE_META[s].index === meta.index;
-            const done = STAGE_META[s].index < meta.index;
-            return (
-              <span
-                key={s}
-                style={{
-                  width: active ? 22 : 8,
-                  height: 8,
-                  borderRadius: 99,
-                  background: active ? GOLD_HI : done ? 'rgba(244,236,216,0.5)' : DOT_OFF,
-                  transition: 'all 0.3s ease',
-                }}
-              />
-            );
-          })}
-        </div>
-        <h1
-          className="text-center"
-          style={{
-            fontFamily: PIXEL,
-            fontSize: 19,
-            letterSpacing: '.08em',
-            color: GOLD_HI,
-            textShadow: '0 2px 0 rgba(0,0,0,0.6), 0 0 18px rgba(245,197,66,0.35)',
-            margin: 0,
-            lineHeight: 1.1,
-          }}
-        >
-          {meta.packLabel}
-        </h1>
-        <p
-          className="text-center"
-          style={{
-            fontFamily: PIXEL,
-            fontSize: 9,
-            letterSpacing: '.16em',
-            color: 'var(--amber)',
-            marginTop: 4,
-          }}
-        >
-          PACK {meta.index} / 3
-        </p>
-      </div>
-
-      {/* Body */}
-      <div className="flex-1 min-h-0 flex flex-col relative" style={{ zIndex: 2, marginTop: 4 }}>
-        {phase === 'sealed' ? (
-          <SealedPack meta={meta} count={count} countNoun={countNoun} onOpen={() => setPhase('open')} />
-        ) : (
-          <>
-            {/* Info line — ONE line, hairline gold-tinted pill (handoff spec). */}
-            <div
-              className="shrink-0"
+      <header className="shrink-0 px-4" style={{ textAlign: 'center' }}>
+        <div className="flex items-center justify-center" style={{ gap: 7, marginBottom: 9 }}>
+          {(['manager', 'players'] as Stage[]).map((key) => (
+            <span
+              key={key}
               style={{
-                border: `1px solid ${INFO_BORDER}`,
-                background: INFO_BG,
-                borderRadius: 8,
-                padding: '8px 12px',
-                margin: '12px 0 0',
-                fontSize: 11.5,
-                lineHeight: 1.3,
-                color: 'var(--cream-soft)',
-                textAlign: 'center',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                width: key === stage ? 28 : 8,
+                height: 8,
+                borderRadius: 99,
+                background: key === stage ? accent : 'rgba(244,236,216,.2)',
+                boxShadow: key === stage ? `0 0 12px ${accent}88` : undefined,
+                transition: 'width 160ms ease',
               }}
-            >
-              {meta.info}
-            </div>
+            />
+          ))}
+        </div>
+        <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: '.14em', color: 'var(--dust)' }}>PACK {stage === 'manager' ? '1' : '2'} / 2</span>
+        <h1 style={{ margin: '7px 0 0', color: accent, fontFamily: 'var(--font-heavy, sans-serif)', fontSize: 25, lineHeight: 1 }}>{title}</h1>
+        <p style={{ margin: '8px auto 0', maxWidth: 360, color: 'var(--cream-soft)', fontSize: 11.5, lineHeight: 1.35 }}>{info}</p>
+      </header>
 
-            {stage === 'players' ? (
-              <PlayerGrid players={sortedPlayers} onOpen={(c) => setModal({ variant: 'player', card: c })} />
-            ) : stage === 'managers' ? (
-              <ManagerGrid
-                managers={contents.managers}
-                pickedId={pickedManagerId}
-                accent={meta.accent}
-                onOpen={(m) => setModal({ variant: 'manager', manager: m })}
-                onPick={(id) => setPickedManagerId(id)}
-              />
-            ) : (
-              <TacticGrid
-                tactics={contents.tactics}
-                pickedId={pickedTacticId}
-                accent={meta.accent}
-                onOpen={(t) => setModal({ variant: 'tactic', tactic: t, charges: 1 })}
-                onPick={(id) => setPickedTacticId(id)}
-              />
-            )}
-          </>
+      <main className="flex-1 min-h-0 flex flex-col px-3" style={{ marginTop: 10 }}>
+        {phase === 'sealed' ? (
+          <SealedPack
+            label={stage === 'manager' ? 'MANAGER PACK' : 'PLAYER PACK'}
+            count={stage === 'manager' ? `${contents.managers.length} MANAGERS · PICK 1` : `${contents.players.length} PLAYERS`}
+            accent={accent}
+            onOpen={() => setPhase('open')}
+          />
+        ) : stage === 'manager' ? (
+          <ManagerSelection
+            managers={contents.managers}
+            pickedId={pickedManagerId}
+            onPick={setPickedManagerId}
+            onInspect={setManagerModal}
+          />
+        ) : (
+          <PlayerReveal players={sortedPlayers} onInspect={(card) => setPlayerModal({ variant: 'player', card })} />
         )}
-      </div>
+      </main>
 
-      {/* Footer CTA (only after reveal) */}
       {phase === 'open' && (
-        <div className="shrink-0 relative" style={{ zIndex: 2, paddingTop: 8 }}>
+        <footer className="shrink-0 px-3 pt-2">
           <button
             type="button"
-            onClick={advanceStage}
+            onClick={continueFlow}
             disabled={gated}
-            className={gated ? '' : 'active:scale-95'}
+            className="active:scale-95"
             style={{
               width: '100%',
+              height: 48,
+              color: gated ? 'var(--dust)' : '#160d04',
+              background: gated ? 'rgba(255,255,255,.06)' : `linear-gradient(180deg, ${accent}, color-mix(in srgb, ${accent} 72%, #6b4300))`,
+              border: gated ? '1px solid var(--border)' : '2px solid #080501',
+              borderRadius: 8,
+              boxShadow: gated ? 'none' : '0 3px 0 #080501',
               fontFamily: PIXEL,
-              fontSize: 14,
-              letterSpacing: '.06em',
-              color: gated ? 'var(--dust)' : '#1a0f08',
-              padding: '14px 0',
-              borderRadius: 10,
-              border: 'none',
-              background: gated
-                ? 'var(--surface)'
-                : 'linear-gradient(180deg, var(--amber), var(--amber-soft))',
-              boxShadow: gated
-                ? '0 4px 0 0 var(--ink-black)'
-                : '0 5px 0 #a3560a, 0 0 24px var(--amber-glow)',
-              transition: 'transform 0.12s ease',
+              fontSize: 11,
               cursor: gated ? 'default' : 'pointer',
             }}
           >
-            {continueLabel}
+            {stage === 'manager'
+              ? gated ? 'PICK A MANAGER' : 'OPEN PLAYER PACK →'
+              : 'PICK YOUR TEAM →'}
           </button>
-        </div>
+        </footer>
       )}
 
-      {/* Full-card overlay — the EXISTING inspect modal */}
-      <CardModal model={modal} onClose={() => setModal(null)} />
+      <CardModal model={playerModal} onClose={() => setPlayerModal(null)} />
+      {managerModal && (
+        <ManagerDossier
+          manager={managerModal}
+          formations={managerFormationsV1(managerModal)}
+          onClose={() => setManagerModal(null)}
+        />
+      )}
     </div>
   );
 }
