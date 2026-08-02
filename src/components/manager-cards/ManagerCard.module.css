@@ -11,23 +11,10 @@
   transition: opacity 140ms ease, filter 140ms ease, transform 140ms ease;
 }
 
-button.card {
-  cursor: pointer;
-}
-
-button.card:active {
-  transform: translateY(2px) scale(0.985);
-}
-
-.grid {
-  width: 100%;
-  aspect-ratio: 2 / 3;
-}
-
-.hero {
-  width: 228px;
-  height: 342px;
-}
+button.card { cursor: pointer; }
+button.card:active { transform: translateY(2px) scale(0.985); }
+.grid { width: 100%; aspect-ratio: 2 / 3; }
+.hero { width: 228px; height: 342px; }
 
 .frameMaterial {
   position: absolute;
@@ -35,10 +22,7 @@ button.card:active {
   z-index: 0;
   padding: max(3px, 1.4cqw);
   background: var(--manager-frame);
-  box-shadow:
-    0 4px 0 #050301,
-    0 12px 24px rgba(0, 0, 0, 0.58),
-    0 0 22px var(--manager-glow);
+  box-shadow: 0 4px 0 #050301, 0 12px 24px rgba(0, 0, 0, 0.58), 0 0 22px var(--manager-glow);
   clip-path: polygon(9% 0, 91% 0, 100% 6%, 100% 94%, 91% 100%, 9% 100%, 0 94%, 0 6%);
 }
 
@@ -47,9 +31,7 @@ button.card:active {
   inset: max(3px, 1.4cqw);
   z-index: 1;
   overflow: hidden;
-  background:
-    radial-gradient(80% 48% at 50% 22%, color-mix(in srgb, var(--manager-edge) 22%, transparent), transparent 72%),
-    linear-gradient(165deg, #2a2013, #100b06 68%, #080503);
+  background: radial-gradient(80% 48% at 50% 22%, color-mix(in srgb, var(--manager-edge) 22%, transparent), transparent 72%), linear-gradient(165deg, #2a2013, #100b06 68%, #080503);
   border: max(1px, 0.7cqw) solid var(--manager-inner);
   clip-path: polygon(8% 0, 92% 0, 100% 5.2%, 100% 94.8%, 92% 100%, 8% 100%, 0 94.8%, 0 5.2%);
 }
@@ -60,15 +42,13 @@ button.card:active {
   inset: 0;
   z-index: 20;
   pointer-events: none;
-  box-shadow:
-    inset 0 0 0 0.7cqw rgba(255, 245, 218, 0.08),
-    inset 0 -38cqw 40cqw rgba(0, 0, 0, 0.8);
+  box-shadow: inset 0 0 0 0.7cqw rgba(255, 245, 218, 0.08), inset 0 -28cqw 30cqw rgba(0, 0, 0, 0.72);
 }
 
 .kcMonogram {
   position: absolute;
   left: 50%;
-  top: 14%;
+  top: 12%;
   z-index: 0;
   transform: translateX(-50%) rotate(-8deg);
   color: color-mix(in srgb, var(--manager-edge) 22%, transparent);
@@ -81,7 +61,7 @@ button.card:active {
 
 .portrait {
   position: absolute;
-  inset: 2% -7% 0;
+  inset: -2% -10% -3%;
   z-index: 1;
   display: grid;
   place-items: center;
@@ -90,15 +70,12 @@ button.card:active {
 }
 
 .portrait img,
-.portrait > div {
-  width: 100%;
-  height: 100%;
-}
+.portrait > div { width: 100%; height: 100%; }
 
 .portrait img {
   object-fit: cover;
-  object-position: center 8%;
-  transform: scale(1.035);
+  object-position: center 4%;
+  transform: scale(1.025);
   filter: contrast(1.04) saturate(0.92) drop-shadow(0 1.5cqw 1.3cqw rgba(0, 0, 0, 0.72));
   user-select: none;
 }
@@ -106,23 +83,20 @@ button.card:active {
 .topScrim,
 .bottomScrim,
 .sheen,
-.raritySeam {
-  position: absolute;
-  pointer-events: none;
-}
+.raritySeam { position: absolute; pointer-events: none; }
 
 .topScrim {
   inset: 0 0 auto;
   z-index: 2;
-  height: 31%;
-  background: linear-gradient(180deg, rgba(4, 3, 2, 0.9), transparent);
+  height: 24%;
+  background: linear-gradient(180deg, rgba(4, 3, 2, 0.84), transparent);
 }
 
 .bottomScrim {
   inset: auto 0 0;
   z-index: 2;
-  height: 64%;
-  background: linear-gradient(180deg, transparent, rgba(6, 4, 2, 0.98) 66%);
+  height: 50%;
+  background: linear-gradient(180deg, transparent, rgba(6, 4, 2, 0.97) 62%);
 }
 
 .sheen {
@@ -138,11 +112,11 @@ button.card:active {
 
 .formationBadge {
   position: absolute;
-  top: 4%;
+  top: 3%;
   left: 4%;
   right: 4%;
   z-index: 8;
-  padding: 2.2cqw 2.6cqw;
+  padding: 1.7cqw 2.2cqw;
   color: #f7edda;
   background: linear-gradient(160deg, rgba(67, 50, 26, 0.95), rgba(14, 9, 4, 0.96));
   border: 0.7cqw solid var(--manager-edge);
@@ -158,23 +132,18 @@ button.card:active {
   gap: 1.5cqw;
 }
 
-.formationList[data-count="1"] {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.formationList[data-count="2"] {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
+.formationList[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
+.formationList[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 .formationList strong {
   min-width: 0;
-  padding: 2cqw 1.4cqw 1.8cqw;
+  padding: 1.7cqw 1.4cqw 1.5cqw;
   color: #f9efd9;
   background: rgba(255, 255, 255, 0.06);
   border: 0.45cqw solid color-mix(in srgb, var(--manager-edge) 58%, transparent);
   border-radius: 1.8cqw;
   font-family: var(--font-heavy, sans-serif);
-  font-size: 6.1cqw;
+  font-size: 5.8cqw;
   line-height: 1;
   letter-spacing: -0.02em;
   text-align: center;
@@ -185,18 +154,16 @@ button.card:active {
   position: absolute;
   left: 4.2%;
   right: 4.2%;
-  bottom: 4%;
+  bottom: 2.8%;
   z-index: 9;
-  padding: 4.8cqw 5.2cqw 3.6cqw;
+  padding: 3.3cqw 4.2cqw 2.4cqw;
   display: flex;
   flex-direction: column;
   align-items: center;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 25%),
-    linear-gradient(180deg, rgba(25, 18, 9, 0.95), rgba(8, 5, 2, 0.99));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 23%), linear-gradient(180deg, rgba(25, 18, 9, 0.82), rgba(8, 5, 2, 0.98));
   border: 0.7cqw solid color-mix(in srgb, var(--manager-edge) 62%, #201406);
   clip-path: polygon(5% 0, 95% 0, 100% 9%, 100% 100%, 0 100%, 0 9%);
-  box-shadow: 0 -1.4cqw 7cqw rgba(0, 0, 0, 0.55);
+  box-shadow: 0 -1.2cqw 5cqw rgba(0, 0, 0, 0.48);
   text-align: center;
 }
 
@@ -204,7 +171,7 @@ button.card:active {
   width: 100%;
   color: #f8efdc;
   font-family: var(--font-heavy, sans-serif);
-  font-size: 10.3cqw;
+  font-size: 9.4cqw;
   line-height: 0.98;
   letter-spacing: -0.025em;
   overflow-wrap: anywhere;
@@ -213,12 +180,12 @@ button.card:active {
 
 .actionLabel {
   width: 100%;
-  margin-top: 3.2cqw;
-  padding-top: 3cqw;
+  margin-top: 2.1cqw;
+  padding-top: 2.1cqw;
   color: var(--manager-edge);
   border-top: 0.45cqw solid color-mix(in srgb, var(--manager-edge) 38%, transparent);
   font-family: var(--font-heavy, sans-serif);
-  font-size: 5.4cqw;
+  font-size: 5.1cqw;
   line-height: 1.05;
   letter-spacing: 0.015em;
   overflow-wrap: anywhere;
@@ -226,35 +193,29 @@ button.card:active {
 
 .actionText {
   width: 100%;
-  margin: 2.3cqw 0 0;
+  margin: 1.5cqw 0 0;
   color: #efe5cf;
   font-family: var(--font-body, sans-serif);
-  font-size: 4.7cqw;
+  font-size: 4.25cqw;
   font-weight: 650;
-  line-height: 1.28;
+  line-height: 1.22;
   text-align: left;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.grid .actionText {
-  -webkit-line-clamp: 3;
-}
-
-.hero .actionText {
-  -webkit-line-clamp: 5;
-}
+.grid .actionText { -webkit-line-clamp: 3; }
+.hero .actionText { -webkit-line-clamp: 4; }
 
 .cardFooter {
   position: relative;
   width: 100%;
-  min-height: 9.2cqw;
-  margin-top: 3.3cqw;
+  min-height: 7.4cqw;
+  margin-top: 2.1cqw;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 4cqw;
+  justify-content: flex-start;
 }
 
 .cardFooter::before {
@@ -269,29 +230,25 @@ button.card:active {
   background: color-mix(in srgb, var(--manager-edge) 28%, transparent);
 }
 
-.xiCostBadge,
-.rarityBadge {
+.xiCostBadge {
   position: relative;
   z-index: 1;
+  min-height: 6.8cqw;
+  padding: 1cqw 1.8cqw 0.9cqw;
+  display: inline-flex;
+  align-items: center;
+  gap: 1.5cqw;
+  color: #f5e6bd;
   background: #0b0703;
   border: 0.45cqw solid color-mix(in srgb, var(--manager-edge) 62%, transparent);
   border-radius: 1.6cqw;
   white-space: nowrap;
 }
 
-.xiCostBadge {
-  min-height: 8.2cqw;
-  padding: 1.3cqw 2.2cqw 1.1cqw;
-  display: inline-flex;
-  align-items: center;
-  gap: 1.8cqw;
-  color: #f5e6bd;
-}
-
 .xiCostBadge small {
   color: #aa9c7c;
   font-family: var(--font-pixel, monospace);
-  font-size: 3.6cqw;
+  font-size: 3.3cqw;
   line-height: 1;
   letter-spacing: 0.07em;
 }
@@ -299,17 +256,8 @@ button.card:active {
 .xiCostBadge strong {
   color: var(--manager-edge);
   font-family: var(--font-heavy, sans-serif);
-  font-size: 6.6cqw;
+  font-size: 5.9cqw;
   line-height: 0.9;
-}
-
-.rarityBadge {
-  padding: 1.7cqw 2.5cqw 1.5cqw;
-  color: var(--manager-edge);
-  font-family: var(--font-pixel, monospace);
-  font-size: 4.2cqw;
-  line-height: 1;
-  letter-spacing: 0.08em;
 }
 
 .raritySeam {
@@ -319,27 +267,10 @@ button.card:active {
   clip-path: polygon(7% 0, 93% 0, 100% 5%, 100% 95%, 93% 100%, 7% 100%, 0 95%, 0 5%);
 }
 
-.selected {
-  transform: translateY(-3px) scale(1.025);
-}
-
-.selected .frameMaterial {
-  box-shadow:
-    0 4px 0 #050301,
-    0 14px 27px rgba(0, 0, 0, 0.62),
-    0 0 0 2px #f7d474,
-    0 0 30px rgba(239, 188, 70, 0.72);
-}
-
-.dimmed {
-  opacity: 0.34;
-  filter: saturate(0.45);
-}
-
-.frameSlot {
-  width: 100%;
-  min-width: 0;
-}
+.selected { transform: translateY(-3px) scale(1.025); }
+.selected .frameMaterial { box-shadow: 0 4px 0 #050301, 0 14px 27px rgba(0, 0, 0, 0.62), 0 0 0 2px #f7d474, 0 0 30px rgba(239, 188, 70, 0.72); }
+.dimmed { opacity: 0.34; filter: saturate(0.45); }
+.frameSlot { width: 100%; min-width: 0; }
 
 @keyframes managerSheen {
   0%, 42% { left: -42%; opacity: 0; }
@@ -349,8 +280,5 @@ button.card:active {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sheen {
-    animation: none;
-    display: none;
-  }
+  .sheen { animation: none; display: none; }
 }
