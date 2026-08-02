@@ -1,0 +1,323 @@
+.card {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 0;
+  color: #f4ecd8;
+  background: transparent;
+  border: 0;
+  container-type: inline-size;
+  isolation: isolate;
+  text-align: left;
+  transition: opacity 140ms ease, filter 140ms ease, transform 140ms ease;
+}
+
+button.card {
+  cursor: pointer;
+}
+
+button.card:active {
+  transform: translateY(2px) scale(0.985);
+}
+
+.grid {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+}
+
+.hero {
+  width: 228px;
+  height: 342px;
+}
+
+.frameMaterial {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  padding: max(3px, 1.4cqw);
+  background: var(--manager-frame);
+  box-shadow:
+    0 4px 0 #050301,
+    0 12px 24px rgba(0, 0, 0, 0.58),
+    0 0 22px var(--manager-glow);
+  clip-path: polygon(9% 0, 91% 0, 100% 6%, 100% 94%, 91% 100%, 9% 100%, 0 94%, 0 6%);
+}
+
+.interior {
+  position: absolute;
+  inset: max(3px, 1.4cqw);
+  z-index: 1;
+  overflow: hidden;
+  background:
+    radial-gradient(80% 48% at 50% 22%, color-mix(in srgb, var(--manager-edge) 22%, transparent), transparent 72%),
+    linear-gradient(165deg, #2a2013, #100b06 68%, #080503);
+  border: max(1px, 0.7cqw) solid var(--manager-inner);
+  clip-path: polygon(8% 0, 92% 0, 100% 5.2%, 100% 94.8%, 92% 100%, 8% 100%, 0 94.8%, 0 5.2%);
+}
+
+.interior::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 0.7cqw rgba(255, 245, 218, 0.08),
+    inset 0 -31cqw 34cqw rgba(0, 0, 0, 0.74);
+}
+
+.kcMonogram {
+  position: absolute;
+  left: 50%;
+  top: 14%;
+  z-index: 0;
+  transform: translateX(-50%) rotate(-8deg);
+  color: color-mix(in srgb, var(--manager-edge) 22%, transparent);
+  font-family: var(--font-heavy, sans-serif);
+  font-size: 65cqw;
+  line-height: 0.85;
+  letter-spacing: -0.13em;
+  white-space: nowrap;
+}
+
+.portrait {
+  position: absolute;
+  inset: 2% -7% 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.portrait img,
+.portrait > div {
+  width: 100%;
+  height: 100%;
+}
+
+.portrait img {
+  object-fit: cover;
+  object-position: center 8%;
+  transform: scale(1.035);
+  filter: contrast(1.04) saturate(0.92) drop-shadow(0 1.5cqw 1.3cqw rgba(0, 0, 0, 0.72));
+  user-select: none;
+}
+
+.topScrim,
+.bottomScrim,
+.sheen,
+.raritySeam {
+  position: absolute;
+  pointer-events: none;
+}
+
+.topScrim {
+  inset: 0 0 auto;
+  z-index: 2;
+  height: 29%;
+  background: linear-gradient(180deg, rgba(4, 3, 2, 0.86), transparent);
+}
+
+.bottomScrim {
+  inset: auto 0 0;
+  z-index: 2;
+  height: 54%;
+  background: linear-gradient(180deg, transparent, rgba(6, 4, 2, 0.96) 72%);
+}
+
+.sheen {
+  top: 0;
+  bottom: 0;
+  left: -42%;
+  z-index: 3;
+  width: 34%;
+  transform: skewX(-17deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 248, 225, 0.18), transparent);
+  animation: managerSheen 6.5s ease-in-out infinite;
+}
+
+.identityCrest {
+  position: absolute;
+  top: 4%;
+  left: 4%;
+  z-index: 8;
+  width: 24%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  color: #fff7df;
+  background:
+    radial-gradient(circle at 34% 28%, color-mix(in srgb, var(--manager-class) 88%, white), var(--manager-class) 52%, #120c06 100%);
+  border: 0.8cqw solid var(--manager-edge);
+  border-radius: 50%;
+  box-shadow: 0 1.2cqw 0 #070401, 0 0 8cqw color-mix(in srgb, var(--manager-class) 45%, transparent);
+}
+
+.identityCrest small {
+  position: absolute;
+  top: 104%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1.4cqw 2.5cqw;
+  color: var(--manager-edge);
+  background: rgba(7, 4, 1, 0.88);
+  border: 0.45cqw solid color-mix(in srgb, var(--manager-edge) 56%, transparent);
+  border-radius: 1.8cqw;
+  font-family: var(--font-pixel, monospace);
+  font-size: 4.8cqw;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.formationBadge {
+  position: absolute;
+  top: 4.2%;
+  right: 3.8%;
+  z-index: 8;
+  min-width: 32%;
+  padding: 3cqw 4cqw 2.7cqw;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1.3cqw;
+  color: #f7edda;
+  background: linear-gradient(160deg, rgba(67, 50, 26, 0.94), rgba(14, 9, 4, 0.95));
+  border: 0.7cqw solid var(--manager-edge);
+  clip-path: polygon(13% 0, 100% 0, 100% 100%, 0 100%, 0 28%);
+  box-shadow: 0 1.1cqw 0 rgba(0, 0, 0, 0.72);
+}
+
+.formationBadge small {
+  color: #a99a7a;
+  font-family: var(--font-pixel, monospace);
+  font-size: 4.3cqw;
+  letter-spacing: 0.09em;
+  line-height: 1;
+}
+
+.formationBadge strong {
+  font-family: var(--font-heavy, sans-serif);
+  font-size: 9.2cqw;
+  line-height: 0.92;
+  white-space: nowrap;
+}
+
+.identityPlate {
+  position: absolute;
+  left: 4.2%;
+  right: 4.2%;
+  bottom: 4%;
+  z-index: 9;
+  padding: 5.1cqw 5.2cqw 4.8cqw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 25%),
+    linear-gradient(180deg, rgba(25, 18, 9, 0.94), rgba(8, 5, 2, 0.98));
+  border: 0.7cqw solid color-mix(in srgb, var(--manager-edge) 62%, #201406);
+  clip-path: polygon(5% 0, 95% 0, 100% 9%, 100% 100%, 0 100%, 0 9%);
+  box-shadow: 0 -1.4cqw 7cqw rgba(0, 0, 0, 0.55);
+  text-align: center;
+}
+
+.name {
+  width: 100%;
+  color: #f8efdc;
+  font-family: var(--font-heavy, sans-serif);
+  font-size: 10.7cqw;
+  line-height: 0.98;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1cqw 0 #060301;
+}
+
+.archetype {
+  max-width: 100%;
+  margin-top: 3.2cqw;
+  color: var(--manager-edge);
+  font-family: var(--font-pixel, monospace);
+  font-size: 5.2cqw;
+  line-height: 1.15;
+  letter-spacing: 0.08em;
+  white-space: normal;
+}
+
+.signature {
+  width: 100%;
+  min-height: 12.5cqw;
+  margin-top: 4cqw;
+  padding: 2.6cqw 3cqw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5cqw;
+  color: #190f05;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.54), transparent 34%),
+    linear-gradient(90deg, #845c20, #f0c866 25%, #ffe49b 50%, #d9a641 76%, #75501a);
+  border: 0.65cqw solid #271605;
+  clip-path: polygon(5% 0, 95% 0, 100% 50%, 95% 100%, 5% 100%, 0 50%);
+  font-family: var(--font-heavy, sans-serif);
+  text-align: center;
+}
+
+.signature i {
+  flex: 0 0 auto;
+  font-size: 6cqw;
+  font-style: normal;
+}
+
+.signature b {
+  min-width: 0;
+  font-size: 5.8cqw;
+  line-height: 1;
+  letter-spacing: 0.015em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.raritySeam {
+  inset: 1.6% 2%;
+  z-index: 19;
+  border: 0.35cqw solid color-mix(in srgb, var(--manager-edge) 35%, transparent);
+  clip-path: polygon(7% 0, 93% 0, 100% 5%, 100% 95%, 93% 100%, 7% 100%, 0 95%, 0 5%);
+}
+
+.selected {
+  transform: translateY(-3px) scale(1.025);
+}
+
+.selected .frameMaterial {
+  box-shadow:
+    0 4px 0 #050301,
+    0 14px 27px rgba(0, 0, 0, 0.62),
+    0 0 0 2px #f7d474,
+    0 0 30px rgba(239, 188, 70, 0.72);
+}
+
+.dimmed {
+  opacity: 0.34;
+  filter: saturate(0.45);
+}
+
+.frameSlot {
+  width: 100%;
+  min-width: 0;
+}
+
+@keyframes managerSheen {
+  0%, 42% { left: -42%; opacity: 0; }
+  52% { opacity: 1; }
+  72% { left: 112%; opacity: 0; }
+  100% { left: 112%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheen {
+    animation: none;
+    display: none;
+  }
+}
