@@ -19,10 +19,19 @@ const PIP_CELLS: Record<number, number[]> = {
   6: [1, 3, 4, 6, 7, 9],
 };
 
+type PlayerCardSize = 'pitch' | 'bench' | 'reveal' | 'mini';
+
+const CARD_SIZE: Record<PlayerCardSize, { width: number; height: number }> = {
+  pitch: { width: 72, height: 96 },
+  bench: { width: 82, height: 123 },
+  reveal: { width: 228, height: 342 },
+  mini: { width: 48, height: 72 },
+};
+
 export interface TeamSelectionPlayerCardProps {
   card: Card;
   v6card?: V6Card;
-  size: 'pitch' | 'bench';
+  size: PlayerCardSize;
   competence?: Competence;
   dimmed?: boolean;
   highlighted?: boolean;
@@ -62,18 +71,23 @@ export default function TeamSelectionPlayerCard({
     : competence === 'secondary'
       ? styles.fitSecondary
       : styles.fitPrimary;
+  const dimensions = CARD_SIZE[size];
 
   const style = {
     '--pc-frame': tier.frame,
     '--pc-edge': tier.edge,
     '--pc-glow': tier.glow,
+    width: dimensions.width,
+    height: dimensions.height,
   } as CSSProperties;
+
+  const proportionClass = size === 'pitch' || size === 'mini' ? styles.pitch : styles.bench;
 
   return (
     <div
       className={[
         styles.card,
-        size === 'pitch' ? styles.pitch : styles.bench,
+        proportionClass,
         fitClass,
         dimmed ? styles.dimmed : '',
         highlighted ? styles.highlighted : '',
@@ -91,7 +105,7 @@ export default function TeamSelectionPlayerCard({
 
         <div className={styles.costCorner} aria-label={`Cost ${cost}`}>
           <span className={styles.pipCluster}>
-            {PIP_CELLS[cost].map((cell) => <i key={cell} style={pipStyle(cell)} />)}
+            {(PIP_CELLS[cost] ?? PIP_CELLS[1]).map((cell) => <i key={cell} style={pipStyle(cell)} />)}
           </span>
         </div>
 
