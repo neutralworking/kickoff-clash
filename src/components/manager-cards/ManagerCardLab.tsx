@@ -22,13 +22,11 @@ const EXAMPLES = [
 ] as const;
 
 export default function ManagerCardLab() {
-  const examples = useMemo(
-    () => EXAMPLES
-      .map(({ id, formations }) => {
-        const manager = ALL_JOKERS.find((candidate) => candidate.id === id);
-        return manager ? { manager, formations: [...formations] } : null;
-      })
-      .filter((example): example is ManagerExample => Boolean(example)),
+  const examples = useMemo<ManagerExample[]>(
+    () => EXAMPLES.flatMap(({ id, formations }) => {
+      const manager = ALL_JOKERS.find((candidate) => candidate.id === id);
+      return manager ? [{ manager, formations: Array.from(formations) }] : [];
+    }),
     [],
   );
   const packManagers = examples.slice(0, 2);
