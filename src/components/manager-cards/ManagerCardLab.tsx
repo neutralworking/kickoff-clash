@@ -6,23 +6,41 @@ import ManagerCard from './ManagerCard';
 import ManagerDossier from './ManagerDossier';
 import styles from './ManagerCardLab.module.css';
 
-const EXAMPLE_IDS = ['tiki_taka', 'gegenpress', 'box_office'];
+interface ManagerExample {
+  manager: JokerCard;
+  formations: string[];
+}
+
+/**
+ * Representative 1/2/3-formation states for card grooming only. Final formation
+ * pools are roster/balance data and are not being decided by this lab.
+ */
+const EXAMPLES = [
+  { id: 'tiki_taka', formations: ['4-3-3'] },
+  { id: 'gegenpress', formations: ['4-3-3', '4-2-3-1'] },
+  { id: 'box_office', formations: ['4-2-3-1', '4-3-3', '4-4-2'] },
+] as const;
 
 export default function ManagerCardLab() {
-  const managers = useMemo(
-    () => EXAMPLE_IDS.map((id) => ALL_JOKERS.find((manager) => manager.id === id)).filter((manager): manager is JokerCard => Boolean(manager)),
+  const examples = useMemo(
+    () => EXAMPLES
+      .map(({ id, formations }) => {
+        const manager = ALL_JOKERS.find((candidate) => candidate.id === id);
+        return manager ? { manager, formations: [...formations] } : null;
+      })
+      .filter((example): example is ManagerExample => Boolean(example)),
     [],
   );
-  const packManagers = managers.slice(0, 2);
-  const [selectedId, setSelectedId] = useState<string | null>(packManagers[0]?.id ?? null);
-  const [inspected, setInspected] = useState<JokerCard | null>(null);
+  const packManagers = examples.slice(0, 2);
+  const [selectedId, setSelectedId] = useState<string | null>(packManagers[0]?.manager.id ?? null);
+  const [inspected, setInspected] = useState<ManagerExample | null>(null);
 
   return (
     <main className={styles.lab}>
       <header className={styles.header}>
         <span>KC CARD LAB</span>
         <h1>MANAGER CARDS</h1>
-        <p>Portrait, identity, preferred shape and one signature trait. Full rules live in the dossier.</p>
+        <p>Portrait, manager-owned formation pool and complete action text. No manager styles.</p>
       </header>
 
       <section className={styles.section}>
@@ -35,11 +53,17 @@ export default function ManagerCardLab() {
         </div>
 
         <div className={styles.packGrid}>
-          {packManagers.map((manager) => {
+          {packManagers.map((example) => {
+            const { manager, formations } = example;
             const selected = selectedId === manager.id;
             return (
               <article key={manager.id} className={styles.choice}>
-                <ManagerCard manager={manager} selected={selected} onClick={() => setInspected(manager)} />
+                <ManagerCard
+                  manager={manager}
+                  formations={formations}
+                  selected={selected}
+                  onClick={() => setInspected(example)}
+                />
                 <button
                   type="button"
                   className={selected ? styles.picked : ''}
@@ -56,17 +80,21 @@ export default function ManagerCardLab() {
       <section className={styles.section}>
         <div className={styles.sectionHeading}>
           <div>
-            <span>RARITY CHECK</span>
-            <h2>CARD FAMILY</h2>
+            <span>FORMATION CAPACITY</span>
+            <h2>ONE · TWO · THREE</h2>
           </div>
-          <small>COMMON · UNCOMMON · RARE</small>
+          <small>REPRESENTATIVE STATES</small>
         </div>
 
         <div className={styles.familyRow}>
-          {managers.map((manager) => (
-            <div key={manager.id} className={styles.familyCard}>
-              <ManagerCard manager={manager} onClick={() => setInspected(manager)} />
-              <span>{manager.rarity.toUpperCase()}</span>
+          {examples.map((example) => (
+            <div key={example.manager.id} className={styles.familyCard}>
+              <ManagerCard
+                manager={example.manager}
+                formations={example.formations}
+                onClick={() => setInspected(example)}
+              />
+              <span>{example.formations.length} FORMATION{example.formations.length === 1 ? '' : 'S'}</span>
             </div>
           ))}
         </div>
@@ -74,10 +102,16 @@ export default function ManagerCardLab() {
 
       <section className={styles.rules}>
         <strong>V1 FACE RULES</strong>
-        <p>No ATT, DEF, cost, tactic charges or generic MGR badge. The face communicates who the manager is, the shape they want and the signature behaviour they bring.</p>
+        <p>The manager determines which formations can be selected. The normal card shows the available pool and action text; store consumables can expand that pool. No style, archetype, ATT, DEF, cost or tactic charges.</p>
       </section>
 
-      {inspected && <ManagerDossier manager={inspected} onClose={() => setInspected(null)} />}
+      {inspected && (
+        <ManagerDossier
+          manager={inspected.manager}
+          formations={inspected.formations}
+          onClose={() => setInspected(null)}
+        />
+      )}
     </main>
   );
 }
