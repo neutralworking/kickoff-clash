@@ -3,7 +3,11 @@
 import { useEffect, useRef } from 'react';
 import type { JokerCard, ManagerGate } from '../../lib/jokers';
 import ManagerCard from './ManagerCard';
-import { managerActionText, resolveManagerFormations } from './managerCardPresentation';
+import {
+  managerActionName,
+  managerActionText,
+  resolveManagerFormations,
+} from './managerCardPresentation';
 import styles from './ManagerDossier.module.css';
 
 function gateCopy(gate: ManagerGate): { label: string; value: string } {
@@ -84,6 +88,7 @@ export default function ManagerDossier({
   const gate = gateCopy(manager.gate);
   const hooks = economyHooks(manager);
   const availableFormations = resolveManagerFormations(manager, formations);
+  const actionName = managerActionName(manager);
   const actionText = managerActionText(manager);
 
   return (
@@ -117,8 +122,8 @@ export default function ManagerDossier({
 
           <section className={styles.panel}>
             <div className={styles.panelHeading}>
-              <span>MANAGER ACTION</span>
-              <strong>FULL EFFECT</strong>
+              <span>ACTION</span>
+              <strong>{actionName.toUpperCase()}</strong>
             </div>
             <p className={styles.effect}>{actionText}</p>
             <dl className={styles.rules}>
