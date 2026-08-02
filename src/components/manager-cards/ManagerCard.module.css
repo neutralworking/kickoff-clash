@@ -62,7 +62,7 @@ button.card:active {
   pointer-events: none;
   box-shadow:
     inset 0 0 0 0.7cqw rgba(255, 245, 218, 0.08),
-    inset 0 -36cqw 38cqw rgba(0, 0, 0, 0.78);
+    inset 0 -38cqw 40cqw rgba(0, 0, 0, 0.8);
 }
 
 .kcMonogram {
@@ -114,15 +114,15 @@ button.card:active {
 .topScrim {
   inset: 0 0 auto;
   z-index: 2;
-  height: 29%;
-  background: linear-gradient(180deg, rgba(4, 3, 2, 0.86), transparent);
+  height: 31%;
+  background: linear-gradient(180deg, rgba(4, 3, 2, 0.9), transparent);
 }
 
 .bottomScrim {
   inset: auto 0 0;
   z-index: 2;
-  height: 62%;
-  background: linear-gradient(180deg, transparent, rgba(6, 4, 2, 0.97) 67%);
+  height: 64%;
+  background: linear-gradient(180deg, transparent, rgba(6, 4, 2, 0.98) 66%);
 }
 
 .sheen {
@@ -136,48 +136,28 @@ button.card:active {
   animation: managerSheen 6.5s ease-in-out infinite;
 }
 
-.rarityBadge {
+.formationBadge {
   position: absolute;
   top: 4%;
   left: 4%;
+  right: 4%;
   z-index: 8;
-  padding: 2.3cqw 3.1cqw 2cqw;
-  color: var(--manager-edge);
-  background: rgba(7, 4, 1, 0.88);
-  border: 0.55cqw solid color-mix(in srgb, var(--manager-edge) 68%, transparent);
-  clip-path: polygon(8% 0, 100% 0, 100% 76%, 92% 100%, 0 100%, 0 24%);
-  box-shadow: 0 1.1cqw 0 rgba(0, 0, 0, 0.72);
-}
-
-.rarityBadge small {
-  display: block;
-  font-family: var(--font-pixel, monospace);
-  font-size: 4.8cqw;
-  line-height: 1;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-}
-
-.formationBadge {
-  position: absolute;
-  top: 4.2%;
-  right: 3.8%;
-  z-index: 8;
-  max-width: 65%;
-  padding: 2.5cqw 3cqw 2.7cqw;
+  min-height: 14%;
+  padding: 2.5cqw 3.2cqw 2.7cqw;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 1.5cqw;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2.4cqw;
   color: #f7edda;
-  background: linear-gradient(160deg, rgba(67, 50, 26, 0.94), rgba(14, 9, 4, 0.95));
+  background: linear-gradient(160deg, rgba(67, 50, 26, 0.95), rgba(14, 9, 4, 0.96));
   border: 0.7cqw solid var(--manager-edge);
-  clip-path: polygon(9% 0, 100% 0, 100% 100%, 0 100%, 0 22%);
+  clip-path: polygon(4% 0, 96% 0, 100% 25%, 100% 100%, 0 100%, 0 25%);
   box-shadow: 0 1.1cqw 0 rgba(0, 0, 0, 0.72);
 }
 
 .formationBadge small {
-  color: #a99a7a;
+  flex: 0 0 auto;
+  color: #b5a584;
   font-family: var(--font-pixel, monospace);
   font-size: 4.1cqw;
   letter-spacing: 0.09em;
@@ -185,6 +165,7 @@ button.card:active {
 }
 
 .formationList {
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -194,8 +175,8 @@ button.card:active {
 .formationList strong {
   padding: 1.5cqw 2cqw 1.3cqw;
   color: #f9efd9;
-  background: rgba(255, 255, 255, 0.055);
-  border: 0.45cqw solid color-mix(in srgb, var(--manager-edge) 55%, transparent);
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.45cqw solid color-mix(in srgb, var(--manager-edge) 58%, transparent);
   border-radius: 1.8cqw;
   font-family: var(--font-heavy, sans-serif);
   font-size: 5.7cqw;
@@ -209,7 +190,7 @@ button.card:active {
   right: 4.2%;
   bottom: 4%;
   z-index: 9;
-  padding: 4.8cqw 5.2cqw 4.8cqw;
+  padding: 4.8cqw 5.2cqw 3.6cqw;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -239,15 +220,16 @@ button.card:active {
   padding-top: 3cqw;
   color: var(--manager-edge);
   border-top: 0.45cqw solid color-mix(in srgb, var(--manager-edge) 38%, transparent);
-  font-family: var(--font-pixel, monospace);
-  font-size: 4.6cqw;
-  line-height: 1;
-  letter-spacing: 0.1em;
+  font-family: var(--font-heavy, sans-serif);
+  font-size: 5.4cqw;
+  line-height: 1.05;
+  letter-spacing: 0.015em;
+  overflow-wrap: anywhere;
 }
 
 .actionText {
   width: 100%;
-  margin: 2.4cqw 0 0;
+  margin: 2.3cqw 0 0;
   color: #efe5cf;
   font-family: var(--font-body, sans-serif);
   font-size: 4.7cqw;
@@ -265,6 +247,28 @@ button.card:active {
 
 .hero .actionText {
   -webkit-line-clamp: 5;
+}
+
+.cardFooter {
+  width: 100%;
+  margin-top: 2.9cqw;
+  padding-top: 2.4cqw;
+  display: flex;
+  justify-content: flex-end;
+  border-top: 0.4cqw solid color-mix(in srgb, var(--manager-edge) 25%, transparent);
+}
+
+.rarityBadge {
+  padding: 1.7cqw 2.5cqw 1.5cqw;
+  color: var(--manager-edge);
+  background: rgba(7, 4, 1, 0.78);
+  border: 0.45cqw solid color-mix(in srgb, var(--manager-edge) 62%, transparent);
+  border-radius: 1.6cqw;
+  font-family: var(--font-pixel, monospace);
+  font-size: 4.2cqw;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 
 .raritySeam {
