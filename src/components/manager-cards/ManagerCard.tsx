@@ -7,7 +7,11 @@ import {
   handoffMgrTier,
 } from '../cards/cardTokens';
 import { managerPortraitSrc, portraitArtStyle } from '../cards/portrait';
-import { managerActionText, resolveManagerFormations } from './managerCardPresentation';
+import {
+  managerActionName,
+  managerActionText,
+  resolveManagerFormations,
+} from './managerCardPresentation';
 import styles from './ManagerCard.module.css';
 
 export type ManagerCardSize = 'grid' | 'hero';
@@ -37,6 +41,7 @@ function cardContents(
   const tier = handoffMgrTier(rarity);
   const portrait = managerPortraitSrc(manager.id);
   const availableFormations = resolveManagerFormations(manager, formations);
+  const actionName = managerActionName(manager);
   const actionText = managerActionText(manager);
 
   return (
@@ -58,10 +63,6 @@ function cardContents(
         <div className={styles.bottomScrim} />
         <div className={styles.sheen} aria-hidden="true" />
 
-        <div className={styles.rarityBadge}>
-          <small>{rarity.toUpperCase()}</small>
-        </div>
-
         <div
           className={styles.formationBadge}
           aria-label={`Available formations: ${availableFormations.join(', ') || 'not assigned'}`}
@@ -76,8 +77,11 @@ function cardContents(
 
         <div className={styles.identityPlate}>
           <strong className={styles.name}>{manager.name.toUpperCase()}</strong>
-          <span className={styles.actionLabel}>MANAGER ACTION</span>
+          <span className={styles.actionLabel}>{actionName.toUpperCase()}</span>
           <p className={styles.actionText}>{actionText}</p>
+          <div className={styles.cardFooter}>
+            <span className={styles.rarityBadge}>{rarity.toUpperCase()}</span>
+          </div>
         </div>
 
         <div className={styles.raritySeam} style={{ '--manager-edge': tier.edge } as CSSProperties} />
@@ -100,6 +104,7 @@ export default function ManagerCard({
   const tier = handoffMgrTier(rarity);
   const Component = onClick ? 'button' : 'div';
   const availableFormations = resolveManagerFormations(manager, formations);
+  const actionName = managerActionName(manager);
   const actionText = managerActionText(manager);
   const style = {
     '--manager-frame': tier.frame,
@@ -118,7 +123,7 @@ export default function ManagerCard({
   const commonProps = {
     className: classes,
     style,
-    'aria-label': `${manager.name}. Available formations: ${availableFormations.join(', ') || 'not assigned'}. Manager action: ${actionText}`,
+    'aria-label': `${manager.name}. Available formations: ${availableFormations.join(', ') || 'not assigned'}. ${actionName}: ${actionText}. ${rarity}.`,
   };
 
   if (Component === 'button') {
