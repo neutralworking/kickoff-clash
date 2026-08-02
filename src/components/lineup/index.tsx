@@ -10,15 +10,16 @@ import { PIXEL, POSITION_COLOR, lastName } from '../cards/cardTokens';
 import { fitnessColor as fitnessColorForPct, HERO } from '../cards/portrait';
 import TeamSelectionPlayerCard from '../player-cards/TeamSelectionPlayerCard';
 
-const SLOT_CARD_W = 72;
-const SLOT_CARD_H = 96;
+// iPhone-first token geometry. The previous 72×96 pitch cards were too large
+// for a 375–390px screen and used only a 12px vertical inset, so the goalkeeper
+// and forward rows were visibly clipped by the pitch. These dimensions preserve
+// the card anatomy while leaving enough green between lines.
+const SLOT_CARD_W = 60;
+const SLOT_CARD_H = 80;
 export const SLOT_INSET_X = SLOT_CARD_W / 2 + 6;
-// Formation y-values never use the literal 0/100 edges. A small fixed inset lets
-// the cards use the full pitch height instead of compressing every line into a
-// half-card-safe band, which caused the GK/defence/DM collisions.
-export const SLOT_INSET_Y = 12;
+export const SLOT_INSET_Y = SLOT_CARD_H / 2 + 4;
 
-/** Snap authored formation coordinates onto cleaner visual rows for the larger
+/** Snap authored formation coordinates onto cleaner visual rows for the compact
  * card silhouette. This changes presentation only; formation identity, slot
  * eligibility and match geometry remain untouched. */
 export function lineupPitchY(y: number): number {
@@ -176,17 +177,17 @@ export function LineupSlot({
               }}
               className="absolute flex items-center justify-center"
               style={{
-                right: -6,
-                bottom: -6,
+                right: -4,
+                bottom: -4,
                 zIndex: 40,
-                width: 15,
-                height: 15,
+                width: 14,
+                height: 14,
                 color: 'var(--line-white)',
                 background: HERO.ink,
                 border: '1.5px solid var(--line-white)',
                 borderRadius: '50%',
                 fontFamily: PIXEL,
-                fontSize: 8,
+                fontSize: 7,
                 lineHeight: 1,
               }}
             >
@@ -199,28 +200,28 @@ export function LineupSlot({
           <div
             className="slot-pulse flex items-center justify-center"
             style={{
-              width: 34,
-              height: 34,
+              width: 30,
+              height: 30,
               borderRadius: '50%',
               background: 'rgba(7,16,11,0.45)',
               border: dropHint ? '2px solid var(--gold)' : '2px dashed rgba(242,246,239,0.7)',
               boxShadow: dropHint ? '0 0 0 3px var(--gold-glow)' : undefined,
             }}
           >
-            <span style={{ color: 'rgba(242,246,239,0.9)', fontFamily: PIXEL, fontSize: 14, lineHeight: 1 }}>+</span>
+            <span style={{ color: 'rgba(242,246,239,0.9)', fontFamily: PIXEL, fontSize: 12, lineHeight: 1 }}>+</span>
           </div>
           <span
             style={{
-              marginTop: 3,
+              marginTop: 2,
               padding: '2px 3px',
               color: 'var(--ink-black)',
               background: 'rgba(242,246,239,0.85)',
               border: '1px solid var(--ink-black)',
               borderRadius: 3,
               fontFamily: PIXEL,
-              fontSize: 8,
+              fontSize: 7,
               lineHeight: 1,
-              letterSpacing: 0.3,
+              letterSpacing: 0.2,
             }}
           >
             {slot.type}
@@ -260,9 +261,9 @@ export function BenchTile({
       onPointerCancel={onPointerCancel}
       className="relative flex active:scale-95"
       style={{
-        flex: '0 0 82px',
-        width: 82,
-        minWidth: 82,
+        flex: '0 0 64px',
+        width: 64,
+        minWidth: 64,
         padding: 0,
         border: 0,
         background: 'transparent',
@@ -289,17 +290,17 @@ export function BenchTile({
           }}
           className="absolute flex items-center justify-center"
           style={{
-            top: -5,
-            right: -5,
+            top: -4,
+            right: -4,
             zIndex: 40,
-            width: 16,
-            height: 16,
+            width: 14,
+            height: 14,
             color: 'var(--line-white)',
             background: 'var(--danger)',
             border: '1.5px solid var(--ink-black)',
             borderRadius: '50%',
             fontFamily: PIXEL,
-            fontSize: 9,
+            fontSize: 8,
             lineHeight: 1,
           }}
         >
