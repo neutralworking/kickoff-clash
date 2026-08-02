@@ -131,10 +131,10 @@ export default function ManagerDossier({
               <span>FORMATIONS</span>
               <strong>{availableFormations.length} AVAILABLE</strong>
             </div>
-            <div className={styles.formations}>
+            <div className={styles.traits}>
               {availableFormations.map((formation) => <span key={formation}>{formation}</span>)}
             </div>
-            <p className={styles.formationNote}>
+            <p style={{ margin: 0, padding: '0 14px 15px', color: '#cfc3aa', fontSize: 11, lineHeight: 1.45 }}>
               This manager determines the formation selector. Formation-unlock consumables bought in the store can add another shape to this manager’s pool.
             </p>
           </section>
