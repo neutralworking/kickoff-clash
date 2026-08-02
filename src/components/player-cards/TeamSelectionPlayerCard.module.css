@@ -8,14 +8,13 @@
 }
 
 .pitch {
-  width: 72px;
-  height: 96px;
+  width: 60px;
+  height: 80px;
 }
 
 .bench {
-  width: 82px;
-  height: 123px;
-  scroll-snap-align: start;
+  width: 64px;
+  height: 96px;
 }
 
 .frameMaterial {
@@ -25,9 +24,9 @@
   padding: 2px;
   background: var(--pc-frame);
   box-shadow:
-    0 3px 0 #060402,
-    0 7px 13px rgba(0, 0, 0, 0.54),
-    0 0 12px var(--pc-glow);
+    0 2px 0 #060402,
+    0 5px 10px rgba(0, 0, 0, 0.52),
+    0 0 9px var(--pc-glow);
   clip-path: polygon(8% 0, 92% 0, 100% 5.4%, 100% 94.6%, 92% 100%, 8% 100%, 0 94.6%, 0 5.4%);
 }
 
@@ -247,8 +246,6 @@
     0 0 2cqw rgba(255, 245, 215, 0.18);
 }
 
-/* On-pitch cards sacrifice a little lower-card furniture so the formation can
-   use more of the pitch vertically. Bench cards retain the fuller proportions. */
 .pitch .portrait {
   inset-bottom: 22%;
 }
@@ -296,16 +293,16 @@
 .misfitReceipt {
   position: absolute;
   left: 50%;
-  bottom: -8px;
+  bottom: -7px;
   z-index: 30;
   transform: translateX(-50%);
-  padding: 3px 4px;
+  padding: 2px 3px;
   color: #fff1e8;
   background: #9f241f;
   border: 1px solid #ff766d;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55);
   white-space: nowrap;
-  font: 5.5px/1 var(--font-pixel, monospace);
+  font: 5px/1 var(--font-pixel, monospace);
   letter-spacing: 0.02em;
 }
 
@@ -315,25 +312,28 @@
 }
 
 .highlighted {
-  transform: translateY(-2px) scale(1.035);
+  transform: translateY(-1px) scale(1.025);
 }
 
 .highlighted .frameMaterial {
   box-shadow:
-    0 3px 0 #060402,
-    0 9px 16px rgba(0, 0, 0, 0.62),
+    0 2px 0 #060402,
+    0 7px 13px rgba(0, 0, 0, 0.62),
     0 0 0 2px #f5d879,
-    0 0 20px rgba(232, 178, 60, 0.7);
+    0 0 16px rgba(232, 178, 60, 0.7);
 }
 
+/* Five substitutes now fit across a 375px iPhone viewport. The strip remains
+   horizontally scrollable as a safety net for narrower embedded/webview widths. */
 :global([data-kc="bench"]) {
   display: flex !important;
   align-items: flex-start;
-  gap: 9px !important;
+  justify-content: space-between;
+  gap: 6px !important;
   overflow-x: auto;
   overflow-y: visible;
-  padding: 7px 2px 12px;
-  scroll-snap-type: x mandatory;
+  padding: 5px 0 7px;
+  scroll-snap-type: x proximity;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
 }
@@ -343,12 +343,39 @@
 }
 
 :global([data-kc="bench"] > button) {
-  flex: 0 0 82px;
-  width: 82px !important;
-  min-width: 82px !important;
+  flex: 0 0 64px;
+  width: 64px !important;
+  min-width: 64px !important;
   scroll-snap-align: start;
 }
 
 :global([data-kc="bench"] > button:not(:has(.card))) {
-  height: 123px !important;
+  height: 96px !important;
+}
+
+@media (max-width: 374px), (max-height: 720px) {
+  .pitch {
+    width: 56px;
+    height: 75px;
+  }
+
+  .bench {
+    width: 61px;
+    height: 91px;
+  }
+
+  :global([data-kc="bench"]) {
+    gap: 5px !important;
+    padding-block: 4px 6px;
+  }
+
+  :global([data-kc="bench"] > button) {
+    flex-basis: 61px;
+    width: 61px !important;
+    min-width: 61px !important;
+  }
+
+  :global([data-kc="bench"] > button:not(:has(.card))) {
+    height: 91px !important;
+  }
 }
