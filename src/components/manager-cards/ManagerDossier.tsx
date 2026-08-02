@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import type { JokerCard, ManagerGate } from '../../lib/jokers';
 import ManagerCard from './ManagerCard';
+import { managerActionText, resolveManagerFormations } from './managerCardPresentation';
 import styles from './ManagerDossier.module.css';
 
 function gateCopy(gate: ManagerGate): { label: string; value: string } {
@@ -26,14 +27,6 @@ function gateCopy(gate: ManagerGate): { label: string; value: string } {
   };
 }
 
-function formationCopy(manager: JokerCard): string {
-  if (!manager.preferredFormation) {
-    return 'All formations count as native. No adherence penalty applies.';
-  }
-
-  return `${manager.preferredFormation} pays the full package. Adjacent shapes pay half; foreign shapes pay one quarter, rounded.`;
-}
-
 function economyHooks(manager: JokerCard): string[] {
   const hooks: string[] = [];
   if (manager.winPayoutMult && manager.winPayoutMult !== 1) {
@@ -45,7 +38,15 @@ function economyHooks(manager: JokerCard): string[] {
   return hooks;
 }
 
-export default function ManagerDossier({ manager, onClose }: { manager: JokerCard; onClose: () => void }) {
+export default function ManagerDossier({
+  manager,
+  formations,
+  onClose,
+}: {
+  manager: JokerCard;
+  formations?: string[];
+  onClose: () => void;
+}) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
@@ -82,6 +83,8 @@ export default function ManagerDossier({ manager, onClose }: { manager: JokerCar
 
   const gate = gateCopy(manager.gate);
   const hooks = economyHooks(manager);
+  const availableFormations = resolveManagerFormations(manager, formations);
+  const actionText = managerActionText(manager);
 
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={`${manager.name} manager dossier`}>
@@ -97,7 +100,7 @@ export default function ManagerDossier({ manager, onClose }: { manager: JokerCar
       <div className={styles.scroll}>
         <main className={styles.content}>
           <section className={styles.hero}>
-            <ManagerCard manager={manager} size="hero" />
+            <ManagerCard manager={manager} formations={availableFormations} size="hero" />
             <div className={styles.metaLine}>
               {manager.nation && <span>{manager.nation.toUpperCase()}</span>}
               <b>{manager.rarity.toUpperCase()}</b>
@@ -107,7 +110,7 @@ export default function ManagerDossier({ manager, onClose }: { manager: JokerCar
           <section className={styles.panel}>
             <div className={styles.panelHeading}>
               <span>PHILOSOPHY</span>
-              <strong>{manager.archetype.toUpperCase()}</strong>
+              <strong>MANAGER IDENTITY</strong>
             </div>
             <blockquote>“{manager.philosophy}”</blockquote>
           </section>
@@ -115,25 +118,25 @@ export default function ManagerDossier({ manager, onClose }: { manager: JokerCar
           <section className={styles.panel}>
             <div className={styles.panelHeading}>
               <span>MANAGER ACTION</span>
-              <strong>{(manager.traits[0] ?? manager.archetype).toUpperCase()}</strong>
+              <strong>FULL EFFECT</strong>
             </div>
-            <p className={styles.effect}>{manager.effect}</p>
+            <p className={styles.effect}>{actionText}</p>
             <dl className={styles.rules}>
               <div><dt>{gate.label}</dt><dd>{gate.value}</dd></div>
-              <div><dt>FORMATION</dt><dd>{formationCopy(manager)}</dd></div>
             </dl>
           </section>
 
           <section className={styles.panel}>
             <div className={styles.panelHeading}>
-              <span>TRAITS</span>
-              <strong>{manager.traits.length} PRINTED</strong>
+              <span>FORMATIONS</span>
+              <strong>{availableFormations.length} AVAILABLE</strong>
             </div>
-            <div className={styles.traits}>
-              {manager.traits.map((trait, index) => (
-                <span key={trait} className={index === 0 ? styles.signature : ''}>{trait}</span>
-              ))}
+            <div className={styles.formations}>
+              {availableFormations.map((formation) => <span key={formation}>{formation}</span>)}
             </div>
+            <p className={styles.formationNote}>
+              This manager determines the formation selector. Formation-unlock consumables bought in the store can add another shape to this manager’s pool.
+            </p>
           </section>
 
           {hooks.length > 0 && (
