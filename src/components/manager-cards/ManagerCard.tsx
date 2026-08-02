@@ -4,18 +4,18 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
 import type { JokerCard } from '../../lib/jokers';
 import {
   MANAGER_RARITY_TO_FRAME,
-  handoffClassColor,
   handoffMgrTier,
-  managerClass,
 } from '../cards/cardTokens';
-import ClassGlyph from '../cards/ClassGlyph';
 import { managerPortraitSrc, portraitArtStyle } from '../cards/portrait';
+import { managerActionText, resolveManagerFormations } from './managerCardPresentation';
 import styles from './ManagerCard.module.css';
 
 export type ManagerCardSize = 'grid' | 'hero';
 
 export interface ManagerCardProps {
   manager: JokerCard;
+  /** V1 manager-owned formation pool. One to three formations. */
+  formations?: string[];
   size?: ManagerCardSize;
   selected?: boolean;
   dimmed?: boolean;
@@ -27,14 +27,17 @@ function frameRarity(manager: JokerCard): string {
   return MANAGER_RARITY_TO_FRAME[manager.rarity] ?? 'Rare';
 }
 
-function cardContents(manager: JokerCard, size: ManagerCardSize, portraitOk: boolean, setPortraitOk: (ok: boolean) => void) {
+function cardContents(
+  manager: JokerCard,
+  formations: string[] | undefined,
+  portraitOk: boolean,
+  setPortraitOk: (ok: boolean) => void,
+) {
   const rarity = frameRarity(manager);
   const tier = handoffMgrTier(rarity);
-  const managerClassName = managerClass(manager.id);
-  const classColour = handoffClassColor(managerClassName);
   const portrait = managerPortraitSrc(manager.id);
-  const formation = manager.preferredFormation ?? 'ANY SHAPE';
-  const signature = manager.traits[0] ?? manager.archetype;
+  const availableFormations = resolveManagerFormations(manager, formations);
+  const actionText = managerActionText(manager);
 
   return (
     <>
@@ -55,27 +58,26 @@ function cardContents(manager: JokerCard, size: ManagerCardSize, portraitOk: boo
         <div className={styles.bottomScrim} />
         <div className={styles.sheen} aria-hidden="true" />
 
-        <div
-          className={styles.identityCrest}
-          style={{ '--manager-class': classColour } as CSSProperties}
-          aria-label={`${managerClassName} manager style`}
-        >
-          <ClassGlyph cls={managerClassName} size={size === 'hero' ? 28 : 17} color="#fff7df" />
+        <div className={styles.rarityBadge}>
           <small>{rarity.toUpperCase()}</small>
         </div>
 
-        <div className={styles.formationBadge} aria-label={`Preferred formation ${formation}`}>
-          <small>PREFERS</small>
-          <strong>{formation}</strong>
+        <div
+          className={styles.formationBadge}
+          aria-label={`Available formations: ${availableFormations.join(', ') || 'not assigned'}`}
+        >
+          <small>{availableFormations.length === 1 ? 'FORMATION' : 'FORMATIONS'}</small>
+          <div className={styles.formationList}>
+            {availableFormations.length > 0
+              ? availableFormations.map((formation) => <strong key={formation}>{formation}</strong>)
+              : <strong>UNASSIGNED</strong>}
+          </div>
         </div>
 
         <div className={styles.identityPlate}>
           <strong className={styles.name}>{manager.name.toUpperCase()}</strong>
-          <span className={styles.archetype}>{manager.archetype.toUpperCase()}</span>
-          <div className={styles.signature}>
-            <i aria-hidden="true">◆</i>
-            <b>{signature.toUpperCase()}</b>
-          </div>
+          <span className={styles.actionLabel}>MANAGER ACTION</span>
+          <p className={styles.actionText}>{actionText}</p>
         </div>
 
         <div className={styles.raritySeam} style={{ '--manager-edge': tier.edge } as CSSProperties} />
@@ -86,6 +88,7 @@ function cardContents(manager: JokerCard, size: ManagerCardSize, portraitOk: boo
 
 export default function ManagerCard({
   manager,
+  formations,
   size = 'grid',
   selected = false,
   dimmed = false,
@@ -96,13 +99,15 @@ export default function ManagerCard({
   const rarity = frameRarity(manager);
   const tier = handoffMgrTier(rarity);
   const Component = onClick ? 'button' : 'div';
+  const availableFormations = resolveManagerFormations(manager, formations);
+  const actionText = managerActionText(manager);
   const style = {
     '--manager-frame': tier.frame,
     '--manager-edge': tier.edge,
     '--manager-glow': tier.glow,
     '--manager-inner': tier.inner,
   } as CSSProperties;
-  const contents = cardContents(manager, size, portraitOk, setPortraitOk);
+  const contents = cardContents(manager, formations, portraitOk, setPortraitOk);
   const classes = [
     styles.card,
     size === 'hero' ? styles.hero : styles.grid,
@@ -113,7 +118,7 @@ export default function ManagerCard({
   const commonProps = {
     className: classes,
     style,
-    'aria-label': `${manager.name}, ${manager.archetype}, prefers ${manager.preferredFormation ?? 'any formation'}, signature ${manager.traits[0] ?? manager.archetype}`,
+    'aria-label': `${manager.name}. Available formations: ${availableFormations.join(', ') || 'not assigned'}. Manager action: ${actionText}`,
   };
 
   if (Component === 'button') {
