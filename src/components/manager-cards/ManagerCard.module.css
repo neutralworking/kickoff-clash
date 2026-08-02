@@ -247,25 +247,69 @@ button.card:active {
 }
 
 .cardFooter {
+  position: relative;
   width: 100%;
-  margin-top: 2.9cqw;
-  padding-top: 2.4cqw;
+  min-height: 9.2cqw;
+  margin-top: 3.3cqw;
   display: flex;
-  justify-content: flex-end;
-  border-top: 0.4cqw solid color-mix(in srgb, var(--manager-edge) 25%, transparent);
+  align-items: center;
+  justify-content: space-between;
+  gap: 4cqw;
+}
+
+.cardFooter::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  height: 0.4cqw;
+  transform: translateY(-50%);
+  background: color-mix(in srgb, var(--manager-edge) 28%, transparent);
+}
+
+.xiCostBadge,
+.rarityBadge {
+  position: relative;
+  z-index: 1;
+  background: #0b0703;
+  border: 0.45cqw solid color-mix(in srgb, var(--manager-edge) 62%, transparent);
+  border-radius: 1.6cqw;
+  white-space: nowrap;
+}
+
+.xiCostBadge {
+  min-height: 8.2cqw;
+  padding: 1.3cqw 2.2cqw 1.1cqw;
+  display: inline-flex;
+  align-items: center;
+  gap: 1.8cqw;
+  color: #f5e6bd;
+}
+
+.xiCostBadge small {
+  color: #aa9c7c;
+  font-family: var(--font-pixel, monospace);
+  font-size: 3.6cqw;
+  line-height: 1;
+  letter-spacing: 0.07em;
+}
+
+.xiCostBadge strong {
+  color: var(--manager-edge);
+  font-family: var(--font-heavy, sans-serif);
+  font-size: 6.6cqw;
+  line-height: 0.9;
 }
 
 .rarityBadge {
   padding: 1.7cqw 2.5cqw 1.5cqw;
   color: var(--manager-edge);
-  background: rgba(7, 4, 1, 0.78);
-  border: 0.45cqw solid color-mix(in srgb, var(--manager-edge) 62%, transparent);
-  border-radius: 1.6cqw;
   font-family: var(--font-pixel, monospace);
   font-size: 4.2cqw;
   line-height: 1;
   letter-spacing: 0.08em;
-  white-space: nowrap;
 }
 
 .raritySeam {
