@@ -20,10 +20,12 @@ import {
 import { cardMetaFor, V7Pitch, V7PlayerCard, type V7ReplacementHint } from './V7Pitch';
 import { V7PressureBoard, V7ResolutionStrip } from './V7ResolutionStage';
 import { replacementHintFor, V7SubstitutionPanel } from './V7SubstitutionPanel';
+import PlayerDossier, { v7PlayerDossier } from '../player-cards/PlayerDossier';
 
 type DisplaySide = 'player' | 'opponent';
 
 const BREAK_ENERGY = [0, 3, 5, 7];
+const DOSSIER_FIXTURE = v7Fixture();
 
 function totals(team: UiTeamView): { attack: number; defence: number } {
   return team.active.reduce(
@@ -457,22 +459,15 @@ function V7MatchInner({
       )}
 
       {inspected && (
-        <div className="v7-inspector-backdrop" role="presentation" onClick={() => setInspected(null)}>
-          <section className="v7-inspector" role="dialog" aria-modal="true" aria-label={`${inspected.name} details`} onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="v7-inspector-close" onClick={() => setInspected(null)} aria-label="Close player details">×</button>
-            <V7PlayerCard player={inspected} highlighted onClick={() => {}} />
-            <div className="v7-inspector-copy">
-              <span>{inspected.position} · {cardMetaFor(inspected.cardId).role} · Cost {cardMetaFor(inspected.cardId).cost}</span>
-              <h2>{inspected.name}</h2>
-              <div className="v7-inspector-stats"><b>{inspected.attack}<small>ATT</small></b><b>{inspected.defence}<small>DEF</small></b></div>
-              <div className="v7-inspector-actions">
-                {cardMetaFor(inspected.cardId).actions.length
-                  ? cardMetaFor(inspected.cardId).actions.map((action) => <span key={action}>⚡ {action}</span>)
-                  : <span>No active ability</span>}
-              </div>
-            </div>
-          </section>
-        </div>
+        <PlayerDossier
+          data={v7PlayerDossier(
+            inspected,
+            DOSSIER_FIXTURE.cards.find((card) => card.id === inspected.cardId),
+            DOSSIER_FIXTURE.actions,
+            phase === 'break' ? `Coaching break ${view.period}` : phase === 'fulltime' ? 'Full time' : `Period ${view.period}`,
+          )}
+          onClose={() => setInspected(null)}
+        />
       )}
     </main>
   );
