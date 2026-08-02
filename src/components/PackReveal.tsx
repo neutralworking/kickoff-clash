@@ -30,14 +30,14 @@ type Phase = 'sealed' | 'open';
 const ANIMATION_CSS = `
 @keyframes kcv1PackPulse {
   0%, 100% { transform: scale(1) rotate(-1.4deg); }
-  50% { transform: scale(1.035) rotate(-1.4deg); }
+  50% { transform: scale(1.025) rotate(-1.4deg); }
 }
 @keyframes kcv1PackShimmer {
   0% { background-position: -180% 0; }
   100% { background-position: 260% 0; }
 }
 @keyframes kcv1Deal {
-  from { opacity: 0; transform: translateY(18px) scale(.94); }
+  from { opacity: 0; transform: translateY(14px) scale(.95); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -57,26 +57,27 @@ function SealedPack({
   onOpen: () => void;
 }) {
   return (
-    <div className="flex-1 min-h-0 flex flex-col items-center justify-center" style={{ gap: 20 }}>
+    <div className="flex-1 min-h-0 flex flex-col items-center justify-center" style={{ gap: 'clamp(12px, 2.2dvh, 18px)' }}>
       <button
         type="button"
         onClick={onOpen}
         aria-label={`Open ${label}`}
         style={{
           position: 'relative',
-          width: 196,
-          height: 288,
+          width: 'clamp(154px, 46vw, 184px)',
+          maxHeight: '40dvh',
+          aspectRatio: '2 / 3',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 11,
+          gap: 9,
           color: 'var(--cream)',
           background: 'linear-gradient(155deg, #2b1c10, #100805)',
           border: `3px solid ${accent}`,
-          borderRadius: 16,
-          boxShadow: `0 12px 28px rgba(0,0,0,.62), 0 0 30px ${accent}55`,
+          borderRadius: 14,
+          boxShadow: `0 10px 24px rgba(0,0,0,.62), 0 0 26px ${accent}55`,
           cursor: 'pointer',
           animation: 'kcv1PackPulse 1.8s ease-in-out infinite',
         }}
@@ -92,11 +93,11 @@ function SealedPack({
             animation: 'kcv1PackShimmer 3.6s linear infinite',
           }}
         />
-        <span style={{ position: 'relative', fontFamily: PIXEL, fontSize: 54, lineHeight: .9, transform: 'rotate(-10deg)', textShadow: '3px 3px 0 #000' }}>KC</span>
-        <strong style={{ position: 'relative', fontFamily: PIXEL, fontSize: 11, letterSpacing: '.15em', color: accent }}>{label}</strong>
-        <span style={{ position: 'relative', fontFamily: PIXEL, fontSize: 8, letterSpacing: '.1em', color: 'var(--cream-soft)' }}>{count}</span>
+        <span style={{ position: 'relative', fontFamily: PIXEL, fontSize: 48, lineHeight: .9, transform: 'rotate(-10deg)', textShadow: '3px 3px 0 #000' }}>KC</span>
+        <strong style={{ position: 'relative', fontFamily: PIXEL, fontSize: 10, letterSpacing: '.13em', color: accent }}>{label}</strong>
+        <span style={{ position: 'relative', paddingInline: 8, fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1.35, letterSpacing: '.08em', textAlign: 'center', color: 'var(--cream-soft)' }}>{count}</span>
       </button>
-      <span style={{ fontFamily: PIXEL, fontSize: 10, letterSpacing: '.2em', color: 'var(--cream)' }}>TAP TO OPEN</span>
+      <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: '.18em', color: 'var(--cream)' }}>TAP TO OPEN</span>
     </div>
   );
 }
@@ -109,14 +110,14 @@ function PickButton({ selected, onClick }: { selected: boolean; onClick: () => v
       className="active:scale-95"
       style={{
         width: '100%',
-        minHeight: 42,
+        minHeight: 38,
         color: selected ? '#160d04' : 'var(--cream)',
         background: selected ? 'linear-gradient(180deg, #ffe49b, #c9922f)' : 'linear-gradient(180deg, #2d2416, #171006)',
         border: selected ? '2px solid #f0cb70' : '2px solid #070401',
         borderRadius: 7,
         boxShadow: '0 3px 0 #070401',
         fontFamily: PIXEL,
-        fontSize: 8,
+        fontSize: 7.5,
         lineHeight: 1.2,
         cursor: 'pointer',
       }}
@@ -138,15 +139,15 @@ function ManagerSelection({
   onInspect: (manager: JokerCard) => void;
 }) {
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: '6px 0 12px', overscrollBehavior: 'contain' }}>
-      <div className="grid mx-auto" style={{ width: '100%', maxWidth: 350, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, alignItems: 'start' }}>
+    <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: '4px 0 8px', overscrollBehavior: 'contain' }}>
+      <div className="grid mx-auto" style={{ width: '100%', maxWidth: 324, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, alignItems: 'start' }}>
         {managers.map((manager, index) => {
           const selected = pickedId === manager.id;
           return (
             <article
               key={manager.id}
               className="flex flex-col"
-              style={{ minWidth: 0, gap: 9, opacity: pickedId && !selected ? .54 : 1, animation: `kcv1Deal 280ms ease-out ${index * 70}ms both` }}
+              style={{ minWidth: 0, gap: 6, opacity: pickedId && !selected ? .54 : 1, animation: `kcv1Deal 280ms ease-out ${index * 70}ms both` }}
             >
               <ManagerCard
                 manager={manager}
@@ -165,8 +166,8 @@ function ManagerSelection({
 
 function PlayerReveal({ players, onInspect }: { players: Card[]; onInspect: (card: Card) => void }) {
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: '6px 0 12px', overscrollBehavior: 'contain' }}>
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 7, alignItems: 'start' }}>
+    <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: '4px 0 8px', overscrollBehavior: 'contain' }}>
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5, alignItems: 'start' }}>
         {players.map((card, index) => (
           <div key={card.id} style={{ minWidth: 0, animation: `kcv1Deal 260ms ease-out ${index * 45}ms both` }}>
             <GameCard model={{ variant: 'player', card }} size="grid" onClick={() => onInspect(card)} />
@@ -217,34 +218,34 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
         height: '100dvh',
         color: 'var(--cream)',
         background: SCREEN_BG,
-        paddingTop: 'max(env(safe-area-inset-top), 12px)',
-        paddingBottom: 'max(env(safe-area-inset-bottom), 10px)',
+        paddingTop: 'max(env(safe-area-inset-top), 10px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
       }}
     >
       <style>{ANIMATION_CSS}</style>
 
-      <header className="shrink-0 px-4" style={{ textAlign: 'center' }}>
-        <div className="flex items-center justify-center" style={{ gap: 7, marginBottom: 9 }}>
+      <header className="shrink-0 px-3" style={{ textAlign: 'center' }}>
+        <div className="flex items-center justify-center" style={{ gap: 6, marginBottom: 6 }}>
           {(['manager', 'players'] as Stage[]).map((key) => (
             <span
               key={key}
               style={{
-                width: key === stage ? 28 : 8,
-                height: 8,
+                width: key === stage ? 24 : 7,
+                height: 7,
                 borderRadius: 99,
                 background: key === stage ? accent : 'rgba(244,236,216,.2)',
-                boxShadow: key === stage ? `0 0 12px ${accent}88` : undefined,
+                boxShadow: key === stage ? `0 0 10px ${accent}88` : undefined,
                 transition: 'width 160ms ease',
               }}
             />
           ))}
         </div>
-        <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: '.14em', color: 'var(--dust)' }}>PACK {stage === 'manager' ? '1' : '2'} / 2</span>
-        <h1 style={{ margin: '7px 0 0', color: accent, fontFamily: 'var(--font-heavy, sans-serif)', fontSize: 25, lineHeight: 1 }}>{title}</h1>
-        <p style={{ margin: '8px auto 0', maxWidth: 360, color: 'var(--cream-soft)', fontSize: 11.5, lineHeight: 1.35 }}>{info}</p>
+        <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: '.13em', color: 'var(--dust)' }}>PACK {stage === 'manager' ? '1' : '2'} / 2</span>
+        <h1 style={{ margin: '5px 0 0', color: accent, fontFamily: 'var(--font-heavy, sans-serif)', fontSize: 'clamp(20px, 5.8vw, 23px)', lineHeight: 1 }}>{title}</h1>
+        <p style={{ margin: '6px auto 0', maxWidth: 340, color: 'var(--cream-soft)', fontSize: 10.5, lineHeight: 1.3 }}>{info}</p>
       </header>
 
-      <main className="flex-1 min-h-0 flex flex-col px-3" style={{ marginTop: 10 }}>
+      <main className="flex-1 min-h-0 flex flex-col px-3" style={{ marginTop: 7 }}>
         {phase === 'sealed' ? (
           <SealedPack
             label={stage === 'manager' ? 'MANAGER PACK' : 'PLAYER PACK'}
@@ -265,7 +266,7 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
       </main>
 
       {phase === 'open' && (
-        <footer className="shrink-0 px-3 pt-2">
+        <footer className="shrink-0 px-3 pt-1.5">
           <button
             type="button"
             onClick={continueFlow}
@@ -273,14 +274,14 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
             className="active:scale-95"
             style={{
               width: '100%',
-              height: 48,
+              height: 44,
               color: gated ? 'var(--dust)' : '#160d04',
               background: gated ? 'rgba(255,255,255,.06)' : `linear-gradient(180deg, ${accent}, color-mix(in srgb, ${accent} 72%, #6b4300))`,
               border: gated ? '1px solid var(--border)' : '2px solid #080501',
               borderRadius: 8,
               boxShadow: gated ? 'none' : '0 3px 0 #080501',
               fontFamily: PIXEL,
-              fontSize: 11,
+              fontSize: 10,
               cursor: gated ? 'default' : 'pointer',
             }}
           >
