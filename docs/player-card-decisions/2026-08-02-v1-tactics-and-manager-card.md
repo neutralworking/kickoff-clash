@@ -37,9 +37,9 @@ Permanent face hierarchy:
 3. Full manager name
 4. Named manager action
 5. Readable manager action text
-6. Maximum starting-XI cost and rarity across the bottom divider
+6. Maximum starting-XI cost across the bottom divider
 
-The rarity label intersects the bottom divider rather than sitting beneath it. The starting-XI cost occupies the opposite side of the same divider.
+As with player cards, rarity may influence the frame treatment but is not written as a label on the face or in the dossier.
 
 Managers do not have a style, archetype or class identity in V1. Do not show the legacy manager class crest, archetype line, `PREFERS` wording or formation-adherence copy.
 
