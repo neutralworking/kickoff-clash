@@ -26,17 +26,20 @@ Manager cards use their own anatomy rather than player-card corners or tactic-ca
 
 Permanent face hierarchy:
 
-1. Manager portrait
-2. Full manager name
-3. Available formation pool
-4. Manager action text
-5. Rarity treatment
+1. Available formation pool across the full top band
+2. Manager portrait
+3. Full manager name
+4. Named manager action
+5. Readable manager action text
+6. Rarity at the bottom of the card
 
 Managers do not have a style, archetype or class identity in V1. Do not show the legacy manager class crest, archetype line, `PREFERS` wording or formation-adherence copy.
 
 Do not show ATT, DEF, player cost, tactic charges or a generic `MGR` label as primary information.
 
-Cards that are large enough—including the normal two-choice manager-pack card—must show readable manager action text on the face. Inspection should provide additional context rather than being the only place where the action can be understood:
+Every manager action must have a distinct name. Until the roster has a dedicated action-name field, the first printed trait is the provisional action name. `MANAGER ACTION` may be used as a section category in supporting UI, but it must not replace the action's actual name.
+
+Cards that are large enough—including the normal two-choice manager-pack card—must show both the action name and readable action text on the face. Inspection should provide additional context rather than being the only place where the action can be understood:
 
 - philosophy/flavour
 - complete action effect
