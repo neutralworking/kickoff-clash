@@ -106,10 +106,11 @@ export default function ManagerDossier({
         <main className={styles.content}>
           <section className={styles.hero}>
             <ManagerCard manager={manager} formations={availableFormations} size="hero" />
-            <div className={styles.metaLine}>
-              {manager.nation && <span>{manager.nation.toUpperCase()}</span>}
-              <b>{manager.rarity.toUpperCase()}</b>
-            </div>
+            {manager.nation && (
+              <div className={styles.metaLine}>
+                <span>{manager.nation.toUpperCase()}</span>
+              </div>
+            )}
           </section>
 
           <section className={styles.panel}>
