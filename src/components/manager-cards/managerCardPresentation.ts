@@ -17,6 +17,15 @@ export function resolveManagerFormations(manager: JokerCard, formations?: string
 }
 
 /**
+ * Until the manager roster gains a dedicated action-name field, the first
+ * printed trait is the action name. This keeps the card contract explicit and
+ * gives the future data migration one clear field to replace.
+ */
+export function managerActionName(manager: JokerCard): string {
+  return manager.traits[0]?.trim() || 'Match Effect';
+}
+
+/**
  * Remove legacy formation-adherence copy from the existing effect string. In V1
  * the manager determines the available formation pool; formations do not pay
  * fractional adherence bonuses.
