@@ -67,8 +67,10 @@ function cardContents(
           className={styles.formationBadge}
           aria-label={`Available formations: ${availableFormations.join(', ') || 'not assigned'}`}
         >
-          <small>{availableFormations.length === 1 ? 'FORMATION' : 'FORMATIONS'}</small>
-          <div className={styles.formationList}>
+          <div
+            className={styles.formationList}
+            data-count={availableFormations.length || 1}
+          >
             {availableFormations.length > 0
               ? availableFormations.map((formation) => <strong key={formation}>{formation}</strong>)
               : <strong>UNASSIGNED</strong>}
