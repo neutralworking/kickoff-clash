@@ -90,7 +90,6 @@ function cardContents(
               <small>START XI</small>
               <strong>{maxStartingXiCost}</strong>
             </span>
-            <span className={styles.rarityBadge}>{rarity.toUpperCase()}</span>
           </div>
         </div>
 
@@ -134,7 +133,7 @@ export default function ManagerCard({
   const commonProps = {
     className: classes,
     style,
-    'aria-label': `${manager.name}. Available formations: ${availableFormations.join(', ') || 'not assigned'}. Maximum starting XI cost ${maxStartingXiCost}. ${actionName}: ${actionText}. ${rarity}.`,
+    'aria-label': `${manager.name}. Available formations: ${availableFormations.join(', ') || 'not assigned'}. Maximum starting XI cost ${maxStartingXiCost}. ${actionName}: ${actionText}.`,
   };
 
   if (Component === 'button') {
