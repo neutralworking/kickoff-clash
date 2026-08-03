@@ -1,7 +1,8 @@
 'use client';
 
 /**
- * V1 starter opening: manager first, then one grouped player reveal.
+ * V1 starter opening: manager first, one grouped player reveal, then the
+ * initial 18-card active-deck overview.
  *
  * Tactic cards are intentionally absent. The callback keeps its legacy second
  * argument only while GameShell is migrated; a non-matching sentinel makes the
@@ -13,18 +14,25 @@ import type { PackContents } from '../lib/packs';
 import type { Card } from '../lib/scoring';
 import type { JokerCard } from '../lib/jokers';
 import { managerFormationsV1 } from '../lib/manager-v1';
+import {
+  ACTIVE_DECK_SIZE,
+  normaliseActiveDeckIds,
+  saveActiveDeckIds,
+} from '../lib/active-deck';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import { PIXEL } from './cards/cardTokens';
 import ManagerCard from './manager-cards/ManagerCard';
 import ManagerDossier from './manager-cards/ManagerDossier';
+import TeamSelectionPlayerCard from './player-cards/TeamSelectionPlayerCard';
 
 const NO_TACTIC_V1_ID = '__v1_no_tactic__';
 const SCREEN_BG = 'radial-gradient(ellipse at 50% 16%, #18301f 0%, #0a0f0b 58%, #060806 100%)';
 const GOLD = '#f5c542';
 const BLUE = '#72b7ff';
 
-type Stage = 'manager' | 'players';
+const STAGES = ['manager', 'players', 'deck'] as const;
+type Stage = typeof STAGES[number];
 type Phase = 'sealed' | 'open';
 
 const ANIMATION_CSS = `
@@ -139,10 +147,7 @@ function ManagerSelection({
   onInspect: (manager: JokerCard) => void;
 }) {
   return (
-    <div
-      className="flex-1 min-h-0 flex items-center overflow-hidden"
-      style={{ padding: '4px 0 8px' }}
-    >
+    <div className="flex-1 min-h-0 flex items-center overflow-hidden" style={{ padding: '4px 0 8px' }}>
       <div
         className="flex w-full overflow-x-auto"
         style={{
@@ -190,10 +195,98 @@ function PlayerReveal({ players, onInspect }: { players: Card[]; onInspect: (car
     <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: '4px 0 8px', overscrollBehavior: 'contain' }}>
       <div className="grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5, alignItems: 'start' }}>
         {players.map((card, index) => (
-          <div key={card.id} style={{ minWidth: 0, animation: `kcv1Deal 260ms ease-out ${index * 45}ms both` }}>
+          <div key={card.id} style={{ minWidth: 0, animation: `kcv1Deal 260ms ease-out ${index * 34}ms both` }}>
             <GameCard model={{ variant: 'player', card }} size="grid" onClick={() => onInspect(card)} />
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function InitialDeckOverview({
+  players,
+  manager,
+  onInspect,
+}: {
+  players: Card[];
+  manager: JokerCard | null;
+  onInspect: (card: Card) => void;
+}) {
+  return (
+    <div className="flex-1 min-h-0 flex flex-col" style={{ padding: '2px 0 6px' }}>
+      <div
+        className="shrink-0 flex items-center"
+        style={{
+          minHeight: 28,
+          padding: '0 8px',
+          marginBottom: 5,
+          border: '1px solid rgba(245,197,66,.28)',
+          borderRadius: 7,
+          background: 'rgba(0,0,0,.24)',
+        }}
+      >
+        <span style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: '.08em', color: 'var(--dust)' }}>MANAGER</span>
+        <strong className="truncate" style={{ marginLeft: 8, fontSize: 10, color: 'var(--cream)' }}>{manager?.name ?? 'SELECTED MANAGER'}</strong>
+        <span style={{ marginLeft: 'auto', fontFamily: PIXEL, fontSize: 7, color: GOLD }}>{players.length}/{ACTIVE_DECK_SIZE}</span>
+      </div>
+
+      <div
+        className="grid min-h-0"
+        style={{
+          gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+          gridTemplateRows: 'repeat(3, minmax(0, 1fr))',
+          gap: 4,
+        }}
+      >
+        {Array.from({ length: ACTIVE_DECK_SIZE }).map((_, index) => {
+          const card = players[index];
+          return card ? (
+            <button
+              key={card.id}
+              type="button"
+              onClick={() => onInspect(card)}
+              aria-label={`Inspect ${card.name}`}
+              style={{
+                minWidth: 0,
+                padding: 0,
+                border: 0,
+                background: 'transparent',
+                animation: `kcv1Deal 220ms ease-out ${index * 24}ms both`,
+              }}
+            >
+              <TeamSelectionPlayerCard card={card} size="deck" />
+            </button>
+          ) : (
+            <div
+              key={`empty-${index}`}
+              style={{
+                minWidth: 0,
+                aspectRatio: '2 / 3',
+                border: '1px dashed rgba(245,197,66,.35)',
+                borderRadius: 5,
+                background: 'rgba(0,0,0,.18)',
+              }}
+            />
+          );
+        })}
+      </div>
+
+      <div
+        className="shrink-0"
+        style={{
+          marginTop: 6,
+          padding: '7px 9px',
+          borderRadius: 7,
+          background: 'rgba(245,197,66,.09)',
+          border: '1px solid rgba(245,197,66,.24)',
+          color: 'var(--cream-soft)',
+          fontSize: 9.5,
+          lineHeight: 1.3,
+          textAlign: 'center',
+        }}
+      >
+        These 18 players are your active deck. Pick the XI and seven substitutes next; you can edit the deck at any time.
       </div>
     </div>
   );
@@ -215,12 +308,26 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
     () => [...contents.players].sort((a, b) => b.power - a.power),
     [contents.players],
   );
+  const initialDeck = useMemo(
+    () => normaliseActiveDeckIds(contents.players, contents.players.map((card) => card.id))
+      .map((id) => contents.players.find((card) => card.id === id))
+      .filter((card): card is Card => Boolean(card)),
+    [contents.players],
+  );
+  const pickedManager = contents.managers.find((manager) => manager.id === pickedManagerId) ?? null;
   const accent = stage === 'manager' ? BLUE : GOLD;
-  const title = stage === 'manager' ? 'PICK YOUR MANAGER' : 'YOUR PLAYER PACK';
+  const title = stage === 'manager'
+    ? 'PICK YOUR MANAGER'
+    : stage === 'players'
+      ? 'YOUR PLAYER PACK'
+      : 'YOUR FIRST DECK';
   const info = stage === 'manager'
     ? 'Your manager sets your formations, starting-XI cost and run action.'
-    : 'All players reveal together. Tap any card to inspect it.';
-  const gated = stage === 'manager' && pickedManagerId === null;
+    : stage === 'players'
+      ? 'All 18 players reveal together. Tap any card to inspect it.'
+      : 'Your whole opening pack becomes the first active deck.';
+  const managerGated = stage === 'manager' && pickedManagerId === null;
+  const deckReady = initialDeck.length === ACTIVE_DECK_SIZE;
 
   function continueFlow() {
     if (stage === 'manager') {
@@ -229,8 +336,20 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
       setPhase('sealed');
       return;
     }
+
+    if (stage === 'players') {
+      saveActiveDeckIds(initialDeck.map((card) => card.id));
+      setStage('deck');
+      setPhase('open');
+      return;
+    }
+
+    if (!deckReady) return;
+    saveActiveDeckIds(initialDeck.map((card) => card.id));
     onContinue(pickedManagerId, NO_TACTIC_V1_ID);
   }
+
+  const stageIndex = STAGES.indexOf(stage);
 
   return (
     <div
@@ -247,21 +366,21 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
 
       <header className="shrink-0 px-3" style={{ textAlign: 'center' }}>
         <div className="flex items-center justify-center" style={{ gap: 6, marginBottom: 6 }}>
-          {(['manager', 'players'] as Stage[]).map((key) => (
+          {STAGES.map((key, index) => (
             <span
               key={key}
               style={{
-                width: key === stage ? 24 : 7,
+                width: index === stageIndex ? 24 : 7,
                 height: 7,
                 borderRadius: 99,
-                background: key === stage ? accent : 'rgba(244,236,216,.2)',
-                boxShadow: key === stage ? `0 0 10px ${accent}88` : undefined,
+                background: index === stageIndex ? accent : index < stageIndex ? `${accent}88` : 'rgba(244,236,216,.2)',
+                boxShadow: index === stageIndex ? `0 0 10px ${accent}88` : undefined,
                 transition: 'width 160ms ease',
               }}
             />
           ))}
         </div>
-        <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: '.13em', color: 'var(--dust)' }}>PACK {stage === 'manager' ? '1' : '2'} / 2</span>
+        <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: '.13em', color: 'var(--dust)' }}>STEP {stageIndex + 1} / {STAGES.length}</span>
         <h1 style={{ margin: '5px 0 0', color: accent, fontFamily: 'var(--font-heavy, sans-serif)', fontSize: 'clamp(20px, 5.8vw, 23px)', lineHeight: 1 }}>{title}</h1>
         <p style={{ margin: '6px auto 0', maxWidth: 340, color: 'var(--cream-soft)', fontSize: 10.5, lineHeight: 1.3 }}>{info}</p>
       </header>
@@ -270,7 +389,7 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
         {phase === 'sealed' ? (
           <SealedPack
             label={stage === 'manager' ? 'MANAGER PACK' : 'PLAYER PACK'}
-            count={stage === 'manager' ? `${contents.managers.length} MANAGERS · PICK 1` : `${contents.players.length} PLAYERS`}
+            count={stage === 'manager' ? `${contents.managers.length} MANAGERS · PICK 1` : `${contents.players.length} PLAYERS · ACTIVE DECK`}
             accent={accent}
             onOpen={() => setPhase('open')}
           />
@@ -281,8 +400,14 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
             onPick={setPickedManagerId}
             onInspect={setManagerModal}
           />
-        ) : (
+        ) : stage === 'players' ? (
           <PlayerReveal players={sortedPlayers} onInspect={(card) => setPlayerModal({ variant: 'player', card })} />
+        ) : (
+          <InitialDeckOverview
+            players={initialDeck}
+            manager={pickedManager}
+            onInspect={(card) => setPlayerModal({ variant: 'player', card })}
+          />
         )}
       </main>
 
@@ -291,24 +416,28 @@ export default function PackReveal({ contents, onContinue }: PackRevealProps) {
           <button
             type="button"
             onClick={continueFlow}
-            disabled={gated}
+            disabled={managerGated || (stage === 'deck' && !deckReady)}
             className="active:scale-95"
             style={{
               width: '100%',
               height: 44,
-              color: gated ? 'var(--dust)' : '#160d04',
-              background: gated ? 'rgba(255,255,255,.06)' : `linear-gradient(180deg, ${accent}, color-mix(in srgb, ${accent} 72%, #6b4300))`,
-              border: gated ? '1px solid var(--border)' : '2px solid #080501',
+              color: managerGated || (stage === 'deck' && !deckReady) ? 'var(--dust)' : '#160d04',
+              background: managerGated || (stage === 'deck' && !deckReady)
+                ? 'rgba(255,255,255,.06)'
+                : `linear-gradient(180deg, ${accent}, color-mix(in srgb, ${accent} 72%, #6b4300))`,
+              border: managerGated || (stage === 'deck' && !deckReady) ? '1px solid var(--border)' : '2px solid #080501',
               borderRadius: 8,
-              boxShadow: gated ? 'none' : '0 3px 0 #080501',
+              boxShadow: managerGated || (stage === 'deck' && !deckReady) ? 'none' : '0 3px 0 #080501',
               fontFamily: PIXEL,
               fontSize: 10,
-              cursor: gated ? 'default' : 'pointer',
+              cursor: managerGated || (stage === 'deck' && !deckReady) ? 'default' : 'pointer',
             }}
           >
             {stage === 'manager'
-              ? gated ? 'PICK A MANAGER' : 'OPEN PLAYER PACK →'
-              : 'PICK YOUR TEAM →'}
+              ? managerGated ? 'PICK A MANAGER' : 'OPEN PLAYER PACK →'
+              : stage === 'players'
+                ? 'VIEW YOUR DECK →'
+                : deckReady ? 'TEAM SELECTION →' : `DECK NEEDS ${ACTIVE_DECK_SIZE} PLAYERS`}
           </button>
         </footer>
       )}
