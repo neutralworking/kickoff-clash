@@ -9,7 +9,7 @@
 
 .pitch {
   width: 64px;
-  height: 86px;
+  height: 88px;
 }
 
 .bench {
@@ -28,7 +28,6 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  padding: 2px;
   background: var(--pc-frame);
   box-shadow:
     0 2px 0 #060402,
@@ -57,18 +56,18 @@
   pointer-events: none;
   box-shadow:
     inset 0 0 0 0.7cqw rgba(255, 242, 206, 0.08),
-    inset 0 -17cqw 24cqw rgba(0, 0, 0, 0.38);
+    inset 0 -21cqw 28cqw rgba(0, 0, 0, 0.46);
 }
 
 .kcMonogram {
   position: absolute;
   left: 50%;
-  top: 10%;
+  top: 8%;
   z-index: 1;
   transform: translateX(-50%) rotate(-7deg);
   color: color-mix(in srgb, var(--pc-edge) 27%, transparent);
   font-family: var(--font-heavy, sans-serif);
-  font-size: 56cqw;
+  font-size: 58cqw;
   line-height: 0.9;
   letter-spacing: -0.12em;
   white-space: nowrap;
@@ -77,22 +76,22 @@
 
 .portrait {
   position: absolute;
-  inset: 8% -7% 23% -7%;
+  inset: 1% -8% 25% -8%;
   z-index: 2;
   overflow: hidden;
   display: grid;
   place-items: center;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 79%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 79%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 82%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 82%, transparent 100%);
 }
 
 .portrait img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 18%;
-  transform: scale(1.04);
+  object-position: center 14%;
+  transform: scale(1.06);
   filter: contrast(1.05) saturate(0.95) drop-shadow(0 1.4cqw 1cqw rgba(0, 0, 0, 0.72));
   user-select: none;
 }
@@ -102,67 +101,25 @@
   font: 16cqw/1 var(--font-heavy, sans-serif);
 }
 
-.costCorner,
-.positionCorner {
+.infoIcon {
   position: absolute;
-  top: 2.5%;
-  z-index: 12;
-  height: 18%;
+  top: 4%;
+  right: 5%;
+  z-index: 16;
+  width: 17cqw;
+  height: 17cqw;
   display: grid;
   place-items: center;
-  color: #fbf7ec;
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.16), transparent 34%),
-    linear-gradient(160deg, #3d2e18, #171006 72%);
-  border: 0.75cqw solid color-mix(in srgb, var(--pc-edge) 76%, #2b1d0a);
-  box-shadow: 0 1cqw 0 rgba(0, 0, 0, 0.68);
-}
-
-.costCorner {
-  left: 2.5%;
-  width: 29%;
-  clip-path: polygon(0 0, 76% 0, 100% 28%, 100% 100%, 0 100%);
-}
-
-.positionCorner {
-  right: 2.5%;
-  width: 27%;
-  clip-path: polygon(24% 0, 100% 0, 100% 100%, 0 100%, 0 28%);
-  font-family: var(--font-heavy, sans-serif);
-  font-size: 11cqw;
-  line-height: 1;
-}
-
-.fitSecondary .positionCorner {
-  color: #171005;
-  background: linear-gradient(160deg, #ffe2a0, #e6a72d 74%);
-  border-color: #ffd476;
-}
-
-.fitMisfit .positionCorner {
-  color: #fff1e8;
-  background: linear-gradient(160deg, #d84d45, #7e1815 74%);
-  border-color: #ff756d;
-}
-
-.pipCluster {
-  width: 15cqw;
-  height: 15cqw;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-}
-
-.pipCluster i {
-  align-self: center;
-  justify-self: center;
-  width: 3.1cqw;
-  height: 3.1cqw;
   border-radius: 50%;
-  background: #ffe194;
-  box-shadow:
-    0 0 0 0.6cqw rgba(59, 38, 6, 0.82),
-    0 0 3cqw rgba(232, 178, 60, 0.68);
+  color: #f8edd2;
+  background: rgba(12, 9, 4, 0.78);
+  border: 1cqw solid color-mix(in srgb, var(--pc-edge) 64%, #33240f);
+  box-shadow: 0 1cqw 0 rgba(0, 0, 0, 0.7);
+  font-family: Georgia, serif;
+  font-size: 11cqw;
+  font-weight: 800;
+  font-style: italic;
+  line-height: 1;
 }
 
 .nameplate,
@@ -181,8 +138,8 @@
 }
 
 .nameplate {
-  bottom: 29.7%;
-  height: 13.5%;
+  bottom: 29.2%;
+  height: 13.2%;
   padding: 0 6%;
   color: #100a04;
   background:
@@ -199,8 +156,8 @@
 .actionPanel {
   left: 4.5%;
   right: 4.5%;
-  bottom: 17.8%;
-  height: 11.3%;
+  bottom: 18.6%;
+  height: 10.2%;
   padding: 0 5%;
   color: #f4ecd8;
   background:
@@ -214,94 +171,141 @@
   letter-spacing: 0.01em;
 }
 
-.statBadge {
+.bottomRail {
   position: absolute;
-  bottom: 0.8%;
+  left: 2.3%;
+  right: 2.3%;
+  bottom: 1.5%;
   z-index: 15;
-  width: 25.5%;
-  height: 16%;
+  height: 16.2%;
   display: grid;
-  place-items: center;
-  padding: 0;
+  grid-template-columns: 0.92fr 0.98fr 1fr 1fr;
+  overflow: hidden;
   color: #fbf7ec;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.16), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 36%),
     linear-gradient(165deg, #392914, #120b04 78%);
   border: 0.65cqw solid color-mix(in srgb, var(--pc-edge) 72%, #241707);
   box-shadow: 0 0.8cqw 0 rgba(0, 0, 0, 0.68);
+  clip-path: polygon(3% 0, 97% 0, 100% 26%, 100% 100%, 0 100%, 0 26%);
 }
 
-.statLeft {
-  left: 0.8%;
-  clip-path: polygon(0 0, 72% 0, 100% 38%, 100% 100%, 0 100%);
-}
-
-.statRight {
-  right: 0.8%;
-  clip-path: polygon(28% 0, 100% 0, 100% 100%, 0 100%, 0 38%);
-}
-
-.statBadge b {
+.metricCell {
   min-width: 0;
-  font-family: var(--font-heavy, sans-serif);
-  font-size: 15cqw;
-  line-height: 0.75;
-  letter-spacing: -0.055em;
-  text-align: center;
-  text-shadow:
-    0 0.65cqw 0 #080502,
-    0 0 2cqw rgba(255, 245, 215, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 0.55cqw solid rgba(255, 235, 190, 0.16);
 }
 
-.pitch .portrait {
-  bottom: 22%;
+.metricCell:last-child {
+  border-right: 0;
+}
+
+.costCell {
+  padding-left: 4%;
+}
+
+.pipCluster {
+  width: 14cqw;
+  height: 14cqw;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.pipCluster i {
+  align-self: center;
+  justify-self: center;
+  width: 3cqw;
+  height: 3cqw;
+  border-radius: 50%;
+  background: #ffe194;
+  box-shadow:
+    0 0 0 0.55cqw rgba(59, 38, 6, 0.82),
+    0 0 2.5cqw rgba(232, 178, 60, 0.68);
+}
+
+.positionCell b,
+.statCell b {
+  font-family: var(--font-heavy, sans-serif);
+  line-height: 0.9;
+  text-shadow: 0 0.65cqw 0 #080502;
+}
+
+.positionCell b {
+  font-size: 11.5cqw;
+}
+
+.statCell {
+  gap: 1.2cqw;
+}
+
+.statCell small {
+  color: rgba(244, 236, 216, 0.58);
+  font-family: var(--font-pixel, monospace);
+  font-size: 4.8cqw;
+  letter-spacing: 0.02em;
+}
+
+.statCell b {
+  font-size: 13.5cqw;
+  letter-spacing: -0.06em;
+}
+
+.fitSecondary .positionCell {
+  color: #171005;
+  background: linear-gradient(160deg, #ffe2a0, #e6a72d 74%);
+}
+
+.fitMisfit .positionCell {
+  color: #fff1e8;
+  background: linear-gradient(160deg, #d84d45, #7e1815 74%);
 }
 
 .pitch .nameplate,
 .bench .nameplate {
-  bottom: 28.2%;
-  height: 10.4%;
-  padding-inline: 5%;
-  font-size: 12.6cqw;
+  bottom: 29%;
+  height: 11.4%;
+  font-size: 12.8cqw;
 }
 
 .pitch .actionPanel,
 .bench .actionPanel {
-  bottom: 18.5%;
-  height: 9.2%;
-  font-size: 8.7cqw;
+  bottom: 18.8%;
+  height: 9.7%;
+  font-size: 8.4cqw;
   letter-spacing: -0.02em;
 }
 
-.pitch .statBadge {
-  bottom: 0.6%;
-  width: 30.5%;
-  height: 18.3%;
-  border-width: 0.8cqw;
-  box-shadow:
-    0 0.9cqw 0 rgba(0, 0, 0, 0.78),
-    inset 0 0 0 0.4cqw rgba(255, 255, 255, 0.06);
+.pitch .bottomRail,
+.bench .bottomRail {
+  height: 16.8%;
 }
 
-.pitch .statLeft {
-  left: 0.4%;
+.pitch .positionCell b,
+.bench .positionCell b {
+  font-size: 12.2cqw;
 }
 
-.pitch .statRight {
-  right: 0.4%;
+.pitch .statCell small,
+.bench .statCell small {
+  display: none;
 }
 
-.pitch .statBadge b {
-  font-size: 18cqw;
-  line-height: 0.72;
-  letter-spacing: -0.07em;
-  text-shadow:
-    0 0.75cqw 0 #080502,
-    0 0 2.4cqw rgba(255, 245, 215, 0.24);
+.pitch .statCell b,
+.bench .statCell b {
+  font-size: 16cqw;
 }
 
 .deck .frameMaterial {
   box-shadow: 0 1px 0 #060402, 0 2px 5px rgba(0, 0, 0, 0.5), 0 0 5px var(--pc-glow);
+}
+
+.deck .infoIcon {
+  width: 15cqw;
+  height: 15cqw;
+  font-size: 10cqw;
 }
 
 .deck .nameplate {
@@ -309,7 +313,7 @@
 }
 
 .deck .actionPanel {
-  font-size: 7.4cqw;
+  font-size: 7.2cqw;
 }
 
 .collection .nameplate {
@@ -317,7 +321,7 @@
 }
 
 .collection .actionPanel {
-  font-size: 7.2cqw;
+  font-size: 7.1cqw;
 }
 
 .misfitReceipt {
@@ -356,7 +360,6 @@
 :global([data-kc="bench"]) {
   display: flex !important;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 6px !important;
   overflow-x: auto;
   overflow-y: visible;
@@ -384,7 +387,7 @@
 @media (max-width: 374px), (max-height: 720px) {
   .pitch {
     width: 58px;
-    height: 78px;
+    height: 80px;
   }
 
   .bench {
