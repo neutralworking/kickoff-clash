@@ -96,8 +96,6 @@ export default function TeamSelectionPlayerCard({
           {portrait ? <img src={portrait} alt="" draggable={false} /> : <span>{lastName(card.name).slice(0, 2).toUpperCase()}</span>}
         </div>
 
-        <span className={styles.infoIcon} aria-hidden="true">i</span>
-
         <div className={styles.nameplate} title={card.name}>{lastName(card.name).toUpperCase()}</div>
         <div className={styles.actionPanel} title={actionName}>{actionName.toUpperCase()}</div>
 
