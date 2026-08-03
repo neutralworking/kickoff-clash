@@ -3,8 +3,8 @@
 /**
  * Kickoff Clash — squad collection overlay.
  *
- * Browse mode now opens the shared 18-card deck builder. Sell mode keeps the
- * transfer gallery so the store can still inspect and sell owned players.
+ * Browse mode opens the shared 18-card deck builder. Sell mode keeps the
+ * transfer gallery and exposes the same builder through EDIT DECK.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -28,7 +28,7 @@ interface SquadGalleryProps {
   /**
    * Optional SELL MODE. When provided, every card in the grid gains a transfer fee
    * + a Sell button; tapping Sell raises an in-gallery confirm step before firing
-   * this callback. When omitted, this entry opens the active-deck builder.
+   * this callback. The header also provides EDIT DECK.
    */
   onSellCard?: (card: Card) => void;
 }
@@ -97,6 +97,7 @@ function SellableSquadGallery({
   const [view, setView] = useState<'grid' | 'roster'>('grid');
   const [modal, setModal] = useState<GameCardModel | null>(null);
   const [sellConfirm, setSellConfirm] = useState<Card | null>(null);
+  const [editingDeck, setEditingDeck] = useState(false);
   const sellMode = true;
   const rosterView = view === 'roster' && !sellMode;
 
@@ -118,6 +119,10 @@ function SellableSquadGallery({
     });
     return sorted;
   }, [deck, group, sort]);
+
+  if (editingDeck) {
+    return <DeckBuilderGallery deck={deck} onClose={() => setEditingDeck(false)} />;
+  }
 
   return (
     <div
@@ -142,11 +147,22 @@ function SellableSquadGallery({
           </span>
         </div>
         <button
+          onClick={() => setEditingDeck(true)}
+          className="active:scale-95 shrink-0 glass-surface"
+          style={{
+            fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: 'var(--gold)',
+            height: 38, padding: '0 10px', borderRadius: 'var(--radius-sm)',
+            border: '2px solid var(--ink-black)', boxShadow: 'var(--depth-1)',
+          }}
+        >
+          EDIT DECK
+        </button>
+        <button
           onClick={onClose}
           className="active:scale-95 shrink-0 glass-surface"
           style={{
             fontFamily: PIXEL, fontSize: 12, letterSpacing: 0.5, color: 'var(--cream)',
-            height: 38, padding: '0 14px', borderRadius: 'var(--radius-sm)',
+            height: 38, padding: '0 12px', borderRadius: 'var(--radius-sm)',
             border: '2px solid var(--ink-black)', boxShadow: 'var(--depth-1)',
           }}
         >
