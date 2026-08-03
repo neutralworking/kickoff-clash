@@ -13,7 +13,7 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  padding: max(env(safe-area-inset-top), 10px) 12px max(env(safe-area-inset-bottom), 8px);
+  padding: max(env(safe-area-inset-top), 8px) 12px max(env(safe-area-inset-bottom), 6px);
   overflow: hidden;
 }
 
@@ -22,7 +22,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 5px;
 }
 
 .labNav button,
@@ -39,13 +39,13 @@
 }
 
 .labNav button {
-  height: 34px;
+  height: 30px;
   border-radius: 7px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.055);
   font-family: var(--font-pixel, monospace);
-  font-size: 9px;
-  letter-spacing: 0.7px;
+  font-size: 8px;
+  letter-spacing: 0.65px;
 }
 
 .labNav .activeTab {
@@ -57,29 +57,29 @@
 
 .header {
   flex: 0 0 auto;
-  min-height: 34px;
+  min-height: 28px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .title {
   margin: 0;
   font-family: var(--font-pixel, monospace);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.55px;
   text-shadow: 0 2px 0 #000;
 }
 
 .counter {
   margin-left: auto;
-  padding: 6px 8px;
+  padding: 5px 7px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background: rgba(0, 0, 0, 0.25);
   font-family: var(--font-pixel, monospace);
-  font-size: 9px;
+  font-size: 8px;
   color: #e8b84f;
 }
 
@@ -94,17 +94,17 @@
 
 .deckSection {
   flex: 0 0 auto;
-  margin-top: 8px;
+  margin-top: 5px;
 }
 
 .sectionHeading {
   display: flex;
   align-items: center;
-  min-height: 22px;
-  margin-bottom: 5px;
+  min-height: 19px;
+  margin-bottom: 4px;
   font-family: var(--font-pixel, monospace);
-  font-size: 8px;
-  letter-spacing: 0.8px;
+  font-size: 7px;
+  letter-spacing: 0.7px;
   color: rgba(244, 236, 216, 0.68);
 }
 
@@ -162,13 +162,12 @@
   color: #f3cf73;
   font-family: var(--font-pixel, monospace);
   font-size: 7px;
-  letter-spacing: 0.5px;
 }
 
 .collectionSection {
   flex: 1 1 auto;
   min-height: 0;
-  margin-top: 7px;
+  margin-top: 5px;
   display: flex;
   flex-direction: column;
 }
@@ -181,7 +180,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-content: start;
   gap: 8px;
-  padding: 2px 2px 10px;
+  padding: 2px 2px 8px;
   overscroll-behavior: contain;
   scrollbar-width: none;
 }
@@ -193,28 +192,22 @@
 .collectionCard.pending {
   outline: 2px solid #f3cf73;
   outline-offset: 2px;
-  filter: saturate(1.12);
-}
-
-.collectionCard.inDeck {
-  opacity: 0.28;
-  filter: grayscale(0.4);
 }
 
 .footer {
   flex: 0 0 auto;
   display: flex;
   gap: 7px;
-  padding-top: 7px;
+  padding-top: 4px;
 }
 
 .doneButton,
 .secondaryButton {
-  height: 43px;
+  height: 38px;
   border-radius: 7px;
   font-family: var(--font-pixel, monospace);
-  font-size: 11px;
-  letter-spacing: 0.5px;
+  font-size: 10px;
+  letter-spacing: 0.45px;
 }
 
 .doneButton {
@@ -233,31 +226,30 @@
 }
 
 .secondaryButton {
-  flex: 0 0 88px;
+  flex: 0 0 86px;
   color: rgba(244, 236, 216, 0.75);
   background: rgba(255, 255, 255, 0.055);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .hint {
-  min-height: 18px;
+  min-height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 4px;
+  margin-top: 3px;
   color: rgba(244, 236, 216, 0.52);
   font-family: var(--font-pixel, monospace);
-  font-size: 7px;
-  letter-spacing: 0.35px;
+  font-size: 6.5px;
   text-align: center;
 }
 
 .compactStats {
   flex: 0 0 auto;
-  height: 34px;
+  height: 28px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  margin-top: 6px;
+  margin-top: 4px;
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 7px;
   background: rgba(0, 0, 0, 0.24);
@@ -268,7 +260,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   border-right: 1px solid rgba(255, 255, 255, 0.09);
   font-family: var(--font-pixel, monospace);
 }
@@ -278,28 +270,28 @@
 }
 
 .compactStat small {
-  font-size: 6px;
-  letter-spacing: 0.7px;
+  font-size: 5.5px;
+  letter-spacing: 0.65px;
   color: rgba(244, 236, 216, 0.48);
 }
 
 .compactStat b {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 400;
 }
 
 .controls {
   flex: 0 0 auto;
-  height: 43px;
+  height: 36px;
   display: grid;
-  grid-template-columns: 1.18fr 0.78fr 1.14fr;
+  grid-template-columns: 1.18fr 0.8fr 1.2fr;
   gap: 5px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .control {
   min-width: 0;
-  padding: 0 8px;
+  padding: 0 7px;
   border-radius: 7px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.055);
@@ -318,14 +310,14 @@
 .control small {
   color: rgba(244, 236, 216, 0.46);
   font-family: var(--font-pixel, monospace);
-  font-size: 5.8px;
-  letter-spacing: 0.75px;
+  font-size: 5.2px;
+  letter-spacing: 0.7px;
 }
 
 .control strong {
-  margin-top: 3px;
+  margin-top: 2px;
   color: #f4ecd8;
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1;
 }
 
@@ -336,14 +328,13 @@
 
 .pitch {
   flex: 1 1 auto;
-  min-height: 270px;
+  min-height: 0;
   position: relative;
-  margin-top: 6px;
+  margin-top: 4px;
   overflow: hidden;
   border: 2px solid #080b06;
   border-radius: 9px;
-  background:
-    repeating-linear-gradient(180deg, #397d43 0, #397d43 9%, #32713c 9%, #32713c 18%);
+  background: repeating-linear-gradient(180deg, #397d43 0, #397d43 9%, #32713c 9%, #32713c 18%);
   box-shadow: 0 3px 0 #050704, inset 0 0 48px rgba(0, 0, 0, 0.28);
 }
 
@@ -367,8 +358,8 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 56px;
-  height: 56px;
+  width: 54px;
+  height: 54px;
   transform: translate(-50%, -50%);
   border: 1px solid rgba(255, 255, 255, 0.48);
   border-radius: 50%;
@@ -382,112 +373,53 @@
 
 .benchHeader {
   flex: 0 0 auto;
-  min-height: 24px;
+  min-height: 18px;
   display: flex;
   align-items: center;
-  margin-top: 5px;
+  margin-top: 3px;
   font-family: var(--font-pixel, monospace);
-  font-size: 8px;
+  font-size: 7px;
   color: #e8b84f;
-  letter-spacing: 0.7px;
-}
-
-.benchHeader small {
-  margin-left: auto;
-  color: rgba(244, 236, 216, 0.42);
-  font-size: 6px;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.65px;
 }
 
 .benchRow {
   flex: 0 0 auto;
-  min-height: 96px;
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  overflow-x: auto;
-  overflow-y: visible;
-  padding: 2px 1px 5px;
-  scroll-snap-type: x mandatory;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-
-.benchRow::-webkit-scrollbar {
-  display: none;
+  height: 72px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+  overflow: visible;
 }
 
 .benchCard {
-  flex: 0 0 64px;
-  width: 64px;
-  scroll-snap-align: start;
+  width: 100%;
+  min-width: 0;
 }
 
 .kickoff {
-  margin-top: 7px;
+  margin-top: 4px;
 }
 
 @media (max-height: 720px) {
-  .labNav {
-    margin-bottom: 5px;
+  .labNav button {
+    height: 28px;
   }
 
   .header {
-    min-height: 28px;
+    min-height: 26px;
   }
 
   .title {
     font-size: 13px;
   }
 
-  .deckSection {
-    margin-top: 5px;
-  }
-
-  .deckGrid {
-    gap: 3px;
-  }
-
-  .collectionSection {
-    margin-top: 4px;
-  }
-
-  .compactStats {
-    height: 30px;
-    margin-top: 4px;
-  }
-
-  .controls {
-    height: 39px;
-    margin-top: 4px;
-  }
-
-  .pitch {
-    min-height: 244px;
-    margin-top: 4px;
-  }
-
-  .benchHeader {
-    min-height: 20px;
-    margin-top: 3px;
-  }
-
   .benchRow {
-    min-height: 91px;
-    gap: 5px;
-  }
-
-  .benchCard {
-    flex-basis: 61px;
-    width: 61px;
-  }
-
-  .footer {
-    padding-top: 5px;
+    height: 68px;
   }
 
   .doneButton,
   .secondaryButton {
-    height: 39px;
+    height: 36px;
   }
 }
