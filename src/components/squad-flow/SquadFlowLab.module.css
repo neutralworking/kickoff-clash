@@ -31,8 +31,7 @@
 .secondaryButton,
 .deckSlot,
 .collectionCard,
-.benchCard,
-.reserveButton {
+.benchCard {
   border: 0;
   color: inherit;
   cursor: pointer;
@@ -393,77 +392,39 @@
   letter-spacing: 0.7px;
 }
 
-.reserveButton {
+.benchHeader small {
   margin-left: auto;
-  padding: 5px 8px;
-  border-radius: 6px;
-  border: 1px solid rgba(232, 184, 79, 0.32);
-  background: rgba(232, 184, 79, 0.09);
-  color: #e8b84f;
-  font-family: var(--font-pixel, monospace);
-  font-size: 7px;
+  color: rgba(244, 236, 216, 0.42);
+  font-size: 6px;
+  letter-spacing: 0.5px;
 }
 
 .benchRow {
   flex: 0 0 auto;
-  display: flex;
-  justify-content: space-between;
-  gap: 5px;
   min-height: 96px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 2px 1px 5px;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.benchRow::-webkit-scrollbar {
+  display: none;
 }
 
 .benchCard {
   flex: 0 0 64px;
   width: 64px;
+  scroll-snap-align: start;
 }
 
 .kickoff {
   margin-top: 7px;
-}
-
-.reserveTray {
-  position: absolute;
-  inset: 0;
-  z-index: 80;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  background: rgba(2, 6, 3, 0.68);
-  backdrop-filter: blur(4px);
-}
-
-.reserveSheet {
-  padding: 10px 12px max(env(safe-area-inset-bottom), 14px);
-  border-top: 2px solid #e8b84f;
-  border-radius: 14px 14px 0 0;
-  background: linear-gradient(180deg, #20271d, #10160f);
-  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.48);
-}
-
-.reserveSheetHeader {
-  display: flex;
-  align-items: center;
-  margin-bottom: 9px;
-  font-family: var(--font-pixel, monospace);
-  font-size: 10px;
-  letter-spacing: 0.6px;
-}
-
-.reserveSheetHeader button {
-  margin-left: auto;
-  padding: 5px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #f4ecd8;
-  font-family: var(--font-pixel, monospace);
-  font-size: 7px;
-}
-
-.reserveCards {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
 }
 
 @media (max-height: 720px) {
@@ -513,6 +474,7 @@
 
   .benchRow {
     min-height: 91px;
+    gap: 5px;
   }
 
   .benchCard {
