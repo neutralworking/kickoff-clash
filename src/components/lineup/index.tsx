@@ -19,19 +19,20 @@ const SLOT_CARD_H = 80;
 export const SLOT_INSET_X = SLOT_CARD_W / 2 + 6;
 export const SLOT_INSET_Y = SLOT_CARD_H / 2 + 4;
 
-/** Snap authored formation coordinates onto cleaner visual rows for the compact
- * card silhouette. This changes presentation only; formation identity, slot
- * eligibility and match geometry remain untouched. */
+/**
+ * Collapse the authored formation coordinates onto four readable mobile lines:
+ * forwards, midfield, defence and goalkeeper. The previous six-line treatment
+ * separated strikers from wingers and holding midfielders from central mids;
+ * with 11 portrait cards inside a 342px iPhone-SE pitch that guaranteed overlap.
+ *
+ * This is presentation only. Slot identity, eligibility and match geometry stay
+ * unchanged, while every supported shape still reads correctly at a glance.
+ */
 export function lineupPitchY(y: number): number {
-  if (y >= 88) return 94; // goalkeeper
-  if (y >= 76) return 76; // centre/full backs
-  if (y >= 68) return 68; // wing-backs
-  if (y >= 56) return 58; // defensive midfield / high wide mids
-  if (y >= 50) return 51; // main midfield line
-  if (y >= 44) return 46; // deeper/offset central mids
-  if (y >= 30) return 34; // attacking midfield
-  if (y >= 20) return 21; // wide forwards
-  return 11; // strikers
+  if (y >= 88) return 98; // goalkeeper
+  if (y >= 68) return 70; // back line, including wing-backs
+  if (y >= 30) return 42; // midfield line, including pivots and attacking mids
+  return 10; // forwards and wide forwards
 }
 
 export interface DragPointerHandlers {
