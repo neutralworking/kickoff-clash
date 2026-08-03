@@ -1,83 +1,89 @@
 # Kickoff Clash
 
-A Balatro-style football management roguelike. Players are cards, your XI is your hand, chemistry connections are your poker bonuses, manager cards are jokers.
+A mobile-first football card battler and roguelike. Build a squad, choose a manager, select an XI and seven-player bench, then play matches through a football-themed card-battle presentation.
 
-Formerly known as `fbal`. Renamed to the canonical `kickoff-clash` on 2026-04-12 as part of the portfolio cleanse. The Godot port (`fbal-godot`) has been archived; this Next.js app is the only active codebase.
+## Read this first
 
-## Current state
+The repository has passed through several engine and design directions. Many older root and `design/` documents are retained for history but no longer describe the active implementation.
 
-- **Match Engine V5** is implemented in `src/lib/match-v5.ts` (707 lines). Design spec: `MATCH_ENGINE_V5.md`.
-- **Game shell** is wired: `GameShell.tsx` orchestrates the phase components (`TitleScreen`, `SetupPhase`, `PackOpening`, `MatchPhase`, `PostMatch`, `ShopPhase`, `EndScreen`).
-- **500 characters** in `public/data/kc_characters.json`, mapped through `src/lib/transform.ts` into the engine's archetype model.
-- **Next.js 16 + React 19 + Tailwind v4 + TypeScript**.
-- **Supabase client** wired in `src/lib/supabase.ts` — used for run persistence.
+**Canonical project handoff:** [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md)
 
-## Stack
+That document records:
 
-| Piece | What |
-|---|---|
-| Framework | Next.js 16 (App Router) |
-| UI | React 19, Tailwind v4 |
-| Language | TypeScript 5.9 |
-| State | Client-side, Supabase for persistence |
-| Dev port | 3001 (avoids conflict with chief-scout at 3000) |
+- the active branch and PR stack;
+- the current V1 product decisions;
+- the player- and manager-card contracts;
+- the current V7 engine/presentation architecture;
+- mobile QA targets;
+- parallel-work boundaries for UI and engine development;
+- immediate next work.
+
+## Current integration point
+
+As of 2026-08-03, the latest integrated work is:
+
+- branch: `agent/manager-production-integration`;
+- PR: [#92 — Start the V1 manager production integration](https://github.com/neutralworking/kickoff-clash/pull/92);
+- base stack: PRs #85–#89, with PR #91 merged into the PR #89 branch.
+
+PR #90 is a rejected opening-flow direction and must not be used as a base.
+
+## Current product flow
+
+The target fresh-run flow is:
+
+```text
+Manager pack and choice
+        ↓
+Grouped player-pack reveal
+        ↓
+Squad / team selection
+        ↓
+V7 match
+        ↓
+Existing post-match, shop, cup and economy flow
+```
+
+Tactic cards are out of scope for V1. Legacy tactic code may remain in the repository, but it is not the current product requirement.
+
+## Architecture at a glance
+
+- `src/components/GameShell.tsx` owns the complete roguelike run lifecycle.
+- `src/engine-v7/` contains the current headless deterministic match rules and receipts.
+- `src/game-v7/` contains the V7 controller and presentation translation.
+- `src/components/match-v7/` contains the current match presentation.
+- `src/components/player-cards/` contains the groomed player-card and dossier family.
+- `src/components/manager-cards/` contains the groomed manager-card and dossier family.
+- `src/lib/manager-v1.ts` contains the V1 manager metadata bridge.
+- `src/lib/run.ts` remains the live run-state model and is due for the manager formation/cost-cap migration.
+
+Do not begin new work in `src/engine/`, `src/engine-v2/`, `/rebuild`, or legacy match-screen paths unless the product owner explicitly reopens them.
+
+## Mobile baseline
+
+Primary QA viewports:
+
+- 390 × 844;
+- 375 × 667.
+
+Phone layouts must be rendered and inspected at both sizes. Desktop screenshots and calculated dimensions are not sufficient approval evidence.
 
 ## Getting started
 
 ```bash
 npm install
-npm run dev      # http://localhost:3001
-npm run build    # production build
+npm run dev       # http://localhost:3001
+npm run build
 npm run lint
+npm test
 ```
 
-## Repo layout
+The project uses Next.js 16, React 19, TypeScript and Tailwind CSS. Check `package.json` for the current focused playtest and simulation commands before using commands from older documentation.
 
-```
-kickoff-clash/
-├── MATCH_ENGINE_V5.md        → canonical design spec for the current match engine
-├── design/                   → older design docs (see "Stale docs" below)
-├── public/data/              → kc_characters.json (500 fictional players)
-└── src/
-    ├── app/                  → Next.js App Router entry (page.tsx → <GameShell />)
-    ├── components/           → React components, one per game phase
-    └── lib/                  → engine: match-v5, chemistry, scoring, transform, run, jokers, tactics, formations, economy, packs, hand, actions, supabase, fan-geometry
-```
+## Parallel engine work
 
-## Key engine files
+Engine work should branch from the latest `agent/manager-production-integration` commit and focus on `src/engine-v7/`, its tests, and necessary `src/game-v7/` controller changes.
 
-| File | Purpose |
-|---|---|
-| `src/lib/match-v5.ts` | Active card play match engine: attack/defend split, scoring, goal resolution |
-| `src/lib/chemistry.ts` | Positional synergies (attack / defence / cross), personality resonances |
-| `src/lib/scoring.ts` | Card types, playing styles, seeded RNG |
-| `src/lib/transform.ts` | `kc_characters.json` → `Card[]` mapping (position map + model→archetype map) |
-| `src/lib/formations.ts` | 8 formations with attack/defence role allocations |
-| `src/lib/jokers.ts` | Manager cards (passive modifiers) |
-| `src/lib/tactics.ts` | Tactic cards |
-| `src/lib/run.ts` | Roguelike run state |
+UI/card work remains on PR #92. Coordinate before changing shared integration files such as `GameShell.tsx`, `SquadScreen.tsx`, `src/lib/run.ts`, adapters or `src/components/match-v7/*`.
 
-## Stale docs (triage needed)
-
-`design/` contains historical docs from the fbal era. Most of them no longer describe reality:
-
-- `design/README.md` — describes the Python/Flask prototype, `python app.py`, `localhost:5055`, GitHub issues on `neutralworking/fbal`. **Stale.**
-- `design/ROADMAP.md` — references `fbal-godot`, `main` and `local-dev` branches, Python `match_engine.py`, `OPPONENT_AI_PATCH.txt`. **Stale.**
-- `design/legacy-python/` — prior prototype. **Keep as history, not a source of truth.**
-- `design/PRD.md`, `design/Football_PRD_v2.md`, `design/QUICK_REF.md`, `design/GETTING_STARTED.md`, `design/OPPONENT_AI_PATCH.txt` — unknown status; PO should triage on first pass.
-
-**Source of truth for game design:** `MATCH_ENGINE_V5.md` at repo root.
-**Source of truth for execution:** `ROADMAP.md` at repo root (to be created by PO).
-
-## Known tech debt
-
-From `MATCH_ENGINE_V5.md` §11:
-
-- **Power range compression** — characters use levels 71–95 (avg 81). §11.2 recommends widening to 50–99 for more meaningful chemistry impact. Not yet applied.
-- **Character data transform** — §11.1 flagged a model-name vs archetype-ID mismatch. `src/lib/transform.ts` now has a `MODEL_TO_ARCHETYPE` map that appears to address this, but the full-coverage audit against all 500 characters is still worth running.
-
-## Ownership
-
-- **Product Owner:** see `../ops/kickoff-clash-po.md` for scope, cadence, and first-week adoption path.
-- **Deployment / hosting:** Platform PO (`../ops/platform-po.md`) — not this PO.
-- **Upstream football data:** routed via chief-scout PO.
+See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) for the complete ownership and conflict map.
