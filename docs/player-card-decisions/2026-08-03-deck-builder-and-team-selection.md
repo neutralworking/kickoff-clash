@@ -47,8 +47,8 @@ The earlier four-corner metric layout is superseded for the compact deck/team-se
 - Left-to-right order is: cost, position, ATT, DEF.
 - Cost remains one pip cluster.
 - ATT and DEF keep explicit micro-labels where card size permits; the fixed order remains the fallback at very small sizes.
-- The top-right is reserved for the information icon.
-- Tapping the card opens the player dossier; the information icon is the visual affordance for that interaction.
+- There is no information icon on the card face.
+- The entire card is the inspection target and opens the player dossier when tapped.
 - Moving all gameplay metrics to the bottom gives the portrait a larger uninterrupted area and removes competing corner furniture.
 
 ## Current prototype
