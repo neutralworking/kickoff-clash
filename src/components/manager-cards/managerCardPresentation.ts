@@ -1,28 +1,21 @@
 import type { JokerCard } from '../../lib/jokers';
+import {
+  managerActionNameV1,
+  managerFormationsV1,
+} from '../../lib/manager-v1';
 
-/**
- * The production manager model still exposes the legacy single
- * `preferredFormation` field. The groomed card accepts the V1 formation pool
- * explicitly and falls back to that legacy field only while the data migration
- * is pending.
- */
+/** Resolve the manager-owned formation pool, with explicit run overrides. */
 export function resolveManagerFormations(manager: JokerCard, formations?: string[]): string[] {
   const source = formations && formations.length > 0
     ? formations
-    : manager.preferredFormation
-      ? [manager.preferredFormation]
-      : [];
+    : managerFormationsV1(manager);
 
   return Array.from(new Set(source)).slice(0, 3);
 }
 
-/**
- * Until the manager roster gains a dedicated action-name field, the first
- * printed trait is the action name. This keeps the card contract explicit and
- * gives the future data migration one clear field to replace.
- */
+/** Every V1 manager action has an explicit printed name. */
 export function managerActionName(manager: JokerCard): string {
-  return manager.traits[0]?.trim() || 'Match Effect';
+  return managerActionNameV1(manager);
 }
 
 /**
