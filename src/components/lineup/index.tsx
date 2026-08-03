@@ -7,32 +7,19 @@ import type { V6Card } from '../../lib/match-v6';
 import { competenceOf, type Competence } from '../../lib/team-select';
 import { pitchAxis } from '../../lib/pitch-layout';
 import { PIXEL, POSITION_COLOR, lastName } from '../cards/cardTokens';
-import { fitnessColor as fitnessColorForPct, HERO } from '../cards/portrait';
+import { fitnessColor as fitnessColorForPct } from '../cards/portrait';
 import TeamSelectionPlayerCard from '../player-cards/TeamSelectionPlayerCard';
 
-// iPhone-first token geometry. The previous 72×96 pitch cards were too large
-// for a 375–390px screen and used only a 12px vertical inset, so the goalkeeper
-// and forward rows were visibly clipped by the pitch. These dimensions preserve
-// the card anatomy while leaving enough green between lines.
 const SLOT_CARD_W = 60;
-const SLOT_CARD_H = 80;
+const SLOT_CARD_H = 82;
 export const SLOT_INSET_X = SLOT_CARD_W / 2 + 6;
-export const SLOT_INSET_Y = SLOT_CARD_H / 2 + 4;
+export const SLOT_INSET_Y = SLOT_CARD_H / 2 + 5;
 
-/**
- * Collapse the authored formation coordinates onto four readable mobile lines:
- * forwards, midfield, defence and goalkeeper. The previous six-line treatment
- * separated strikers from wingers and holding midfielders from central mids;
- * with 11 portrait cards inside a 342px iPhone-SE pitch that guaranteed overlap.
- *
- * This is presentation only. Slot identity, eligibility and match geometry stay
- * unchanged, while every supported shape still reads correctly at a glance.
- */
 export function lineupPitchY(y: number): number {
-  if (y >= 88) return 98; // goalkeeper
-  if (y >= 68) return 70; // back line, including wing-backs
-  if (y >= 30) return 42; // midfield line, including pivots and attacking mids
-  return 10; // forwards and wide forwards
+  if (y >= 88) return 98;
+  if (y >= 68) return 70;
+  if (y >= 30) return 42;
+  return 10;
 }
 
 export interface DragPointerHandlers {
@@ -108,10 +95,7 @@ export function LineupSlot({
   v6card,
   justPlaced,
   onClick,
-  onInspect,
   competence,
-  stats: _stats,
-  misfitReveal = false,
   dim = false,
   dropHint = false,
   onPointerDown,
@@ -165,36 +149,7 @@ export function LineupSlot({
             competence={resolvedCompetence}
             dimmed={dim}
             highlighted={dropHint}
-            showMisfitReceipt={resolvedCompetence === 'incompetent' && misfitReveal}
           />
-          {onInspect && (
-            <span
-              role="button"
-              aria-label={`Inspect ${lastName(card.name)}`}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                onInspect();
-              }}
-              className="absolute flex items-center justify-center"
-              style={{
-                right: -4,
-                bottom: -4,
-                zIndex: 40,
-                width: 14,
-                height: 14,
-                color: 'var(--line-white)',
-                background: HERO.ink,
-                border: '1.5px solid var(--line-white)',
-                borderRadius: '50%',
-                fontFamily: PIXEL,
-                fontSize: 7,
-                lineHeight: 1,
-              }}
-            >
-              i
-            </span>
-          )}
         </div>
       ) : (
         <>
@@ -222,7 +177,6 @@ export function LineupSlot({
               fontFamily: PIXEL,
               fontSize: 7,
               lineHeight: 1,
-              letterSpacing: 0.2,
             }}
           >
             {slot.type}
@@ -236,7 +190,6 @@ export function LineupSlot({
 export function BenchTile({
   card,
   v6card,
-  onRemove,
   dim = false,
   dropHint = false,
   touchAction,
@@ -262,9 +215,8 @@ export function BenchTile({
       onPointerCancel={onPointerCancel}
       className="relative flex active:scale-95"
       style={{
-        flex: '0 0 64px',
-        width: 64,
-        minWidth: 64,
+        width: '100%',
+        minWidth: 0,
         padding: 0,
         border: 0,
         background: 'transparent',
@@ -280,54 +232,14 @@ export function BenchTile({
         dimmed={dim}
         highlighted={dropHint}
       />
-      {onRemove && (
-        <span
-          role="button"
-          aria-label={`Remove ${lastName(card.name)} from bench`}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            onRemove();
-          }}
-          className="absolute flex items-center justify-center"
-          style={{
-            top: -4,
-            right: -4,
-            zIndex: 40,
-            width: 14,
-            height: 14,
-            color: 'var(--line-white)',
-            background: 'var(--danger)',
-            border: '1.5px solid var(--ink-black)',
-            borderRadius: '50%',
-            fontFamily: PIXEL,
-            fontSize: 8,
-            lineHeight: 1,
-          }}
-        >
-          ×
-        </span>
-      )}
     </button>
   );
 }
 
 export function BenchCover({ benchCards }: { benchCards: Card[] }) {
   if (benchCards.length === 0) return null;
-  const groups = new Set(benchCards.map((card) => card.position));
   return (
-    <span
-      title={`${benchCards.length} substitutes · ${groups.size} positions covered`}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 3,
-        color: 'var(--cream-soft)',
-        fontFamily: PIXEL,
-        fontSize: 6.5,
-        letterSpacing: 0.3,
-      }}
-    >
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
       {benchCards.slice(0, 7).map((card) => (
         <i
           key={card.id}

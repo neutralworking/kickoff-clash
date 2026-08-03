@@ -1,21 +1,24 @@
 'use client';
 
 /**
- * Kickoff Clash — Squad Gallery.
+ * Kickoff Clash — squad collection overlay.
  *
- * A full-screen overlay that shows EVERY owned card (RunState.deck) in a filter/sort
- * grid, tap → CardModal inspect. The collection/mastery surface the game was missing —
- * the player can finally see their whole squad. Reusable: opened from the Team Talk and
- * the Shop (and anywhere with a deck). Obeys the no-page-scroll law — only the grid
- * scrolls internally; header + controls are fixed.
+ * Browse mode opens the shared 18-card deck builder. Sell mode keeps the
+ * transfer gallery and exposes the same builder through EDIT DECK.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Card } from '../lib/scoring';
 import { getTransferFee } from '../lib/economy';
+import {
+  ACTIVE_DECK_SIZE,
+  loadActiveDeckIds,
+  saveActiveDeckIds,
+} from '../lib/active-deck';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import RosterCanvas from './RosterCanvas';
+import DeckBuilderScreen from './deck-builder/DeckBuilderScreen';
 import { PIXEL } from './cards/cardTokens';
 
 interface SquadGalleryProps {
@@ -25,7 +28,7 @@ interface SquadGalleryProps {
   /**
    * Optional SELL MODE. When provided, every card in the grid gains a transfer fee
    * + a Sell button; tapping Sell raises an in-gallery confirm step before firing
-   * this callback. When omitted, the gallery stays inspect-only.
+   * this callback. The header also provides EDIT DECK.
    */
   onSellCard?: (card: Card) => void;
 }
@@ -50,14 +53,52 @@ const RARITY_ORDER: Record<string, number> = { Legendary: 0, Epic: 1, Rare: 2, C
 const POSITION_ORDER: Record<string, number> = { GK: 0, CD: 1, WD: 2, DM: 3, CM: 4, AM: 5, WM: 6, WF: 7, CF: 8 };
 const fitnessOf = (c: Card): number => c.fitness ?? (c.injured ? 33 : 100);
 
-export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCard }: SquadGalleryProps) {
+export default function SquadGallery(props: SquadGalleryProps) {
+  if (!props.onSellCard) {
+    return <DeckBuilderGallery deck={props.deck} onClose={props.onClose} />;
+  }
+
+  return <SellableSquadGallery {...props} onSellCard={props.onSellCard} />;
+}
+
+function DeckBuilderGallery({ deck, onClose }: { deck: Card[]; onClose: () => void }) {
+  const fallbackIds = useMemo(
+    () => deck.slice(0, ACTIVE_DECK_SIZE).map((card) => card.id),
+    [deck],
+  );
+  const [initialIds, setInitialIds] = useState<number[]>(fallbackIds);
+
+  useEffect(() => {
+    setInitialIds(loadActiveDeckIds(deck, fallbackIds));
+  }, [deck, fallbackIds]);
+
+  return (
+    <DeckBuilderScreen
+      key={initialIds.join(':')}
+      collection={deck}
+      initialDeckIds={initialIds}
+      onCancel={onClose}
+      onSave={(ids) => {
+        saveActiveDeckIds(ids);
+        onClose();
+      }}
+    />
+  );
+}
+
+function SellableSquadGallery({
+  deck,
+  onClose,
+  title = 'SQUAD',
+  onSellCard,
+}: SquadGalleryProps & { onSellCard: (card: Card) => void }) {
   const [group, setGroup] = useState('all');
   const [sort, setSort] = useState<SortKey>('power');
   const [view, setView] = useState<'grid' | 'roster'>('grid');
   const [modal, setModal] = useState<GameCardModel | null>(null);
   const [sellConfirm, setSellConfirm] = useState<Card | null>(null);
-  const sellMode = !!onSellCard;
-  // The class-sectioned ROSTER canvas is a browse-only view (inspect, no sell).
+  const [editingDeck, setEditingDeck] = useState(false);
+  const sellMode = true;
   const rosterView = view === 'roster' && !sellMode;
 
   const cards = useMemo(() => {
@@ -79,6 +120,10 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCar
     return sorted;
   }, [deck, group, sort]);
 
+  if (editingDeck) {
+    return <DeckBuilderGallery deck={deck} onClose={() => setEditingDeck(false)} />;
+  }
+
   return (
     <div
       className="absolute inset-0 flex flex-col overflow-hidden phase-setup"
@@ -89,7 +134,6 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCar
         paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
       }}
     >
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="shrink-0 flex items-center gap-2 px-3">
         <div className="flex flex-col mr-auto min-w-0">
           <span
@@ -98,16 +142,27 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCar
           >
             {title}
           </span>
-          <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1, color: sellMode ? 'var(--gold)' : 'var(--dust)', marginTop: 2 }}>
-            {sellMode ? `${cards.length} CARDS · TAP SELL FOR CASH` : `${cards.length}/${deck.length} CARDS`}
+          <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 1, color: 'var(--gold)', marginTop: 2 }}>
+            {cards.length} CARDS · TAP SELL FOR CASH
           </span>
         </div>
+        <button
+          onClick={() => setEditingDeck(true)}
+          className="active:scale-95 shrink-0 glass-surface"
+          style={{
+            fontFamily: PIXEL, fontSize: 9, letterSpacing: 0.4, color: 'var(--gold)',
+            height: 38, padding: '0 10px', borderRadius: 'var(--radius-sm)',
+            border: '2px solid var(--ink-black)', boxShadow: 'var(--depth-1)',
+          }}
+        >
+          EDIT DECK
+        </button>
         <button
           onClick={onClose}
           className="active:scale-95 shrink-0 glass-surface"
           style={{
             fontFamily: PIXEL, fontSize: 12, letterSpacing: 0.5, color: 'var(--cream)',
-            height: 38, padding: '0 14px', borderRadius: 'var(--radius-sm)',
+            height: 38, padding: '0 12px', borderRadius: 'var(--radius-sm)',
             border: '2px solid var(--ink-black)', boxShadow: 'var(--depth-1)',
           }}
         >
@@ -115,7 +170,6 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCar
         </button>
       </div>
 
-      {/* ── Filter (position groups) ───────────────────────────────────────── */}
       <div className="shrink-0 flex items-center gap-1.5 px-3 mt-2">
         {POS_GROUPS.map((g) => {
           const on = group === g.id;
@@ -140,7 +194,6 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCar
         })}
       </div>
 
-      {/* ── Sort + view ────────────────────────────────────────────────────── */}
       <div className="shrink-0 flex items-center gap-1.5 px-3 mt-1.5">
         <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)' }}>SORT</span>
         <div className="flex" style={{ borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}>
@@ -164,7 +217,6 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCar
           })}
         </div>
 
-        {/* View toggle (browse-only — hidden in sell mode). */}
         {!sellMode && (
           <div className="flex ml-auto" style={{ borderRadius: 'var(--radius-sm)', border: '2px solid var(--ink-black)', overflow: 'hidden' }}>
             {(['grid', 'roster'] as const).map((v) => {
@@ -189,7 +241,6 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCar
         )}
       </div>
 
-      {/* ── Grid / Roster (the only scroller) ──────────────────────────────── */}
       <div
         className={`flex-1 min-h-0 overflow-y-auto pb-2 ${rosterView ? '' : 'px-3 pt-2.5'}`}
         style={{ overscrollBehavior: 'contain' }}
@@ -203,53 +254,42 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCar
         ) : (
           <div className="grid grid-cols-3 gap-2.5">
             {cards.map((c, i) => (
-              sellMode ? (
-                <div key={c.id} className="flex flex-col" style={{ gap: 5 }}>
-                  <GameCard
-                    model={{ variant: 'player', card: c }}
-                    onClick={() => setModal({ variant: 'player', card: c })}
-                    delay={Math.min(i, 11) * 18}
-                    ariaLabel={`Inspect ${c.name}`}
-                  />
-                  <button
-                    onClick={() => setSellConfirm(c)}
-                    className="active:scale-95"
-                    style={{
-                      height: 40,
-                      borderRadius: 'var(--radius-sm)',
-                      border: '2px solid var(--ink-black)',
-                      background: 'rgba(232,54,47,0.18)',
-                      boxShadow: '0 2px 0 0 var(--ink-black)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 1,
-                    }}
-                  >
-                    <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.4, color: 'var(--cream)', textTransform: 'uppercase' }}>
-                      Sell
-                    </span>
-                    <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--kit-red)' }}>
-                      {'£'}{getTransferFee(c).toLocaleString()}
-                    </span>
-                  </button>
-                </div>
-              ) : (
+              <div key={c.id} className="flex flex-col" style={{ gap: 5 }}>
                 <GameCard
-                  key={c.id}
                   model={{ variant: 'player', card: c }}
                   onClick={() => setModal({ variant: 'player', card: c })}
                   delay={Math.min(i, 11) * 18}
                   ariaLabel={`Inspect ${c.name}`}
                 />
-              )
+                <button
+                  onClick={() => setSellConfirm(c)}
+                  className="active:scale-95"
+                  style={{
+                    height: 40,
+                    borderRadius: 'var(--radius-sm)',
+                    border: '2px solid var(--ink-black)',
+                    background: 'rgba(232,54,47,0.18)',
+                    boxShadow: '0 2px 0 0 var(--ink-black)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 1,
+                  }}
+                >
+                  <span style={{ fontFamily: PIXEL, fontSize: 8.5, letterSpacing: 0.4, color: 'var(--cream)', textTransform: 'uppercase' }}>
+                    Sell
+                  </span>
+                  <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--kit-red)' }}>
+                    {'£'}{getTransferFee(c).toLocaleString()}
+                  </span>
+                </button>
+              </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* ── Sell confirm (in-gallery bottom sheet) ─────────────────────────── */}
       {sellConfirm && (
         <div
           className="absolute inset-0 flex flex-col justify-end scrim-fade"
@@ -293,7 +333,7 @@ export default function SquadGallery({ deck, onClose, title = 'SQUAD', onSellCar
                   Cancel
                 </button>
                 <button
-                  onClick={() => { onSellCard?.(sellConfirm); setSellConfirm(null); }}
+                  onClick={() => { onSellCard(sellConfirm); setSellConfirm(null); }}
                   className="flex-1 sheen-strong active:scale-[0.98] relative overflow-hidden"
                   style={{
                     height: 46, borderRadius: 'var(--radius-sm)',

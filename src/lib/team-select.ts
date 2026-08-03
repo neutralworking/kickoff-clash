@@ -11,7 +11,7 @@ import type { Card } from './scoring';
 import type { Formation } from './formations';
 import { positionFitsSlot } from './formations';
 
-// V7 matchday squad: 11 starters + 7 substitutes = 18 players.
+// The 18-card active deck is the full matchday squad: 11 starters + 7 substitutes.
 export const BENCH_SIZE = 7;
 
 export interface XISelection {

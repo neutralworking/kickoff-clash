@@ -22,7 +22,7 @@ const PIP_CELLS: Record<number, number[]> = {
 export interface TeamSelectionPlayerCardProps {
   card: Card;
   v6card?: V6Card;
-  size: 'pitch' | 'bench';
+  size: 'pitch' | 'bench' | 'deck' | 'collection';
   competence?: Competence;
   dimmed?: boolean;
   highlighted?: boolean;
@@ -62,6 +62,13 @@ export default function TeamSelectionPlayerCard({
     : competence === 'secondary'
       ? styles.fitSecondary
       : styles.fitPrimary;
+  const sizeClass = size === 'pitch'
+    ? styles.pitch
+    : size === 'bench'
+      ? styles.bench
+      : size === 'deck'
+        ? styles.deck
+        : styles.collection;
 
   const style = {
     '--pc-frame': tier.frame,
@@ -73,7 +80,7 @@ export default function TeamSelectionPlayerCard({
     <div
       className={[
         styles.card,
-        size === 'pitch' ? styles.pitch : styles.bench,
+        sizeClass,
         fitClass,
         dimmed ? styles.dimmed : '',
         highlighted ? styles.highlighted : '',
@@ -89,22 +96,26 @@ export default function TeamSelectionPlayerCard({
           {portrait ? <img src={portrait} alt="" draggable={false} /> : <span>{lastName(card.name).slice(0, 2).toUpperCase()}</span>}
         </div>
 
-        <div className={styles.costCorner} aria-label={`Cost ${cost}`}>
-          <span className={styles.pipCluster}>
-            {PIP_CELLS[cost].map((cell) => <i key={cell} style={pipStyle(cell)} />)}
-          </span>
-        </div>
-
-        <div className={styles.positionCorner}>{card.position}</div>
-
         <div className={styles.nameplate} title={card.name}>{lastName(card.name).toUpperCase()}</div>
         <div className={styles.actionPanel} title={actionName}>{actionName.toUpperCase()}</div>
 
-        <div className={`${styles.statBadge} ${styles.statLeft}`} aria-label={`${attack} attack`}>
-          <b>{attack}</b>
-        </div>
-        <div className={`${styles.statBadge} ${styles.statRight}`} aria-label={`${defence} defence`}>
-          <b>{defence}</b>
+        <div className={styles.bottomRail}>
+          <div className={`${styles.metricCell} ${styles.costCell}`} aria-label={`Cost ${cost}`}>
+            <span className={styles.pipCluster}>
+              {PIP_CELLS[cost].map((cell) => <i key={cell} style={pipStyle(cell)} />)}
+            </span>
+          </div>
+          <div className={`${styles.metricCell} ${styles.positionCell}`}>
+            <b>{card.position}</b>
+          </div>
+          <div className={`${styles.metricCell} ${styles.statCell}`} aria-label={`${attack} attack`}>
+            <small>ATT</small>
+            <b>{attack}</b>
+          </div>
+          <div className={`${styles.metricCell} ${styles.statCell}`} aria-label={`${defence} defence`}>
+            <small>DEF</small>
+            <b>{defence}</b>
+          </div>
         </div>
       </div>
 
