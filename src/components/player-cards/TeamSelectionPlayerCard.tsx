@@ -22,7 +22,7 @@ const PIP_CELLS: Record<number, number[]> = {
 export interface TeamSelectionPlayerCardProps {
   card: Card;
   v6card?: V6Card;
-  size: 'pitch' | 'bench';
+  size: 'pitch' | 'bench' | 'deck' | 'collection';
   competence?: Competence;
   dimmed?: boolean;
   highlighted?: boolean;
@@ -62,6 +62,13 @@ export default function TeamSelectionPlayerCard({
     : competence === 'secondary'
       ? styles.fitSecondary
       : styles.fitPrimary;
+  const sizeClass = size === 'pitch'
+    ? styles.pitch
+    : size === 'bench'
+      ? styles.bench
+      : size === 'deck'
+        ? styles.deck
+        : styles.collection;
 
   const style = {
     '--pc-frame': tier.frame,
@@ -73,7 +80,7 @@ export default function TeamSelectionPlayerCard({
     <div
       className={[
         styles.card,
-        size === 'pitch' ? styles.pitch : styles.bench,
+        sizeClass,
         fitClass,
         dimmed ? styles.dimmed : '',
         highlighted ? styles.highlighted : '',
