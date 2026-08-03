@@ -14,17 +14,17 @@ const MATCH_BENCH_SIZE = 7;
 const LAB_SEED = 21873;
 
 const PITCH_POINTS = [
-  { x: 18, y: 17 },
-  { x: 50, y: 17 },
-  { x: 82, y: 17 },
-  { x: 22, y: 42 },
-  { x: 50, y: 42 },
-  { x: 78, y: 42 },
-  { x: 12, y: 68 },
-  { x: 37, y: 68 },
-  { x: 63, y: 68 },
-  { x: 88, y: 68 },
-  { x: 50, y: 84 },
+  { x: 18, y: 13 },
+  { x: 50, y: 13 },
+  { x: 82, y: 13 },
+  { x: 22, y: 38 },
+  { x: 50, y: 38 },
+  { x: 78, y: 38 },
+  { x: 12, y: 63 },
+  { x: 37, y: 63 },
+  { x: 63, y: 63 },
+  { x: 88, y: 63 },
+  { x: 50, y: 87 },
 ] as const;
 
 export default function SquadFlowLab() {
@@ -223,7 +223,6 @@ export default function SquadFlowLab() {
 
             <div className={styles.benchHeader}>
               <span>SUBSTITUTES {substitutes.length}/{MATCH_BENCH_SIZE}</span>
-              <small>SWIPE FOR ALL 7</small>
             </div>
             <div className={styles.benchRow}>
               {substitutes.map((card) => (
