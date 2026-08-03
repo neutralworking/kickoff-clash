@@ -8,13 +8,20 @@
 }
 
 .pitch {
-  width: 60px;
-  height: 80px;
+  width: 64px;
+  height: 86px;
 }
 
 .bench {
   width: 64px;
   height: 96px;
+}
+
+.deck,
+.collection {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 3;
 }
 
 .frameMaterial {
@@ -247,20 +254,23 @@
 }
 
 .pitch .portrait {
-  inset-bottom: 22%;
+  bottom: 22%;
 }
 
-.pitch .nameplate {
+.pitch .nameplate,
+.bench .nameplate {
   bottom: 28.2%;
-  height: 9.8%;
+  height: 10.4%;
   padding-inline: 5%;
-  font-size: 9.6cqw;
+  font-size: 12.6cqw;
 }
 
-.pitch .actionPanel {
-  bottom: 19.2%;
-  height: 8.4%;
-  font-size: 5.8cqw;
+.pitch .actionPanel,
+.bench .actionPanel {
+  bottom: 18.5%;
+  height: 9.2%;
+  font-size: 8.7cqw;
+  letter-spacing: -0.02em;
 }
 
 .pitch .statBadge {
@@ -288,6 +298,26 @@
   text-shadow:
     0 0.75cqw 0 #080502,
     0 0 2.4cqw rgba(255, 245, 215, 0.24);
+}
+
+.deck .frameMaterial {
+  box-shadow: 0 1px 0 #060402, 0 2px 5px rgba(0, 0, 0, 0.5), 0 0 5px var(--pc-glow);
+}
+
+.deck .nameplate {
+  font-size: 11.8cqw;
+}
+
+.deck .actionPanel {
+  font-size: 7.4cqw;
+}
+
+.collection .nameplate {
+  font-size: 11.4cqw;
+}
+
+.collection .actionPanel {
+  font-size: 7.2cqw;
 }
 
 .misfitReceipt {
@@ -323,8 +353,6 @@
     0 0 16px rgba(232, 178, 60, 0.7);
 }
 
-/* Five substitutes now fit across a 375px iPhone viewport. The strip remains
-   horizontally scrollable as a safety net for narrower embedded/webview widths. */
 :global([data-kc="bench"]) {
   display: flex !important;
   align-items: flex-start;
@@ -355,8 +383,8 @@
 
 @media (max-width: 374px), (max-height: 720px) {
   .pitch {
-    width: 52px;
-    height: 69px;
+    width: 58px;
+    height: 78px;
   }
 
   .bench {
