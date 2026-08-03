@@ -2,13 +2,15 @@
 
 import { useMemo, useRef, useState } from 'react';
 import type { Card } from '../../lib/scoring';
+import { ACTIVE_DECK_SIZE } from '../../lib/active-deck';
 import { v6Cost } from '../../lib/v6-bridge';
 import CardModal from '../cards/CardModal';
 import type { GameCardModel } from '../cards/GameCard';
 import TeamSelectionPlayerCard from '../player-cards/TeamSelectionPlayerCard';
 import styles from './DeckBuilderScreen.module.css';
 
-export const ACTIVE_DECK_SIZE = 18;
+export { ACTIVE_DECK_SIZE } from '../../lib/active-deck';
+
 const HOLD_TO_REMOVE_MS = 450;
 
 interface DeckBuilderScreenProps {
