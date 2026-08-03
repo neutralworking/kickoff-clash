@@ -13,12 +13,13 @@ import { portraitSrc } from './cards/portrait';
 import {
   type XISelection,
   type Competence,
+  autoFill,
   autoFillXI,
   competenceOf,
+  emptySelection,
   startersFilled,
   BENCH_SIZE,
 } from '../lib/team-select';
-import { pitchAxis } from '../lib/pitch-layout';
 import { PIXEL } from './cards/cardTokens';
 import { LineupSlot, BenchTile, SLOT_INSET_X, SLOT_INSET_Y, lineupPitchY } from './lineup';
 import CardModal from './cards/CardModal';
@@ -65,10 +66,12 @@ function initialDeckIds(pool: Card[], initial?: { startingXI: number[]; benchIds
   const selected = [...new Set([...(initial?.startingXI ?? []), ...(initial?.benchIds ?? [])])]
     .filter((id) => valid.has(id))
     .slice(0, ACTIVE_DECK_SIZE);
+
   for (const card of pool) {
     if (selected.length >= ACTIVE_DECK_SIZE) break;
     if (!selected.includes(card.id)) selected.push(card.id);
   }
+
   return selected;
 }
 
@@ -87,6 +90,7 @@ export function moveCard(prev: XISelection, cardId: number, target: DropTarget):
   if (target.kind === 'slot') {
     const occupant = prev.starters[target.index];
     if (occupant === cardId) return prev;
+
     const starters = [...prev.starters];
     const bench = [...prev.bench];
     starters[target.index] = cardId;
@@ -94,14 +98,16 @@ export function moveCard(prev: XISelection, cardId: number, target: DropTarget):
     if (slotIndex >= 0) {
       starters[slotIndex] = occupant ?? null;
     } else if (benchIndex >= 0) {
-      bench[benchIndex] = occupant ?? cardId;
       if (occupant == null) bench.splice(benchIndex, 1);
+      else bench[benchIndex] = occupant;
     }
+
     return { starters, bench };
   }
 
   const occupant = prev.bench[target.index];
   if (occupant === cardId) return prev;
+
   const starters = [...prev.starters];
   const bench = [...prev.bench];
 
@@ -112,27 +118,27 @@ export function moveCard(prev: XISelection, cardId: number, target: DropTarget):
     bench[target.index] = cardId;
     bench[benchIndex] = occupant;
   }
+
   return { starters, bench };
 }
 
-export default function SquadScreen(props: SquadScreenProps) {
-  const {
-    mode,
-    pool,
-    formations,
-    initialFormationId,
-    initialIntent,
-    initialSelection,
-    managers,
-    initialManagerId,
-    opponent,
-    jokers,
-    onConfirm,
-  } = props;
-
+export default function SquadScreen({
+  mode,
+  pool,
+  formations,
+  initialFormationId,
+  initialIntent,
+  initialSelection,
+  managers,
+  initialManagerId,
+  opponent,
+  jokers,
+  onConfirm,
+}: SquadScreenProps) {
   const initialDeck = useMemo(() => initialDeckIds(pool, initialSelection), [pool, initialSelection]);
-  const [deckIds, setDeckIds] = useState<number[]>(initialDeck);
   const byId = useMemo(() => new Map(pool.map((card) => [card.id, card])), [pool]);
+
+  const [deckIds, setDeckIds] = useState<number[]>(initialDeck);
   const deckCards = useMemo(
     () => deckIds.map((id) => byId.get(id)).filter((card): card is Card => Boolean(card)),
     [deckIds, byId],
@@ -158,14 +164,11 @@ export default function SquadScreen(props: SquadScreenProps) {
   const [dragXY, setDragXY] = useState<{ x: number; y: number } | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
 
-  const draftManager = managers?.find((manager) => manager.id === managerId) ?? null;
+  const draftManager = managers?.find((candidate) => candidate.id === managerId) ?? null;
   const manager = mode === 'draft' ? draftManager : jokers?.[0] ?? null;
   const maxXiCost = manager ? managerMaxStartingXiCost(manager) : MAX_XI_COST;
   const xiCards = selection.starters
     .filter((id): id is number => id != null)
-    .map((id) => byId.get(id))
-    .filter((card): card is Card => Boolean(card));
-  const benchCards = selection.bench
     .map((id) => byId.get(id))
     .filter((card): card is Card => Boolean(card));
   const competenceByIndex = selection.starters.map((id, index): Competence => {
@@ -189,10 +192,24 @@ export default function SquadScreen(props: SquadScreenProps) {
   }
 
   function saveDeck(nextIds: number[]) {
-    const nextCards = nextIds.map((id) => byId.get(id)).filter((card): card is Card => Boolean(card));
+    const nextCards = nextIds
+      .map((id) => byId.get(id))
+      .filter((card): card is Card => Boolean(card));
     setDeckIds(nextIds);
     setSelection(selectionFromDeck(nextCards, formation));
     setShowDeckBuilder(false);
+  }
+
+  function autoPick() {
+    setSelection(selectionFromDeck(deckCards, formation));
+  }
+
+  function fillEmpty() {
+    setSelection((current) => autoFill(deckCards, formation, current, 'empty'));
+  }
+
+  function clearSelection() {
+    setSelection(emptySelection(formation));
   }
 
   function confirm() {
@@ -233,6 +250,7 @@ export default function SquadScreen(props: SquadScreenProps) {
       const index = Math.max(0, Math.min(BENCH_SIZE - 1, Math.floor(((clientX - bench.left) / bench.width) * BENCH_SIZE)));
       if (!(src.from === 'bench' && src.index === index)) return { kind: 'bench', index };
     }
+
     return null;
   }
 
@@ -244,11 +262,13 @@ export default function SquadScreen(props: SquadScreenProps) {
   function movePointer(event: ReactPointerEvent) {
     const pointer = pointerRef.current;
     if (!pointer) return;
+
     if (!pointer.moved && Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) > 8) {
       pointer.moved = true;
       setDrag(pointer.src);
     }
     if (!pointer.moved) return;
+
     const root = rootRef.current?.getBoundingClientRect();
     if (root) setDragXY({ x: event.clientX - root.left, y: event.clientY - root.top });
     setTarget(findDropTarget(event.clientX, event.clientY, pointer.src));
@@ -293,9 +313,12 @@ export default function SquadScreen(props: SquadScreenProps) {
   return (
     <div
       ref={rootRef}
-      className={`flex flex-col overflow-hidden relative ${mode === 'talk' ? 'phase-setup' : 'kc-app-bg'}`}
+      className={`relative overflow-hidden ${mode === 'talk' ? 'phase-setup' : 'kc-app-bg'}`}
       style={{
         height: '100dvh',
+        display: 'grid',
+        gridTemplateRows: '28px 24px 38px minmax(0, 1fr) 22px auto 42px',
+        gap: 4,
         paddingTop: 'max(env(safe-area-inset-top), 8px)',
         paddingBottom: 'max(env(safe-area-inset-bottom), 6px)',
       }}
@@ -303,17 +326,16 @@ export default function SquadScreen(props: SquadScreenProps) {
       onPointerUp={drag ? endPointer : undefined}
       onPointerCancel={drag ? cancelPointer : undefined}
     >
-      <header className="shrink-0 flex items-center px-3" style={{ minHeight: 28 }}>
+      <header className="flex items-center px-3">
         <h1 style={{ margin: 0, fontFamily: PIXEL, fontSize: 14, letterSpacing: 0.6, color: 'var(--cream)', textShadow: '0 2px 0 var(--ink-black)' }}>
           TEAM SELECTION
         </h1>
       </header>
 
-      <div className="shrink-0 px-3 mt-1">
+      <div className="px-3">
         <div
-          className="flex items-center justify-center"
+          className="flex h-full items-center justify-center"
           style={{
-            height: 24,
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-sm)',
             background: 'rgba(0,0,0,0.25)',
@@ -331,7 +353,7 @@ export default function SquadScreen(props: SquadScreenProps) {
         </div>
       </div>
 
-      <div className="shrink-0 grid grid-cols-3 gap-1.5 px-3 mt-1" style={{ height: 38 }}>
+      <div className="grid grid-cols-3 gap-1.5 px-3">
         <button
           type="button"
           onClick={() => mode === 'draft' && setOverlay('manager')}
@@ -363,11 +385,11 @@ export default function SquadScreen(props: SquadScreenProps) {
         </button>
       </div>
 
-      <div className="flex-1 min-h-0 px-3 mt-1">
+      <div className="min-h-0 px-3">
         <div
           ref={pitchRef}
           data-kc="pitch"
-          className="relative w-full h-full overflow-hidden"
+          className="relative h-full w-full overflow-hidden"
           style={{
             borderRadius: 'var(--radius)',
             border: '2px solid var(--ink-black)',
@@ -399,34 +421,41 @@ export default function SquadScreen(props: SquadScreenProps) {
         </div>
       </div>
 
-      <div className="shrink-0 px-3 mt-1">
-        <div style={{ height: 16, display: 'flex', alignItems: 'center', fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.65, color: 'var(--gold)' }}>
+      <div className="flex items-center gap-1 px-3">
+        <strong style={{ marginRight: 'auto', fontFamily: PIXEL, fontSize: 7, letterSpacing: 0.65, color: 'var(--gold)', fontWeight: 400 }}>
           SUBSTITUTES {selection.bench.length}/{BENCH_SIZE}
-        </div>
-        <div ref={benchRef} data-kc="bench" className="grid grid-cols-7 gap-1" style={{ height: 72 }}>
-          {Array.from({ length: BENCH_SIZE }).map((_, index) => {
-            const cardId = selection.bench[index];
-            const card = cardId != null ? byId.get(cardId) : undefined;
-            return card ? (
-              <BenchTile
-                key={card.id}
-                card={card}
-                v6card={v6Of(card)}
-                dim={drag?.from === 'bench' && drag.index === index}
-                dropHint={dropTarget?.kind === 'bench' && dropTarget.index === index}
-                onPointerDown={(event) => beginPointer({ from: 'bench', index, id: card.id }, event)}
-                onPointerMove={!drag ? movePointer : undefined}
-                onPointerUp={!drag ? endPointer : undefined}
-                onPointerCancel={cancelPointer}
-              />
-            ) : (
-              <div key={`empty-${index}`} style={{ border: '1px dashed var(--border)', borderRadius: 5, background: 'rgba(0,0,0,0.2)' }} />
-            );
-          })}
-        </div>
+        </strong>
+        <MiniAction label="AUTO" onClick={autoPick} accent="var(--gold)" />
+        <MiniAction label="FILL" onClick={fillEmpty} accent="var(--cream-soft)" />
+        <MiniAction label="CLEAR" onClick={clearSelection} accent="var(--dust)" />
       </div>
 
-      <footer className="shrink-0 flex gap-2 px-3 mt-1">
+      <div ref={benchRef} data-kc="bench" className="grid grid-cols-7 gap-1 px-3">
+        {Array.from({ length: BENCH_SIZE }).map((_, index) => {
+          const cardId = selection.bench[index];
+          const card = cardId != null ? byId.get(cardId) : undefined;
+          return card ? (
+            <BenchTile
+              key={card.id}
+              card={card}
+              v6card={v6Of(card)}
+              dim={drag?.from === 'bench' && drag.index === index}
+              dropHint={dropTarget?.kind === 'bench' && dropTarget.index === index}
+              onPointerDown={(event) => beginPointer({ from: 'bench', index, id: card.id }, event)}
+              onPointerMove={!drag ? movePointer : undefined}
+              onPointerUp={!drag ? endPointer : undefined}
+              onPointerCancel={cancelPointer}
+            />
+          ) : (
+            <div
+              key={`empty-${index}`}
+              style={{ aspectRatio: '4 / 5', border: '1px dashed var(--border)', borderRadius: 5, background: 'rgba(0,0,0,0.2)' }}
+            />
+          );
+        })}
+      </div>
+
+      <footer className="relative z-20 flex gap-2 px-3" style={{ background: 'linear-gradient(180deg, transparent, rgba(2,7,3,0.72) 22%)' }}>
         <button
           type="button"
           onClick={() => setShowDeckBuilder(true)}
@@ -457,7 +486,7 @@ export default function SquadScreen(props: SquadScreenProps) {
 
       {drag && dragXY && (
         <div style={{ position: 'absolute', left: dragXY.x, top: dragXY.y, width: 58, transform: 'translate(-50%, -65%)', zIndex: 70, pointerEvents: 'none', opacity: 0.9 }}>
-          {byId.get(drag.id) && <TeamSelectionGhost card={byId.get(drag.id) as Card} />}
+          <div style={{ width: '100%', aspectRatio: '2 / 3', borderRadius: 6, border: '2px solid var(--gold)', background: 'var(--surface-raised)', boxShadow: '0 8px 18px rgba(0,0,0,0.55)' }} />
         </div>
       )}
 
@@ -472,7 +501,7 @@ export default function SquadScreen(props: SquadScreenProps) {
             style={{ maxHeight: '72%', overflowY: 'auto', borderRadius: '14px 14px 0 0', borderTop: '2px solid var(--gold)', padding: '10px 12px max(env(safe-area-inset-bottom), 12px)' }}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center mb-2">
+            <div className="mb-2 flex items-center">
               <strong style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--cream)' }}>
                 {overlay === 'manager' ? 'PICK MANAGER' : overlay === 'formation' ? 'PICK FORMATION' : 'OPPOSITION'}
               </strong>
@@ -537,10 +566,23 @@ export default function SquadScreen(props: SquadScreenProps) {
   );
 }
 
+function MiniAction({ label, onClick, accent }: { label: string; onClick: () => void; accent: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="glass-surface active:scale-95"
+      style={{ height: 20, padding: '0 7px', borderRadius: 5, fontFamily: PIXEL, fontSize: 7, color: accent }}
+    >
+      {label}
+    </button>
+  );
+}
+
 function PitchMarkings() {
   const line = 'rgba(242,246,239,0.5)';
   return (
-    <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 150" preserveAspectRatio="none">
+    <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 150" preserveAspectRatio="none">
       <rect x="3" y="3" width="94" height="144" fill="none" stroke={line} strokeWidth="0.6" />
       <line x1="3" y1="75" x2="97" y2="75" stroke={line} strokeWidth="0.6" />
       <circle cx="50" cy="75" r="11" fill="none" stroke={line} strokeWidth="0.6" />
@@ -548,11 +590,5 @@ function PitchMarkings() {
       <rect x="26" y="3" width="48" height="20" fill="none" stroke={line} strokeWidth="0.6" />
       <rect x="26" y="127" width="48" height="20" fill="none" stroke={line} strokeWidth="0.6" />
     </svg>
-  );
-}
-
-function TeamSelectionGhost({ card }: { card: Card }) {
-  return (
-    <div style={{ width: '100%', aspectRatio: '2 / 3', borderRadius: 6, border: '2px solid var(--gold)', background: 'var(--surface-raised)', boxShadow: '0 8px 18px rgba(0,0,0,0.55)' }} />
   );
 }
