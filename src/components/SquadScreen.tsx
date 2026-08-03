@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Card } from '../lib/scoring';
 import type { Formation } from '../lib/formations';
@@ -9,6 +9,11 @@ import type { TeamIntent, OpponentBuild } from '../lib/run';
 import type { JokerCard } from '../lib/jokers';
 import { xiV6Totals, toDisplayV6Card, MAX_XI_COST } from '../lib/v6-bridge';
 import { managerMaxStartingXiCost } from '../lib/manager-v1';
+import {
+  ACTIVE_DECK_SIZE,
+  loadActiveDeckIds,
+  saveActiveDeckIds,
+} from '../lib/active-deck';
 import { portraitSrc } from './cards/portrait';
 import {
   type XISelection,
@@ -25,7 +30,7 @@ import { LineupSlot, BenchTile, SLOT_INSET_X, SLOT_INSET_Y, lineupPitchY } from 
 import CardModal from './cards/CardModal';
 import type { GameCardModel } from './cards/GameCard';
 import ManagerCard from './manager-cards/ManagerCard';
-import DeckBuilderScreen, { ACTIVE_DECK_SIZE } from './deck-builder/DeckBuilderScreen';
+import DeckBuilderScreen from './deck-builder/DeckBuilderScreen';
 
 export interface SquadScreenResult {
   startingXI: number[];
@@ -155,6 +160,21 @@ export default function SquadScreen({
   const [showDeckBuilder, setShowDeckBuilder] = useState(false);
   const [modal, setModal] = useState<GameCardModel | null>(null);
 
+  useEffect(() => {
+    if (mode === 'draft') return;
+
+    const savedIds = loadActiveDeckIds(pool, initialDeck);
+    const unchanged = savedIds.length === deckIds.length
+      && savedIds.every((id, index) => id === deckIds[index]);
+    if (unchanged) return;
+
+    const savedCards = savedIds
+      .map((id) => byId.get(id))
+      .filter((card): card is Card => Boolean(card));
+    setDeckIds(savedIds);
+    setSelection(selectionFromDeck(savedCards, getFormation(formationId)));
+  }, [mode, pool, initialDeck, deckIds, byId, formationId]);
+
   const rootRef = useRef<HTMLDivElement | null>(null);
   const pitchRef = useRef<HTMLDivElement | null>(null);
   const benchRef = useRef<HTMLDivElement | null>(null);
@@ -195,6 +215,7 @@ export default function SquadScreen({
     const nextCards = nextIds
       .map((id) => byId.get(id))
       .filter((card): card is Card => Boolean(card));
+    saveActiveDeckIds(nextIds);
     setDeckIds(nextIds);
     setSelection(selectionFromDeck(nextCards, formation));
     setShowDeckBuilder(false);
@@ -214,6 +235,7 @@ export default function SquadScreen({
 
   function confirm() {
     if (!ready) return;
+    saveActiveDeckIds(deckIds);
     onConfirm({
       startingXI: selection.starters.filter((id): id is number => id != null),
       benchIds: selection.bench,
