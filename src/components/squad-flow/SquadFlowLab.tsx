@@ -10,7 +10,7 @@ import TeamSelectionPlayerCard from '../player-cards/TeamSelectionPlayerCard';
 import styles from './SquadFlowLab.module.css';
 
 const DECK_SIZE = 18;
-const MATCH_BENCH_SIZE = 5;
+const MATCH_BENCH_SIZE = 7;
 const LAB_SEED = 21873;
 
 const PITCH_POINTS = [
@@ -39,7 +39,6 @@ export default function SquadFlowLab() {
   const [screen, setScreen] = useState<'deck' | 'team'>('deck');
   const [activeIds, setActiveIds] = useState<number[]>(initialIds);
   const [pendingReplacement, setPendingReplacement] = useState<number | null>(null);
-  const [showReserves, setShowReserves] = useState(false);
 
   const byId = useMemo(() => new Map(collection.map((card) => [card.id, card])), [collection]);
   const activeCards = useMemo(
@@ -55,7 +54,6 @@ export default function SquadFlowLab() {
   const lineup = useMemo(() => autoFillXI(activeCards, formation, false), [activeCards, formation]);
   const starters = lineup.xi.slice(0, 11);
   const substitutes = lineup.bench.slice(0, MATCH_BENCH_SIZE);
-  const reserves = lineup.bench.slice(MATCH_BENCH_SIZE, MATCH_BENCH_SIZE + 2);
   const totals = useMemo(() => xiV6Totals(starters, formation), [starters, formation]);
   const manager = starter.managers[0];
 
@@ -182,7 +180,7 @@ export default function SquadFlowLab() {
           <section className={styles.teamSelection}>
             <header className={styles.header}>
               <h1 className={styles.title}>TEAM SELECTION</h1>
-              <span className={styles.counter}>18-CARD DECK</span>
+              <span className={styles.counter}>XI + 7 SUBS</span>
             </header>
 
             <div className={styles.compactStats}>
@@ -225,9 +223,7 @@ export default function SquadFlowLab() {
 
             <div className={styles.benchHeader}>
               <span>SUBSTITUTES {substitutes.length}/{MATCH_BENCH_SIZE}</span>
-              <button className={styles.reserveButton} onClick={() => setShowReserves(true)}>
-                RESERVES {reserves.length}
-              </button>
+              <small>SWIPE FOR ALL 7</small>
             </div>
             <div className={styles.benchRow}>
               {substitutes.map((card) => (
@@ -241,20 +237,6 @@ export default function SquadFlowLab() {
               <button className={styles.secondaryButton} onClick={() => setScreen('deck')}>EDIT DECK</button>
               <button className={styles.doneButton}>KICK OFF →</button>
             </footer>
-
-            {showReserves && (
-              <div className={styles.reserveTray} onClick={() => setShowReserves(false)}>
-                <div className={styles.reserveSheet} onClick={(event) => event.stopPropagation()}>
-                  <div className={styles.reserveSheetHeader}>
-                    <span>DECK RESERVES</span>
-                    <button onClick={() => setShowReserves(false)}>CLOSE</button>
-                  </div>
-                  <div className={styles.reserveCards}>
-                    {reserves.map((card) => <TeamSelectionPlayerCard key={card.id} card={card} size="collection" />)}
-                  </div>
-                </div>
-              </div>
-            )}
           </section>
         )}
       </div>
