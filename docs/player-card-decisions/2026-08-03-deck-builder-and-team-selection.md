@@ -10,7 +10,7 @@ Deck building and team selection are separate concepts and separate screens.
 - The active deck contains exactly 18 player cards.
 - The deck-builder screen presents the active deck as a fixed 3 × 6 grid.
 - The collection appears below as larger, browseable cards.
-- The deck builder must be accessible from team selection and from the store.
+- The deck builder is accessible from team selection and from the store.
 - Purchased player cards enter the collection only. They never alter the active deck automatically.
 
 The active deck is not a 16-card deck. Any older wording that describes 16 players as the run deck is superseded.
@@ -72,12 +72,30 @@ The earlier four-corner metric layout is superseded for the compact deck/team-se
 
 The production `SquadScreen` on `agent/deck-builder-team-selection` implements the hierarchy above. The earlier `/lab/squad-flow` route remains a grooming aid, but it is no longer the only implementation.
 
-A reusable production deck-builder screen exists at:
+Reusable production pieces:
 
 - `src/components/deck-builder/DeckBuilderScreen.tsx`
+- `src/lib/active-deck.ts`
 
-Team selection opens it through `EDIT DECK`, saves an exact 18-card deck and rebuilds the XI plus seven substitutes from that deck.
+`active-deck.ts` is the client-side source of truth for the chosen 18 IDs. It:
 
-## Remaining integration
+- persists `activeDeckIds` separately from the owned collection;
+- validates saved IDs against the current collection;
+- removes duplicates and cards no longer owned;
+- fills missing spaces from the collection after a sale, retirement or old save;
+- leaves newly purchased cards in the collection until the player explicitly adds them.
 
-The same deck-builder screen still needs to be opened from the store with a parent-owned save callback so the chosen 18 IDs persist in `RunState`. Buying a player adds that player to the owned collection and leaves the active deck unchanged.
+Team selection:
+
+- establishes the first active deck during the draft;
+- saves it when the player saves the deck or kicks off;
+- restores it for later team-talk screens;
+- rebuilds the XI and seven substitutes from the restored 18.
+
+Store:
+
+- opens the same deck builder from the existing squad entry;
+- saves to the same persistent `activeDeckIds` source;
+- keeps sell mode as a separate collection-management view.
+
+The active-deck store is deliberately separate from the engine-owned `RunState` files while UI and engine work proceed in parallel. It can be consolidated into a future versioned run-save schema without changing the deck-builder component contract.
