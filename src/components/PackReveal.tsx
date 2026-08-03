@@ -139,15 +139,36 @@ function ManagerSelection({
   onInspect: (manager: JokerCard) => void;
 }) {
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: '4px 0 8px', overscrollBehavior: 'contain' }}>
-      <div className="grid mx-auto" style={{ width: '100%', maxWidth: 324, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, alignItems: 'start' }}>
+    <div
+      className="flex-1 min-h-0 flex items-center overflow-hidden"
+      style={{ padding: '4px 0 8px' }}
+    >
+      <div
+        className="flex w-full overflow-x-auto"
+        style={{
+          gap: 12,
+          padding: '0 clamp(30px, 12vw, 50px) 8px',
+          scrollSnapType: 'x mandatory',
+          scrollPaddingInline: '12vw',
+          overscrollBehaviorX: 'contain',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+        }}
+      >
         {managers.map((manager, index) => {
           const selected = pickedId === manager.id;
           return (
             <article
               key={manager.id}
               className="flex flex-col"
-              style={{ minWidth: 0, gap: 6, opacity: pickedId && !selected ? .54 : 1, animation: `kcv1Deal 280ms ease-out ${index * 70}ms both` }}
+              style={{
+                minWidth: 0,
+                flex: '0 0 clamp(230px, 68vw, 270px)',
+                gap: 6,
+                opacity: pickedId && !selected ? .54 : 1,
+                animation: `kcv1Deal 280ms ease-out ${index * 70}ms both`,
+                scrollSnapAlign: 'center',
+              }}
             >
               <ManagerCard
                 manager={manager}
