@@ -180,7 +180,6 @@ export default function SquadFlowLab() {
           <section className={styles.teamSelection}>
             <header className={styles.header}>
               <h1 className={styles.title}>TEAM SELECTION</h1>
-              <span className={styles.counter}>XI + 7 SUBS</span>
             </header>
 
             <div className={styles.compactStats}>
