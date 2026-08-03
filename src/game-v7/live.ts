@@ -112,8 +112,13 @@ function adaptCard(card: Card, id: string, naturalSector?: Sector): V7PlayerCard
   };
 }
 
-/** Preserve the SquadScreen slot choice. A naturally eligible player adopts that
- * lane; a genuine misfit keeps their natural lane so V7 applies its −2/−2 receipt. */
+/** Flank is slot-derived (NW-152). The live position codes carry no left/right,
+ * so a wide card's lane comes from the formation slot it is placed in, not a
+ * printed property: `positionForSlot` gives the L/R position code and
+ * `sectorForSlot` the sector. A naturally eligible player adopts that lane (so a
+ * left-wing card played on the left is never out of position); a genuine misfit
+ * keeps its natural lane so V7 applies its −2/−2 receipt. This is what populates
+ * both flanks of a live-adapted XI (see live-balance.test.ts). */
 function adaptStartingXI(cards: readonly Card[], formation: Formation, prefix: string): V7PlayerCard[] {
   return cards.map((card, index) => {
     const slot = formation.slots[index]!;
