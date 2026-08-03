@@ -23,21 +23,22 @@ Team selection uses the entire active 18-card deck:
 - 7 substitutes;
 - no reserves outside the substitute bench.
 
-The substitute strip can scroll horizontally on narrow phones so the cards remain readable rather than shrinking all seven into the viewport.
+All seven substitutes remain visible in one fixed row. Team selection must not scroll vertically or horizontally.
 
 ## Team-selection hierarchy
 
 - Screen title is exactly `TEAM SELECTION`.
-- Remove the subtitle/context line from the main header.
-- ATT, DEF and budget remain but use a smaller compact presentation.
-- Remove the DEF / BAL / ATT intent selector; it is no longer a gameplay factor.
-- Put the manager control before formation.
-- Rename `SHAPE` to `FORMATION`.
-- Put the opposition preview in the space released by removing the intent selector.
-- Remove the HOME toggle.
-- Remove the permanent misfit counter.
-- `EDIT DECK` opens the dedicated deck-builder screen rather than editing the full collection inside team selection.
-- Use the released screen space to increase card size and make player name and action meaningfully readable.
+- There is no subtitle, context line or secondary counter in the header.
+- ATT, DEF and budget use one small, single-line readout.
+- The DEF / BAL / ATT intent selector is removed.
+- Controls appear in this order: manager, formation, opposition.
+- `SHAPE` is relabelled `FORMATION`.
+- The opposition preview replaces the removed intent-control area.
+- The HOME/AWAY toggle is removed.
+- The permanent misfit counter is removed.
+- `EDIT DECK` opens the dedicated deck-builder screen.
+- The screen remains a single fixed phone viewport.
+- Released space belongs to the pitch and readable player cards, not more status furniture.
 
 ## Player-card anatomy update
 
@@ -46,19 +47,22 @@ The earlier four-corner metric layout is superseded for the compact deck/team-se
 - Cost, position, ATT and DEF sit together in a single bottom rail.
 - Left-to-right order is: cost, position, ATT, DEF.
 - Cost remains one pip cluster.
-- ATT and DEF keep explicit micro-labels where card size permits; the fixed order remains the fallback at very small sizes.
-- There is no information icon on the card face.
-- The entire card is the inspection target and opens the player dossier when tapped.
-- Moving all gameplay metrics to the bottom gives the portrait a larger uninterrupted area and removes competing corner furniture.
+- ATT and DEF keep explicit micro-labels where card size permits; fixed order carries the meaning at the smallest sizes.
+- There is no information icon on the card face or added by the pitch wrapper.
+- The entire card opens the player dossier when tapped.
+- Compact deck and substitute cards omit action text rather than rendering unreadably small text.
+- Pitch and collection cards retain readable name and action text.
 
-## Current prototype
+## Production implementation
 
-The review route is `/lab/squad-flow` on `agent/deck-builder-team-selection`.
+The production `SquadScreen` on `agent/deck-builder-team-selection` now implements the hierarchy above. The earlier `/lab/squad-flow` route remains a grooming aid, but it is no longer the only implementation.
 
-The lab contains:
+A reusable production deck-builder screen now exists at:
 
-1. a functional 18-card deck builder with a 3 × 6 active-deck grid and enlarged collection cards;
-2. a revised team-selection composition with compact ATT/DEF/budget, manager → formation → opposition controls and seven substitutes in a readable horizontal strip;
-3. the bottom-rail player-card anatomy across deck, collection, pitch and substitute sizes.
+- `src/components/deck-builder/DeckBuilderScreen.tsx`
 
-Production run-state and store wiring should follow after the mobile lab is approved.
+Team selection opens it through `EDIT DECK`, saves an exact 18-card deck and rebuilds the XI plus seven substitutes from that deck.
+
+## Remaining integration
+
+The same deck-builder screen still needs to be opened from the store with a parent-owned save callback so the edited XI and substitute IDs persist in `RunState`. Do not add a cosmetic store button that cannot save the deck.
