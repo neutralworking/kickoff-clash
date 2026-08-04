@@ -210,7 +210,7 @@ export function buildOpponentPlan(
   }
 
   const decision: BreakDecision = { subs: [best.sub], activations: [] };
-  const plan = buildBreakPlan('opponent', state.opponent, decision, breakIndex, registry, state.seed);
+  const plan = buildBreakPlan('opponent', state.opponent, decision, breakIndex, registry, state.seed, ledger);
   if (!plan.ok) return plan;
 
   return ok({

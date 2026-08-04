@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MatchReceiptEvent } from '@/engine-v7';
+import type { LedgerEffect, MatchReceiptEvent } from '@/engine-v7';
 import type { Card } from '@/lib/scoring';
 import {
   adaptPlayerCard,
@@ -114,6 +114,26 @@ describe('lineup adapter', () => {
     if (!plan.ok) return;
     expect(plan.value.outgoingCardIds).toContain(activeCf!.cardId);
     expect(plan.value.incomingAssignments[0]!.cardId).toBe('h_b3');
+  });
+
+  it('prices an incoming sub at its reduced cost, so a discount makes an over-budget sub legal (NW-162)', () => {
+    if (!initial) throw new Error('fixture failed');
+    const activeCf = initial.state.player.players.find((p) => p.zone === 'active' && p.currentSlotKey === 'cf');
+    const sub = { subs: [{ outCardId: activeCf!.cardId, inCardId: 'h_b1' }] };
+
+    // h_b1 prints cost 4; break-1 energy is 3 → illegal on printed cost alone.
+    const withoutDiscount = buildBreakPlan('player', initial.state.player, sub, 1, initial.registry, initial.state.seed);
+    expect(withoutDiscount.ok).toBe(false);
+
+    // A −2 reserve-cost reduction on h_b1 drops its effective cost to 2 ≤ 3 → legal.
+    const discount: LedgerEffect = {
+      id: 'discount-h_b1', side: 'player', origin: 'activated',
+      sourceInstanceId: 's', sourceActionId: 'a', sourceCardId: 'x', actionName: 'Discount',
+      effect: { type: 'modify_cost', amount: -2 }, targetIds: ['h_b1'],
+      createdPeriod: 1, createdBreakIndex: 1, lifetime: { kind: 'period', untilPeriod: 2 },
+    };
+    const withDiscount = buildBreakPlan('player', initial.state.player, sub, 1, initial.registry, initial.state.seed, [discount]);
+    expect(withDiscount.ok).toBe(true);
   });
 
   it('builds a deterministic, affordable opponent response', () => {
