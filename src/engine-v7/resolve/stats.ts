@@ -46,6 +46,11 @@ export interface EffectivePlayer {
 /** The A3 flat out-of-position penalty (current sector ≠ natural sector). */
 export const OUT_OF_POSITION_PENALTY = 2;
 
+/** Reserve-cost floor: a card's effective cost never drops below this, so a stack
+ * of `modify_cost` reductions can reach a free (0) sub but never a negative cost
+ * that would refund break energy (NW-162 / Batch-1 Law 4). */
+export const COST_FLOOR = 0;
+
 interface StatFold {
   attackSet: StatSetEffect[];
   defenceSet: StatSetEffect[];
@@ -131,7 +136,7 @@ export function effectivePlayers(
       attackMultipliers: fold.attackMul,
       defenceMultipliers: fold.defenceMul,
     });
-    const cost = card.printedCost + fold.costFlat.reduce((sum, amount) => sum + amount, 0);
+    const cost = Math.max(COST_FLOOR, card.printedCost + fold.costFlat.reduce((sum, amount) => sum + amount, 0));
 
     if (player.zone === 'bench') {
       result.push({

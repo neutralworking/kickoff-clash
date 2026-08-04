@@ -2,9 +2,11 @@ import {
   autoMapFormation,
   BREAK_ENERGY,
   calculateBreakBudget,
+  effectivePlayers,
   validateBreakPlan,
   type BreakIndex,
   type BreakPlan,
+  type LedgerEffect,
   type PlannedActivation,
   type ResolutionStage,
   type V7PlayerCard,
@@ -66,7 +68,11 @@ function toActivations(decision: BreakDecision, team: V7TeamState): AdapterResul
   return ok(activations);
 }
 
-/** Build and validate a player break plan from a decision, or a typed error. */
+/** Build and validate a player break plan from a decision, or a typed error.
+ *  The `ledger` is required so an incoming sub is priced at its EFFECTIVE reserve
+ *  cost (printed + any `modify_cost` reductions, floored at COST_FLOOR) rather than
+ *  its printed cost — otherwise a cost-reduction effect would be silently ignored by
+ *  break-budget legality (NW-162 / Batch-1 Law 4). */
 export function buildBreakPlan(
   side: BreakPlan['side'],
   team: V7TeamState,
@@ -74,6 +80,7 @@ export function buildBreakPlan(
   breakIndex: BreakIndex,
   registry: GameRegistry,
   seed: number,
+  ledger: readonly LedgerEffect[] = [],
 ): AdapterResult<BreakPlan> {
   const switching = Boolean(decision.formationSwitchId && decision.formationSwitchId !== team.formationId);
   if (switching && decision.subs.length > 0) {
@@ -117,9 +124,13 @@ export function buildBreakPlan(
     }
   }
 
+  // Price each incoming sub at its effective reserve cost (printed + modify_cost
+  // reductions, floored), not its printed cost, so cost-reduction effects actually
+  // change what a manager can afford at the break.
+  const effectiveCostByCard = new Map(effectivePlayers(team, registry, ledger).map((player) => [player.cardId, player.cost]));
   const incomingCosts = incomingAssignments.map((assignment) => ({
     cardId: assignment.cardId,
-    cost: registry.cards.get(assignment.cardId)?.printedCost ?? 0,
+    cost: effectiveCostByCard.get(assignment.cardId) ?? registry.cards.get(assignment.cardId)?.printedCost ?? 0,
   }));
   const submittedBudget = calculateBreakBudget(breakIndex, [], incomingCosts);
 

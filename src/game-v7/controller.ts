@@ -206,7 +206,7 @@ export class V7MatchController {
       this.validationErrors = ['Not in a break — a plan cannot be submitted now.'];
       return { ok: false, error: { code: 'illegal_plan', message: this.validationErrors[0]! } };
     }
-    const result = buildBreakPlan('player', this.state.player, decision, this.state.period as BreakIndex, this.registry, this.state.seed);
+    const result = buildBreakPlan('player', this.state.player, decision, this.state.period as BreakIndex, this.registry, this.state.seed, this.ledger);
     this.pendingOpponentPlan = null;
     this.pendingOpponentDecision = null;
     if (result.ok) {
