@@ -27,6 +27,7 @@ import {
   type SideView,
 } from './context';
 import { effectivePlayers, splitByZone, type CardRegistry } from './stats';
+import { captureReplacementSnapshots, type ReplacementSnapshot } from './snapshots';
 
 // The break resolver — the spine that turns two locked break plans into the
 // next period's opening state. It sequences the whole thing deterministically:
@@ -61,6 +62,9 @@ export interface BreakResolution {
   ledger: LedgerEffect[];
   chances: Record<TeamSide, ChanceToken[]>;
   receipts: MatchReceiptEvent[];
+  /** Effective stats of each replaced card, frozen at the moment of its
+   *  substitution (Law 1). Transient — scoped to this break's resolution. */
+  snapshots: ReplacementSnapshot[];
 }
 
 interface Board {
@@ -233,6 +237,7 @@ export function resolveBreak(input: BreakResolutionInput): BreakResolution {
   };
   let ledger: LedgerEffect[] = [...input.ledger];
   const receipts: MatchReceiptEvent[] = [];
+  const snapshots: ReplacementSnapshot[] = [];
 
   // 1–2. Each side, in priority order, resolves its whole locked sequence.
   for (const side of resolutionOrder(state.priority)) {
@@ -240,6 +245,17 @@ export function resolveBreak(input: BreakResolutionInput): BreakResolution {
     board = before.board;
     ledger = before.ledger;
     receipts.push(...before.receipts);
+
+    // Freeze each replaced card's effective stats from the board as it stands at
+    // this side's instant (A1), before the lineup change removes them.
+    const captured = captureReplacementSnapshots(
+      teamOf(board, side),
+      effectivePlayers(teamOf(board, side), registry, ledger),
+      input.plans[side],
+      { period: upcomingPeriod, breakIndex },
+    );
+    snapshots.push(...captured.snapshots);
+    receipts.push(...captured.receipts);
 
     const lineup = applyLineup(teamOf(board, side), input.plans[side], registry, { period: upcomingPeriod, breakIndex });
     board = withTeam(board, side, lineup.team);
@@ -285,5 +301,5 @@ export function resolveBreak(input: BreakResolutionInput): BreakResolution {
     resolutionDepth: 0,
   };
 
-  return { state: nextState, ledger, chances, receipts };
+  return { state: nextState, ledger, chances, receipts, snapshots };
 }
