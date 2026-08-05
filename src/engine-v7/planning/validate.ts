@@ -1,9 +1,14 @@
-import type { BreakPlan, FormationDefinition, RuntimePlayerState } from '../../lib/match-v7/types';
+import type { BreakIndex, BreakPlan, FormationDefinition, PeriodNumber, RuntimePlayerState, SectorLock } from '../../lib/match-v7/types';
+import { sectorLockErrors } from '../resolve/locks';
 
 export interface PlanValidationInput {
   plan: BreakPlan;
   formation: FormationDefinition;
   players: readonly RuntimePlayerState[];
+  /** Active sector locks to enforce (Law 5). Omit when the caller has none. */
+  locks?: readonly SectorLock[];
+  /** Coordinates the plan resolves at, used to filter active lock windows. */
+  coords?: { period: PeriodNumber; breakIndex: BreakIndex | 0 };
 }
 
 export interface PlanValidationResult {
@@ -49,6 +54,11 @@ export function validateBreakPlan(input: PlanValidationInput): PlanValidationRes
   const incoming = new Set(input.plan.incomingAssignments.map((assignment) => assignment.cardId));
   for (const cardId of outgoing) {
     if (incoming.has(cardId)) errors.push(`${cardId} cannot leave and enter in the same break.`);
+  }
+
+  if (input.locks && input.locks.length > 0) {
+    const coords = input.coords ?? { period: input.plan.breakIndex as PeriodNumber, breakIndex: input.plan.breakIndex };
+    errors.push(...sectorLockErrors(input.locks, coords, input.plan, input.players, input.formation));
   }
 
   return { legal: errors.length === 0, errors };

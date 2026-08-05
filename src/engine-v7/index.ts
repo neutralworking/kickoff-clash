@@ -12,6 +12,7 @@ export * from './resolve/priority';
 export * from './resolve/lineup';
 export * from './resolve/context';
 export * from './resolve/chances';
+export * from './resolve/locks';
 export * from './resolve/break';
 export * from './resolve/rerolls';
 export * from './resolve/rolls';
