@@ -27,6 +27,7 @@ import {
   type SideView,
 } from './context';
 import { effectivePlayers, splitByZone, type CardRegistry } from './stats';
+import { carryLocks, createLocksFromEffects } from './locks';
 
 // The break resolver — the spine that turns two locked break plans into the
 // next period's opening state. It sequences the whole thing deterministically:
@@ -274,6 +275,14 @@ export function resolveBreak(input: BreakResolutionInput): BreakResolution {
     opponent: createChances('opponent', upcomingPeriod, opponentActive, playerActive, createRng(state.seed, `chance:opponent:${upcomingPeriod}`)).tokens,
   };
 
+  // Carry still-active sector locks and add any this break's `lock_sector` effects
+  // created (Law 5), so the next break's plans are validated against them.
+  const locks = carryLocks(
+    state.locks,
+    createLocksFromEffects(ledger, { period: upcomingPeriod, breakIndex }),
+    { period: upcomingPeriod, breakIndex: 0 },
+  );
+
   const nextState: V7MatchState = {
     ...state,
     period: upcomingPeriod,
@@ -283,6 +292,7 @@ export function resolveBreak(input: BreakResolutionInput): BreakResolution {
     opponent: board.opponent,
     receipt: [...state.receipt, ...receipts],
     resolutionDepth: 0,
+    ...(locks.length > 0 ? { locks } : {}),
   };
 
   return { state: nextState, ledger, chances, receipts };

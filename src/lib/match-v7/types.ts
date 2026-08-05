@@ -85,6 +85,7 @@ export type ActionEffect =
   | { type: 'add_reroll'; count: number }
   | { type: 'copy_action'; sourceMode: 'first' | 'selected' | 'all' | 'random_positive'; allowCopiedSource: boolean }
   | { type: 'disable_action'; scope: 'named_action' | 'all_player_actions' | 'manager_action'; duration: EffectDuration }
+  | { type: 'lock_sector'; sector: Sector; targetSide: 'own' | 'enemy'; duration: EffectDuration }
   | { type: 'restore_charge'; count: number; mayExceedPrintedMaximum: boolean }
   | { type: 'add_charge'; count: number }
   | { type: 'remove_charge'; count: number }
@@ -256,6 +257,17 @@ export interface V7TeamState {
   cumulativeGrossChances: number;
 }
 
+/** A positional freeze on one side's lineup in a sector (Law 5). While active it
+ *  forbids substituting into or out of, or moving across, the named sector for the
+ *  named side. The `until` window mirrors an action's disable window; an absent
+ *  window means the current break only. */
+export interface SectorLock {
+  /** The side whose lineup changes in `sector` are forbidden. */
+  side: TeamSide;
+  sector: Sector;
+  until?: { period?: PeriodNumber; break?: BreakIndex; matchEnd?: true };
+}
+
 export interface V7MatchState {
   seed: number;
   period: PeriodNumber;
@@ -266,4 +278,6 @@ export interface V7MatchState {
   opponent: V7TeamState;
   receipt: MatchReceiptEvent[];
   resolutionDepth: number;
+  /** Active sector locks (Law 5). Absent/empty means no positional freezes. */
+  locks?: readonly SectorLock[];
 }
