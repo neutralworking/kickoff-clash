@@ -10,6 +10,7 @@ export * from './actions/dispatch';
 export * from './resolve/stats';
 export * from './resolve/priority';
 export * from './resolve/lineup';
+export * from './resolve/copy';
 export * from './resolve/context';
 export * from './resolve/chances';
 export * from './resolve/break';

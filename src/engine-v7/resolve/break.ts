@@ -18,6 +18,7 @@ import { rebuildOngoing, type DispatchEntry } from '../actions/dispatch';
 import { appendEffects, type LedgerEffect } from '../actions/effects';
 import { resolutionOrder } from './priority';
 import { applyLineup } from './lineup';
+import { applyCopyEffects } from './copy';
 import { createChances } from './chances';
 import {
   conditionContextFor,
@@ -250,6 +251,12 @@ export function resolveBreak(input: BreakResolutionInput): BreakResolution {
     ledger = after.ledger;
     receipts.push(...after.receipts);
   }
+
+  // 2.5. Materialise this break's `copy_action` effects onto their new owners,
+  // before the ongoing rebuild so a copied passive takes hold next period.
+  const copied = applyCopyEffects(board, ledger, registry, { period: upcomingPeriod, breakIndex, seed: state.seed });
+  board = copied.board;
+  receipts.push(...copied.receipts);
 
   // 3. Recompute ongoing effects for both sides against the settled board.
   for (const side of ['player', 'opponent'] as const) {

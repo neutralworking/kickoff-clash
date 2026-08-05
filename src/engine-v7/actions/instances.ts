@@ -42,6 +42,7 @@ export function createActionInstance(
     immediateSourceCardId: origin.immediateSourceCardId ?? origin.cardId,
     originalSourceCardId: origin.originalSourceCardId ?? origin.cardId,
     remainingCharges: initialCharges(action),
+    copyDepth: 0,
     activationCountThisBreak: 0,
     runtimeState: { ...(options.runtimeState ?? {}) },
   };
@@ -96,6 +97,7 @@ export function copyActionInstance(
     remainingCharges: initialCharges(action),
     copiedAtPeriod: coords.period,
     copiedAtBreak: coords.breakIndex,
+    copyDepth: (source.copyDepth ?? 0) + 1,
     activationCountThisBreak: 0,
     runtimeState: { ...(options.runtimeState ?? {}) },
   };

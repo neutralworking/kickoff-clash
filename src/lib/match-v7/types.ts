@@ -165,6 +165,8 @@ export interface RuntimeActionInstance {
   disabledUntil?: { period?: PeriodNumber; break?: BreakIndex; matchEnd?: true };
   copiedAtPeriod?: PeriodNumber;
   copiedAtBreak?: BreakIndex;
+  /** Copy provenance depth: 0 for a printed instance, source + 1 for a copy. */
+  copyDepth?: number;
   activationCountThisBreak: 0 | 1;
   runtimeState: Record<string, unknown>;
 }
