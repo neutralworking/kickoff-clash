@@ -26,6 +26,7 @@ import {
   splitByZone,
   type CardRegistry,
   type EffectivePlayer,
+  type LedgerEffect,
 } from '..';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -260,6 +261,68 @@ describe('lineup application (A3/A4)', () => {
     expect(receipts.map((event) => event.eventType)).toEqual(
       expect.arrayContaining(['substitution_off', 'substitution_on']),
     );
+  });
+});
+
+// ── Action suppression (Law 7 / NW-166) ─────────────────────────────────────
+
+describe('action suppression', () => {
+  const AURA_DEF = defineAction({
+    id: 'auradef', name: 'Aura', timing: 'ongoing', duration: 'ongoing',
+    effects: [{ type: 'modify_stat', stat: 'defence', mode: 'flat', amount: 2 }],
+  });
+  const registry: CardRegistry = {
+    cards: new Map([
+      ['marked', card('marked', 'centre', 6, 6, ['CM'], ['auradef'])],
+      ['opp', card('opp', 'centre', 6, 5, ['GK'])],
+    ]),
+    actions: new Map([['auradef', AURA_DEF]]),
+    formations: new Map([['f', formation('f')]]),
+  };
+  const teams = () => ({
+    player: {
+      side: 'player' as const, managerId: 'm', formationId: 'f', score: 0, cumulativeGrossChances: 0,
+      players: [activePlayer('marked', 'cm', 'centre', 0, [createActionInstance(AURA_DEF, { cardId: 'marked' })])],
+    } satisfies V7TeamState,
+    opponent: {
+      side: 'opponent' as const, managerId: 'o', formationId: 'f', score: 0, cumulativeGrossChances: 0,
+      players: [activePlayer('opp', 'gk', 'centre', 0)],
+    } satisfies V7TeamState,
+  });
+  const disableEffect: LedgerEffect = {
+    id: 'disable-marked', side: 'opponent', origin: 'activated',
+    sourceInstanceId: 's', sourceActionId: 'silence', sourceCardId: 'x', actionName: 'Silence',
+    effect: { type: 'disable_action', scope: 'all_player_actions', duration: 'current_period' }, targetIds: ['marked'],
+    createdPeriod: 2, createdBreakIndex: 1, lifetime: { kind: 'period', untilPeriod: 2 },
+  };
+  const auraOn = (out: { ledger: LedgerEffect[] }) => out.ledger.some((entry) =>
+    entry.sourceActionId === 'auradef' && entry.effect.type === 'modify_stat' && entry.targetIds.includes('marked'));
+
+  it('materialises a disable_action onto the target and drops its ongoing effect', () => {
+    const { player, opponent } = teams();
+    const out = resolveBreak({
+      state: matchState(player, opponent, 'player'),
+      ledger: [disableEffect],
+      plans: { player: emptyPlan('player'), opponent: emptyPlan('opponent') },
+      registry, breakIndex: 1, upcomingPeriod: 2,
+    });
+    const marked = out.state.player.players.find((p) => p.cardId === 'marked')!;
+    expect(marked.actionInstances[0]!.disabledUntil).toBeDefined();
+    expect(out.receipts.some((event) => event.eventType === 'action_suppressed')).toBe(true);
+    expect(auraOn(out)).toBe(false); // suppressed ongoing is dropped this period
+  });
+
+  it('leaves the ongoing effect on when there is no suppression', () => {
+    const { player, opponent } = teams();
+    const out = resolveBreak({
+      state: matchState(player, opponent, 'player'),
+      ledger: [],
+      plans: { player: emptyPlan('player'), opponent: emptyPlan('opponent') },
+      registry, breakIndex: 1, upcomingPeriod: 2,
+    });
+    const marked = out.state.player.players.find((p) => p.cardId === 'marked')!;
+    expect(marked.actionInstances[0]!.disabledUntil).toBeUndefined();
+    expect(auraOn(out)).toBe(true);
   });
 });
 

@@ -27,6 +27,7 @@ import {
   type SideView,
 } from './context';
 import { effectivePlayers, splitByZone, type CardRegistry } from './stats';
+import { applyDisableEffects } from './suppression';
 
 // The break resolver — the spine that turns two locked break plans into the
 // next period's opening state. It sequences the whole thing deterministically:
@@ -250,6 +251,13 @@ export function resolveBreak(input: BreakResolutionInput): BreakResolution {
     ledger = after.ledger;
     receipts.push(...after.receipts);
   }
+
+  // 2b. Materialise this break's action-suppression (disable_action) effects onto
+  // their targets before the ongoing rebuild, so a suppressed card's ongoing effect
+  // drops for the upcoming period (Law 7).
+  const suppression = applyDisableEffects(board, ledger, { period: upcomingPeriod, breakIndex });
+  board = { player: suppression.player, opponent: suppression.opponent };
+  receipts.push(...suppression.receipts);
 
   // 3. Recompute ongoing effects for both sides against the settled board.
   for (const side of ['player', 'opponent'] as const) {
