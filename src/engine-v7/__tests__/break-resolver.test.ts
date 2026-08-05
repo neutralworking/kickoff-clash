@@ -26,6 +26,7 @@ import {
   splitByZone,
   type CardRegistry,
   type EffectivePlayer,
+  type LedgerEffect,
 } from '..';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -260,6 +261,80 @@ describe('lineup application (A3/A4)', () => {
     expect(receipts.map((event) => event.eventType)).toEqual(
       expect.arrayContaining(['substitution_off', 'substitution_on']),
     );
+  });
+});
+
+// ── Replacement snapshots (Law 1 / NW-159) ──────────────────────────────────
+
+describe('replacement stat snapshots', () => {
+  const registry: CardRegistry = {
+    cards: new Map([
+      ['keep', card('keep', 'centre', 2, 9, ['GK'])],
+      ['starter', card('starter', 'centre', 6, 6, ['CM'])],
+      ['sub', card('sub', 'centre', 5, 5, ['CM'])],
+      ['opp', card('opp', 'centre', 6, 5, ['GK'])],
+    ]),
+    actions: new Map(),
+    formations: new Map([['f', formation('f')]]),
+  };
+
+  const teams = () => ({
+    player: {
+      side: 'player' as const, managerId: 'm', formationId: 'f', score: 0, cumulativeGrossChances: 0,
+      players: [activePlayer('keep', 'gk', 'centre', 0), activePlayer('starter', 'cm', 'centre', 1), benchPlayer('sub', 2)],
+    } satisfies V7TeamState,
+    opponent: {
+      side: 'opponent' as const, managerId: 'o', formationId: 'f', score: 0, cumulativeGrossChances: 0,
+      players: [activePlayer('opp', 'gk', 'centre', 0)],
+    } satisfies V7TeamState,
+  });
+
+  const subPlan: BreakPlan = {
+    side: 'player', breakIndex: 1,
+    outgoingCardIds: ['starter'],
+    incomingAssignments: [{ cardId: 'sub', slotKey: 'cm' }],
+    finalSlotAssignments: { gk: 'keep', cm: 'sub' },
+    activations: [],
+    submittedBudget: { breakIndex: 1, baseEnergy: 3, guaranteedModifiers: [], availableEnergy: 3, incomingCosts: [], netIncomingCost: 0, legalAtSubmission: true },
+    scannerRevealState: 'none', locked: true,
+  };
+
+  it('freezes the outgoing card\'s effective stats at the moment it is replaced', () => {
+    const { player, opponent } = teams();
+    // A +4 attack buff on the outgoing card, so effective (10) differs from printed (6).
+    const buff: LedgerEffect = {
+      id: 'buff-starter', side: 'player', origin: 'activated',
+      sourceInstanceId: 's', sourceActionId: 'a', sourceCardId: 'x', actionName: 'Buff',
+      effect: { type: 'modify_stat', stat: 'attack', mode: 'flat', amount: 4 }, targetIds: ['starter'],
+      createdPeriod: 1, createdBreakIndex: 1, lifetime: { kind: 'period', untilPeriod: 2 },
+    };
+    const out = resolveBreak({
+      state: matchState(player, opponent, 'player'),
+      ledger: [buff],
+      plans: { player: subPlan, opponent: emptyPlan('opponent') },
+      registry, breakIndex: 1, upcomingPeriod: 2,
+    });
+
+    expect(out.snapshots).toHaveLength(1);
+    const snap = out.snapshots[0]!;
+    expect(snap.outCardId).toBe('starter');
+    expect(snap.inCardId).toBe('sub');
+    expect(snap.slotKey).toBe('cm');
+    expect(snap.attack).toBe(10); // effective (printed 6 + buff 4), not printed
+    expect(snap.defence).toBe(6);
+    expect(out.receipts.some((event) => event.eventType === 'replacement_snapshot')).toBe(true);
+  });
+
+  it('takes no snapshot when the break makes no substitution', () => {
+    const { player, opponent } = teams();
+    const out = resolveBreak({
+      state: matchState(player, opponent, 'player'),
+      ledger: [],
+      plans: { player: emptyPlan('player'), opponent: emptyPlan('opponent') },
+      registry, breakIndex: 1, upcomingPeriod: 2,
+    });
+    expect(out.snapshots).toHaveLength(0);
+    expect(out.receipts.some((event) => event.eventType === 'replacement_snapshot')).toBe(false);
   });
 });
 
