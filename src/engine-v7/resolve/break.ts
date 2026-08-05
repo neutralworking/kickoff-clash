@@ -14,7 +14,7 @@ import type {
 import { receiptEvent } from '../runtime/receipt';
 import { createRng } from '../core/rng';
 import { activateAction, resetBreakActivations } from '../actions/activate';
-import { rebuildOngoing, type DispatchEntry } from '../actions/dispatch';
+import { dispatchSubbedOn, rebuildOngoing, type DispatchEntry } from '../actions/dispatch';
 import { appendEffects, type LedgerEffect } from '../actions/effects';
 import { resolutionOrder } from './priority';
 import { applyLineup } from './lineup';
@@ -198,6 +198,35 @@ function runStage(
   return { board: currentBoard, ledger: currentLedger, receipts };
 }
 
+/** The `subbed_on` action entries of the cards that just entered active play this
+ *  break — skipping any whose actions are wholly suppressed (emergency GK). */
+function subbedOnEntries(
+  team: V7TeamState,
+  enteredCardIds: ReadonlySet<string>,
+  ownView: SideView,
+  enemyView: SideView,
+  input: BreakResolutionInput,
+): DispatchEntry[] {
+  const entries: DispatchEntry[] = [];
+  for (const player of team.players) {
+    if (player.zone !== 'active' || !enteredCardIds.has(player.cardId)) continue;
+    if (ownView.suppressedCardIds.has(player.cardId)) continue;
+    const source = findSource(ownView, player.cardId);
+    if (!source) continue;
+    for (const instance of player.actionInstances) {
+      const action = input.registry.actions.get(instance.printedActionId);
+      if (!action || action.timing !== 'subbed_on') continue;
+      entries.push({
+        instance,
+        action,
+        conditionContext: conditionContextFor(source, ownView, enemyView, { period: input.upcomingPeriod }),
+        targetContext: targetContextFor(source, ownView, enemyView),
+      });
+    }
+  }
+  return entries;
+}
+
 function ongoingEntries(
   team: V7TeamState,
   ownView: SideView,
@@ -244,6 +273,24 @@ export function resolveBreak(input: BreakResolutionInput): BreakResolution {
     const lineup = applyLineup(teamOf(board, side), input.plans[side], registry, { period: upcomingPeriod, breakIndex });
     board = withTeam(board, side, lineup.team);
     receipts.push(...lineup.receipts);
+
+    // Fire the Subbed-On actions of the cards that just came on, after the lineup
+    // lands and before the after-lineup activations (Law 8). Keyed to the entry
+    // event, so it re-fires on any future re-entry.
+    const enteredCardIds = new Set(input.plans[side].incomingAssignments.map((assignment) => assignment.cardId));
+    if (enteredCardIds.size > 0) {
+      const ownTeam = teamOf(board, side);
+      const ownView = sideView(ownTeam, registry, ledger);
+      const enemyView = sideView(teamOf(board, otherSide(side)), registry, ledger);
+      const dispatched = dispatchSubbedOn(
+        subbedOnEntries(ownTeam, enteredCardIds, ownView, enemyView, input),
+        side,
+        { period: upcomingPeriod, breakIndex: 0 },
+      );
+      ledger = appendEffects(ledger, dispatched.effects);
+      board = withTeam(board, side, mergeInstances(ownTeam, dispatched.instances));
+      receipts.push(...dispatched.receipts);
+    }
 
     const after = runStage(board, ledger, side, 'after_lineup_changes', input);
     board = after.board;

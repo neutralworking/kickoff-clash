@@ -142,6 +142,97 @@ export function dispatchGameStart(
   return { effects, receipts, instances };
 }
 
+/**
+ * Fire the `subbed_on` actions of cards that have just entered active play. Unlike
+ * game_start (once per match), the trigger is the entry EVENT — the caller invokes
+ * this each time a card comes on — so a charged action repeats until its charges are
+ * spent, and an uncharged one fires on every entry (Law 8 / NW-167). Disabled
+ * instances are blocked; failed conditions or empty targets fizzle. Entries must be
+ * pre-filtered to the cards that entered this break; suppressed sources are excluded
+ * by the caller (emergency goalkeepers) and by the disable check here.
+ */
+export function dispatchSubbedOn(
+  entries: readonly DispatchEntry[],
+  side: TeamSide,
+  coords: RuntimeCoords,
+): DispatchResult {
+  const effects: LedgerEffect[] = [];
+  const receipts: MatchReceiptEvent[] = [];
+  const instances: RuntimeActionInstance[] = [];
+
+  const receipt = (
+    instance: RuntimeActionInstance,
+    action: V7ActionDefinition,
+    eventType: string,
+    message: string,
+    data: Record<string, unknown> = {},
+    targetIds?: string[],
+  ): MatchReceiptEvent =>
+    receiptEvent({
+      id: `rcpt:subon:${side}:${instance.instanceId}:${coords.period}:${coords.breakIndex}:${eventType}`,
+      period: coords.period,
+      phase: 'break_subbed_on',
+      eventType,
+      message,
+      side,
+      sourceId: instance.currentOwnerCardId,
+      actionName: action.name,
+      ...(targetIds ? { targetIds } : {}),
+      data,
+    });
+
+  for (const { instance, action, conditionContext, targetContext } of entries) {
+    if (action.timing !== 'subbed_on') {
+      instances.push(instance);
+      continue;
+    }
+    if (isActionDisabled(instance, coords) || !hasCharge(instance)) {
+      instances.push(instance);
+      receipts.push(receipt(instance, action, 'action_blocked', `${action.name} did not fire on entry.`, {
+        reason: isActionDisabled(instance, coords) ? 'disabled' : 'no_charges',
+      }));
+      continue;
+    }
+    if (!evaluateConditionGroups(action.conditionGroups, conditionContext)) {
+      instances.push(instance);
+      receipts.push(receipt(instance, action, 'action_fizzled', `${action.name} fizzled on entry.`, {
+        reason: 'condition_failed',
+      }));
+      continue;
+    }
+
+    const resolved = resolveTarget(action.target, targetContext);
+    const needsPlayers = action.effects.some(effectRequiresPlayers);
+    if (needsPlayers && isPlayerTarget(action.target) && resolved.playerIds.length === 0) {
+      instances.push(instance);
+      receipts.push(receipt(instance, action, 'action_fizzled', `${action.name} fizzled: no valid target.`, {
+        reason: 'invalid_target',
+      }));
+      continue;
+    }
+
+    const produced = buildLedgerEffects(
+      {
+        instanceId: instance.instanceId,
+        actionId: instance.printedActionId,
+        cardId: instance.currentOwnerCardId,
+        actionName: action.name,
+        side,
+        origin: 'subbed_on',
+      },
+      action.effects,
+      resolved,
+      { period: coords.period, breakIndex: coords.breakIndex, effectivePeriod: coords.period },
+      action.duration,
+    );
+    effects.push(...produced);
+    instances.push(consumeCharge(instance));
+    receipts.push(receipt(instance, action, 'subbed_on_fired', `${action.name} fired on entry.`, {}, resolved.playerIds));
+  }
+
+  return { effects, receipts, instances };
+}
+
 interface ProgressReadout {
   accrues: boolean;
   storedProgress: number;

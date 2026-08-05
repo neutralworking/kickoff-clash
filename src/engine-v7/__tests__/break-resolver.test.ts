@@ -263,6 +263,77 @@ describe('lineup application (A3/A4)', () => {
   });
 });
 
+// ── Subbed-On dispatch (Law 8 / NW-167) ─────────────────────────────────────
+
+describe('subbed-on dispatch', () => {
+  const BOOST = defineAction({
+    id: 'boost', name: 'Boost', timing: 'subbed_on', printedCharges: 1,
+    target: { type: 'self' },
+    effects: [{ type: 'modify_stat', stat: 'attack', mode: 'flat', amount: 3 }],
+    duration: 'current_period',
+  });
+  const registry: CardRegistry = {
+    cards: new Map([
+      ['keep', card('keep', 'centre', 2, 9, ['GK'])],
+      ['starter', card('starter', 'centre', 6, 6, ['CM'])],
+      ['sub', card('sub', 'centre', 5, 5, ['CM'], ['boost'])],
+      ['opp', card('opp', 'centre', 6, 5, ['GK'])],
+    ]),
+    actions: new Map([['boost', BOOST]]),
+    formations: new Map([['f', formation('f')]]),
+  };
+  const teams = () => ({
+    player: {
+      side: 'player' as const, managerId: 'm', formationId: 'f', score: 0, cumulativeGrossChances: 0,
+      players: [
+        activePlayer('keep', 'gk', 'centre', 0),
+        activePlayer('starter', 'cm', 'centre', 1),
+        benchPlayer('sub', 2, [createActionInstance(BOOST, { cardId: 'sub' })]),
+      ],
+    } satisfies V7TeamState,
+    opponent: {
+      side: 'opponent' as const, managerId: 'o', formationId: 'f', score: 0, cumulativeGrossChances: 0,
+      players: [activePlayer('opp', 'gk', 'centre', 0)],
+    } satisfies V7TeamState,
+  });
+  const subPlan: BreakPlan = {
+    side: 'player', breakIndex: 1,
+    outgoingCardIds: ['starter'],
+    incomingAssignments: [{ cardId: 'sub', slotKey: 'cm' }],
+    finalSlotAssignments: { gk: 'keep', cm: 'sub' },
+    activations: [],
+    submittedBudget: { breakIndex: 1, baseEnergy: 3, guaranteedModifiers: [], availableEnergy: 3, incomingCosts: [], netIncomingCost: 0, legalAtSubmission: true },
+    scannerRevealState: 'none', locked: true,
+  };
+
+  it('fires a subbed_on action when its card comes on, and spends a charge', () => {
+    const { player, opponent } = teams();
+    const out = resolveBreak({
+      state: matchState(player, opponent, 'player'),
+      ledger: [],
+      plans: { player: subPlan, opponent: emptyPlan('opponent') },
+      registry, breakIndex: 1, upcomingPeriod: 2,
+    });
+    expect(out.receipts.some((event) => event.eventType === 'subbed_on_fired')).toBe(true);
+    expect(out.ledger.some((entry) => entry.origin === 'subbed_on' && entry.effect.type === 'modify_stat' && entry.targetIds.includes('sub'))).toBe(true);
+    const sub = out.state.player.players.find((p) => p.cardId === 'sub')!;
+    expect(sub.actionInstances[0]!.remainingCharges).toBe(0);
+  });
+
+  it('does not fire a subbed_on for a card that did not enter this break', () => {
+    const { player, opponent } = teams();
+    const out = resolveBreak({
+      state: matchState(player, opponent, 'player'),
+      ledger: [],
+      plans: { player: emptyPlan('player'), opponent: emptyPlan('opponent') },
+      registry, breakIndex: 1, upcomingPeriod: 2,
+    });
+    expect(out.receipts.some((event) => event.eventType === 'subbed_on_fired')).toBe(false);
+    const sub = out.state.player.players.find((p) => p.cardId === 'sub')!;
+    expect(sub.actionInstances[0]!.remainingCharges).toBe(1); // untouched on the bench
+  });
+});
+
 // ── Chance creation ─────────────────────────────────────────────────────────
 
 describe('chance creation from the board', () => {
