@@ -57,6 +57,7 @@ export function effectRequiresPlayers(effect: ActionEffect): boolean {
   switch (effect.type) {
     case 'modify_stat':
     case 'swap_stats':
+    case 'reset_stats':
     case 'modify_cost':
     case 'copy_action':
       return true;

@@ -57,42 +57,111 @@ interface StatFold {
   swap: boolean;
 }
 
-function emptyFold(): StatFold {
-  return { attackSet: [], defenceSet: [], attackFlat: [], defenceFlat: [], attackMul: [], defenceMul: [], costFlat: [], swap: false };
+/**
+ * A single stat contribution, tagged with its ledger `order` and whether it is
+ * `temporary` — i.e. anything that is not a whole-match effect. `reset_stats`
+ * clears a card's temporary stat contributions that precede it; match-lifetime
+ * ones survive. Cost is not a stat and is never reset.
+ */
+interface StatContribution {
+  value: number;
+  order: number;
+  temporary: boolean;
 }
 
-/** Collect every stat-touching ledger effect that targets each card, in ledger order. */
+interface CardAccumulator {
+  attackSet: StatContribution[];
+  defenceSet: StatContribution[];
+  attackFlat: StatContribution[];
+  defenceFlat: StatContribution[];
+  attackMul: StatContribution[];
+  defenceMul: StatContribution[];
+  swapToggles: StatContribution[];
+  costFlat: number[];
+}
+
+function emptyAccumulator(): CardAccumulator {
+  return {
+    attackSet: [],
+    defenceSet: [],
+    attackFlat: [],
+    defenceFlat: [],
+    attackMul: [],
+    defenceMul: [],
+    swapToggles: [],
+    costFlat: [],
+  };
+}
+
+const keepMatchLifetime = (list: StatContribution[]): StatContribution[] =>
+  list.filter((contribution) => !contribution.temporary);
+
+/**
+ * Collect every stat-touching ledger effect that targets each card, in ledger
+ * order, then flatten to the shape `calculatePlayerStats` consumes. A
+ * `reset_stats` effect drops the card's temporary stat contributions accrued
+ * before it (set / flat / multiply / swap), leaving whole-match ones intact.
+ * Because ongoing effects are re-emitted at the end of the ledger after each
+ * break resolves, a reset never clears passives — they land after it and are
+ * reapplied naturally.
+ */
 function foldByCard(ledger: readonly LedgerEffect[]): Map<string, StatFold> {
-  const folds = new Map<string, StatFold>();
-  const foldFor = (cardId: string): StatFold => {
-    let fold = folds.get(cardId);
-    if (!fold) {
-      fold = emptyFold();
-      folds.set(cardId, fold);
+  const accumulators = new Map<string, CardAccumulator>();
+  const accumulatorFor = (cardId: string): CardAccumulator => {
+    let acc = accumulators.get(cardId);
+    if (!acc) {
+      acc = emptyAccumulator();
+      accumulators.set(cardId, acc);
     }
-    return fold;
+    return acc;
   };
 
   ledger.forEach((entry, order) => {
+    const temporary = entry.lifetime.kind !== 'match';
     for (const cardId of entry.targetIds) {
-      const fold = foldFor(cardId);
+      const acc = accumulatorFor(cardId);
       const effect = entry.effect;
-      if (effect.type === 'swap_stats') {
-        fold.swap = !fold.swap;
+      if (effect.type === 'reset_stats') {
+        acc.attackSet = keepMatchLifetime(acc.attackSet);
+        acc.defenceSet = keepMatchLifetime(acc.defenceSet);
+        acc.attackFlat = keepMatchLifetime(acc.attackFlat);
+        acc.defenceFlat = keepMatchLifetime(acc.defenceFlat);
+        acc.attackMul = keepMatchLifetime(acc.attackMul);
+        acc.defenceMul = keepMatchLifetime(acc.defenceMul);
+        acc.swapToggles = keepMatchLifetime(acc.swapToggles);
+      } else if (effect.type === 'swap_stats') {
+        acc.swapToggles.push({ value: 1, order, temporary });
       } else if (effect.type === 'modify_cost') {
-        fold.costFlat.push(effect.amount);
+        acc.costFlat.push(effect.amount);
       } else if (effect.type === 'modify_stat') {
-        const set = effect.stat === 'attack' ? fold.attackSet : fold.defenceSet;
-        const flat = effect.stat === 'attack' ? fold.attackFlat : fold.defenceFlat;
-        const mul = effect.stat === 'attack' ? fold.attackMul : fold.defenceMul;
-        if (effect.mode === 'set') set.push({ value: effect.amount, resolvedOrder: order });
-        else if (effect.mode === 'flat') flat.push(effect.amount);
-        else mul.push(effect.amount);
+        const set = effect.stat === 'attack' ? acc.attackSet : acc.defenceSet;
+        const flat = effect.stat === 'attack' ? acc.attackFlat : acc.defenceFlat;
+        const mul = effect.stat === 'attack' ? acc.attackMul : acc.defenceMul;
+        if (effect.mode === 'set') set.push({ value: effect.amount, order, temporary });
+        else if (effect.mode === 'flat') flat.push({ value: effect.amount, order, temporary });
+        else mul.push({ value: effect.amount, order, temporary });
       }
     }
   });
 
+  const folds = new Map<string, StatFold>();
+  for (const [cardId, acc] of accumulators) {
+    folds.set(cardId, {
+      attackSet: acc.attackSet.map((c) => ({ value: c.value, resolvedOrder: c.order })),
+      defenceSet: acc.defenceSet.map((c) => ({ value: c.value, resolvedOrder: c.order })),
+      attackFlat: acc.attackFlat.map((c) => c.value),
+      defenceFlat: acc.defenceFlat.map((c) => c.value),
+      attackMul: acc.attackMul.map((c) => c.value),
+      defenceMul: acc.defenceMul.map((c) => c.value),
+      costFlat: acc.costFlat,
+      swap: acc.swapToggles.length % 2 === 1,
+    });
+  }
   return folds;
+}
+
+function emptyFold(): StatFold {
+  return { attackSet: [], defenceSet: [], attackFlat: [], defenceFlat: [], attackMul: [], defenceMul: [], costFlat: [], swap: false };
 }
 
 function occupancy(team: V7TeamState): Map<string, string> {

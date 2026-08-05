@@ -219,6 +219,71 @@ describe('effective-stat ledger', () => {
   });
 });
 
+// ── Stat reset (Law 3) ───────────────────────────────────────────────────────
+
+describe('reset_stats folding (Law 3)', () => {
+  const registry: CardRegistry = {
+    cards: new Map([
+      ['fielder', card('fielder', 'centre', 6, 6, ['CM'])],
+      ['winger', card('winger', 'centre', 8, 3, ['CM'])],
+    ]),
+    actions: new Map(),
+    formations: new Map([['f', formation('f')]]),
+  };
+  const team = (cardId: string): V7TeamState => ({
+    side: 'player', managerId: 'm', formationId: 'f', score: 0, cumulativeGrossChances: 0,
+    players: [activePlayer(cardId, 'cm', 'centre', 0)],
+  });
+  const base = { side: 'player' as const, origin: 'activated' as const, sourceInstanceId: 's', sourceActionId: 'a', sourceCardId: 'x', actionName: 'A', createdPeriod: 1 as const, createdBreakIndex: 1 as const };
+
+  it('clears a temporary buff on reset but keeps a whole-match buff', () => {
+    const [player] = effectivePlayers(team('fielder'), registry, [
+      { ...base, id: 'e1', effect: { type: 'modify_stat', stat: 'attack', mode: 'flat', amount: 4 }, targetIds: ['fielder'], lifetime: { kind: 'period', untilPeriod: 2 } },
+      { ...base, id: 'e2', effect: { type: 'modify_stat', stat: 'attack', mode: 'flat', amount: 2 }, targetIds: ['fielder'], lifetime: { kind: 'match' } },
+      { ...base, id: 'e3', effect: { type: 'reset_stats' }, targetIds: ['fielder'], lifetime: { kind: 'immediate' } },
+    ]);
+    // printed 6, temporary +4 dropped, whole-match +2 survives.
+    expect(player!.attack).toBe(8);
+    expect(player!.defence).toBe(6);
+  });
+
+  it('leaves a stat change applied after the reset intact', () => {
+    const [player] = effectivePlayers(team('fielder'), registry, [
+      { ...base, id: 'e1', effect: { type: 'modify_stat', stat: 'attack', mode: 'flat', amount: 4 }, targetIds: ['fielder'], lifetime: { kind: 'period', untilPeriod: 2 } },
+      { ...base, id: 'e2', effect: { type: 'reset_stats' }, targetIds: ['fielder'], lifetime: { kind: 'immediate' } },
+      { ...base, id: 'e3', effect: { type: 'modify_stat', stat: 'attack', mode: 'flat', amount: 5 }, targetIds: ['fielder'], lifetime: { kind: 'period', untilPeriod: 2 } },
+    ]);
+    // pre-reset +4 dropped, post-reset +5 kept.
+    expect(player!.attack).toBe(11);
+  });
+
+  it('undoes a temporary swap on reset but leaves cost modifiers untouched', () => {
+    const [player] = effectivePlayers(team('winger'), registry, [
+      { ...base, id: 'e1', effect: { type: 'swap_stats' }, targetIds: ['winger'], lifetime: { kind: 'period', untilPeriod: 2 } },
+      { ...base, id: 'e2', effect: { type: 'modify_cost', amount: -2 }, targetIds: ['winger'], lifetime: { kind: 'period', untilPeriod: 2 } },
+      { ...base, id: 'e3', effect: { type: 'reset_stats' }, targetIds: ['winger'], lifetime: { kind: 'immediate' } },
+    ]);
+    // swap undone → back to printed 8/3; cost is not a stat, so −2 survives (3 − 2).
+    expect(player!.attack).toBe(8);
+    expect(player!.defence).toBe(3);
+    expect(player!.cost).toBe(1);
+  });
+
+  it('only resets the targeted card', () => {
+    const both: V7TeamState = {
+      side: 'player', managerId: 'm', formationId: 'f', score: 0, cumulativeGrossChances: 0,
+      players: [activePlayer('fielder', 'cm', 'centre', 0), activePlayer('winger', 'lm', 'centre', 1)],
+    };
+    const players = effectivePlayers(both, registry, [
+      { ...base, id: 'e1', effect: { type: 'modify_stat', stat: 'attack', mode: 'flat', amount: 3 }, targetIds: ['fielder', 'winger'], lifetime: { kind: 'period', untilPeriod: 2 } },
+      { ...base, id: 'e2', effect: { type: 'reset_stats' }, targetIds: ['fielder'], lifetime: { kind: 'immediate' } },
+    ]);
+    const byId = new Map(players.map((p) => [p.cardId, p]));
+    expect(byId.get('fielder')!.attack).toBe(6); // reset back to printed
+    expect(byId.get('winger')!.attack).toBe(11); // untouched: printed 8 + 3
+  });
+});
+
 // ── Lineup ──────────────────────────────────────────────────────────────────
 
 describe('lineup application (A3/A4)', () => {
@@ -289,6 +354,10 @@ const GATED = defineAction({
   id: 'gated', name: 'Gated', printedCharges: 1,
   conditionGroups: [{ group: 1, conditions: [{ type: 'score_state', state: 'winning' }] }],
 });
+const RESET = defineAction({
+  id: 'reset', name: 'Reset', printedCharges: 1,
+  target: { type: 'self' }, effects: [{ type: 'reset_stats' }], duration: 'instant',
+});
 
 function fullTeam(side: TeamSide, extraInstances: Record<string, RuntimeActionInstance[]> = {}): V7TeamState {
   const players = SLOTS.map(([slotKey, , sector], index) =>
@@ -306,7 +375,7 @@ function buildRegistry(): CardRegistry {
   }
   return {
     cards,
-    actions: new Map([['buff', BUFF], ['aura', AURA], ['gated', GATED]]),
+    actions: new Map([['buff', BUFF], ['aura', AURA], ['gated', GATED], ['reset', RESET]]),
     formations: new Map([['f', formation('f')]]),
   };
 }
@@ -392,6 +461,33 @@ describe('break orchestration', () => {
     const ongoing = out.ledger.filter((entry) => entry.origin === 'ongoing' && entry.side === 'player');
     expect(ongoing).toHaveLength(1);
     expect(ongoing[0]!.targetIds).toEqual(['player-cd']);
+  });
+
+  it('clears a temporary buff at reset while reapplying the ongoing aura after it', () => {
+    const auraInstance = createActionInstance(AURA, { cardId: 'player-cd' });
+    const resetInstance = createActionInstance(RESET, { cardId: 'player-cd' });
+    const registry = buildRegistry();
+    const out = resolveBreak({
+      state: matchState(fullTeam('player', { cd: [auraInstance, resetInstance] }), fullTeam('opponent'), 'player'),
+      // A temporary buff carried in from an earlier period, still on the ledger.
+      ledger: [
+        { id: 'carry', side: 'player', origin: 'activated', sourceInstanceId: 'carry', sourceActionId: 'buff', sourceCardId: 'player-cd', actionName: 'Carry',
+          effect: { type: 'modify_stat', stat: 'attack', mode: 'flat', amount: 5 }, targetIds: ['player-cd'],
+          createdPeriod: 1, createdBreakIndex: 1, lifetime: { kind: 'period', untilPeriod: 4 } },
+      ],
+      plans: {
+        player: emptyPlan('player', [{ actionInstanceId: resetInstance.instanceId, sourceId: 'player-cd', stage: 'before_lineup_changes', order: 0 }]),
+        opponent: emptyPlan('opponent'),
+      },
+      registry, breakIndex: 1, upcomingPeriod: 2,
+    });
+
+    const cd = effectivePlayers(out.state.player, registry, out.ledger).find((player) => player.cardId === 'player-cd')!;
+    // Card prints 6/5. The reset drops the carried +5 attack; the ongoing aura
+    // (+2 defence), re-emitted after the reset, still lands.
+    expect(cd.attack).toBe(6);
+    expect(cd.defence).toBe(7);
+    expect(out.receipts.some((event) => event.eventType === 'action_activated' && event.actionName === 'Reset')).toBe(true);
   });
 
   it('creates the upcoming period chances for both sides', () => {

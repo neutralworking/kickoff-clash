@@ -76,6 +76,7 @@ export type ActionTarget =
 export type ActionEffect =
   | { type: 'modify_stat'; stat: 'attack' | 'defence'; mode: 'flat' | 'set' | 'multiply'; amount: number }
   | { type: 'swap_stats' }
+  | { type: 'reset_stats' }
   | { type: 'modify_cost'; amount: number }
   | { type: 'modify_break_budget'; amount: number; guaranteed: boolean }
   | { type: 'add_chance'; count: number; sectorMode: 'source' | 'selected' | 'centre' | 'highest_pressure' | 'lowest_pressure' | 'random' }
