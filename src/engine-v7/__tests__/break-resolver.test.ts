@@ -289,6 +289,12 @@ const GATED = defineAction({
   id: 'gated', name: 'Gated', printedCharges: 1,
   conditionGroups: [{ group: 1, conditions: [{ type: 'score_state', state: 'winning' }] }],
 });
+const COPY = defineAction({
+  id: 'copy', name: 'Copy', printedCharges: 1,
+  target: { type: 'selected_player', side: 'own' },
+  effects: [{ type: 'copy_action', sourceMode: 'first', allowCopiedSource: false }],
+  duration: 'instant',
+});
 
 function fullTeam(side: TeamSide, extraInstances: Record<string, RuntimeActionInstance[]> = {}): V7TeamState {
   const players = SLOTS.map(([slotKey, , sector], index) =>
@@ -306,7 +312,7 @@ function buildRegistry(): CardRegistry {
   }
   return {
     cards,
-    actions: new Map([['buff', BUFF], ['aura', AURA], ['gated', GATED]]),
+    actions: new Map([['buff', BUFF], ['aura', AURA], ['gated', GATED], ['copy', COPY]]),
     formations: new Map([['f', formation('f')]]),
   };
 }
@@ -392,6 +398,29 @@ describe('break orchestration', () => {
     const ongoing = out.ledger.filter((entry) => entry.origin === 'ongoing' && entry.side === 'player');
     expect(ongoing).toHaveLength(1);
     expect(ongoing[0]!.targetIds).toEqual(['player-cd']);
+  });
+
+  it('materialises a copy_action activation onto the acting card', () => {
+    const copyInstance = createActionInstance(COPY, { cardId: 'player-cm' });
+    const buffInstance = createActionInstance(BUFF, { cardId: 'player-cd' });
+    const registry = buildRegistry();
+    const out = resolveBreak({
+      state: matchState(fullTeam('player', { cm: [copyInstance], cd: [buffInstance] }), fullTeam('opponent'), 'player'),
+      ledger: [],
+      plans: {
+        player: emptyPlan('player', [{ actionInstanceId: copyInstance.instanceId, sourceId: 'player-cm', stage: 'before_lineup_changes', order: 0, selectedTargetIds: ['player-cd'] }]),
+        opponent: emptyPlan('opponent'),
+      },
+      registry, breakIndex: 1, upcomingPeriod: 2,
+    });
+
+    const cm = out.state.player.players.find((entry) => entry.cardId === 'player-cm')!;
+    const copies = cm.actionInstances.filter((instance) => instance.copiedAtPeriod !== undefined);
+    expect(copies).toHaveLength(1);
+    expect(copies[0]!.printedActionId).toBe('buff');
+    expect(copies[0]!.copyDepth).toBe(1);
+    expect(copies[0]!.immediateSourceCardId).toBe('player-cd');
+    expect(out.receipts.some((event) => event.eventType === 'action_copied')).toBe(true);
   });
 
   it('creates the upcoming period chances for both sides', () => {
