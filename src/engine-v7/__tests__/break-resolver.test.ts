@@ -488,6 +488,10 @@ describe('break orchestration', () => {
     expect(cd.attack).toBe(6);
     expect(cd.defence).toBe(7);
     expect(out.receipts.some((event) => event.eventType === 'action_activated' && event.actionName === 'Reset')).toBe(true);
+
+    const reset = out.receipts.find((event) => event.eventType === 'stats_reset');
+    expect(reset?.targetIds).toEqual(['player-cd']);
+    expect(reset?.data.clearedEffectIds).toEqual(['carry']);
   });
 
   it('creates the upcoming period chances for both sides', () => {

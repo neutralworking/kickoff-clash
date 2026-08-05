@@ -121,6 +121,52 @@ interface StageRun {
   receipts: MatchReceiptEvent[];
 }
 
+/**
+ * For each `reset_stats` effect an activation just minted, record which
+ * temporary stat effects it clears. The fold applies the reset by ledger order,
+ * so the cleared set is exactly the temporary (non-whole-match) stat effects
+ * that already target the card — everything sitting in the ledger before the
+ * reset. This is observability only; the fold in `stats.ts` is the source of
+ * truth for what actually applies.
+ */
+function statsResetReceipts(
+  ledgerBefore: readonly LedgerEffect[],
+  produced: readonly LedgerEffect[],
+  side: TeamSide,
+  period: PeriodNumber,
+  actionName: string,
+): MatchReceiptEvent[] {
+  const receipts: MatchReceiptEvent[] = [];
+  for (const effect of produced) {
+    if (effect.effect.type !== 'reset_stats') continue;
+    for (const cardId of effect.targetIds) {
+      const clearedEffectIds = ledgerBefore
+        .filter(
+          (entry) =>
+            entry.targetIds.includes(cardId) &&
+            entry.lifetime.kind !== 'match' &&
+            (entry.effect.type === 'modify_stat' || entry.effect.type === 'swap_stats'),
+        )
+        .map((entry) => entry.id);
+      receipts.push(
+        receiptEvent({
+          id: `rcpt:${side}:reset:${effect.id}:${cardId}`,
+          period,
+          phase: 'break_activation',
+          eventType: 'stats_reset',
+          message: `${actionName} reset ${cardId} to printed stats.`,
+          side,
+          sourceId: effect.sourceCardId,
+          actionName,
+          targetIds: [cardId],
+          data: { cardId, clearedEffectIds },
+        }),
+      );
+    }
+  }
+  return receipts;
+}
+
 function runStage(
   board: Board,
   ledger: LedgerEffect[],
@@ -190,9 +236,11 @@ function runStage(
       targetContext,
     });
 
+    const ledgerBefore = currentLedger;
     currentBoard = withTeam(currentBoard, side, replaceInstance(ownTeam, result.instance));
     currentLedger = appendEffects(currentLedger, result.effects);
     receipts.push(result.receipt);
+    receipts.push(...statsResetReceipts(ledgerBefore, result.effects, side, upcomingPeriod, action.name));
   }
 
   return { board: currentBoard, ledger: currentLedger, receipts };
