@@ -13,5 +13,6 @@ export * from './broadcast';
 export * from './presentation';
 export * from './coaching';
 export * from './fixtures';
+export * from './player-actions';
 export * from './live';
 export * from './controller';
