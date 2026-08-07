@@ -1,6 +1,6 @@
 import {
   V8_PERIODS,
-  canDeployToZone,
+  canPlayToZone,
   contributionInZone,
   deployPlayer,
   emptyV8Board,
@@ -9,6 +9,7 @@ import {
   teamTotals,
   type V8Board,
   type V8PlayerCard,
+  type V8SlotReservation,
   type V8Zone,
 } from './core';
 
@@ -16,6 +17,8 @@ export interface V8SimulationSummary {
   games: number;
   averageCombinedGoals: number;
   averagePlayersDeployedPerTeam: number;
+  averageOneCostPlayersDeployedPerTeam: number;
+  periodOneMultiPlayRate: number;
   drawRate: number;
   averageGoalsByPeriod: readonly number[];
   zoneShare: Record<V8Zone, number>;
@@ -43,6 +46,8 @@ interface SimulationTeam {
   managerAvailable: boolean;
   score: number;
   deployed: number;
+  oneCostDeployed: number;
+  firstPeriodDeployments: number;
   zonePlays: Record<V8Zone, number>;
   chancesCreated: number;
   chancesPlayed: number;
@@ -95,28 +100,28 @@ function prototypePlayer(
 
 const HOME_XI: readonly PrototypePlayer[] = [
   prototypePlayer({ id: 'h_gk', name: 'Otto Kerr', position: 'GK', printedAttack: 1, printedDefence: 6, naturalZones: ['DEF'] }),
-  prototypePlayer({ id: 'h_lb', name: 'Rue Vance', position: 'LB', printedAttack: 3, printedDefence: 4, naturalZones: ['DEF'] }),
+  prototypePlayer({ id: 'h_lb', name: 'Rue Vance', position: 'LB', printedAttack: 2, printedDefence: 2, naturalZones: ['DEF', 'MID'], cost: 1 }),
   prototypePlayer({ id: 'h_lcb', name: 'Dane Holt', position: 'CB', printedAttack: 2, printedDefence: 5, naturalZones: ['DEF'] }),
-  prototypePlayer({ id: 'h_rcb', name: 'Ivo Senn', position: 'CB', printedAttack: 2, printedDefence: 4, naturalZones: ['DEF'] }),
+  prototypePlayer({ id: 'h_rcb', name: 'Ivo Senn', position: 'CB', printedAttack: 0, printedDefence: 3, naturalZones: ['DEF'], cost: 1 }),
   prototypePlayer({ id: 'h_rb', name: 'Cass Ojo', position: 'RB', printedAttack: 3, printedDefence: 4, naturalZones: ['DEF'] }),
   prototypePlayer({ id: 'h_lm', name: 'Lio Fen', position: 'LM', printedAttack: 6, printedDefence: 3, naturalZones: ['MID'] }),
   prototypePlayer({ id: 'h_cm', name: 'Ren Colm', position: 'CM', printedAttack: 7, printedDefence: 3, naturalZones: ['MID'], createsChance: 'through_ball' }),
   prototypePlayer({ id: 'h_rm', name: 'Tave Rune', position: 'RM', printedAttack: 6, printedDefence: 3, naturalZones: ['MID'], createsChance: 'cross' }),
   prototypePlayer({ id: 'h_lw', name: 'Rai Okonkwo', position: 'LW', printedAttack: 9, printedDefence: 2, naturalZones: ['ATT'] }),
   prototypePlayer({ id: 'h_cf', name: 'Niko Vale', position: 'CF', printedAttack: 9, printedDefence: 2, naturalZones: ['ATT'], receivesCross: true }),
-  prototypePlayer({ id: 'h_rw', name: 'Juno Pike', position: 'RW', printedAttack: 9, printedDefence: 2, naturalZones: ['ATT'] }),
+  prototypePlayer({ id: 'h_rw', name: 'Juno Pike', position: 'RW', printedAttack: 3, printedDefence: 0, naturalZones: ['ATT'], cost: 1 }),
 ];
 
 const AWAY_XI: readonly PrototypePlayer[] = [
   prototypePlayer({ id: 'a_gk', name: 'Bram Reef', position: 'GK', printedAttack: 1, printedDefence: 6, naturalZones: ['DEF'] }),
   prototypePlayer({ id: 'a_lcb', name: 'Sig Reed', position: 'CB', printedAttack: 2, printedDefence: 5, naturalZones: ['DEF'] }),
   prototypePlayer({ id: 'a_ccb', name: 'Tomas Lock', position: 'CB', printedAttack: 3, printedDefence: 6, naturalZones: ['DEF'] }),
-  prototypePlayer({ id: 'a_rcb', name: 'Gio Pace', position: 'CB', printedAttack: 3, printedDefence: 4, naturalZones: ['DEF'] }),
-  prototypePlayer({ id: 'a_lwb', name: 'Kes Rowan', position: 'LWB', printedAttack: 4, printedDefence: 3, naturalZones: ['MID'] }),
+  prototypePlayer({ id: 'a_rcb', name: 'Gio Pace', position: 'CB', printedAttack: 0, printedDefence: 3, naturalZones: ['DEF'], cost: 1 }),
+  prototypePlayer({ id: 'a_lwb', name: 'Kes Rowan', position: 'LWB', printedAttack: 2, printedDefence: 2, naturalZones: ['DEF', 'MID'], cost: 1 }),
   prototypePlayer({ id: 'a_dm', name: 'Malik Daro', position: 'DM', printedAttack: 3, printedDefence: 4, naturalZones: ['MID'] }),
   prototypePlayer({ id: 'a_cm', name: 'Aris Nov', position: 'CM', printedAttack: 6, printedDefence: 3, naturalZones: ['MID'], createsChance: 'through_ball' }),
   prototypePlayer({ id: 'a_rwb', name: 'Rex Hale', position: 'RWB', printedAttack: 4, printedDefence: 3, naturalZones: ['MID'], createsChance: 'cross' }),
-  prototypePlayer({ id: 'a_lf', name: 'Bo Marsh', position: 'LF', printedAttack: 8, printedDefence: 2, naturalZones: ['ATT'] }),
+  prototypePlayer({ id: 'a_lf', name: 'Bo Marsh', position: 'LF', printedAttack: 3, printedDefence: 0, naturalZones: ['ATT'], cost: 1 }),
   prototypePlayer({ id: 'a_cf', name: 'Coby Wren', position: 'CF', printedAttack: 9, printedDefence: 2, naturalZones: ['ATT'], receivesCross: true }),
   prototypePlayer({ id: 'a_rf', name: 'Ravi Tuck', position: 'RF', printedAttack: 8, printedDefence: 2, naturalZones: ['ATT'] }),
 ];
@@ -131,6 +136,8 @@ function createTeam(xi: readonly PrototypePlayer[], rng: SimulationRng): Simulat
     managerAvailable: true,
     score: 0,
     deployed: 0,
+    oneCostDeployed: 0,
+    firstPeriodDeployments: 0,
     zonePlays: { DEF: 0, MID: 0, ATT: 0 },
     chancesCreated: 0,
     chancesPlayed: 0,
@@ -177,6 +184,7 @@ function playGreedyTurn(
   const boost: TurnBoost = { attack: 0, defence: 0 };
   const playableChanceCount = team.chances.length;
   const playedChanceIndices = new Set<number>();
+  const reservedSlots: V8SlotReservation[] = [];
 
   while (energy > 0) {
     const baseBands = currentNetGoalBands(team, opponent, boost);
@@ -187,7 +195,7 @@ function playGreedyTurn(
       if (card.cost > energy) continue;
 
       for (const zone of ['DEF', 'MID', 'ATT'] as const) {
-        if (!canDeployToZone(team.board, zone)) continue;
+        if (!canPlayToZone(team.board, zone, reservedSlots)) continue;
         const contribution = contributionInZone(card, zone);
         const provisionalBoard = deployPlayer(team.board, card, zone, team.deployed + 1);
         const originalBoard = team.board;
@@ -206,7 +214,7 @@ function playGreedyTurn(
     for (let index = 0; index < playableChanceCount; index += 1) {
       if (playedChanceIndices.has(index)) continue;
       const chance = team.chances[index]!;
-      if (chance.cost > energy) continue;
+      if (chance.cost > energy || !canPlayToZone(team.board, 'ATT', reservedSlots)) continue;
 
       const receiverBonus = chance.type === 'cross' && hasCrossReceiver(team) ? 2 : 0;
       const chanceBoost = { attack: chance.attackBoost + receiverBonus, defence: 0 };
@@ -222,7 +230,7 @@ function playGreedyTurn(
 
     if (team.managerAvailable && energy >= 3) {
       for (const zone of ['DEF', 'MID', 'ATT'] as const) {
-        if (team.board[zone].length === 0) continue;
+        if (team.board[zone].length === 0 || !canPlayToZone(team.board, zone, reservedSlots)) continue;
         const managerBoost = managerBoostForZone(team.board, zone);
         const newBands = currentNetGoalBands(team, opponent, {
           attack: boost.attack + managerBoost.attack,
@@ -242,6 +250,7 @@ function playGreedyTurn(
       const [card] = team.hand.splice(best.index, 1);
       if (!card) break;
       team.deployed += 1;
+      if (card.cost === 1) team.oneCostDeployed += 1;
       team.zonePlays[best.zone] += 1;
       team.board = deployPlayer(team.board, card, best.zone, team.deployed);
       if (card.createsChance) {
@@ -252,10 +261,12 @@ function playGreedyTurn(
       boost.attack += best.boost.attack;
       boost.defence += best.boost.defence;
       playedChanceIndices.add(best.index);
+      reservedSlots.push({ zone: best.zone, kind: 'chance' });
       team.chancesPlayed += 1;
     } else {
       boost.attack += best.boost.attack;
       boost.defence += best.boost.defence;
+      reservedSlots.push({ zone: best.zone, kind: 'manager' });
       team.managerAvailable = false;
       team.managerUsed = true;
     }
@@ -283,6 +294,10 @@ function simulateOne(seed: number, energyCurve: readonly number[]): { home: Simu
     const periodsRemaining = V8_PERIODS.length - periodIndex;
     const homeBoost = playGreedyTurn(home, away, energyCurve[periodIndex]!, periodsRemaining);
     const awayBoost = playGreedyTurn(away, home, energyCurve[periodIndex]!, periodsRemaining);
+    if (periodIndex === 0) {
+      home.firstPeriodDeployments = home.deployed;
+      away.firstPeriodDeployments = away.deployed;
+    }
     const homeTotals = teamTotals(home.board);
     const awayTotals = teamTotals(away.board);
     const homeGoals = goalsFromAttackDefence(homeTotals.attack + homeBoost.attack, awayTotals.defence + awayBoost.defence);
@@ -303,6 +318,8 @@ export function simulatePrototypeBatch(
 ): V8SimulationSummary {
   let totalGoals = 0;
   let totalPlayers = 0;
+  let oneCostPlayers = 0;
+  let periodOneMultiPlayTeams = 0;
   let draws = 0;
   let chancesCreated = 0;
   let chancesPlayed = 0;
@@ -324,6 +341,8 @@ export function simulatePrototypeBatch(
       zonePlays.DEF += team.zonePlays.DEF;
       zonePlays.MID += team.zonePlays.MID;
       zonePlays.ATT += team.zonePlays.ATT;
+      oneCostPlayers += team.oneCostDeployed;
+      if (team.firstPeriodDeployments >= 2) periodOneMultiPlayTeams += 1;
       chancesCreated += team.chancesCreated;
       chancesPlayed += team.chancesPlayed;
       if (team.managerUsed) managersUsed += 1;
@@ -342,6 +361,8 @@ export function simulatePrototypeBatch(
     games,
     averageCombinedGoals: totalGoals / games,
     averagePlayersDeployedPerTeam: totalPlayers / teamCount,
+    averageOneCostPlayersDeployedPerTeam: oneCostPlayers / teamCount,
+    periodOneMultiPlayRate: periodOneMultiPlayTeams / teamCount,
     drawRate: draws / games,
     averageGoalsByPeriod: periodGoals.map((goals) => goals / games),
     zoneShare,
