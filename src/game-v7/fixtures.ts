@@ -22,9 +22,9 @@ import { BEND_IT, VISION } from './player-actions';
  * engine already supports (game_start / ongoing / activated + chance cancellation).
  *
  * The unlinked /lab/match-v7 route may opt into typed-chance visual QA with
- * `?chance=cross`, `?chance=through-ball`, or `?chance=both`. These variants add
- * only the creator Action required to make the requested token type visible;
- * they never alter the normal fixture used by engine/integration tests.
+ * `?chance=cross`, `?chance=through-ball`, `?chance=corner`, or `?chance=both`.
+ * These variants add only the creator Action required to make the requested type
+ * or origin visible; they never alter the normal fixture used by engine tests.
  */
 
 export const FIXTURE_SEED = 20260723;
@@ -90,6 +90,17 @@ const ACTION_LOCKDOWN = baseAction({
   target: { type: 'chance', side: 'enemy', selector: 'first_in_sector', sector: 'centre' },
   effects: [{ type: 'cancel_chance', count: 1 }],
   duration: 'current_period',
+});
+
+/** Dev-only typed-chance fixture: add one Action-origin Corner each period. */
+const ACTION_CORNER_FIXTURE = baseAction({
+  id: 'act_fixture_corner',
+  name: 'Corner Lab',
+  displayText: 'Create one Corner chance.',
+  timing: 'ongoing',
+  target: { type: 'self' },
+  effects: [{ type: 'add_chance', count: 1, chanceType: 'corner', sectorMode: 'centre' }],
+  duration: 'ongoing',
 });
 
 export const FIXTURE_ACTIONS: V7ActionDefinition[] = [ACTION_TALISMAN, ACTION_WALL, ACTION_SPARK, ACTION_LOCKDOWN];
@@ -244,12 +255,12 @@ export interface V7Fixture {
   source: 'fixture';
 }
 
-export type TypedChanceFixtureScenario = 'cross' | 'through-ball' | 'both';
+export type TypedChanceFixtureScenario = 'cross' | 'through-ball' | 'corner' | 'both';
 
 function scenarioFromLocation(): TypedChanceFixtureScenario | undefined {
   if (typeof window === 'undefined') return undefined;
   const value = new URLSearchParams(window.location.search).get('chance');
-  return value === 'cross' || value === 'through-ball' || value === 'both' ? value : undefined;
+  return value === 'cross' || value === 'through-ball' || value === 'corner' || value === 'both' ? value : undefined;
 }
 
 function addActionToCard(cards: readonly V7PlayerCard[], cardId: string, actionId: string): V7PlayerCard[] {
@@ -265,8 +276,8 @@ export function v7Fixture(explicitScenario?: TypedChanceFixtureScenario): V7Fixt
 
   // First-period pressure creates one left and one right Box token at FIXTURE_SEED.
   // BEND IT lives on the right midfielder; VISION's global-first target resolves
-  // the left token. This keeps each browser fixture deterministic without adding
-  // hidden chance volume or test-only engine behavior.
+  // the left token. The Corner fixture adds a genuine Action-origin token so the
+  // browser suite covers both origin treatments without hidden chance injection.
   if (scenario === 'cross' || scenario === 'both') {
     cards = addActionToCard(cards, 'h_rm', BEND_IT.id);
     actions.push(BEND_IT);
@@ -274,6 +285,10 @@ export function v7Fixture(explicitScenario?: TypedChanceFixtureScenario): V7Fixt
   if (scenario === 'through-ball' || scenario === 'both') {
     cards = addActionToCard(cards, 'h_lm', VISION.id);
     actions.push(VISION);
+  }
+  if (scenario === 'corner') {
+    cards = addActionToCard(cards, 'h_cm', ACTION_CORNER_FIXTURE.id);
+    actions.push(ACTION_CORNER_FIXTURE);
   }
 
   return {
