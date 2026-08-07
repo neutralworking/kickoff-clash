@@ -5,6 +5,7 @@ export {
   revealCalibrationPlayer as revealCalibrationPlayerWithDecay,
   endV8CalibrationPeriod as endV8CalibrationPeriodWithDecay,
   calibrationActionText,
+  calibrationHandPlayersWithDecayText,
   calibrationModifierBadges,
 } from './calibration-decay';
 
