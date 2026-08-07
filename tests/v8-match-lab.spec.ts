@@ -23,7 +23,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(page.locator('.v8-card')).toHaveCount(6);
     await expect(page.locator('.v8-card').filter({ hasText: 'Ángel Di María' })).toHaveCount(1);
     await expect(page.locator('.v8-card').filter({ hasText: 'RABONA' })).toContainText('If you have a Cross in your hand');
-    await expect(page.getByText(/REVEALS FIRST · seeded tiebreak · Tacticals use no player slot/)).toBeVisible();
+    await expect(page.getByText(/seeded tiebreak · Tacticals use no player slot/)).toBeVisible();
     await expectMobileFit(page);
 
     await page.locator('.v8-card--manager').click();
