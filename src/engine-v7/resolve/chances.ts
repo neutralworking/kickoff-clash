@@ -169,6 +169,7 @@ function actionSector(
   active: readonly EffectivePlayer[],
   seed: number,
   period: PeriodNumber,
+  tokenIndex: number,
 ): Sector {
   const effect = entry.effect;
   if (effect.type !== 'add_chance') return entry.sector ?? 'centre';
@@ -186,7 +187,7 @@ function actionSector(
   if (effect.sectorMode === 'lowest_pressure') {
     return [...SECTORS].sort((a, b) => (counts.get(a) ?? 0) - (counts.get(b) ?? 0) || SECTOR_RANK[a] - SECTOR_RANK[b])[0]!;
   }
-  return createRng(seed, `chance-sector:${period}:${entry.id}`).pick(SECTORS);
+  return createRng(seed, `chance-sector:${period}:${entry.id}:${tokenIndex}`).pick(SECTORS);
 }
 
 function destinationSector(
@@ -229,7 +230,7 @@ export function applyChanceShapeEffects(
     if (targetSide !== side) continue;
 
     for (let index = 0; index < effect.count; index += 1) {
-      const sector = actionSector(entry, tokens, active, seed, period);
+      const sector = actionSector(entry, tokens, active, seed, period, index);
       if (tokens.filter((token) => token.sector === sector && !token.cancelled).length >= ACTION_SECTOR_CAP) continue;
       const token: ChanceToken = {
         id: `chance:${side}:${period}:action:${entry.id}:${index}`,
