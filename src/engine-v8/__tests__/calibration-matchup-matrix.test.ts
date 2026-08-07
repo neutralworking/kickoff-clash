@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   V8_CALIBRATION_MATRIX_SEEDS,
@@ -25,6 +26,10 @@ describe('V8 calibration matchup matrix', () => {
     expect(report.squads.every((squad) => Number.isFinite(squad.averageGoalDifference))).toBe(true);
     expect(report.squads.every((squad) => squad.tacticalAttackShare >= 0 && squad.tacticalAttackShare <= 1)).toBe(true);
 
-    console.log(`\n${formatV8CalibrationMatrixReport(report)}\n`);
+    const text = formatV8CalibrationMatrixReport(report);
+    mkdirSync('test-results', { recursive: true });
+    writeFileSync('test-results/v8-calibration-matrix.json', `${JSON.stringify(report, null, 2)}\n`);
+    writeFileSync('test-results/v8-calibration-matrix.txt', `${text}\n`);
+    console.log(`\n${text}\n`);
   });
 });
