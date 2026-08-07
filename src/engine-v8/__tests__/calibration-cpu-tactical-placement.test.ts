@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { type V8Zone } from '../core';
 import {
   createTacticalInstance,
-  tacticalDefinition,
   type V8TacticalCardInstance,
-  type V8Zone,
 } from '../tactical';
 import {
   createV8CalibrationState,
   previewCalibrationTacticalCost,
   seedCalibrationPlayer,
+  tacticalDefinition,
   type V8CalibrationState,
 } from '../calibration-runtime';
 
