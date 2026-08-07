@@ -28,7 +28,7 @@ jobs:
       - run: npm ci
 
       - name: Typed chance Vitest gate
-        run: npx vitest run src/engine-v7/__tests__/typed-chances.test.ts src/game-v7/__tests__/through-ball-pair-simulation.test.ts
+        run: npx vitest run src/engine-v7/__tests__/typed-chances.test.ts src/game-v7/__tests__/cross-pair-simulation.test.ts src/game-v7/__tests__/through-ball-pair-simulation.test.ts
 
       - name: Full Vitest regression visibility
         continue-on-error: true
