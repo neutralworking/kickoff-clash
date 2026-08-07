@@ -4,6 +4,7 @@ import {
   V8_ZONE_CAPACITY,
   canDeployToZone,
   canMovePlayer,
+  canPlayToZone,
   contributionInZone,
   deployPlayer,
   drawPlayers,
@@ -17,9 +18,11 @@ import {
   resolvePeriodScore,
   spendTransientCardEnergy,
   teamTotals,
+  zoneOccupancy,
   type V8ChanceCard,
   type V8ManagerCard,
   type V8PlayerCard,
+  type V8SlotReservation,
 } from '..';
 
 function player(partial: Partial<V8PlayerCard> & Pick<V8PlayerCard, 'id' | 'position' | 'printedAttack' | 'printedDefence' | 'cost' | 'naturalZones'>): V8PlayerCard {
@@ -106,6 +109,30 @@ describe('V8 three-zone prototype foundations', () => {
     }), 'DEF', 5)).toThrow('DEF is full');
   });
 
+  it('makes Manager and Chance cards reserve physical slots until their activation resolves', () => {
+    let board = emptyV8Board();
+    for (let index = 0; index < 2; index += 1) {
+      board = deployPlayer(board, player({
+        id: `att-${index}`,
+        position: 'CF',
+        printedAttack: 6,
+        printedDefence: 0,
+        cost: 3,
+        naturalZones: ['ATT'],
+      }), 'ATT', index);
+    }
+
+    const reservations: V8SlotReservation[] = [
+      { zone: 'ATT', kind: 'chance' },
+      { zone: 'ATT', kind: 'manager' },
+    ];
+
+    expect(zoneOccupancy(board, 'ATT', reservations)).toBe(4);
+    expect(canPlayToZone(board, 'ATT', reservations)).toBe(false);
+    expect(zoneOccupancy(board, 'ATT')).toBe(2);
+    expect(canPlayToZone(board, 'ATT')).toBe(true);
+  });
+
   it('starts with three players, then drawing two each period exposes the entire XI by period four', () => {
     const xi = Array.from({ length: 11 }, (_, index) => player({
       id: `p-${index + 1}`,
@@ -143,7 +170,7 @@ describe('V8 three-zone prototype foundations', () => {
     expect(canMovePlayer(moveable)).toBe(true);
   });
 
-  it('resolves chance cards as temporary boosts rather than board occupants', () => {
+  it('resolves chance cards as temporary boosts and releases their reserved slot afterwards', () => {
     const cross: V8ChanceCard = {
       kind: 'chance',
       id: 'cross-1',
