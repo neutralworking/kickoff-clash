@@ -44,7 +44,7 @@ function runtime(cardId: string, deploymentOrder: number): RuntimePlayerState {
     deploymentOrder,
     zone: 'active',
     currentSlotKey: cardId,
-    currentSector: cardId === 'creator' ? 'centre' : 'centre',
+    currentSector: 'centre',
     periodsParticipated: [],
     mandatoryRemoval: false,
     actionInstances: [],
@@ -85,7 +85,8 @@ function actionLedger(
   sourceCardId: string,
   period: number,
 ): LedgerEffect[] {
-  if (definition.target.type !== 'chance') throw new Error(`${definition.name} must target a chance.`);
+  const target = definition.target;
+  if (target.type !== 'chance') throw new Error(`${definition.name} must target a chance.`);
   const sourceInstanceId = `sim:${definition.id}:${actingSide}:${period}`;
   return definition.effects.map((effect, index) => ({
     id: `sim:effect:${definition.id}:${actingSide}:${period}:${index}`,
@@ -98,9 +99,9 @@ function actionLedger(
     effect,
     targetIds: [],
     tokenTarget: {
-      side: definition.target.side,
-      selector: definition.target.selector,
-      ...(definition.target.chanceTypes ? { chanceTypes: [...definition.target.chanceTypes] } : {}),
+      side: target.side,
+      selector: target.selector,
+      ...(target.chanceTypes ? { chanceTypes: [...target.chanceTypes] } : {}),
     },
     createdPeriod: period as 1 | 2 | 3 | 4,
     createdBreakIndex: 0 as const,
