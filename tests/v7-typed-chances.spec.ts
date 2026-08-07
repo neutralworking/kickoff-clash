@@ -2,8 +2,12 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
-async function startPausedPeriod(page: Page, scenario: 'cross' | 'through-ball') {
-  await page.goto(`/lab/match-v7?chance=${scenario}`);
+type TypedChanceScenario = 'cross' | 'through-ball' | 'corner' | undefined;
+type ChanceOrigin = 'calculated' | 'action';
+type BrowserChanceType = 'box' | 'cross' | 'through_ball' | 'corner';
+
+async function startPausedPeriod(page: Page, scenario: TypedChanceScenario) {
+  await page.goto(scenario ? `/lab/match-v7?chance=${scenario}` : '/lab/match-v7');
   await expect(page.getByRole('heading', { name: /kickoff clash — v7 match lab/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /^kick off/i })).toBeVisible();
   await page.getByRole('button', { name: /^kick off/i }).click();
@@ -11,7 +15,7 @@ async function startPausedPeriod(page: Page, scenario: 'cross' | 'through-ball')
   await page.getByRole('button', { name: /^pause$/i }).click();
 }
 
-async function advanceUntilVisible(page: Page, locator: Locator, maxSteps = 36) {
+async function advanceUntilVisible(page: Page, locator: Locator, maxSteps = 48) {
   for (let step = 0; step < maxSteps; step += 1) {
     if (await locator.isVisible()) return;
     const next = page.getByRole('button', { name: /^next$/i });
@@ -33,19 +37,22 @@ async function expectMobileFit(page: Page) {
 
 async function verifyTypedChance(
   page: Page,
-  scenario: 'cross' | 'through-ball',
-  typeClass: 'cross' | 'through_ball',
-  accessibleType: 'Cross' | 'Through Ball',
+  scenario: TypedChanceScenario,
+  origin: ChanceOrigin,
+  typeClass: BrowserChanceType,
+  accessibleType: 'Box' | 'Cross' | 'Through Ball' | 'Corner',
 ) {
   await startPausedPeriod(page, scenario);
 
-  const chanceToken = page.locator(`.v7-chance-token.origin-calculated.type-${typeClass}`).first();
+  const originLabel = origin === 'action' ? 'Action-created' : 'ATT-created';
+  const shortType = accessibleType === 'Through Ball' ? 'THRU' : accessibleType.toUpperCase();
+  const chanceToken = page.locator(`.v7-chance-token.origin-${origin}.type-${typeClass}`).first();
   await advanceUntilVisible(page, chanceToken);
-  await expect(chanceToken).toHaveAttribute('aria-label', new RegExp(`ATT-created ${accessibleType} chance`, 'i'));
-  await expect(chanceToken.locator('small')).toHaveText(accessibleType === 'Through Ball' ? 'THRU' : accessibleType.toUpperCase());
+  await expect(chanceToken).toHaveAttribute('aria-label', new RegExp(`${originLabel} ${accessibleType} chance`, 'i'));
+  await expect(chanceToken.locator('small')).toHaveText(shortType);
   await expectMobileFit(page);
 
-  const rollingToken = page.locator(`.v7-resolution-strip.kind-roll .v7-active-chance-token.origin-calculated.type-${typeClass}`);
+  const rollingToken = page.locator(`.v7-resolution-strip.kind-roll .v7-active-chance-token.origin-${origin}.type-${typeClass}`);
   await advanceUntilVisible(page, rollingToken);
   const rollStrip = page.locator('.v7-resolution-strip.kind-roll');
   await expect(rollStrip).toContainText(accessibleType);
@@ -55,11 +62,19 @@ async function verifyTypedChance(
 }
 
 test.describe('V7 typed chances on a mobile viewport', () => {
+  test('Box exposes calculated origin and names its finisher before the roll', async ({ page }) => {
+    await verifyTypedChance(page, undefined, 'calculated', 'box', 'Box');
+  });
+
   test('Cross keeps calculated origin, exposes type, and names its finisher before the roll', async ({ page }) => {
-    await verifyTypedChance(page, 'cross', 'cross', 'Cross');
+    await verifyTypedChance(page, 'cross', 'calculated', 'cross', 'Cross');
   });
 
   test('Through Ball keeps calculated origin, exposes type, and names its finisher before the roll', async ({ page }) => {
-    await verifyTypedChance(page, 'through-ball', 'through_ball', 'Through Ball');
+    await verifyTypedChance(page, 'through-ball', 'calculated', 'through_ball', 'Through Ball');
+  });
+
+  test('Corner exposes Action origin separately from its type and names its finisher before the roll', async ({ page }) => {
+    await verifyTypedChance(page, 'corner', 'action', 'corner', 'Corner');
   });
 });
