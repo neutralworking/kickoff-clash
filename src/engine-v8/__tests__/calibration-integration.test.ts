@@ -73,8 +73,9 @@ describe('high-priority calibration interactions', () => {
 
   it('C. Valderrama + Shevchenko resolves the first Through Ball for +8 ATT', () => {
     let state = highEnergy();
-    state = revealCalibrationPlayer(state, 'home', 'valderrama', 'MID');
+    // PAUSE AND SLIP only adds +2 when ATT is already occupied, so establish the runner first.
     state = revealCalibrationPlayer(state, 'home', 'shevchenko', 'ATT');
+    state = revealCalibrationPlayer(state, 'home', 'valderrama', 'MID');
     const throughBall = tactical(state, 'home', 'through_ball');
 
     state = playCalibrationTactical(state, 'home', throughBall.id, 'ATT', { ignoreEnergy: true });
