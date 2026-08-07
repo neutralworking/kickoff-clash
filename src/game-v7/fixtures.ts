@@ -7,6 +7,7 @@ import type {
   V7ManagerCard,
   V7PlayerCard,
 } from '@/engine-v7';
+import { BEND_IT, VISION } from './player-actions';
 
 /**
  * Kickoff Clash V7 — deterministic development fixture for the live-match slice.
@@ -19,6 +20,11 @@ import type {
  * It supplies everything one V7 match needs: two managers, two legal formations,
  * two full XIs + seven-player benches, and a small set of actions the merged V7
  * engine already supports (game_start / ongoing / activated + chance cancellation).
+ *
+ * The unlinked /lab/match-v7 route may opt into typed-chance visual QA with
+ * `?chance=cross`, `?chance=through-ball`, or `?chance=both`. These variants add
+ * only the creator Action required to make the requested token type visible;
+ * they never alter the normal fixture used by engine/integration tests.
  */
 
 export const FIXTURE_SEED = 20260723;
@@ -238,11 +244,42 @@ export interface V7Fixture {
   source: 'fixture';
 }
 
-export function v7Fixture(): V7Fixture {
+export type TypedChanceFixtureScenario = 'cross' | 'through-ball' | 'both';
+
+function scenarioFromLocation(): TypedChanceFixtureScenario | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const value = new URLSearchParams(window.location.search).get('chance');
+  return value === 'cross' || value === 'through-ball' || value === 'both' ? value : undefined;
+}
+
+function addActionToCard(cards: readonly V7PlayerCard[], cardId: string, actionId: string): V7PlayerCard[] {
+  return cards.map((entry) => entry.id === cardId
+    ? { ...entry, actionIds: [...entry.actionIds, actionId] }
+    : { ...entry, actionIds: [...entry.actionIds] });
+}
+
+export function v7Fixture(explicitScenario?: TypedChanceFixtureScenario): V7Fixture {
+  const scenario = explicitScenario ?? scenarioFromLocation();
+  let cards = FIXTURE_CARDS.map((entry) => ({ ...entry, actionIds: [...entry.actionIds] }));
+  const actions = [...FIXTURE_ACTIONS];
+
+  // First-period pressure creates one left and one right Box token at FIXTURE_SEED.
+  // BEND IT lives on the right midfielder; VISION's global-first target resolves
+  // the left token. This keeps each browser fixture deterministic without adding
+  // hidden chance volume or test-only engine behavior.
+  if (scenario === 'cross' || scenario === 'both') {
+    cards = addActionToCard(cards, 'h_rm', BEND_IT.id);
+    actions.push(BEND_IT);
+  }
+  if (scenario === 'through-ball' || scenario === 'both') {
+    cards = addActionToCard(cards, 'h_lm', VISION.id);
+    actions.push(VISION);
+  }
+
   return {
     seed: FIXTURE_SEED,
-    cards: FIXTURE_CARDS,
-    actions: FIXTURE_ACTIONS,
+    cards,
+    actions,
     formations: FIXTURE_FORMATIONS,
     home: HOME_SQUAD,
     away: AWAY_SQUAD,
