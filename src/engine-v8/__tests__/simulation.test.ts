@@ -20,7 +20,14 @@ describe('V8 prototype economy simulation', () => {
     expect(result.zoneShare.MID).toBeGreaterThan(0.15);
     expect(result.zoneShare.ATT).toBeGreaterThan(0.15);
     expect(result.averagePlayersDeployedPerTeam).toBeGreaterThan(4);
-    expect(result.averagePlayersDeployedPerTeam).toBeLessThan(8);
+    expect(result.averagePlayersDeployedPerTeam).toBeLessThan(9);
+  });
+
+  it('makes genuine 1-cost players part of the 3-energy tempo game', () => {
+    const result = simulatePrototypeBatch(160, CONTROLLED, 2500);
+
+    expect(result.averageOneCostPlayersDeployedPerTeam).toBeGreaterThan(1);
+    expect(result.periodOneMultiPlayRate).toBeGreaterThan(0.2);
   });
 
   it('creates playable future-period Chance cards rather than automatic chance resolution', () => {
