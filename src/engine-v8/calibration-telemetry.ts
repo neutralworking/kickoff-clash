@@ -137,17 +137,12 @@ function majorChainsForSide(
     }
   }
 
-  for (const event of state.events.filter((item) => item.period === state.period && item.type === 'chance_cancelled')) {
-    if (!chains.some((chain) => chain.includes(event.text.split(' is cancelled')[0] ?? ''))) chains.push(event.text);
-  }
-
   return [...new Set(chains)].slice(0, 6);
 }
 
 function teamPeriodTelemetry(args: {
   state: V8CalibrationState;
   side: V8CalibrationSide;
-  opponent: V8CalibrationSide;
   goals: number;
   teamAttack: number;
   teamDefence: number;
@@ -193,7 +188,6 @@ export function captureV8CalibrationPeriodTelemetry(args: {
     home: teamPeriodTelemetry({
       state,
       side: 'home',
-      opponent: 'away',
       goals: homeGoals,
       teamAttack: homeAttack,
       teamDefence: homeDefence,
@@ -203,7 +197,6 @@ export function captureV8CalibrationPeriodTelemetry(args: {
     away: teamPeriodTelemetry({
       state,
       side: 'away',
-      opponent: 'home',
       goals: awayGoals,
       teamAttack: awayAttack,
       teamDefence: awayDefence,
