@@ -1,7 +1,12 @@
 'use client';
 
 import type { TeamSide } from '@/engine-v7';
-import type { PresentationBeat, PressurePresentation, PressureSidePresentation } from '@/game-v7';
+import {
+  chanceTypeLabel,
+  type PresentationBeat,
+  type PressurePresentation,
+  type PressureSidePresentation,
+} from '@/game-v7';
 import './v7chancecalc.css';
 
 function sideCopy(side: TeamSide): { short: string; possessive: string; className: string } {
@@ -24,19 +29,61 @@ function meterWidth(value: number, scale: number): string {
 
 function pressureProgress(data: PressureSidePresentation, reached: number, baseShown: boolean): number {
   const positiveDifference = Math.max(0, data.difference);
-  // Each threshold beat advances through one complete five-point band. The base
-  // result beat then fills any remainder without turning it into another chance.
   if (baseShown) return positiveDifference;
   if (reached > 0) return Math.min(positiveDifference, reached * 5);
   return 0;
 }
 
 function adjustmentText(data: PressureSidePresentation): string | null {
+  const typed = data.tokens.some((token) => token.chanceType !== 'box' || token.origin === 'action');
   const parts = [
-    data.addedChances !== 0 ? `${data.addedChances >= 0 ? '+' : ''}${data.addedChances} added` : null,
+    data.addedChances !== 0 ? `${data.addedChances >= 0 ? '+' : ''}${data.addedChances} action` : null,
+    typed ? 'typed' : null,
     data.cancelledChances > 0 ? `−${data.cancelledChances} blocked` : null,
   ].filter(Boolean);
   return parts.length ? parts.join(' · ') : null;
+}
+
+function chanceTypeIcon(type: PresentationBeat['chanceType']): string {
+  switch (type) {
+    case 'cross': return '✚';
+    case 'through_ball': return '↗';
+    case 'corner': return '⌟';
+    case 'box': return '▣';
+    default: return '◆';
+  }
+}
+
+function shortChanceLabel(type: NonNullable<PresentationBeat['chanceType']>): string {
+  return type === 'through_ball' ? 'THRU' : chanceTypeLabel(type).toUpperCase();
+}
+
+function ChanceTokenRail({ data, visible }: { data: PressureSidePresentation; visible: boolean }) {
+  if (!visible) return <div className="v7-chance-token-rail placeholder" aria-hidden="true" />;
+  if (data.tokens.length === 0) {
+    return <div className="v7-chance-token-rail empty" aria-label="No chances"><span>NO CHANCES</span></div>;
+  }
+
+  return (
+    <div className="v7-chance-token-rail" aria-label="Chance bar">
+      {data.tokens.map((token) => {
+        const label = chanceTypeLabel(token.chanceType);
+        const finisher = token.finisherName ? ` · ${token.finisherName}` : '';
+        const origin = token.origin === 'action' ? 'Action-created' : token.origin === 'calculated' ? 'ATT-created' : 'Stored';
+        return (
+          <span
+            className={`v7-chance-token origin-${token.origin} type-${token.chanceType}${token.cancelled ? ' cancelled' : ''}`}
+            title={`${origin} ${label}${finisher}`}
+            aria-label={`${origin} ${label} chance${token.cancelled ? ', cancelled' : ''}${finisher}`}
+            key={token.tokenId}
+          >
+            <b aria-hidden="true">{chanceTypeIcon(token.chanceType)}</b>
+            <small>{shortChanceLabel(token.chanceType)}</small>
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 export function V7PressureBoard({
@@ -96,6 +143,7 @@ export function V7PressureBoard({
                 )) : <span className="empty">NO BASE CHANCE</span>}
                 {adjustment && finalShown && <b className="v7-pressure-adjustment">{adjustment}</b>}
               </div>
+              {data && <ChanceTokenRail data={data} visible={finalShown} />}
             </div>
             <strong className={displayedChances !== null ? 'revealed' : ''}>{displayedChances ?? '–'}<small>{finalShown ? 'FINAL' : 'BASE'}</small></strong>
           </div>
@@ -117,7 +165,7 @@ function Formula({ beat }: { beat: PresentationBeat }) {
 
 function CauseList({ data, chanceOnly = false }: { data: PressureSidePresentation; chanceOnly?: boolean }) {
   const modifiers = chanceOnly
-    ? data.modifiers.filter((modifier) => modifier.detail.includes('chance'))
+    ? data.modifiers.filter((modifier) => modifier.detail.toLowerCase().includes('chance') || modifier.detail.includes('→'))
     : data.modifiers;
   return (
     <div className="v7-resolution-causes">
@@ -169,7 +217,7 @@ export function V7ResolutionStrip({ beat }: { beat: PresentationBeat }) {
     return (
       <section className="v7-resolution-strip kind-overview" aria-live="polite">
         <div><span>FINAL CHANCES</span><strong>{beat.pressure?.player.finalChances ?? 0}<i>–</i>{beat.pressure?.opponent.finalChances ?? 0}</strong></div>
-        <p>Base ATT–DEF pressure is complete. Added and cancelled chances are applied. Now every surviving chance rolls.</p>
+        <p>Origin is shown by token colour; the icon and label show the football chance type. Each chance now rolls with its assigned finisher.</p>
       </section>
     );
   }
@@ -177,12 +225,18 @@ export function V7ResolutionStrip({ beat }: { beat: PresentationBeat }) {
   if (beat.kind === 'roll') {
     const total = Math.max(1, beat.chanceTotal ?? 1);
     const current = Math.max(1, beat.chanceIndex ?? 1);
+    const type = beat.chanceType;
     return (
       <section className={`v7-resolution-strip kind-roll ${copy?.className ?? ''}`} aria-live="polite">
         <div className="v7-roll-progress">
           <div>
             <span>{copy?.possessive} CHANCE {current} OF {total}</span>
-            <strong>{beat.sector?.toUpperCase()} attack resolving on the pitch</strong>
+            <strong>{beat.title}</strong>
+            {beat.detail && <small>{beat.detail}</small>}
+          </div>
+          <div className={`v7-active-chance-token origin-${beat.chanceOrigin ?? 'calculated'} type-${type ?? 'box'}`} aria-label={`${type ? chanceTypeLabel(type) : 'Box'} chance`}>
+            <b aria-hidden="true">{chanceTypeIcon(type)}</b>
+            <span>{type ? shortChanceLabel(type) : 'BOX'}</span>
           </div>
           <div className="v7-roll-pips" aria-label={`Chance ${current} of ${total}`}>
             {Array.from({ length: total }, (_, index) => (

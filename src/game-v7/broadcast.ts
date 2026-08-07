@@ -1,5 +1,5 @@
 import type { PeriodNumber, TeamSide } from '@/engine-v7';
-import type { MatchEvent, MatchEventKind } from './receipts';
+import type { ChanceEventData, MatchEvent, MatchEventKind } from './receipts';
 
 export type BroadcastBeatKind =
   | 'kickoff'
@@ -25,6 +25,7 @@ export interface BroadcastBeat {
   sourceEventIds: string[];
   emphasis: 'neutral' | 'positive' | 'negative' | 'warning';
   durationMs: number;
+  chance?: ChanceEventData;
 }
 
 const BEAT_KIND: Partial<Record<MatchEventKind, BroadcastBeatKind>> = {
@@ -36,6 +37,11 @@ const BEAT_KIND: Partial<Record<MatchEventKind, BroadcastBeatKind>> = {
   substitution: 'change',
   movement: 'change',
   chance_created: 'chance',
+  chance_changed: 'chance',
+  chance_moved: 'chance',
+  chance_claimed: 'chance',
+  chance_claim_fizzle: 'chance',
+  finisher_assigned: 'chance',
   chance_cancelled: 'chance',
   die_roll: 'roll',
   reroll: 'roll',
@@ -55,6 +61,13 @@ const HIDDEN_STANDALONE_EVENTS = new Set<MatchEventKind>([
   'priority_change',
 ]);
 
+function typeLabel(chance?: ChanceEventData): string {
+  if (!chance?.chanceType) return 'Chance';
+  return chance.chanceType === 'through_ball'
+    ? 'Through Ball'
+    : chance.chanceType[0]!.toUpperCase() + chance.chanceType.slice(1);
+}
+
 function labelFor(event: MatchEvent): Pick<BroadcastBeat, 'eyebrow' | 'title' | 'emphasis'> {
   switch (event.kind) {
     case 'action_activation': return { eyebrow: 'Your action', title: event.text, emphasis: 'positive' };
@@ -63,9 +76,14 @@ function labelFor(event: MatchEvent): Pick<BroadcastBeat, 'eyebrow' | 'title' | 
     case 'substitution': return { eyebrow: 'Your change', title: event.text, emphasis: 'neutral' };
     case 'formation_change': return { eyebrow: 'Formation change', title: event.text, emphasis: 'neutral' };
     case 'movement': return { eyebrow: 'Movement', title: event.text, emphasis: 'neutral' };
-    case 'chance_created': return { eyebrow: 'Attack', title: 'Chance created', emphasis: 'warning' };
+    case 'chance_created': return { eyebrow: event.chance?.origin === 'action' ? 'Action chance' : 'Attack', title: `${typeLabel(event.chance)} created`, emphasis: 'warning' };
+    case 'chance_changed': return { eyebrow: 'Chance reshaped', title: event.text, emphasis: 'warning' };
+    case 'chance_moved': return { eyebrow: 'Chance moved', title: event.text, emphasis: 'warning' };
+    case 'chance_claimed': return { eyebrow: 'Specialist', title: event.text, emphasis: 'positive' };
+    case 'chance_claim_fizzle': return { eyebrow: 'Claim failed', title: event.text, emphasis: 'negative' };
+    case 'finisher_assigned': return { eyebrow: 'Finisher', title: event.text, emphasis: 'neutral' };
     case 'chance_cancelled': return { eyebrow: 'Chance cancelled', title: event.text, emphasis: 'negative' };
-    case 'die_roll': return { eyebrow: 'Roll', title: event.text, emphasis: 'warning' };
+    case 'die_roll': return { eyebrow: `${typeLabel(event.chance)} roll`, title: event.text, emphasis: 'warning' };
     case 'reroll': return { eyebrow: 'Reroll', title: event.text, emphasis: 'warning' };
     case 'goal': return { eyebrow: 'Goal', title: event.text, emphasis: 'positive' };
     case 'attribution': return { eyebrow: 'Scorer', title: event.text, emphasis: 'positive' };
@@ -88,6 +106,10 @@ function durationFor(kind: BroadcastBeatKind): number {
 function canJoin(current: BroadcastBeat, event: MatchEvent): boolean {
   if (current.period !== event.period || current.side !== event.side) return false;
   if (current.kind === 'action') return event.kind === 'effect_applied' || event.kind === 'chance_created';
+  if (current.kind === 'chance') {
+    return event.chance?.tokenId === current.chance?.tokenId
+      && ['chance_changed', 'chance_moved', 'chance_claimed', 'finisher_assigned'].includes(event.kind);
+  }
   if (current.kind === 'roll') return event.kind === 'reroll';
   if (current.kind === 'goal') return event.kind === 'attribution' || event.kind === 'unattributed_goal';
   if (current.kind === 'change') return event.kind === 'substitution' || event.kind === 'movement';
@@ -102,12 +124,10 @@ export function buildBroadcastBeats(events: readonly MatchEvent[]): BroadcastBea
     if (current && canJoin(current, event)) {
       current.sourceEventIds.push(event.id);
       current.detail = current.detail ? `${current.detail} · ${event.text}` : event.text;
+      if (event.chance) current.chance = { ...current.chance, ...event.chance };
       continue;
     }
 
-    // Passive upkeep is still retained in receipts and diagnostics, but it is not
-    // a match moment. Ongoing effects such as "Wall is active" should live on the
-    // relevant card rather than interrupting goals, chances and coaching changes.
     if (HIDDEN_STANDALONE_EVENTS.has(event.kind)) continue;
 
     const kind = BEAT_KIND[event.kind] ?? 'info';
@@ -120,6 +140,7 @@ export function buildBroadcastBeats(events: readonly MatchEvent[]): BroadcastBea
       ...label,
       sourceEventIds: [event.id],
       durationMs: durationFor(kind),
+      ...(event.chance ? { chance: event.chance } : {}),
     });
   }
 
@@ -134,11 +155,6 @@ export interface MatchDirectorSnapshot {
   isPlaying: boolean;
 }
 
-/**
- * Owns the order in which the player experiences a resolved match sequence.
- * The internal queue and cursor are deliberately private so UI components only
- * depend on the current beat and completed history, never storage mechanics.
- */
 export class MatchDirector {
   private beats: BroadcastBeat[] = [];
   private cursor = 0;

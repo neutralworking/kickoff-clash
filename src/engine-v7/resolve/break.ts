@@ -31,15 +31,11 @@ import { effectivePlayers, splitByZone, type CardRegistry } from './stats';
 // The break resolver — the spine that turns two locked break plans into the
 // next period's opening state. It sequences the whole thing deterministically:
 //   1. reset the once-per-break activation flags;
-//   2. in priority order (leader first, so the trailing side's board-reading
-//      cards see the leader's landed cards — A1), for each side run its
-//      before-lineup activations, apply its formation switch / subs / movement,
-//      then its after-lineup activations;
+//   2. in priority order resolve before-lineup actions, lineup changes, then
+//      after-lineup actions;
 //   3. recompute both sides' ongoing effects against the settled board;
-//   4. create (not roll) the upcoming period's chances.
-// It obeys the same rule as the action runtime: it produces new immutable state,
-// an appended effect ledger, and an ordered receipt trail — the receipts are the
-// record of what happened. Dice rolling / goal resolution is the next slice.
+//   4. create the upcoming period's calculated Box chances + creation receipts.
+// Typed shaping/claims are resolved at period resolution once those tokens exist.
 
 export type RandomPass = (
   side: TeamSide,
@@ -266,13 +262,16 @@ export function resolveBreak(input: BreakResolutionInput): BreakResolution {
     receipts.push(...rebuilt.receipts);
   }
 
-  // 4. Create the upcoming period's chances from the settled board.
+  // 4. Create the upcoming period's calculated Box chances from the settled board.
   const playerActive = splitByZone(effectivePlayers(board.player, registry, ledger)).active;
   const opponentActive = splitByZone(effectivePlayers(board.opponent, registry, ledger)).active;
+  const playerCreation = createChances('player', upcomingPeriod, playerActive, opponentActive, createRng(state.seed, `chance:player:${upcomingPeriod}`));
+  const opponentCreation = createChances('opponent', upcomingPeriod, opponentActive, playerActive, createRng(state.seed, `chance:opponent:${upcomingPeriod}`));
   const chances: Record<TeamSide, ChanceToken[]> = {
-    player: createChances('player', upcomingPeriod, playerActive, opponentActive, createRng(state.seed, `chance:player:${upcomingPeriod}`)).tokens,
-    opponent: createChances('opponent', upcomingPeriod, opponentActive, playerActive, createRng(state.seed, `chance:opponent:${upcomingPeriod}`)).tokens,
+    player: playerCreation.tokens,
+    opponent: opponentCreation.tokens,
   };
+  receipts.push(...playerCreation.receipts, ...opponentCreation.receipts);
 
   const nextState: V7MatchState = {
     ...state,

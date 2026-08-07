@@ -1,4 +1,10 @@
-import type { ChanceToken, Sector, TeamSide } from '../../lib/match-v7/types';
+import type {
+  ChanceToken,
+  ChanceType,
+  FinisherAssignment,
+  Sector,
+  TeamSide,
+} from '../../lib/match-v7/types';
 import type { DeterministicRng } from '../core/rng';
 import { DEFAULT_REROLL_POLICY, shouldReroll, usableRerolls, type RerollPolicy } from './rerolls';
 
@@ -6,13 +12,17 @@ import { DEFAULT_REROLL_POLICY, shouldReroll, usableRerolls, type RerollPolicy }
 // roll meets or exceeds its (possibly modified) minimumGoalRoll. Misses are
 // re-rolled per the reroll policy, consuming one RNG value each, immediately
 // after the die they replace (V6 spec B2). Cancelled tokens never roll. Every
-// roll — original, each reroll, and the accepted final — is recorded so the
-// receipt is a full audit trail.
+// roll carries the stable typed-token + intended-finisher identity for receipts
+// and presentation.
 
 export interface TokenRoll {
   tokenId: string;
   side: TeamSide;
   sector: Sector;
+  origin: ChanceToken['origin'];
+  chanceType: ChanceType;
+  finisherId?: string;
+  finisherAssignment?: FinisherAssignment;
   order: number;
   threshold: number;
   /** Every d6 value in order: [original, ...rerolls]. Empty when cancelled. */
@@ -34,6 +44,10 @@ export function rollToken(
     tokenId: token.id,
     side: token.side,
     sector: token.sector,
+    origin: token.origin,
+    chanceType: token.chanceType,
+    ...(token.finisherId ? { finisherId: token.finisherId } : {}),
+    ...(token.finisherAssignment ? { finisherAssignment: token.finisherAssignment } : {}),
     order: token.order,
     threshold: token.minimumGoalRoll,
   };

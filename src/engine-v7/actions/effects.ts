@@ -1,6 +1,8 @@
 import type {
   ActionEffect,
   BreakIndex,
+  ChanceSelector,
+  ChanceType,
   EffectDuration,
   PeriodNumber,
   Sector,
@@ -60,6 +62,12 @@ export interface EffectSource {
   origin: EffectOrigin;
 }
 
+export interface ChanceTokenTarget {
+  side: 'own' | 'enemy';
+  selector: ChanceSelector;
+  chanceTypes?: ChanceType[];
+}
+
 /** A materialised, resolved effect sitting in the ledger. */
 export interface LedgerEffect {
   id: string;
@@ -75,11 +83,11 @@ export interface LedgerEffect {
   slotKey?: string;
   /**
    * For chance-targeting effects, the resolved target preserved verbatim from
-   * the action: whose chances (relative to this effect's acting `side`) and
-   * which of them. Period resolution consumes this directly, so token ownership
-   * is never inferred from the effect type.
+   * the action: whose chances (relative to this effect's acting `side`), which
+   * tokens, and optionally which football types. Period resolution consumes
+   * this directly, so token ownership/type is never inferred from effect names.
    */
-  tokenTarget?: { side: 'own' | 'enemy'; selector: 'first_in_sector' | 'all_in_sector' };
+  tokenTarget?: ChanceTokenTarget;
   createdPeriod: PeriodNumber;
   createdBreakIndex: BreakIndex | 0;
   lifetime: EffectLifetime;
@@ -151,7 +159,13 @@ export function buildLedgerEffects(
     ...(resolved.sector !== undefined ? { sector: resolved.sector } : {}),
     ...(resolved.slotKey !== undefined ? { slotKey: resolved.slotKey } : {}),
     ...(resolved.chanceSelector !== undefined
-      ? { tokenTarget: { side: resolved.chanceSide ?? 'own', selector: resolved.chanceSelector } }
+      ? {
+          tokenTarget: {
+            side: resolved.chanceSide ?? 'own',
+            selector: resolved.chanceSelector,
+            ...(resolved.chanceTypes ? { chanceTypes: [...resolved.chanceTypes] } : {}),
+          },
+        }
       : {}),
     createdPeriod: coords.period,
     createdBreakIndex: coords.breakIndex,

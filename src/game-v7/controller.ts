@@ -1,5 +1,5 @@
 import {
-  boardChances,
+  boardChanceCreation,
   processBoundary,
   resolveBreak as resolveBreakEngine,
   resolvePeriod as resolvePeriodEngine,
@@ -31,12 +31,9 @@ import { expect as expectResult, type AdapterResult } from './adapter/result';
 import { syntheticEvent, translateReceipts, type MatchEvent } from './receipts';
 
 // The V7 match controller — pure TypeScript, no React, no engine mutation. It
-// owns the engine state, the effect ledger, the current phase, the pending
-// player plan, the deterministic opponent plan, the receipt-derived event feed,
-// score/period, the completed result, and restart. It sequences the engine
-// primitives (period resolution → boundary → break resolution) and enforces the
-// legality rules: no double-resolve, no illegal plan, no advancing after full
-// time. Snapshots are stored read-only and never mutated.
+// owns engine state, ledger, phase, plans, receipt-derived events, snapshots and
+// result. Chance creation is now fully receipt-backed by the engine: no synthetic
+// aggregate chance event is generated here.
 
 export type ControllerPhase = 'period' | 'break' | 'fulltime';
 
@@ -85,7 +82,8 @@ export class V7MatchController {
     this.registry = initial.registry;
     this.state = initial.state;
     this.ledger = initial.ledger;
-    this.chances = boardChances(this.state, this.ledger, this.registry, this.state.period);
+    const opening = boardChanceCreation(this.state, this.ledger, this.registry, this.state.period);
+    this.chances = opening.chances;
     this.phase = 'period';
     this.snapshots = [];
     this.pendingPlan = null;
@@ -96,7 +94,7 @@ export class V7MatchController {
     this.resultValue = null;
     this.events = [syntheticEvent('kickoff', 'kickoff', 1, `Kickoff — ${this.teamName('player')} vs ${this.teamName('opponent')}.`)];
     this.appendReceipts(initial.receipts);
-    this.emitChanceCreated();
+    this.appendReceipts(opening.receipts);
     this.version += 1;
   }
 
@@ -109,24 +107,6 @@ export class V7MatchController {
     if (receipts.length === 0) return;
     this.events.push(...translateReceipts(receipts));
     this.latestReceiptType = receipts[receipts.length - 1]!.eventType;
-  }
-
-  private emitChanceCreated(): void {
-    for (const side of ['player', 'opponent'] as const) {
-      const tokens = this.chances[side];
-      if (tokens.length === 0) continue;
-      const bySector = { left: 0, centre: 0, right: 0 };
-      for (const token of tokens) bySector[token.sector] += 1;
-      this.events.push(
-        syntheticEvent(
-          `chance:${this.state.period}:${side}`,
-          'chance_created',
-          this.state.period,
-          `${this.teamName(side)} created ${tokens.length} chance${tokens.length === 1 ? '' : 's'} (L${bySector.left} C${bySector.centre} R${bySector.right}).`,
-          side,
-        ),
-      );
-    }
   }
 
   private phaseLabel(): string {
@@ -316,7 +296,6 @@ export class V7MatchController {
     this.ledger = resolved.ledger;
     this.chances = resolved.chances;
     this.appendReceipts(resolved.receipts);
-    this.emitChanceCreated();
 
     this.phase = 'period';
     this.pendingPlan = null;

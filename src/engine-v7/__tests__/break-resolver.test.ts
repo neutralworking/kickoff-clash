@@ -270,11 +270,11 @@ describe('chance creation from the board', () => {
     const ownActive = [eff('a', 'left', 12, 4), eff('b', 'centre', 10, 4), eff('c', 'right', 8, 4)];
     const enemyActive = [eff('x', 'left', 4, 6), eff('y', 'centre', 4, 7), eff('z', 'right', 4, 6)];
     const result = createChances('player', 2, ownActive, enemyActive, createRng(7, 'chance'));
-    // total ATT 30 − total DEF 19 = 11 → ceil(11/5) = 3 tokens.
-    expect(result.count).toBe(3);
-    expect(result.tokens).toHaveLength(3);
+    // total ATT 30 − total DEF 19 = 11 → two complete five-point bands.
+    expect(result.count).toBe(2);
+    expect(result.tokens).toHaveLength(2);
     expect(result.tokens.every((token) => token.minimumGoalRoll === 6)).toBe(true);
-    expect(result.tokens.every((token) => token.origin === 'calculated' && !token.cancelled)).toBe(true);
+    expect(result.tokens.every((token) => token.origin === 'calculated' && token.chanceType === 'box' && !token.cancelled)).toBe(true);
   });
 });
 
