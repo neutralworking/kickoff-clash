@@ -310,15 +310,42 @@ describe('specialist conversion + typed counters', () => {
     expect(applyTokenEffects([cross], effects, 'player')[0]!.minimumGoalRoll).toBe(6);
   });
 
-  it('a Cross-only defensive threshold cannot touch a Box', () => {
+  it('a Cross-only defensive threshold floor cannot touch a Box', () => {
     const box = token({ id: 'box', chanceType: 'box', minimumGoalRoll: 5 });
     const cross = token({ id: 'cross', chanceType: 'cross', order: 1, minimumGoalRoll: 5 });
     const counter = ledger(
-      { type: 'set_goal_threshold', minimumRoll: 6 },
+      { type: 'set_goal_threshold_floor', minimumRoll: 6 },
       { side: 'opponent', targetSide: 'enemy', chanceTypes: ['cross'], selector: 'first' },
     );
     const out = applyTokenEffects([box, cross], [counter], 'player');
     expect(out.find((entry) => entry.id === 'box')!.minimumGoalRoll).toBe(5);
     expect(out.find((entry) => entry.id === 'cross')!.minimumGoalRoll).toBe(6);
+  });
+
+  it('a defensive floor wins regardless of player/opponent ledger order', () => {
+    const source = 'instance:runner';
+    const throughBall = token({
+      id: 'through',
+      side: 'opponent',
+      chanceType: 'through_ball',
+      minimumGoalRoll: 6,
+      finisherId: 'runner',
+      finisherAssignment: 'claimed',
+    });
+    const claim = ledger(
+      { type: 'claim_chance' },
+      { side: 'opponent', id: 'claim', sourceCardId: 'runner', sourceInstanceId: source, chanceTypes: ['through_ball'] },
+    );
+    const specialist = ledger(
+      { type: 'set_goal_threshold', minimumRoll: 5 },
+      { side: 'opponent', id: 'specialist', sourceCardId: 'runner', sourceInstanceId: source, chanceTypes: ['through_ball'] },
+    );
+    const counter = ledger(
+      { type: 'set_goal_threshold_floor', minimumRoll: 6 },
+      { side: 'player', id: 'counter', targetSide: 'enemy', chanceTypes: ['through_ball'] },
+    );
+
+    expect(applyTokenEffects([throughBall], [counter, claim, specialist], 'opponent')[0]!.minimumGoalRoll).toBe(6);
+    expect(applyTokenEffects([throughBall], [claim, specialist, counter], 'opponent')[0]!.minimumGoalRoll).toBe(6);
   });
 });
