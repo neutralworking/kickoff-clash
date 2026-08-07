@@ -8,12 +8,18 @@ import {
   emptyV8Board,
   goalsFromAttackDefence,
   outOfPositionPenalty,
+  prototypeBoardWithOngoing,
+  prototypeCrossReceiverBonus,
+  prototypeFollowAttackBoost,
+  prototypeKeeperReactionBoost,
+  prototypePressurePenalty,
   revealPriority,
   teamTotals,
   zoneOccupancy,
   type V8Board,
   type V8ChanceType,
   type V8PlayerCard,
+  type V8PrototypeAction,
   type V8RevealPriorityReason,
   type V8Side,
   type V8SlotReservation,
@@ -23,9 +29,9 @@ import './v8lab.css';
 
 type LabPlayer = V8PlayerCard & {
   actionName?: string;
+  actionText?: string;
   createsChance?: Extract<V8ChanceType, 'cross' | 'through_ball'>;
-  receivesCross?: boolean;
-  onReveal?: 'press_next';
+  prototypeAction?: V8PrototypeAction;
 };
 
 type LabChance = {
@@ -103,30 +109,94 @@ function player(
 }
 
 const HOME_XI: readonly LabPlayer[] = [
-  player('h_gk', 'Otto Kerr', 'GK', 1, 6, 'DEF', 3, { actionName: 'STARFISH' }),
-  player('h_lb', 'Rue Vance', 'LB', 2, 2, 'DEF', 1, { actionName: 'OVERLAP', naturalZones: ['DEF', 'MID'] }),
-  player('h_lcb', 'Dane Holt', 'CB', 2, 5, 'DEF', 3, { actionName: 'WALL' }),
-  player('h_rcb', 'Ivo Senn', 'CB', 0, 3, 'DEF', 1, { actionName: 'FRONT FOOT', onReveal: 'press_next' }),
+  player('h_gk', 'Otto Kerr', 'GK', 1, 6, 'DEF', 3, {
+    actionName: 'STARFISH',
+    actionText: 'On Reveal: if CPU already revealed in ATT, +3 DEF this period.',
+    prototypeAction: 'keeper_react',
+  }),
+  player('h_lb', 'Rue Vance', 'LB', 2, 2, 'DEF', 1, {
+    actionName: 'OVERLAP',
+    naturalZones: ['DEF', 'MID'],
+    statuses: ['moveable'],
+  }),
+  player('h_lcb', 'Dane Holt', 'CB', 2, 5, 'DEF', 3, {
+    actionName: 'WALL',
+    actionText: 'Ongoing: +2 DEF while another teammate is in DEF.',
+    prototypeAction: 'wall',
+  }),
+  player('h_rcb', 'Ivo Senn', 'CB', 0, 3, 'DEF', 1, {
+    actionName: 'FRONT FOOT',
+    actionText: 'On Reveal: next opposing reveal here loses 2 contributing stats this period.',
+    prototypeAction: 'press_next',
+  }),
   player('h_rb', 'Cass Ojo', 'RB', 3, 4, 'DEF', 2),
   player('h_lm', 'Lio Fen', 'LM', 6, 3, 'MID', 5),
-  player('h_cm', 'Ren Colm', 'CM', 7, 3, 'MID', 5, { actionName: 'VISION', createsChance: 'through_ball' }),
-  player('h_rm', 'Tave Rune', 'RM', 6, 3, 'MID', 5, { actionName: 'BEND IT', createsChance: 'cross' }),
+  player('h_cm', 'Ren Colm', 'CM', 7, 3, 'MID', 5, {
+    actionName: 'VISION',
+    actionText: 'On Reveal: add a Through Ball to your hand for next period.',
+    createsChance: 'through_ball',
+  }),
+  player('h_rm', 'Tave Rune', 'RM', 6, 3, 'MID', 5, {
+    actionName: 'BEND IT',
+    actionText: 'On Reveal: add a Cross to your hand for next period.',
+    createsChance: 'cross',
+  }),
   player('h_lw', 'Rai Okonkwo', 'LW', 9, 2, 'ATT', 5),
-  player('h_cf', 'Niko Vale', 'CF', 9, 2, 'ATT', 5, { actionName: 'BOBO BOMBER', receivesCross: true }),
-  player('h_rw', 'Juno Pike', 'RW', 3, 0, 'ATT', 1, { actionName: 'RUNNER' }),
+  player('h_cf', 'Niko Vale', 'CF', 9, 2, 'ATT', 5, {
+    actionName: 'BOBO BOMBER',
+    actionText: 'Ongoing: your Crosses get +2 ATT while this is in ATT.',
+    prototypeAction: 'cross_receiver',
+  }),
+  player('h_rw', 'Juno Pike', 'RW', 3, 0, 'ATT', 1, {
+    actionName: 'RUNNER',
+    actionText: 'On Reveal: +2 ATT if another friendly ATT card revealed before this.',
+    prototypeAction: 'follow_att',
+  }),
 ];
 
 const AWAY_XI: readonly LabPlayer[] = [
-  player('a_gk', 'Bram Reef', 'GK', 1, 6, 'DEF', 3),
-  player('a_lcb', 'Sig Reed', 'CB', 2, 5, 'DEF', 3),
+  player('a_gk', 'Bram Reef', 'GK', 1, 6, 'DEF', 3, {
+    actionName: 'CLAIM IT',
+    actionText: 'On Reveal: if YOU already revealed in ATT, +3 DEF this period.',
+    prototypeAction: 'keeper_react',
+  }),
+  player('a_lcb', 'Sig Reed', 'CB', 2, 5, 'DEF', 3, {
+    actionName: 'BLOCK',
+    actionText: 'Ongoing: +2 DEF while another teammate is in DEF.',
+    prototypeAction: 'wall',
+  }),
   player('a_ccb', 'Tomas Lock', 'CB', 3, 6, 'DEF', 3),
-  player('a_rcb', 'Gio Pace', 'CB', 0, 3, 'DEF', 1, { actionName: 'STEP UP', onReveal: 'press_next' }),
-  player('a_lwb', 'Kes Rowan', 'LWB', 2, 2, 'DEF', 1, { actionName: 'OVERLAP', naturalZones: ['DEF', 'MID'] }),
+  player('a_rcb', 'Gio Pace', 'CB', 0, 3, 'DEF', 1, {
+    actionName: 'STEP UP',
+    actionText: 'On Reveal: next opposing reveal here loses 2 contributing stats this period.',
+    prototypeAction: 'press_next',
+  }),
+  player('a_lwb', 'Kes Rowan', 'LWB', 2, 2, 'DEF', 1, {
+    actionName: 'OVERLAP',
+    naturalZones: ['DEF', 'MID'],
+    statuses: ['moveable'],
+  }),
   player('a_dm', 'Malik Daro', 'DM', 3, 4, 'MID', 4),
-  player('a_cm', 'Aris Nov', 'CM', 6, 3, 'MID', 5, { actionName: 'VISION', createsChance: 'through_ball' }),
-  player('a_rwb', 'Rex Hale', 'RWB', 4, 3, 'MID', 4, { actionName: 'EARLY CROSS', createsChance: 'cross' }),
-  player('a_lf', 'Bo Marsh', 'LF', 3, 0, 'ATT', 1, { actionName: 'POACHER' }),
-  player('a_cf', 'Coby Wren', 'CF', 9, 2, 'ATT', 5, { actionName: 'TARGET MAN', receivesCross: true }),
+  player('a_cm', 'Aris Nov', 'CM', 6, 3, 'MID', 5, {
+    actionName: 'VISION',
+    actionText: 'On Reveal: add a Through Ball for next period.',
+    createsChance: 'through_ball',
+  }),
+  player('a_rwb', 'Rex Hale', 'RWB', 4, 3, 'MID', 4, {
+    actionName: 'EARLY CROSS',
+    actionText: 'On Reveal: add a Cross for next period.',
+    createsChance: 'cross',
+  }),
+  player('a_lf', 'Bo Marsh', 'LF', 3, 0, 'ATT', 1, {
+    actionName: 'POACHER',
+    actionText: 'On Reveal: +2 ATT if another friendly ATT card revealed before this.',
+    prototypeAction: 'follow_att',
+  }),
+  player('a_cf', 'Coby Wren', 'CF', 9, 2, 'ATT', 5, {
+    actionName: 'TARGET MAN',
+    actionText: 'Ongoing: Crosses get +2 ATT while this is in ATT.',
+    prototypeAction: 'cross_receiver',
+  }),
   player('a_rf', 'Ravi Tuck', 'RF', 8, 2, 'ATT', 4),
 ];
 
@@ -194,12 +264,6 @@ function boardWithPendingPlayers(board: V8Board, pending: readonly PendingPlay[]
   return next;
 }
 
-function pressurePenalty(zone: V8Zone): ZonePenalty {
-  if (zone === 'DEF') return { attack: 0, defence: 2 };
-  if (zone === 'ATT') return { attack: 2, defence: 0 };
-  return { attack: 2, defence: 2 };
-}
-
 function pressurePenaltyText(zone: V8Zone): string {
   if (zone === 'DEF') return '-2 DEF';
   if (zone === 'ATT') return '-2 ATT';
@@ -207,6 +271,7 @@ function pressurePenaltyText(zone: V8Zone): string {
 }
 
 function totalsWithPenalties(board: V8Board, penalties: ReadonlyMap<string, ZonePenalty>): ReturnType<typeof teamTotals> {
+  const adjustedBoard = prototypeBoardWithOngoing(board);
   const byZone: ReturnType<typeof teamTotals>['byZone'] = {
     DEF: { attack: 0, defence: 0 },
     MID: { attack: 0, defence: 0 },
@@ -214,7 +279,7 @@ function totalsWithPenalties(board: V8Board, penalties: ReadonlyMap<string, Zone
   };
 
   for (const zone of ZONES) {
-    for (const deployed of board[zone]) {
+    for (const deployed of adjustedBoard[zone]) {
       const penalty = penalties.get(deployed.card.id) ?? { attack: 0, defence: 0 };
       const contribution = contributionInZone({
         ...deployed.card,
@@ -259,7 +324,13 @@ function resolveRevealWindow(
   period: number,
   seed: number,
 ) {
-  const priority = revealPriority(homeScore, awayScore, home.board, away.board, seed);
+  const priority = revealPriority(
+    homeScore,
+    awayScore,
+    prototypeBoardWithOngoing(home.board),
+    prototypeBoardWithOngoing(away.board),
+    seed,
+  );
   const works: Record<V8Side, RevealWork> = {
     home: newRevealWork(home),
     away: newRevealWork(away),
@@ -269,6 +340,10 @@ function resolveRevealWindow(
     away: awayPending,
   };
   const pressureWaiting: Record<V8Side, Record<V8Zone, number>> = {
+    home: { DEF: 0, MID: 0, ATT: 0 },
+    away: { DEF: 0, MID: 0, ATT: 0 },
+  };
+  const revealedPlayers: Record<V8Side, Record<V8Zone, number>> = {
     home: { DEF: 0, MID: 0, ATT: 0 },
     away: { DEF: 0, MID: 0, ATT: 0 },
   };
@@ -287,9 +362,25 @@ function resolveRevealWindow(
         log.push(`${actor} reveal ${play.card.name} → ${play.zone}.`);
 
         if (pressureWaiting[side][play.zone] > 0) {
-          work.penalties.set(play.card.id, pressurePenalty(play.zone));
+          work.penalties.set(play.card.id, prototypePressurePenalty(play.zone));
           pressureWaiting[side][play.zone] -= 1;
           log.push(`${play.card.name} is caught by pressure: ${pressurePenaltyText(play.zone)} this period.`);
+        }
+
+        if (play.card.prototypeAction === 'keeper_react') {
+          const boost = prototypeKeeperReactionBoost(revealedPlayers[opponent].ATT);
+          if (boost > 0) {
+            work.boost.defence += boost;
+            log.push(`${play.card.actionName ?? play.card.name}: +${boost} DEF after reacting to an earlier opposing ATT reveal.`);
+          }
+        }
+
+        if (play.card.prototypeAction === 'follow_att' && play.zone === 'ATT') {
+          const boost = prototypeFollowAttackBoost(revealedPlayers[side].ATT);
+          if (boost > 0) {
+            work.boost.attack += boost;
+            log.push(`${play.card.actionName ?? play.card.name}: +${boost} ATT for following another friendly ATT reveal.`);
+          }
         }
 
         if (play.card.createsChance) {
@@ -298,21 +389,30 @@ function resolveRevealWindow(
           log.push(`${play.card.actionName ?? play.card.name}: ${chance.name} added for next period.`);
         }
 
-        if (play.card.onReveal === 'press_next') {
+        if (play.card.prototypeAction === 'press_next') {
           pressureWaiting[opponent][play.zone] += 1;
           log.push(`${play.card.actionName ?? play.card.name}: pressure waits for the next opposing reveal in ${play.zone}.`);
         }
+
+        if (play.card.prototypeAction === 'wall' && play.zone === 'DEF' && work.team.board.DEF.length >= 2) {
+          log.push(`${play.card.actionName ?? play.card.name}: Ongoing +2 DEF is active.`);
+        }
+
+        if (play.card.prototypeAction === 'cross_receiver' && play.zone === 'ATT') {
+          log.push(`${play.card.actionName ?? play.card.name}: Cross receiver is active in ATT.`);
+        }
+
+        revealedPlayers[side][play.zone] += 1;
         continue;
       }
 
       if (play.kind === 'chance') {
         const receiverBonus = play.card.chanceType === 'cross'
-          && work.team.board.ATT.some((deployed) => (deployed.card as LabPlayer).receivesCross)
-          ? 2
+          ? prototypeCrossReceiverBonus(work.team.board)
           : 0;
         const attackBoost = play.card.attackBoost + receiverBonus;
         work.boost.attack += attackBoost;
-        log.push(`${actor} reveal ${play.card.name} → ATT: +${attackBoost} ATT, then the Chance leaves its slot.`);
+        log.push(`${actor} reveal ${play.card.name} → ATT: +${attackBoost} ATT${receiverBonus ? ' including +2 receiver bonus' : ''}, then the Chance leaves its slot.`);
         continue;
       }
 
@@ -348,8 +448,8 @@ function planBot(team: TeamState, opponentBoard: V8Board, energy: number, period
   let projectedBoard = team.board;
 
   while (remaining > 0) {
-    const ownTotals = teamTotals(projectedBoard);
-    const oppTotals = teamTotals(opponentBoard);
+    const ownTotals = teamTotals(prototypeBoardWithOngoing(projectedBoard));
+    const oppTotals = teamTotals(prototypeBoardWithOngoing(opponentBoard));
     const baseNet = goalsFromAttackDefence(ownTotals.attack, oppTotals.defence)
       - goalsFromAttackDefence(oppTotals.attack, ownTotals.defence);
     let best: { play: PendingPlay; score: number } | null = null;
@@ -362,7 +462,8 @@ function planBot(team: TeamState, opponentBoard: V8Board, energy: number, period
 
       if (handCard.kind === 'chance') {
         if (!canPlayToZone(team.board, 'ATT', reservations)) continue;
-        const projectedBoost = handCard.card.attackBoost;
+        const receiverBonus = prototypeCrossReceiverBonus(projectedBoard);
+        const projectedBoost = handCard.card.attackBoost + (handCard.card.chanceType === 'cross' ? receiverBonus : 0);
         const net = goalsFromAttackDefence(ownTotals.attack + projectedBoost, oppTotals.defence)
           - goalsFromAttackDefence(oppTotals.attack, ownTotals.defence);
         const score = (net - baseNet) * 100 + projectedBoost - handCard.card.cost;
@@ -378,7 +479,13 @@ function planBot(team: TeamState, opponentBoard: V8Board, energy: number, period
       for (const zone of ZONES) {
         if (!canPlayToZone(team.board, zone, reservations)) continue;
         const contribution = contributionInZone(handCard.card, zone);
-        const score = (contribution.attack + contribution.defence) * (4 - periodIndex)
+        let actionValue = 0;
+        if (handCard.card.prototypeAction === 'wall' && zone === 'DEF' && projectedBoard.DEF.length > 0) actionValue += 2;
+        if (handCard.card.prototypeAction === 'follow_att' && zone === 'ATT' && projectedBoard.ATT.length > 0) actionValue += 2;
+        if (handCard.card.prototypeAction === 'cross_receiver' && zone === 'ATT') actionValue += 1;
+        if (handCard.card.prototypeAction === 'keeper_react' && zone === 'DEF') actionValue += 1;
+        if (handCard.card.createsChance) actionValue += 1;
+        const score = (contribution.attack + contribution.defence + actionValue) * (4 - periodIndex)
           - handCard.card.cost
           - outOfPositionPenalty(handCard.card, zone) * 2;
         if (best === null || score > best.score) {
@@ -462,7 +569,10 @@ function CardFace({ handCard, selected, pending, onClick }: {
       <span className="v8-card__cost">{card.cost}</span>
       <span className="v8-card__position">{card.position}</span>
       <strong>{card.name}</strong>
-      <small>{card.actionName ?? '—'}</small>
+      <small>
+        <b>{card.actionName ?? '—'}</b>
+        {card.actionText && <span>{card.actionText}</span>}
+      </small>
       <span className="v8-card__att">{card.printedAttack} ATT</span>
       <span className="v8-card__def">{card.printedDefence} DEF</span>
     </button>
@@ -533,10 +643,16 @@ export default function V8MatchLab() {
   const selectedHand = selected?.kind === 'hand' ? home.hand.find((card) => handId(card) === selected.id) ?? null : null;
   const selectedPlayer = selectedHand?.kind === 'player' ? selectedHand.card : null;
   const projectedHome = useMemo(() => boardWithPendingPlayers(home.board, pending), [home.board, pending]);
-  const homeTotals = teamTotals(home.board);
-  const awayTotals = teamTotals(away.board);
+  const homeTotals = teamTotals(prototypeBoardWithOngoing(home.board));
+  const awayTotals = teamTotals(prototypeBoardWithOngoing(away.board));
   const currentPriority = useMemo(
-    () => revealPriority(homeScore, awayScore, home.board, away.board, gameSeed + periodIndex * 101),
+    () => revealPriority(
+      homeScore,
+      awayScore,
+      prototypeBoardWithOngoing(home.board),
+      prototypeBoardWithOngoing(away.board),
+      gameSeed + periodIndex * 101,
+    ),
     [homeScore, awayScore, home.board, away.board, gameSeed, periodIndex],
   );
 
@@ -640,7 +756,7 @@ export default function V8MatchLab() {
 
     setHomeScore(newHomeScore);
     setAwayScore(newAwayScore);
-    setEvents((current) => [...periodEvents, ...current].slice(0, 20));
+    setEvents((current) => [...periodEvents, ...current].slice(0, 24));
     setPending([]);
     setSelected(null);
 
