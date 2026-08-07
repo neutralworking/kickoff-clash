@@ -1,135 +1,235 @@
-# Kickoff Clash V8 — tempo, transient slots, reveal priority and first Action set
+# Kickoff Clash V8 — 30-player Action calibration
 
 Date: 2026-08-07
 Branch: `agent/v8-three-zone-prototype`
 PR: #105
 
-## Energy baseline
+## Current match baseline
 
-The current preferred Energy curve is:
+- Four periods: 0–22, 22–HT, HT–66, 66–FT.
+- Preferred Energy curve: **3 / 5 / 7 / 9**.
+- Starting XI is the 11-player deck.
+- Opening three players plus Manager; draw two players at the start of each period.
+- DEF / MID / ATT are depth zones, not left/centre/right lanes.
+- Four **player** slots per side per zone.
+- Players persist after reveal.
+- No normal substitution phase.
+- Reveal priority: score → current ATT → ATT+DEF board strength → seeded deterministic tiebreak.
+- Priority side reveals its commitments in play order, then the other side reveals in play order.
+- On Reveal resolves immediately; Ongoing activates while deployed/enabled; End of Period runs after the period state/outcome is known.
 
-- Period 1: **3**
-- Period 2: **5**
-- Period 3: **7**
-- Period 4: **9**
+## Physical slot rule
 
-`4 / 6 / 8 / 10` remains available in the lab only as an intentionally more explosive comparison.
+Player slots and Tactical placement are now deliberately separate concepts.
 
-The 3-Energy opener felt better in direct playtesting because the opening draw matters more and the player cannot simply dump high-value cards immediately.
+- Player card: reserves one of four player slots and remains there.
+- Manager card: reserves one player slot while committed/revealing, resolves, disappears and releases it.
+- Tactical / Chance card: is played to a zone, costs Energy, resolves at its reveal point, disappears and **never consumes a player slot**.
 
-## First 1-cost tempo experiment
+This supersedes the earlier prototype rule where Chance cards temporarily reserved slots.
 
-Each development XI now contains three genuine 1-cost players rather than discounting existing high-output cards.
+## Opposing `here`
 
-The test archetypes are:
+Friendly effects use the player's literal depth zone.
 
-1. **Flexible full-back / wing-back** — around 2 ATT / 2 DEF, natural in DEF and MID.
-2. **Cheap defensive body** — around 0 ATT / 3 DEF, natural in DEF.
-3. **Cheap attacking runner** — around 3 ATT / 0 DEF, natural in ATT.
+For opposing targeting/cancellation, the confronting football depth is used:
 
-The point is to test tempo, setup and flexibility. Cost is not rarity and a 1-cost card should not visually read as a low-prestige card.
+- friendly ATT ↔ opponent DEF
+- friendly MID ↔ opponent MID
+- friendly DEF ↔ opponent ATT
 
-The deterministic economy simulation reports average 1-cost deployments per team and the rate of 2+ player deployments in Period 1.
+This makes dribbler-v-defender interactions and defensive Chance cancellation coherent without introducing hidden left/centre/right sectors.
 
-## Four physical slots means four committed cards
+## Seven reusable Tactical definitions
 
-Each DEF / MID / ATT zone has four physical play slots.
+| Tactical | Cost | Eligible zone(s) | Baseline |
+| --- | ---: | --- | --- |
+| Cross | 1 | MID / ATT | +2 ATT this period |
+| Through Ball | 1 | MID / ATT | +2 ATT this period |
+| Long Shot | 1 | DEF / MID / ATT | +1 ATT this period |
+| Corner | 1 | ATT | +3 ATT this period |
+| Penalty | 1 | ATT | +5 ATT this period |
+| Offside Trap | 1 | DEF | Cancel the next opposing Through Ball here this period |
+| Trigger Press | 1 | ATT | Friendly DEF here also counts toward ATT this period |
 
-During a commitment/reveal window, **every card played into a zone reserves one of those four slots**:
+Cross, Through Ball, Long Shot, Corner and Penalty are Chance types. Offside Trap and Trigger Press are Tactical utility cards, not Chances.
 
-- Player card — reserves a slot, then remains there after reveal.
-- Manager card — reserves a slot while queued/revealing, resolves its Action, then disappears and releases the slot.
-- Chance card — reserves a slot while queued/revealing, resolves its effect, then disappears and releases the slot.
+## Generated Tactical instances
 
-Therefore a Manager or Chance cannot be played into a full zone, and a transient reservation can prevent another commitment that period. After the transient resolves, its slot is available again.
+Generated cards retain their base type while carrying per-instance state:
 
-## Reveal priority
+- cost modifier;
+- ATT modifier;
+- cancellation eligibility/immunity;
+- source player;
+- generated-card metadata/riders.
 
-At the start of each reveal window:
+Examples now supported:
 
-1. The team currently **leading the match** reveals first.
-2. If level, the team with higher current **ATT** reveals first.
-3. If ATT is level, compare **board strength = ATT + DEF**.
-4. If everything visible is tied, use a **seeded deterministic tiebreak**.
+- Beckham Cross = normal Cross +2 generated ATT;
+- Charlton Long Shot = normal Long Shot with +2 if actually played in MID;
+- Ronaldo Penalty = normal Penalty +2 generated ATT;
+- Park Trigger Press = 0 cost only in the generation period, then returns to cost 1;
+- Baresi Offside Trap retains the Baresi source so a successful cancellation can award +2 DEF in his current zone.
 
-Priority is fixed before hidden commitments reveal. The priority team reveals **all cards in play order**, then the other team does the same.
+Specialist effects are snapped when the Tactical is played. Later movement does not alter an already resolved Chance.
 
-Timing semantics:
+## Shared player state
 
-- **On Reveal** resolves immediately.
-- **Ongoing** becomes active as soon as the card reveals.
-- Manager and Chance effects use the board state at the exact moment they reveal.
-- **End of Period** waits until both teams have completely revealed.
+The calibration runtime has reusable state for:
 
-## First V8 Action interaction set
+- printed/base ATT and DEF;
+- current ATT and DEF through explicit modifiers;
+- temporary period modifiers;
+- permanent match modifiers;
+- current zone;
+- Action enabled/suppressed state;
+- once-per-period counters;
+- once-per-match counters;
+- per-period Tactical ATT;
+- per-period zone DEF bonuses;
+- movement usage;
+- Tactical resolutions and cancellation results;
+- observable event/action log.
 
-The lab now contains enough different Action patterns to test whether reveal priority creates actual gameplay rather than only presentation.
+`reduced DEF` is derived as `current DEF < printed DEF`; there is no separate combo flag.
 
-### FRONT FOOT / STEP UP — first-reveal disruption
+## The 30 calibration cards
 
-**On Reveal:** pressure the next opposing player revealed in the same zone this period.
+Only the requested 30 are in this implementation batch:
 
-The target loses 2 from the contributing stats for that zone:
+### Cross
 
-- DEF: -2 DEF
-- MID: -2 ATT / -2 DEF
-- ATT: -2 ATT
+- Abby Wambach — DIVING HEADER
+- Ada Hegerberg — FRONT-POST DART
+- Ángel Di María — RABONA
+- Cafu — PENDOLINO
+- David Beckham — BEND IT
+- Dragan Džajić — LEFT-FOOT WHIP
 
-If the pressure is created after the opponent has already finished revealing, it expires unused. This makes revealing first valuable.
+### Through Ball
 
-### STARFISH / CLAIM IT — reactive reveal
+- Alex Morgan — CURVED RUN
+- Andriy Shevchenko — RUNS IN BEHIND
+- Carlos Valderrama — PAUSE AND SLIP
+- Jari Litmanen — KILLER PASS
 
-**On Reveal:** if the opponent has already revealed a player in ATT this period, gain **+3 DEF this period**.
+### Long Shot
 
-This intentionally creates the opposite incentive to FRONT FOOT: the keeper can benefit from revealing second.
+- Bobby Charlton — THUNDERBALL
+- Carli Lloyd — HALFWAY HIT
 
-### RUNNER / POACHER — friendly sequencing
+### Corner
 
-**On Reveal in ATT:** if another friendly ATT player revealed earlier in the same reveal sequence, gain **+2 ATT this period**.
+- Christian Eriksen — WHIPPED DELIVERY
+- Sergio Ramos — 93RD MINUTE
 
-This makes the order of a team's own commitments matter even when reveal priority itself is already known.
+### Penalty / dribbling
 
-### WALL / BLOCK — persistent Ongoing
+- Damien Duff — KNOCK AND RUN
+- Garrincha — JOY OF THE PEOPLE
+- Jay-Jay Okocha — STEPOVER
+- Neymar — RAINBOW FLICK
+- Ronaldo Nazário — FLIP FLAP
+- Antonín Panenka — CHIPPED PENALTY
 
-**Ongoing:** while another friendly player is also in DEF, this card has **+2 DEF**.
+### Defensive / control
 
-The bonus is included in displayed team DEF, period scoring and future reveal-priority board strength.
+- Andrés Iniesta — LA CROQUETA
+- Billy Bremner — CRUNCHING TACKLE
+- Clarence Seedorf — RIDE THE TACKLE
+- Claude Makélélé — WATER-CARRIER
+- Claudio Gentile — MAN MARKER
+- Franco Baresi — STEP UP
+- Park Ji-sung — THREE LUNGS
+- Peter Schmeichel — STARFISH
 
-### VISION / BEND IT / EARLY CROSS — delayed creators
+### Placement / movement
 
-**On Reveal:** generate a typed Chance card for the following period.
+- Christine Sinclair — ARRIVE UNMARKED
+- Franz Beckenbauer — DER KAISER
 
-- VISION → Through Ball
-- BEND IT / EARLY CROSS → Cross
+The six explicitly excluded experimental rows remain outside this batch: Abedi Pelé, Aitana Bonmatí, Bryan Robson, Clint Dempsey, Fabian Barthez and Ronaldinho.
 
-The generated Chance does not resolve automatically and must later be played for Energy into a physical slot.
+## Action mechanics covered
 
-### BOBO BOMBER / TARGET MAN — typed-Chance receiver
+The runtime now supports the calibration requirements including:
 
-**Ongoing in ATT:** a Cross gains **+2 ATT** when it reveals while this receiver is already active in ATT.
+- same-type generated-card modification and hand inspection;
+- multi-card generation;
+- typed local Chance specialist bonuses;
+- first-per-period and first-per-match state;
+- cancellation immunity;
+- generic first-Chance cancellation;
+- Offside Trap cancellation and Baresi rider;
+- reduced-DEF threshold checks;
+- required pre-effect sequencing for Garrincha/Okocha;
+- temporary and permanent player stat modifiers;
+- Iniesta first-target protection;
+- Seedorf reduction immunity;
+- Makélélé dynamic local aura;
+- Gentile dynamic highest-ATT Action suppression and restoration without replaying On Reveal;
+- Cafu forward-only movement generation;
+- Beckenbauer any-direction movement burst;
+- movement once per period;
+- Trigger Press dual DEF/ATT contribution;
+- period reset and match-persistent state.
 
-This means ordering can matter within the same period: revealing the receiver before the Cross creates the bonus; revealing the Cross first does not.
+## Data sourcing
 
-## Action presentation
+The Card Design Tracker remains authoritative for:
 
-Hand cards now show both the **Action name and concise effect text**. The prototype should be playable without memorizing hidden semantics from previous runs.
+- player identity;
+- match/full card names;
+- position;
+- Action name and text;
+- any populated Cost.
 
-The match log records reveal order and activated Action effects so sequencing can be audited during playtesting.
+The 30 tracker rows currently have blank ATT/DEF cells. Existing established values from `kc_player_roster_reconciliation_view` are therefore used for 28 players. Where the tracker Cost is blank, the reconciled KC Cost is also used.
 
-`OVERLAP` cards retain the Moveable status in data, but actual post-deployment movement is deliberately not implemented in this pass. Movement interacts with four-slot reservations and deserves a separate rules/UI pass rather than being smuggled into the first Action experiment.
+Makélélé and Gentile could not be reconciled to stored KC values and remain explicitly marked `calibration_fallback` for ATT/DEF/Cost. No tracker or Supabase values are written by this batch.
 
-## Next questions
+This is not a balance pass.
 
-The important playtest questions are now:
+## Automated calibration coverage
 
-- Does reveal priority actually change which card you play first?
-- Is it interesting that some Actions want priority while STARFISH may prefer to reveal second?
-- Does RUNNER / POACHER make within-team ordering legible and rewarding?
-- Does WALL create useful persistent board-building without making DEF snowball?
-- Do creator → Chance → receiver chains feel worth the Energy and slot cost?
-- Is effect text readable enough in the temporary card UI?
-- Which Action pattern feels like it should be expanded across the real player roster?
+The focused V8 gate covers the handoff's high-priority integration scenarios:
 
-After this set is understood, the next mechanic should be **Moveable / movement**, followed by richer disruption/copy/disable interactions if reveal priority still feels good.
+A. Beckham + Wambach = +8 Cross.
+B. Beckham + Wambach + Ada = +12 uncancellable first Cross.
+C. Valderrama + Shevchenko = +8 first Through Ball.
+D. Duff → Neymar → Panenka = +8 uncancellable Penalty.
+E. Duff → Okocha verifies the pre-existing-reduction requirement.
+F. Ronaldo verifies the exact -3 DEF threshold.
+G. Baresi trap cancels Through Ball and awards +2 DEF.
+H. Park's generated Trigger Press costs 0 in-period and adds ATT from DEF without removing DEF.
+I. Gentile dynamically retargets suppression and restores the previous Action.
+J. Period reset clears period state while retaining once-match/permanent state.
 
-Do not rebalance toward realistic football scorelines. The target remains decision quality and match drama.
+Additional tests cover RABONA, PENDOLINO, two-card Džajić generation, Charlton/Lloyd, Eriksen/Ramos, Garrincha sequencing, Iniesta/Seedorf, Makélélé, Litmanen, Sinclair and Beckenbauer.
+
+Existing V7 focused gates remain in CI for regression visibility.
+
+## Playable lab
+
+`/lab/match-v8` now mounts the real-card calibration harness rather than the fake XI prototype.
+
+It includes:
+
+- real calibration player names and tracker Action text;
+- actual Tactical cards in hand;
+- generated-card ATT/cost/rider feedback;
+- current Energy;
+- temporary current stats on deployed players;
+- `NO ACTION` feedback for suppressed cards;
+- Moveable / move-used state;
+- cancellation and Action feedback through the event log;
+- hidden commitments and reveal priority;
+- Manager transient slot lifecycle;
+- slotless Tactical commitments;
+- three manual deck presets so every one of the 30 cards appears in a user-controlled XI across the harness:
+  - CREATORS
+  - DRIBBLERS
+  - CONTROL / SET PIECES
+
+The UI remains deliberately functional. Card-face redesign, global balance, the rest of the roster and final drag-and-drop presentation remain out of scope.
