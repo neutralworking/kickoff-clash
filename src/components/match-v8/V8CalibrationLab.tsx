@@ -2,17 +2,20 @@
 
 import { useMemo, useState } from 'react';
 import {
+  buildV8CalibrationMatchTelemetry,
   calibrationHandPlayers,
   calibrationHandTacticals,
   calibrationPlayerCard,
   calibrationPlayersInZone,
-  calibrationRuntimeId,
+  calibrationSquadCostProfile,
   calibrationTeamTotals,
+  captureV8CalibrationPeriodTelemetry,
   createV8CalibrationMatch,
   currentCalibrationAttack,
   currentCalibrationDefence,
   endV8CalibrationPeriod,
   getV8CalibrationPlayer,
+  getV8CalibrationSquad,
   goalsFromAttackDefence,
   isCalibrationActionEnabled,
   moveCalibrationPlayer,
@@ -23,8 +26,12 @@ import {
   revealCalibrationPlayer,
   spendCalibrationTacticalFromHand,
   tacticalDefinition,
+  V8_CALIBRATION_SQUAD_KEYS,
+  type V8CalibrationMatchTelemetry,
+  type V8CalibrationPeriodTelemetry,
   type V8CalibrationPlayerCard,
   type V8CalibrationSide,
+  type V8CalibrationSquadKey,
   type V8CalibrationState,
   type V8TacticalCardInstance,
   type V8Zone,
@@ -37,26 +44,8 @@ const ZONES: readonly V8Zone[] = ['DEF', 'MID', 'ATT'];
 const PERIOD_LABELS = ['0–22', '22–HT', 'HT–66', '66–FT'] as const;
 const MANAGER_COST = 3;
 const MANAGER_NAME = 'CONTROL';
-
-const PRESETS = {
-  creators: {
-    label: 'CREATORS',
-    home: ['beckham', 'wambach', 'hegerberg', 'di-maria', 'cafu', 'dzajic', 'morgan', 'shevchenko', 'valderrama', 'litmanen', 'schmeichel'],
-    away: ['gentile', 'baresi', 'iniesta', 'bremner', 'seedorf', 'makelele', 'park', 'beckenbauer', 'sinclair', 'charlton', 'lloyd'],
-  },
-  dribblers: {
-    label: 'DRIBBLERS',
-    home: ['duff', 'garrincha', 'okocha', 'neymar', 'ronaldo', 'panenka', 'sinclair', 'di-maria', 'valderrama', 'park', 'schmeichel'],
-    away: ['baresi', 'gentile', 'seedorf', 'makelele', 'beckenbauer', 'ramos', 'eriksen', 'wambach', 'hegerberg', 'charlton', 'lloyd'],
-  },
-  control: {
-    label: 'CONTROL / SET PIECES',
-    home: ['gentile', 'baresi', 'iniesta', 'bremner', 'seedorf', 'makelele', 'beckenbauer', 'charlton', 'lloyd', 'eriksen', 'ramos'],
-    away: ['duff', 'garrincha', 'okocha', 'neymar', 'ronaldo', 'panenka', 'sinclair', 'di-maria', 'valderrama', 'park', 'schmeichel'],
-  },
-} as const;
-
-type PresetKey = keyof typeof PRESETS;
+const DEFAULT_HOME_SQUAD: V8CalibrationSquadKey = 'cross';
+const DEFAULT_AWAY_SQUAD: V8CalibrationSquadKey = 'balanced_midrange';
 
 type PendingPlay =
   | { kind: 'player'; side: V8CalibrationSide; cardId: string; zone: V8Zone; cost: number }
@@ -114,11 +103,10 @@ function withCalibrationEnergy(state: V8CalibrationState): V8CalibrationState {
   };
 }
 
-function createPresetMatch(preset: PresetKey, seed: number): V8CalibrationState {
-  const definition = PRESETS[preset];
+function createSquadMatch(homeSquad: V8CalibrationSquadKey, awaySquad: V8CalibrationSquadKey, seed: number): V8CalibrationState {
   return withCalibrationEnergy(createV8CalibrationMatch(
-    seededShuffle(definition.home, seed),
-    seededShuffle(definition.away, seed + 1),
+    seededShuffle(getV8CalibrationSquad(homeSquad).playerIds, seed),
+    seededShuffle(getV8CalibrationSquad(awaySquad).playerIds, seed + 1),
   ));
 }
 
@@ -322,10 +310,27 @@ function recapHighlights(state: V8CalibrationState, period: number): string[] {
     .slice(-6);
 }
 
+function signed(value: number): string {
+  return `${value > 0 ? '+' : ''}${value}`;
+}
+
+function TelemetryTeamPeriod({ label, telemetry }: { label: string; telemetry: V8CalibrationPeriodTelemetry['home'] }) {
+  return (
+    <div className="v8-telemetry__team">
+      <b>{label}</b>
+      <span>{telemetry.goals} G · {telemetry.attack} ATT · {telemetry.defence} DEF · margin {signed(telemetry.attackingMargin)}</span>
+      <span>Tactical ATT {telemetry.tacticalAttack} · Action Δ {signed(telemetry.actionAttackDelta)} ATT / {signed(telemetry.actionDefenceDelta)} DEF</span>
+      <span>{telemetry.playersDeployed} players · {telemetry.tacticalsPlayed} Tacticals · {telemetry.unusedEnergy} Energy unused · {telemetry.cancelledChances} cancelled</span>
+      {telemetry.majorChains.map((chain) => <small key={chain}>{chain}</small>)}
+    </div>
+  );
+}
+
 export default function V8CalibrationLab() {
-  const [preset, setPreset] = useState<PresetKey>('creators');
+  const [homeSquad, setHomeSquad] = useState<V8CalibrationSquadKey>(DEFAULT_HOME_SQUAD);
+  const [awaySquad, setAwaySquad] = useState<V8CalibrationSquadKey>(DEFAULT_AWAY_SQUAD);
   const [seed, setSeed] = useState(8082026);
-  const [state, setState] = useState<V8CalibrationState>(() => createPresetMatch('creators', 8082026));
+  const [state, setState] = useState<V8CalibrationState>(() => createSquadMatch(DEFAULT_HOME_SQUAD, DEFAULT_AWAY_SQUAD, 8082026));
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
   const [pending, setPending] = useState<PendingPlay[]>([]);
@@ -334,6 +339,8 @@ export default function V8CalibrationLab() {
   const [awayManagerAvailable, setAwayManagerAvailable] = useState(true);
   const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([]);
   const [recaps, setRecaps] = useState<PeriodRecap[]>([]);
+  const [telemetryPeriods, setTelemetryPeriods] = useState<V8CalibrationPeriodTelemetry[]>([]);
+  const [matchTelemetry, setMatchTelemetry] = useState<V8CalibrationMatchTelemetry | null>(null);
   const [finished, setFinished] = useState(false);
 
   const homePlayers = calibrationHandPlayers(state, 'home');
@@ -341,12 +348,16 @@ export default function V8CalibrationLab() {
   const totalsHome = calibrationTeamTotals(state, 'home');
   const totalsAway = calibrationTeamTotals(state, 'away');
   const currentPriority = useMemo(() => priority(state, homeScore, awayScore, seed + state.period * 101), [state, homeScore, awayScore, seed]);
+  const homeCostProfile = useMemo(() => calibrationSquadCostProfile(homeSquad), [homeSquad]);
+  const awayCostProfile = useMemo(() => calibrationSquadCostProfile(awaySquad), [awaySquad]);
   const latestRecap = recaps.at(-1);
+  const latestTelemetry = telemetryPeriods.at(-1);
 
-  const reset = (nextPreset = preset, nextSeed = seed + 31) => {
-    setPreset(nextPreset);
+  const reset = (nextHomeSquad = homeSquad, nextAwaySquad = awaySquad, nextSeed = seed + 31) => {
+    setHomeSquad(nextHomeSquad);
+    setAwaySquad(nextAwaySquad);
     setSeed(nextSeed);
-    setState(createPresetMatch(nextPreset, nextSeed));
+    setState(createSquadMatch(nextHomeSquad, nextAwaySquad, nextSeed));
     setHomeScore(0);
     setAwayScore(0);
     setPending([]);
@@ -355,6 +366,8 @@ export default function V8CalibrationLab() {
     setAwayManagerAvailable(true);
     setUndoStack([]);
     setRecaps([]);
+    setTelemetryPeriods([]);
+    setMatchTelemetry(null);
     setFinished(false);
   };
 
@@ -459,6 +472,19 @@ export default function V8CalibrationLab() {
     resolved.events.push({ type: 'action_triggered', period, text: `${periodLabel}: ${home.attack} ATT vs ${away.defence} DEF → ${scoredHome} goal${scoredHome === 1 ? '' : 's'}.` });
     resolved.events.push({ type: 'action_triggered', period, text: `${periodLabel}: opponent ${away.attack} ATT vs ${home.defence} DEF → ${scoredAway} goal${scoredAway === 1 ? '' : 's'}.` });
 
+    const periodTelemetry = captureV8CalibrationPeriodTelemetry({
+      state: resolved,
+      homeGoals: scoredHome,
+      awayGoals: scoredAway,
+      homeAttack: home.attack,
+      homeDefence: home.defence,
+      awayAttack: away.attack,
+      awayDefence: away.defence,
+      plays: allPending,
+    });
+    const nextTelemetryPeriods = [...telemetryPeriods, periodTelemetry];
+    setTelemetryPeriods(nextTelemetryPeriods);
+
     setRecaps((items) => [...items, {
       period,
       label: periodLabel,
@@ -475,6 +501,16 @@ export default function V8CalibrationLab() {
     const wasFinal = resolved.period === 4;
     resolved = endV8CalibrationPeriod(resolved);
     if (!wasFinal) resolved = withCalibrationEnergy(resolved);
+    if (wasFinal) {
+      setMatchTelemetry(buildV8CalibrationMatchTelemetry({
+        state: resolved,
+        homeSquad,
+        awaySquad,
+        homeScore: nextHomeScore,
+        awayScore: nextAwayScore,
+        periods: nextTelemetryPeriods,
+      }));
+    }
     setState(resolved);
     setHomeScore(nextHomeScore);
     setAwayScore(nextAwayScore);
@@ -501,17 +537,27 @@ export default function V8CalibrationLab() {
 
       <div className="v8-condition">
         <button>
-          <strong>30-CARD V8 CALIBRATION</strong>
+          <strong>V8 SQUAD CALIBRATION</strong>
           <span>2/4/6/8 Energy · player Costs −1 (min 1) · source values unchanged</span>
         </button>
-        <button onClick={() => reset(preset, seed + 31)}>NEW DRAW</button>
+        <button onClick={() => reset(homeSquad, awaySquad, seed + 31)}>NEW DRAW</button>
       </div>
 
-      <section className="v8-lab-controls">
-        <span>DECK PRESET</span>
-        {(Object.keys(PRESETS) as PresetKey[]).map((key) => (
-          <button key={key} className={preset === key ? 'is-active' : ''} onClick={() => reset(key, seed + 31)}>{PRESETS[key].label}</button>
-        ))}
+      <section className="v8-lab-controls v8-lab-controls--squads" aria-label="Calibration squads">
+        <label>
+          <span>YOU SQUAD</span>
+          <select data-testid="home-squad-select" value={homeSquad} onChange={(event) => reset(event.target.value as V8CalibrationSquadKey, awaySquad, seed + 31)}>
+            {V8_CALIBRATION_SQUAD_KEYS.map((key) => <option key={key} value={key}>{getV8CalibrationSquad(key).label}</option>)}
+          </select>
+          <small>C{homeCostProfile.totalCost} · avg {homeCostProfile.averageCost.toFixed(2)}</small>
+        </label>
+        <label>
+          <span>CPU SQUAD</span>
+          <select data-testid="away-squad-select" value={awaySquad} onChange={(event) => reset(homeSquad, event.target.value as V8CalibrationSquadKey, seed + 31)}>
+            {V8_CALIBRATION_SQUAD_KEYS.map((key) => <option key={key} value={key}>{getV8CalibrationSquad(key).label}</option>)}
+          </select>
+          <small>C{awayCostProfile.totalCost} · avg {awayCostProfile.averageCost.toFixed(2)}</small>
+        </label>
       </section>
 
       <section className="v8-totals">
@@ -586,6 +632,39 @@ export default function V8CalibrationLab() {
         </details>
       )}
 
+      {latestTelemetry && (
+        <details className="v8-telemetry" data-testid="v8-telemetry" open={finished}>
+          <summary>
+            <strong>CALIBRATION TELEMETRY</strong>
+            <span>{getV8CalibrationSquad(homeSquad).shortLabel} vs {getV8CalibrationSquad(awaySquad).shortLabel} · {telemetryPeriods.length}/4 periods</span>
+          </summary>
+          <div className="v8-telemetry__body">
+            <div className="v8-telemetry__period" data-testid={`telemetry-period-${latestTelemetry.period}`}>
+              <small>P{latestTelemetry.period} · {PERIOD_LABELS[latestTelemetry.period - 1]}</small>
+              <TelemetryTeamPeriod label="YOU" telemetry={latestTelemetry.home} />
+              <TelemetryTeamPeriod label="CPU" telemetry={latestTelemetry.away} />
+            </div>
+
+            {telemetryPeriods.length > 1 && (
+              <div className="v8-telemetry__history">
+                {telemetryPeriods.map((periodTelemetry) => (
+                  <span key={periodTelemetry.period}>P{periodTelemetry.period}: {periodTelemetry.home.goals}–{periodTelemetry.away.goals} · margins {signed(periodTelemetry.home.attackingMargin)} / {signed(periodTelemetry.away.attackingMargin)}</span>
+                ))}
+              </div>
+            )}
+
+            {matchTelemetry && (
+              <div className="v8-telemetry__match" data-testid="match-telemetry-final">
+                <b>FULL MATCH · {matchTelemetry.finalScore} · {matchTelemetry.totalGoals} total goals · {matchTelemetry.winner === 'draw' ? 'DRAW' : matchTelemetry.winner === 'home' ? 'YOU WIN' : 'CPU WINS'}</b>
+                <span>YOU: {matchTelemetry.home.playersDeployed} deployed / {matchTelemetry.home.playersUndeployed} undeployed · {matchTelemetry.home.totalUnusedEnergy} unused Energy · {matchTelemetry.home.tacticalsPlayed} Tacticals · {matchTelemetry.home.tacticalAttackGenerated} Tactical ATT · {matchTelemetry.home.cancelledChances} cancelled</span>
+                <span>CPU: {matchTelemetry.away.playersDeployed} deployed / {matchTelemetry.away.playersUndeployed} undeployed · {matchTelemetry.away.totalUnusedEnergy} unused Energy · {matchTelemetry.away.tacticalsPlayed} Tacticals · {matchTelemetry.away.tacticalAttackGenerated} Tactical ATT · {matchTelemetry.away.cancelledChances} cancelled</span>
+                {[...new Set([...matchTelemetry.home.majorChains, ...matchTelemetry.away.majorChains])].map((chain) => <small key={chain}>{chain}</small>)}
+              </div>
+            )}
+          </div>
+        </details>
+      )}
+
       <section className="v8-hand-wrap">
         <div className="v8-hand-heading"><strong>HAND</strong><span>{state.teams.home.drawPile.length} XI cards unseen</span></div>
         <div className="v8-hand">
@@ -620,7 +699,7 @@ export default function V8CalibrationLab() {
           <small>FULL TIME</small>
           <strong>{homeScore}–{awayScore}</strong>
           <b>{homeScore > awayScore ? 'VICTORY' : homeScore < awayScore ? 'DEFEAT' : 'DRAW'}</b>
-          <button onClick={() => reset(preset, seed + 31)}>PLAY AGAIN</button>
+          <button onClick={() => reset(homeSquad, awaySquad, seed + 31)}>PLAY AGAIN</button>
         </div>
       )}
     </main>
