@@ -38,14 +38,19 @@ const MANAGER_NAME = 'CONTROL';
 
 const PRESETS = {
   creators: {
-    label: 'CREATORS vs CONTROL',
+    label: 'CREATORS',
     home: ['beckham', 'wambach', 'hegerberg', 'di-maria', 'cafu', 'dzajic', 'morgan', 'shevchenko', 'valderrama', 'litmanen', 'schmeichel'],
     away: ['gentile', 'baresi', 'iniesta', 'bremner', 'seedorf', 'makelele', 'park', 'beckenbauer', 'sinclair', 'charlton', 'lloyd'],
   },
   dribblers: {
-    label: 'DRIBBLERS vs SET PIECES',
+    label: 'DRIBBLERS',
     home: ['duff', 'garrincha', 'okocha', 'neymar', 'ronaldo', 'panenka', 'sinclair', 'di-maria', 'valderrama', 'park', 'schmeichel'],
     away: ['baresi', 'gentile', 'seedorf', 'makelele', 'beckenbauer', 'ramos', 'eriksen', 'wambach', 'hegerberg', 'charlton', 'lloyd'],
+  },
+  control: {
+    label: 'CONTROL / SET PIECES',
+    home: ['gentile', 'baresi', 'iniesta', 'bremner', 'seedorf', 'makelele', 'beckenbauer', 'charlton', 'lloyd', 'eriksen', 'ramos'],
+    away: ['duff', 'garrincha', 'okocha', 'neymar', 'ronaldo', 'panenka', 'sinclair', 'di-maria', 'valderrama', 'park', 'schmeichel'],
   },
 } as const;
 
@@ -244,12 +249,28 @@ function DeployedChip({ state, side, runtimeId, onMove }: { state: V8Calibration
   const suppressed = !isCalibrationActionEnabled(state, runtimeId);
   const moveable = side === 'home' && (card.actionKey === 'cafu_pendolino' || card.actionKey === 'beckenbauer_der_kaiser');
   const moved = Boolean(state.periodCounters[`move:${runtimeId}`]);
+  const canMove = moveable && !moved && Boolean(onMove);
   return (
-    <button className={`v8-chip${side === 'away' ? ' v8-chip--away' : ''}${suppressed ? ' is-suppressed' : ''}`} onClick={moveable && !moved ? onMove : undefined}>
+    <span
+      className={`v8-chip${side === 'away' ? ' v8-chip--away' : ''}${suppressed ? ' is-suppressed' : ''}`}
+      role={canMove ? 'button' : undefined}
+      tabIndex={canMove ? 0 : undefined}
+      onClick={(event) => {
+        if (!canMove) return;
+        event.stopPropagation();
+        onMove?.();
+      }}
+      onKeyDown={(event) => {
+        if (!canMove || (event.key !== 'Enter' && event.key !== ' ')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onMove?.();
+      }}
+    >
       {card.realName}
       <b>{attack}/{defence}</b>
       <small>{suppressed ? 'NO ACTION' : moveable ? (moved ? 'MOVE USED' : 'MOVEABLE') : card.actionName}</small>
-    </button>
+    </span>
   );
 }
 
@@ -413,7 +434,7 @@ export default function V8CalibrationLab() {
       <div className="v8-condition">
         <button>
           <strong>30-CARD V8 CALIBRATION</strong>
-          <span>Real tracker cards · calibration stats where tracker values are blank</span>
+          <span>Tracker Actions · established KC values where available · 2 marked fallbacks</span>
         </button>
         <button onClick={() => reset(preset, seed + 31)}>NEW DRAW</button>
       </div>
