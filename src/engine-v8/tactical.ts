@@ -39,13 +39,19 @@ export interface V8TacticalCardInstance {
   metadata: V8GeneratedTacticalMetadata;
 }
 
+/**
+ * eligibleZones remains the legality list, but its order is also the calibration CPU's
+ * deterministic tie-break when two legal zones cost the same. Keep the preferred specialist
+ * lane first: Cross / Through Ball finishers live in ATT, while Long Shot specialists live in MID.
+ * This changes only CPU placement preference, not Tactical legality or balance values.
+ */
 export const V8_TACTICAL_DEFINITIONS: Record<V8TacticalType, V8TacticalDefinition> = {
   cross: {
     type: 'cross',
     name: 'Cross',
     baseCost: 1,
     baseAtt: 2,
-    eligibleZones: ['MID', 'ATT'],
+    eligibleZones: ['ATT', 'MID'],
     isChance: true,
     text: '+2 ATT this period.',
   },
@@ -54,7 +60,7 @@ export const V8_TACTICAL_DEFINITIONS: Record<V8TacticalType, V8TacticalDefinitio
     name: 'Through Ball',
     baseCost: 1,
     baseAtt: 2,
-    eligibleZones: ['MID', 'ATT'],
+    eligibleZones: ['ATT', 'MID'],
     isChance: true,
     text: '+2 ATT this period.',
   },
@@ -63,7 +69,7 @@ export const V8_TACTICAL_DEFINITIONS: Record<V8TacticalType, V8TacticalDefinitio
     name: 'Long Shot',
     baseCost: 1,
     baseAtt: 1,
-    eligibleZones: ['DEF', 'MID', 'ATT'],
+    eligibleZones: ['MID', 'DEF', 'ATT'],
     isChance: true,
     text: '+1 ATT this period.',
   },
