@@ -87,6 +87,7 @@ export type ActionEffect =
   | { type: 'cancel_chance'; count: number }
   | { type: 'move_chance'; destination: Sector | 'selected' | 'highest_pressure' | 'lowest_pressure' }
   | { type: 'set_goal_threshold'; minimumRoll: 3 | 4 | 5 | 6 | 7 }
+  | { type: 'set_goal_threshold_floor'; minimumRoll: 3 | 4 | 5 | 6 | 7 }
   | { type: 'add_reroll'; count: number }
   | { type: 'copy_action'; sourceMode: 'first' | 'selected' | 'all' | 'random_positive'; allowCopiedSource: boolean }
   | { type: 'disable_action'; scope: 'named_action' | 'all_player_actions' | 'manager_action'; duration: EffectDuration }
