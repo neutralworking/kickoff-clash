@@ -1,5 +1,8 @@
 import {
   calculatedChanceCount,
+  type ChanceToken,
+  type ChanceType,
+  type FinisherAssignment,
   type PeriodNumber,
   type PeriodSnapshot,
   type Sector,
@@ -37,11 +40,22 @@ export interface PressureModifier {
   tone: 'positive' | 'negative' | 'neutral';
 }
 
+export interface ChanceTokenPresentation {
+  tokenId: string;
+  origin: ChanceToken['origin'];
+  chanceType: ChanceType;
+  sector: Sector;
+  cancelled: boolean;
+  finisherId?: string;
+  finisherName?: string;
+  finisherAssignment?: FinisherAssignment;
+}
+
 export interface PressureSidePresentation {
   attack: number;
   enemyDefence: number;
   difference: number;
-  /** Pure design-rule result: ceil((ATT - enemy DEF) / 5), minimum zero. */
+  /** Pure design-rule result: one chance for each complete five-point positive ATT band. */
   baseChances: number;
   /** Chances introduced after the base ATT-v-DEF calculation. */
   addedChances: number;
@@ -52,6 +66,8 @@ export interface PressureSidePresentation {
   /** Compatibility alias for finalChances. */
   chances: number;
   sectors: SectorChanceCounts;
+  /** Stable typed-token rail. Origin drives colour; chanceType drives icon/label. */
+  tokens: ChanceTokenPresentation[];
   modifiers: PressureModifier[];
 }
 
@@ -67,6 +83,10 @@ export interface PresentationBeat {
   side?: TeamSide;
   sector?: Sector;
   cardId?: string;
+  chanceType?: ChanceType;
+  chanceOrigin?: ChanceToken['origin'];
+  finisherId?: string;
+  finisherAssignment?: FinisherAssignment;
   title: string;
   detail?: string;
   durationMs: number;
@@ -86,6 +106,15 @@ export interface PresentationBeat {
     defenceDelta: number;
     chanceDelta: number;
   };
+}
+
+export function chanceTypeLabel(chanceType: ChanceType): string {
+  switch (chanceType) {
+    case 'through_ball': return 'Through Ball';
+    case 'box': return 'Box';
+    case 'cross': return 'Cross';
+    case 'corner': return 'Corner';
+  }
 }
 
 function emptySectors(): SectorChanceCounts {
@@ -156,7 +185,29 @@ function modifiersForSide(
         id: entry.id,
         cardId: entry.sourceCardId,
         label: `${source} · ${entry.actionName}`,
-        detail: `+${entry.effect.count} ${entry.effect.count === 1 ? 'chance' : 'chances'}`,
+        detail: `+${entry.effect.count} ${chanceTypeLabel(entry.effect.chanceType)} ${entry.effect.count === 1 ? 'chance' : 'chances'}`,
+        tone: 'positive',
+      });
+      continue;
+    }
+
+    if (entry.effect.type === 'change_chance_type' && chanceTargetSide(entry) === side) {
+      modifiers.push({
+        id: entry.id,
+        cardId: entry.sourceCardId,
+        label: `${source} · ${entry.actionName}`,
+        detail: `Shapes ${entry.effect.count} → ${chanceTypeLabel(entry.effect.chanceType)}`,
+        tone: 'positive',
+      });
+      continue;
+    }
+
+    if (entry.effect.type === 'claim_chance' && chanceTargetSide(entry) === side) {
+      modifiers.push({
+        id: entry.id,
+        cardId: entry.sourceCardId,
+        label: `${source} · ${entry.actionName}`,
+        detail: 'Claims matching chance',
         tone: 'positive',
       });
       continue;
@@ -197,11 +248,23 @@ function sidePressure(snapshot: PeriodSnapshot, side: TeamSide, view?: UiMatchVi
   const generated = snapshot.tokenOutcomes.filter((token) => token.side === side);
   const cancelledChances = generated.filter((token) => token.cancelled).length;
   const finalChances = generated.length - cancelledChances;
-  const addedChances = generated.length - baseChances;
+  const addedChances = generated.filter((token) => token.origin === 'action').length;
   const sectors = emptySectors();
   for (const token of generated) {
     if (!token.cancelled) sectors[token.sector] += 1;
   }
+  const tokens: ChanceTokenPresentation[] = generated
+    .slice()
+    .sort((a, b) => a.order - b.order || a.tokenId.localeCompare(b.tokenId))
+    .map((token) => ({
+      tokenId: token.tokenId,
+      origin: token.origin,
+      chanceType: token.chanceType,
+      sector: token.sector,
+      cancelled: token.cancelled,
+      ...(token.finisherId ? { finisherId: token.finisherId, finisherName: playerName(view, token.finisherId) ?? token.finisherId } : {}),
+      ...(token.finisherAssignment ? { finisherAssignment: token.finisherAssignment } : {}),
+    }));
 
   return {
     attack,
@@ -213,6 +276,7 @@ function sidePressure(snapshot: PeriodSnapshot, side: TeamSide, view?: UiMatchVi
     finalChances,
     chances: finalChances,
     sectors,
+    tokens,
     modifiers: modifiersForSide(snapshot, side, view),
   };
 }
@@ -277,9 +341,11 @@ function pressureSequence(
     thresholdTotal: data.baseChances,
   });
 
-  if (data.addedChances !== 0 || data.cancelledChances > 0) {
+  const shaped = data.tokens.some((token) => token.chanceType !== 'box' || token.origin === 'action');
+  if (data.addedChances !== 0 || data.cancelledChances > 0 || shaped) {
     const adjustments = [
-      data.addedChances !== 0 ? `${signed(data.addedChances)} added` : null,
+      data.addedChances !== 0 ? `${signed(data.addedChances)} action-created` : null,
+      shaped ? 'typed chances shaped' : null,
       data.cancelledChances > 0 ? `−${data.cancelledChances} cancelled` : null,
     ].filter(Boolean).join(' · ');
     beats.push({
@@ -320,7 +386,7 @@ export function buildPeriodPresentation(
     kind: 'overview',
     period: snapshot.period,
     title: `${pressure.player.finalChances}–${pressure.opponent.finalChances} chances`,
-    detail: 'Base pressure and action adjustments are resolved. Each surviving chance now rolls.',
+    detail: 'Base pressure and typed Action adjustments are resolved. Each surviving chance now rolls with its assigned finisher.',
     durationMs: 1050,
     pressure,
   });
@@ -335,8 +401,17 @@ export function buildPeriodPresentation(
   for (const token of outcomes) {
     const sideLabel = token.side === 'player' ? 'Your' : 'Their';
     const sectorLabel = token.sector[0]!.toUpperCase() + token.sector.slice(1);
+    const typeLabel = chanceTypeLabel(token.chanceType);
     const total = pressure[token.side].finalChances;
-    const cardId = token.scorerId ?? activeAttackerFor(snapshot, token.side, token.sector);
+    const finisherId = token.finisherId ?? token.scorerId;
+    const cardId = finisherId ?? activeAttackerFor(snapshot, token.side, token.sector);
+    const finisher = playerName(view, finisherId) ?? finisherId ?? 'The attack';
+    const chanceIdentity = {
+      chanceType: token.chanceType,
+      chanceOrigin: token.origin,
+      ...(finisherId ? { finisherId } : {}),
+      ...(token.finisherAssignment ? { finisherAssignment: token.finisherAssignment } : {}),
+    };
 
     if (token.cancelled) {
       beats.push({
@@ -346,8 +421,9 @@ export function buildPeriodPresentation(
         side: token.side,
         sector: token.sector,
         cardId,
-        title: `${sideLabel} chance cancelled`,
-        detail: `${sectorLabel} lane shut down before the roll.`,
+        ...chanceIdentity,
+        title: `${typeLabel} cancelled`,
+        detail: `${sideLabel} ${typeLabel.toLowerCase()} was shut down before ${finisher} could finish.`,
         durationMs: 850,
       });
       continue;
@@ -361,8 +437,9 @@ export function buildPeriodPresentation(
       side: token.side,
       sector: token.sector,
       cardId,
-      title: `${sideLabel} chance ${rollIndex[token.side]} of ${total}`,
-      detail: `${sectorLabel} attack · needs ${token.threshold}+`,
+      ...chanceIdentity,
+      title: `${sideLabel} ${typeLabel} · ${rollIndex[token.side]} of ${total}`,
+      detail: `${finisher} · ${sectorLabel} · needs ${token.threshold}+`,
       durationMs: token.rerollsUsed > 0 ? 1900 : 1650,
       rolls: [...token.rolls],
       finalRoll: token.finalRoll,
@@ -373,7 +450,6 @@ export function buildPeriodPresentation(
     });
 
     if (token.scored) {
-      const scorer = playerName(view, token.scorerId) ?? 'The attack';
       beats.push({
         id: `presentation:${snapshot.period}:${token.tokenId}:goal`,
         kind: 'goal',
@@ -381,8 +457,9 @@ export function buildPeriodPresentation(
         side: token.side,
         sector: token.sector,
         cardId,
+        ...chanceIdentity,
         title: 'GOAL!',
-        detail: `${scorer} converts from the ${token.sector}.`,
+        detail: `${finisher} converts the ${typeLabel}.`,
         durationMs: 1900,
         rolls: [...token.rolls],
         finalRoll: token.finalRoll,
@@ -399,8 +476,9 @@ export function buildPeriodPresentation(
         side: token.side,
         sector: token.sector,
         cardId,
-        title: 'Chance missed',
-        detail: `${token.finalRoll} was below the ${token.threshold}+ target.`,
+        ...chanceIdentity,
+        title: `${typeLabel} missed`,
+        detail: `${finisher}: ${token.finalRoll} was below the ${token.threshold}+ target.`,
         durationMs: 900,
         rolls: [...token.rolls],
         finalRoll: token.finalRoll,
