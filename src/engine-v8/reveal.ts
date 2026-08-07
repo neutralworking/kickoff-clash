@@ -16,7 +16,7 @@ function opposite(side: V8Side): V8Side {
 /**
  * V8 reveal priority:
  * 1. The team leading the match reveals first.
- * 2. If level, compare each team's current ATT edge over the opposing DEF.
+ * 2. If level, compare current ATT.
  * 3. If still level, compare total current board strength (ATT + DEF).
  * 4. A seeded deterministic tiebreak resolves a complete tie.
  *
@@ -38,11 +38,8 @@ export function revealPriority(
 
   const home = teamTotals(homeBoard);
   const away = teamTotals(awayBoard);
-  const homeAttackEdge = home.attack - away.defence;
-  const awayAttackEdge = away.attack - home.defence;
-
-  if (homeAttackEdge !== awayAttackEdge) {
-    const first: V8Side = homeAttackEdge > awayAttackEdge ? 'home' : 'away';
+  if (home.attack !== away.attack) {
+    const first: V8Side = home.attack > away.attack ? 'home' : 'away';
     return { first, second: opposite(first), reason: 'attack_edge' };
   }
 
