@@ -39,13 +39,15 @@ printed position.
 
 - Type has no hidden scoring modifier. All threshold/reroll/cancel/claim value is explicit and receipt-backed.
 - ATT-created chances always start `origin: calculated`, `chanceType: box`.
-- `add_chance` adds volume and names a type.
+- `add_chance` adds volume and names a type. Multi-token random creation uses a separate deterministic RNG namespace per token.
 - `change_chance_type` changes only type; token id, origin, side, order and sector survive.
 - `move_chance` changes only sector.
 - `claim_chance` assigns the source player as finisher of a matching token.
 - Claims resolve in ledger order. The first valid claim wins; later claims fizzle.
 - Default assignment is team-wide, weighted by effective ATT, and uses a token-namespaced RNG stream isolated from goal rolls.
 - If no default-eligible finisher exists, the strongest active non-emergency goalkeeper is assigned as `fallback`.
+- `set_goal_threshold` sets a conversion threshold such as a specialist's 5+.
+- `set_goal_threshold_floor` is a hard defensive floor applied after ordinary threshold changes. “Cannot score on less than 6+” therefore works identically for player and opponent regardless of ledger order.
 - Follow-up chains such as miss → Corner are deferred.
 
 ## Resolution order
@@ -56,8 +58,9 @@ printed position.
 4. Apply sector movement.
 5. Resolve explicit claims.
 6. Assign every unclaimed token from the default eligibility table/fallback.
-7. Apply cancellation, threshold and reroll effects.
-8. Roll and attribute the result to the assigned finisher.
+7. Apply cancellation, ordinary threshold and reroll effects.
+8. Enforce defensive goal-threshold floors.
+9. Roll and attribute the result to the assigned finisher.
 
 ## Contract
 
@@ -79,6 +82,7 @@ Action additions:
 { type: 'add_chance'; count: number; chanceType: ChanceType; sectorMode: ... }
 { type: 'change_chance_type'; chanceType: ChanceType; count: number }
 { type: 'claim_chance' }
+{ type: 'set_goal_threshold_floor'; minimumRoll: 3 | 4 | 5 | 6 | 7 }
 
 {
   type: 'chance';
@@ -155,11 +159,13 @@ Recorded 5,000-match balance result from the Card Design Tracker:
 
 - Calculated tokens are Box/calculated.
 - Action-created tokens preserve Action origin and have stable unique ids.
+- Multiple random Action-created chances use independent deterministic sector draws.
 - Shaping preserves origin and id.
 - A CF can finish a Cross created in either wide sector.
 - Default assignment replays byte-identically for the same seed/state.
 - A valid specialist claim beats default assignment and only its claimed token gets the 5+ conversion modifier.
 - A typed defensive effect cannot touch a Box token.
+- A defensive “cannot score on less than 6+” counter beats a 5+ specialist regardless of which side owns either card or ledger insertion order.
 - Chance creation, shaping, assignment, cancellation, rolls and goals are receipt-backed.
 - UI exposes origin and type separately and names the intended finisher before rolling.
 - Simulation reports type mix, conversion and pair delta.
@@ -175,5 +181,4 @@ The last local handoff reported:
 - Cross and Through Ball mobile tests authored but Chromium unavailable.
 
 Those numbers describe the lost checkout, not this reconstructed branch. PR #104
-must re-establish them (or document a deliberate delta) before the recovery is
-considered complete.
+re-establishes verification independently through GitHub Actions and Vercel.
