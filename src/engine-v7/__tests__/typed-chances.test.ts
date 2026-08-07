@@ -298,14 +298,14 @@ describe('specialist conversion + typed counters', () => {
   });
 
   it('a Cross-only defensive threshold cannot touch a Box', () => {
-    const box = token({ id: 'box', chanceType: 'box' });
+    const box = token({ id: 'box', chanceType: 'box', minimumGoalRoll: 5 });
     const cross = token({ id: 'cross', chanceType: 'cross', order: 1, minimumGoalRoll: 5 });
     const counter = ledger(
       { type: 'set_goal_threshold', minimumRoll: 6 },
       { side: 'opponent', targetSide: 'enemy', chanceTypes: ['cross'], selector: 'first' },
     );
     const out = applyTokenEffects([box, cross], [counter], 'player');
-    expect(out.find((entry) => entry.id === 'box')!.minimumGoalRoll).toBe(6);
+    expect(out.find((entry) => entry.id === 'box')!.minimumGoalRoll).toBe(5);
     expect(out.find((entry) => entry.id === 'cross')!.minimumGoalRoll).toBe(6);
   });
 });
