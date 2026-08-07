@@ -173,6 +173,19 @@ describe('typed chance creation + shaping', () => {
     expect(first.tokens[0]!.id).toContain('eff:add:corner');
   });
 
+  it('namespaces each token in a multi-chance random Action independently', () => {
+    const add = ledger(
+      { type: 'add_chance', count: 3, chanceType: 'box', sectorMode: 'random' },
+      { id: 'eff:add:random', sourceInstanceId: 'instance:random' },
+    );
+    const first = applyChanceShapeEffects([], [add], 'player', 1, [], 1);
+    const replay = applyChanceShapeEffects([], [add], 'player', 1, [], 1);
+
+    expect(first).toEqual(replay);
+    expect(first.tokens).toHaveLength(3);
+    expect(first.tokens.map((entry) => entry.sector)).toEqual(['right', 'left', 'right']);
+  });
+
   it('filters typed targets without touching non-matching tokens', () => {
     const box = token({ id: 'box', chanceType: 'box', order: 0 });
     const cross = token({ id: 'cross', chanceType: 'cross', order: 1 });
