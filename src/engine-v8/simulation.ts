@@ -81,7 +81,7 @@ function shuffle<T>(values: readonly T[], rng: SimulationRng): T[] {
 }
 
 function prototypeCost(card: Omit<PrototypePlayer, 'cost'>): number {
-  return Math.max(1, Math.ceil(naturalZonePower({ ...card, cost: 0 }) / 2));
+  return Math.max(1, Math.ceil(naturalZonePower(card) / 2));
 }
 
 function prototypePlayer(
