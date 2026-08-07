@@ -18,8 +18,9 @@ import { effectivePlayers, type CardRegistry, type EffectivePlayer } from './sta
 
 // Period resolution. The typed-chance pipeline is intentionally explicit:
 // calculated Box tokens → Action-created tokens → type shaping → movement →
-// claims/default finisher assignment → cancel/threshold/reroll → roll. Origin,
-// type and finisher remain separate facts on the same stable token id throughout.
+// claims/default finisher assignment → cancel/threshold/reroll → threshold floors
+// → roll. Origin, type and finisher remain separate facts on the same stable
+// token id throughout.
 
 export const FINAL_PERIOD: PeriodNumber = 4;
 
@@ -71,11 +72,28 @@ function effectDependsOnClaim(entry: LedgerEffect, ledger: readonly LedgerEffect
   return ledger.some((other) => other.sourceInstanceId === entry.sourceInstanceId && other.effect.type === 'claim_chance');
 }
 
+function matchingClaimedTokens(
+  out: readonly ChanceToken[],
+  entry: LedgerEffect,
+  ledger: readonly LedgerEffect[],
+): ChanceToken[] {
+  let selected = selectChanceTokens(out, entry);
+  if (effectDependsOnClaim(entry, ledger)) {
+    selected = selected.filter((token) => token.finisherAssignment === 'claimed' && token.finisherId === entry.sourceCardId);
+  }
+  return selected;
+}
+
 /**
  * Apply conversion-level token effects after finishers are fixed. Type filters
  * are preserved on the ledger target. When an Action couples `claim_chance` with
  * a threshold/reroll, the conversion modifier applies only if that same source
  * actually won the claim; a fizzled specialist never grants free value.
+ *
+ * Defensive threshold floors are deliberately applied in a second pass. A card
+ * whose text says a chance "cannot score on less than 6+" therefore remains a
+ * hard counter regardless of which team happens to be `player`, who has
+ * priority, or the order ongoing effects were rebuilt into the ledger.
  */
 export function applyTokenEffects(
   tokens: readonly ChanceToken[],
@@ -91,10 +109,9 @@ export function applyTokenEffects(
     }
     if (!entry.tokenTarget || targetedChanceSide(entry) !== side) continue;
 
-    let selected = selectChanceTokens(out, entry);
-    if (effectDependsOnClaim(entry, ledger) && effect.type !== 'cancel_chance') {
-      selected = selected.filter((token) => token.finisherAssignment === 'claimed' && token.finisherId === entry.sourceCardId);
-    }
+    const selected = effect.type === 'cancel_chance'
+      ? selectChanceTokens(out, entry)
+      : matchingClaimedTokens(out, entry, ledger);
 
     if (effect.type === 'cancel_chance') {
       const ids = new Set(
@@ -114,6 +131,18 @@ export function applyTokenEffects(
     } else {
       out = out.map((token) => (ids.has(token.id) ? { ...token, rerolls: token.rerolls + effect.count } : token));
     }
+  }
+
+  for (const entry of ledger) {
+    const effect = entry.effect;
+    if (effect.type !== 'set_goal_threshold_floor' || !entry.tokenTarget || targetedChanceSide(entry) !== side) continue;
+
+    const ids = new Set(matchingClaimedTokens(out, entry, ledger).map((token) => token.id));
+    out = out.map((token) => {
+      if (!ids.has(token.id)) return token;
+      const minimumGoalRoll = Math.max(token.minimumGoalRoll, effect.minimumRoll) as ChanceToken['minimumGoalRoll'];
+      return { ...token, minimumGoalRoll };
+    });
   }
 
   return out;
