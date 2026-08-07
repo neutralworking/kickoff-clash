@@ -12,7 +12,36 @@ async function expectMobileFit(page: Page) {
   expect(dimensions.bodyWidth).toBeLessThanOrEqual(dimensions.viewport);
 }
 
+async function expectTestingSurfaceAboveFold(page: Page) {
+  const positions = await page.evaluate(() => {
+    const rect = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (!element) throw new Error(`Missing ${selector}`);
+      const box = element.getBoundingClientRect();
+      return { top: box.top, bottom: box.bottom };
+    };
+    return {
+      viewportHeight: window.innerHeight,
+      pitch: rect('.v8-pitch'),
+      commit: rect('.v8-commit'),
+      firstCard: rect('.v8-hand .v8-card'),
+    };
+  });
+
+  expect(positions.pitch.top).toBeGreaterThanOrEqual(0);
+  expect(positions.pitch.bottom).toBeLessThan(positions.viewportHeight);
+  expect(positions.commit.bottom).toBeLessThan(positions.viewportHeight);
+  expect(positions.firstCard.top).toBeLessThan(positions.viewportHeight);
+  expect(positions.firstCard.bottom).toBeLessThanOrEqual(positions.viewportHeight);
+}
+
 test.describe('V8 real-card calibration lab', () => {
+  test('keeps the core testing surface in one phone viewport', async ({ page }) => {
+    await page.goto('/lab/match-v8');
+    await expectTestingSurfaceAboveFold(page);
+    await expectMobileFit(page);
+  });
+
   test('uses real tracker cards and releases the Manager player slot after reveal', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
