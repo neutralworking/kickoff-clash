@@ -1,4 +1,4 @@
-# Kickoff Clash V8 — tempo, transient slots and reveal priority
+# Kickoff Clash V8 — tempo, transient slots, reveal priority and first Action set
 
 Date: 2026-08-07
 Branch: `agent/v8-three-zone-prototype`
@@ -29,12 +29,7 @@ The test archetypes are:
 
 The point is to test tempo, setup and flexibility. Cost is not rarity and a 1-cost card should not visually read as a low-prestige card.
 
-The deterministic economy simulation now reports:
-
-- average 1-cost players deployed per team;
-- rate at which a team makes 2+ player deployments in Period 1.
-
-This is intended to detect whether the lower curve creates combinations rather than simply creating dead opening hands.
+The deterministic economy simulation reports average 1-cost deployments per team and the rate of 2+ player deployments in Period 1.
 
 ## Four physical slots means four committed cards
 
@@ -46,74 +41,95 @@ During a commitment/reveal window, **every card played into a zone reserves one 
 - Manager card — reserves a slot while queued/revealing, resolves its Action, then disappears and releases the slot.
 - Chance card — reserves a slot while queued/revealing, resolves its effect, then disappears and releases the slot.
 
-Therefore:
-
-- a Manager cannot be played into a zone already containing four players;
-- a Chance cannot be played into a full ATT zone;
-- if a zone has three persistent players and a Manager is queued there, no fifth card can also be committed there that period;
-- after the Manager or Chance resolves, its slot is available again next period.
-
-This lifecycle is now an engine-level contract through slot reservations, not only a UI convention.
+Therefore a Manager or Chance cannot be played into a full zone, and a transient reservation can prevent another commitment that period. After the transient resolves, its slot is available again.
 
 ## Reveal priority
-
-Reveal priority is now a V8 rule rather than an unresolved question.
 
 At the start of each reveal window:
 
 1. The team currently **leading the match** reveals first.
-2. If the score is level, the team with the higher current **ATT** reveals first.
-3. If ATT is also level, compare current **board strength = ATT + DEF**.
+2. If level, the team with higher current **ATT** reveals first.
+3. If ATT is level, compare **board strength = ATT + DEF**.
 4. If everything visible is tied, use a **seeded deterministic tiebreak**.
 
-Priority is fixed before the hidden commitments are shown and remains fixed for the entire reveal window.
-
-The priority team reveals **all cards in the order they were played**, then the other team reveals all cards in its play order.
+Priority is fixed before hidden commitments reveal. The priority team reveals **all cards in play order**, then the other team does the same.
 
 Timing semantics:
 
-- **On Reveal** resolves immediately when that card reveals.
-- **Ongoing** becomes active as soon as that card reveals.
+- **On Reveal** resolves immediately.
+- **Ongoing** becomes active as soon as the card reveals.
 - Manager and Chance effects use the board state at the exact moment they reveal.
-- **End of Period** effects wait until both teams have completely revealed.
+- **End of Period** waits until both teams have completely revealed.
 
-This means sequencing within a period now matters. For example, playing CONTROL before a player can produce a different result from playing that player first and CONTROL second.
+## First V8 Action interaction set
 
-## First priority-sensitive Action test
+The lab now contains enough different Action patterns to test whether reveal priority creates actual gameplay rather than only presentation.
 
-The development 1-cost centre-backs now provide a mirrored first interaction:
+### FRONT FOOT / STEP UP — first-reveal disruption
 
-- **FRONT FOOT**
-- **STEP UP**
+**On Reveal:** pressure the next opposing player revealed in the same zone this period.
 
-On Reveal, they place pressure on the next opposing player revealed in the same zone **this period**.
-
-The target loses 2 from the stats that matter in that zone for the period:
+The target loses 2 from the contributing stats for that zone:
 
 - DEF: -2 DEF
 - MID: -2 ATT / -2 DEF
 - ATT: -2 ATT
 
-The pressure expires if no later opposing card reveals into that zone. This is deliberate: a card on the team that reveals second may set pressure too late, making reveal priority consequential without adding a separate interrupt phase.
+If the pressure is created after the opponent has already finished revealing, it expires unused. This makes revealing first valuable.
 
-## Playable presentation
+### STARFISH / CLAIM IT — reactive reveal
 
-The lab shows queued Manager / Chance cards inside the same four-slot grid as players. They use a transient visual treatment and disappear immediately after their reveal resolves.
+**On Reveal:** if the opponent has already revealed a player in ATT this period, gain **+3 DEF this period**.
 
-The commitment panel now shows which team currently has reveal priority and why. The match log records the reveal side, order, Manager / Chance resolution and the first FRONT FOOT / STEP UP interaction.
+This intentionally creates the opposite incentive to FRONT FOOT: the keeper can benefit from revealing second.
 
-The current interaction remains click card → click zone. Drag-and-drop is still the intended later interaction model.
+### RUNNER / POACHER — friendly sequencing
+
+**On Reveal in ATT:** if another friendly ATT player revealed earlier in the same reveal sequence, gain **+2 ATT this period**.
+
+This makes the order of a team's own commitments matter even when reveal priority itself is already known.
+
+### WALL / BLOCK — persistent Ongoing
+
+**Ongoing:** while another friendly player is also in DEF, this card has **+2 DEF**.
+
+The bonus is included in displayed team DEF, period scoring and future reveal-priority board strength.
+
+### VISION / BEND IT / EARLY CROSS — delayed creators
+
+**On Reveal:** generate a typed Chance card for the following period.
+
+- VISION → Through Ball
+- BEND IT / EARLY CROSS → Cross
+
+The generated Chance does not resolve automatically and must later be played for Energy into a physical slot.
+
+### BOBO BOMBER / TARGET MAN — typed-Chance receiver
+
+**Ongoing in ATT:** a Cross gains **+2 ATT** when it reveals while this receiver is already active in ATT.
+
+This means ordering can matter within the same period: revealing the receiver before the Cross creates the bonus; revealing the Cross first does not.
+
+## Action presentation
+
+Hand cards now show both the **Action name and concise effect text**. The prototype should be playable without memorizing hidden semantics from previous runs.
+
+The match log records reveal order and activated Action effects so sequencing can be audited during playtesting.
+
+`OVERLAP` cards retain the Moveable status in data, but actual post-deployment movement is deliberately not implemented in this pass. Movement interacts with four-slot reservations and deserves a separate rules/UI pass rather than being smuggled into the first Action experiment.
 
 ## Next questions
 
-Playtest the 1-cost and reveal layers before broadening the Action pool:
+The important playtest questions are now:
 
-- Does Period 1 usually present at least two plausible lines without becoming automatic?
-- Are 1-cost cards still useful when drawn in Period 3 or 4?
-- Is the flexible 1-cost DEF/MID card too efficient because MID counts both stats?
-- Does reserving a physical slot for a Chance make typed chances more tactical, or does it make full ATT zones frustrating?
-- Does Manager slot occupancy create meaningful timing pressure?
-- Is reveal priority noticeable enough to influence placement order without feeling like bookkeeping?
-- Does FRONT FOOT / STEP UP create readable interaction, or does the temporary penalty feel too fiddly?
+- Does reveal priority actually change which card you play first?
+- Is it interesting that some Actions want priority while STARFISH may prefer to reveal second?
+- Does RUNNER / POACHER make within-team ordering legible and rewarding?
+- Does WALL create useful persistent board-building without making DEF snowball?
+- Do creator → Chance → receiver chains feel worth the Energy and slot cost?
+- Is effect text readable enough in the temporary card UI?
+- Which Action pattern feels like it should be expanded across the real player roster?
+
+After this set is understood, the next mechanic should be **Moveable / movement**, followed by richer disruption/copy/disable interactions if reveal priority still feels good.
 
 Do not rebalance toward realistic football scorelines. The target remains decision quality and match drama.
