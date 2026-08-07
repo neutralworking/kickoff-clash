@@ -125,6 +125,11 @@
     padding: 5px;
     border-radius: 9px;
   }
+  .v8-commit > div {
+    min-width: 0;
+    max-height: 34px;
+    overflow: hidden;
+  }
   .v8-commit strong {
     overflow: hidden;
     font-size: 9px;
@@ -132,6 +137,7 @@
     white-space: nowrap;
   }
   .v8-commit span {
+    display: block;
     overflow: hidden;
     margin-top: 1px;
     font-size: 7px;
@@ -139,7 +145,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .v8-commit span:not(:first-of-type) { display: none; }
   .v8-commit button {
     min-height: 38px;
     padding: 5px 4px;
