@@ -156,6 +156,11 @@
   text-align: center;
 }
 .v8-chip--away { background: #3b2422; }
+.v8-chip--transient {
+  border-style: dashed;
+  background: linear-gradient(165deg, rgba(94,72,126,.95), rgba(54,41,78,.95));
+}
+.v8-chip--transient b { font-size: 7px; letter-spacing: .03em; }
 .v8-chip b { margin-top: 3px; font-size: 9px; }
 
 .v8-commit {
@@ -269,6 +274,7 @@
   .v8-chip { min-height: 43px; }
   .v8-chip { padding: 3px 2px; font-size: 6.5px; }
   .v8-chip b { font-size: 8px; }
+  .v8-chip--transient b { font-size: 6px; }
   .v8-commit { grid-template-columns: 1fr auto; }
   .v8-commit .v8-primary { grid-column: 1 / -1; width: 100%; }
   .v8-totals span { font-size: 8px; }
