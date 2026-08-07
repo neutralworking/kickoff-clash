@@ -1,4 +1,4 @@
-import type { ActionTarget, Sector, TeamSide } from '../../lib/match-v7/types';
+import type { ActionTarget, ChanceSelector, ChanceType, Sector, TeamSide } from '../../lib/match-v7/types';
 import type { ConditionPlayerView } from './conditions';
 
 export interface TargetContext {
@@ -16,7 +16,8 @@ export interface ResolvedTarget {
   playerIds: string[];
   sector?: Sector;
   slotKey?: string;
-  chanceSelector?: 'first_in_sector' | 'all_in_sector';
+  chanceSelector?: ChanceSelector;
+  chanceTypes?: ChanceType[];
   /** For chance targets: whose chances, relative to the acting side. */
   chanceSide?: 'own' | 'enemy';
   side?: TeamSide;
@@ -95,11 +96,17 @@ export function resolveTarget(target: ActionTarget, context: TargetContext): Res
       }
       return { playerIds: ordered.slice(0, target.count ?? 1).map((player) => player.cardId) };
     }
-    case 'chance': return {
-      playerIds: [],
-      sector: target.sector ?? context.source.sector,
-      chanceSelector: target.selector,
-      chanceSide: target.side,
-    };
+    case 'chance': {
+      const globalSelector = target.selector === 'first';
+      return {
+        playerIds: [],
+        ...(target.sector !== undefined || !globalSelector
+          ? { sector: target.sector ?? context.source.sector }
+          : {}),
+        chanceSelector: target.selector,
+        chanceSide: target.side,
+        ...(target.chanceTypes ? { chanceTypes: [...target.chanceTypes] } : {}),
+      };
+    }
   }
 }
