@@ -86,7 +86,18 @@ function matchState(period: 1 | 2 | 3 | 4 = 1, priority: TeamSide = 'player'): V
 }
 
 function token(side: TeamSide, sector: Sector, order: number, overrides: Partial<ChanceToken> = {}): ChanceToken {
-  return { id: `t:${side}:${sector}:${order}`, side, sector, origin: 'calculated', order, minimumGoalRoll: 6, rerolls: 0, cancelled: false, ...overrides };
+  return {
+    id: `t:${side}:${sector}:${order}`,
+    side,
+    sector,
+    origin: 'calculated',
+    order,
+    minimumGoalRoll: 6,
+    rerolls: 0,
+    cancelled: false,
+    ...overrides,
+    chanceType: overrides.chanceType ?? 'box',
+  };
 }
 
 interface LedgerEffectOptions {
