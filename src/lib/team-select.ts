@@ -11,8 +11,8 @@ import type { Card } from './scoring';
 import type { Formation } from './formations';
 import { positionFitsSlot } from './formations';
 
-// 5 subs → an 11 XI + 5 bench = the 16-card starting squad (owner direction).
-export const BENCH_SIZE = 5;
+// V7 matchday squad: 11 starters + 7 substitutes = 18 players.
+export const BENCH_SIZE = 7;
 
 export interface XISelection {
   starters: (number | null)[]; // length === formation.slots.length; cardId per slot

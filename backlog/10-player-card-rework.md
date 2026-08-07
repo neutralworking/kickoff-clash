@@ -1,5 +1,7 @@
 # 10 — Player card rework
 
+> **Superseded for current card mechanics and UI:** see [`docs/player-card-system-spec.md`](../docs/player-card-system-spec.md). The living spec reflects the July 2026 grooming decisions and takes precedence over the older fitness/durability/pillars assumptions below.
+
 **Source:** 0.3 owner feedback ("the player card needs a full rework"). Deferred from the 0.1→0.3 push (the 0.3 push elevated the card *visuals* and added on-card position/fitness + in-match ratings; this task reworks the card *model* and full detail).
 
 ## Outcome

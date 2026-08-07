@@ -7,6 +7,7 @@ import {
   type UiPlayerView,
   type UiTeamView,
 } from '@/game-v7';
+import type { V7ActionDefinition, V7PlayerCard } from '@/engine-v7';
 import { portraitSrc } from '../cards/portrait';
 
 type Side = 'player' | 'opponent';
@@ -23,15 +24,26 @@ export interface V7ReplacementHint {
   detail: string;
 }
 
+const CARD_META = new Map<string, CardMeta>();
+
+/** Register the cards used by the current match. The lab fixture is registered by
+ * default; the live run registers its adapted collection before rendering. */
+export function registerV7CardMeta(
+  cards: readonly V7PlayerCard[],
+  actions: readonly V7ActionDefinition[],
+): void {
+  const actionNames = new Map(actions.map((action) => [action.id, action.name]));
+  for (const card of cards) {
+    CARD_META.set(card.id, {
+      cost: card.printedCost,
+      role: card.role,
+      actions: card.actionIds.map((id) => actionNames.get(id)).filter((name): name is string => Boolean(name)),
+    });
+  }
+}
+
 const fixture = v7Fixture();
-const ACTION_NAMES = new Map(fixture.actions.map((action) => [action.id, action.name]));
-const CARD_META = new Map<string, CardMeta>(
-  fixture.cards.map((card) => [card.id, {
-    cost: card.printedCost,
-    role: card.role,
-    actions: card.actionIds.map((id) => ACTION_NAMES.get(id)).filter((name): name is string => Boolean(name)),
-  }]),
-);
+registerV7CardMeta(fixture.cards, fixture.actions);
 
 export function cardMetaFor(cardId: string): CardMeta {
   return CARD_META.get(cardId) ?? { cost: 0, role: 'Player', actions: [] };
@@ -45,10 +57,18 @@ const SLOT_POSITION: Record<string, { x: number; y: number }> = {
   rcb: { x: 69, y: 73 },
   rb: { x: 91, y: 73 },
   lwb: { x: 10, y: 53 },
+  rwb: { x: 90, y: 53 },
+  ldm: { x: 36, y: 59 },
   dm: { x: 50, y: 58 },
+  rdm: { x: 64, y: 59 },
   lm: { x: 18, y: 47 },
+  lcm: { x: 34, y: 47 },
   cm: { x: 50, y: 47 },
+  rcm: { x: 66, y: 47 },
   rm: { x: 82, y: 47 },
+  lam: { x: 35, y: 34 },
+  am: { x: 50, y: 34 },
+  ram: { x: 65, y: 34 },
   lw: { x: 14, y: 18 },
   lf: { x: 31, y: 20 },
   cf: { x: 50, y: 16 },
