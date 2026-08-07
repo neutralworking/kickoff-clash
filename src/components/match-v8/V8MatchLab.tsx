@@ -2,15 +2,18 @@
 
 import { useMemo, useState } from 'react';
 import {
+  canPlayToZone,
   contributionInZone,
   deployPlayer,
   emptyV8Board,
   goalsFromAttackDefence,
   outOfPositionPenalty,
   teamTotals,
+  zoneOccupancy,
   type V8Board,
   type V8ChanceType,
   type V8PlayerCard,
+  type V8SlotReservation,
   type V8Zone,
 } from '@/engine-v8';
 import './v8lab.css';
@@ -88,28 +91,28 @@ function player(
 
 const HOME_XI: readonly LabPlayer[] = [
   player('h_gk', 'Otto Kerr', 'GK', 1, 6, 'DEF', 3, { actionName: 'STARFISH' }),
-  player('h_lb', 'Rue Vance', 'LB', 3, 4, 'DEF', 2),
+  player('h_lb', 'Rue Vance', 'LB', 2, 2, 'DEF', 1, { actionName: 'OVERLAP', naturalZones: ['DEF', 'MID'] }),
   player('h_lcb', 'Dane Holt', 'CB', 2, 5, 'DEF', 3, { actionName: 'WALL' }),
-  player('h_rcb', 'Ivo Senn', 'CB', 2, 4, 'DEF', 2),
+  player('h_rcb', 'Ivo Senn', 'CB', 0, 3, 'DEF', 1, { actionName: 'FRONT FOOT' }),
   player('h_rb', 'Cass Ojo', 'RB', 3, 4, 'DEF', 2),
   player('h_lm', 'Lio Fen', 'LM', 6, 3, 'MID', 5),
   player('h_cm', 'Ren Colm', 'CM', 7, 3, 'MID', 5, { actionName: 'VISION', createsChance: 'through_ball' }),
   player('h_rm', 'Tave Rune', 'RM', 6, 3, 'MID', 5, { actionName: 'BEND IT', createsChance: 'cross' }),
   player('h_lw', 'Rai Okonkwo', 'LW', 9, 2, 'ATT', 5),
   player('h_cf', 'Niko Vale', 'CF', 9, 2, 'ATT', 5, { actionName: 'BOBO BOMBER', receivesCross: true }),
-  player('h_rw', 'Juno Pike', 'RW', 9, 2, 'ATT', 5),
+  player('h_rw', 'Juno Pike', 'RW', 3, 0, 'ATT', 1, { actionName: 'RUNNER' }),
 ];
 
 const AWAY_XI: readonly LabPlayer[] = [
   player('a_gk', 'Bram Reef', 'GK', 1, 6, 'DEF', 3),
   player('a_lcb', 'Sig Reed', 'CB', 2, 5, 'DEF', 3),
   player('a_ccb', 'Tomas Lock', 'CB', 3, 6, 'DEF', 3),
-  player('a_rcb', 'Gio Pace', 'CB', 3, 4, 'DEF', 2),
-  player('a_lwb', 'Kes Rowan', 'LWB', 4, 3, 'MID', 4),
+  player('a_rcb', 'Gio Pace', 'CB', 0, 3, 'DEF', 1, { actionName: 'STEP UP' }),
+  player('a_lwb', 'Kes Rowan', 'LWB', 2, 2, 'DEF', 1, { actionName: 'OVERLAP', naturalZones: ['DEF', 'MID'] }),
   player('a_dm', 'Malik Daro', 'DM', 3, 4, 'MID', 4),
   player('a_cm', 'Aris Nov', 'CM', 6, 3, 'MID', 5, { actionName: 'VISION', createsChance: 'through_ball' }),
   player('a_rwb', 'Rex Hale', 'RWB', 4, 3, 'MID', 4, { actionName: 'EARLY CROSS', createsChance: 'cross' }),
-  player('a_lf', 'Bo Marsh', 'LF', 8, 2, 'ATT', 4),
+  player('a_lf', 'Bo Marsh', 'LF', 3, 0, 'ATT', 1, { actionName: 'POACHER' }),
   player('a_cf', 'Coby Wren', 'CF', 9, 2, 'ATT', 5, { actionName: 'TARGET MAN', receivesCross: true }),
   player('a_rf', 'Ravi Tuck', 'RF', 8, 2, 'ATT', 4),
 ];
@@ -163,6 +166,10 @@ function handId(card: HandCard): string {
   return card.card.id;
 }
 
+function slotReservations(pending: readonly PendingPlay[]): V8SlotReservation[] {
+  return pending.map((play) => ({ zone: play.zone, kind: play.kind }));
+}
+
 function boardWithPendingPlayers(board: V8Board, pending: readonly PendingPlay[]): V8Board {
   let next = board;
   let order = Math.max(0, ...ZONES.flatMap((zone) => next[zone].map((deployed) => deployed.deployedOrder)));
@@ -210,6 +217,7 @@ function planBot(team: TeamState, opponentBoard: V8Board, energy: number, period
     const baseNet = goalsFromAttackDefence(ownTotals.attack, oppTotals.defence)
       - goalsFromAttackDefence(oppTotals.attack, ownTotals.defence);
     let best: { play: PendingPlay; score: number } | null = null;
+    const reservations = slotReservations(pending);
 
     for (const handCard of team.hand) {
       const id = handId(handCard);
@@ -217,6 +225,7 @@ function planBot(team: TeamState, opponentBoard: V8Board, energy: number, period
       if (handCard.card.cost > remaining) continue;
 
       if (handCard.kind === 'chance') {
+        if (!canPlayToZone(team.board, 'ATT', reservations)) continue;
         const projectedBoost = handCard.card.attackBoost;
         const net = goalsFromAttackDefence(ownTotals.attack + projectedBoost, oppTotals.defence)
           - goalsFromAttackDefence(oppTotals.attack, ownTotals.defence);
@@ -231,8 +240,7 @@ function planBot(team: TeamState, opponentBoard: V8Board, energy: number, period
       }
 
       for (const zone of ZONES) {
-        const alreadyQueued = pending.filter((play) => play.kind === 'player' && play.zone === zone).length;
-        if (team.board[zone].length + alreadyQueued >= 4) continue;
+        if (!canPlayToZone(team.board, zone, reservations)) continue;
         const contribution = contributionInZone(handCard.card, zone);
         const score = (contribution.attack + contribution.defence) * (4 - periodIndex)
           - handCard.card.cost
@@ -247,7 +255,9 @@ function planBot(team: TeamState, opponentBoard: V8Board, energy: number, period
     }
 
     if (team.managerAvailable && !used.has('manager') && remaining >= MANAGER_COST && periodIndex >= 2) {
-      const counts = ZONES.map((zone) => ({ zone, count: projectedBoard[zone].length }));
+      const counts = ZONES
+        .filter((zone) => canPlayToZone(team.board, zone, reservations))
+        .map((zone) => ({ zone, count: projectedBoard[zone].length }));
       counts.sort((a, b) => b.count - a.count);
       const preferred = counts[0];
       if (preferred && preferred.count > 0) {
@@ -350,19 +360,25 @@ function CardFace({ handCard, selected, pending, onClick }: {
   );
 }
 
-function ZoneBoard({ zone, home, away, selectedPlayer, onZone }: {
+function ZoneBoard({ zone, home, liveHome, away, pending, selectedPlayer, onZone }: {
   zone: V8Zone;
   home: V8Board;
+  liveHome: V8Board;
   away: V8Board;
+  pending: readonly PendingPlay[];
   selectedPlayer: LabPlayer | null;
   onZone: (zone: V8Zone) => void;
 }) {
   const penalty = selectedPlayer ? formatPenalty(selectedPlayer, zone) : null;
+  const transients = pending.filter((play) => play.zone === zone && play.kind !== 'player');
+  const occupancy = zoneOccupancy(liveHome, zone, slotReservations(pending));
+  const emptyHomeSlots = Math.max(0, 4 - home[zone].length - transients.length);
+
   return (
     <button className="v8-zone" onClick={() => onZone(zone)}>
       <div className="v8-zone__heading">
         <strong>{zone}</strong>
-        <span>{penalty ?? `${home[zone].length}/4`}</span>
+        <span>{penalty ?? `${occupancy}/4`}</span>
       </div>
       <div className="v8-zone__side v8-zone__side--away">
         {away[zone].map((deployed) => (
@@ -374,7 +390,13 @@ function ZoneBoard({ zone, home, away, selectedPlayer, onZone }: {
         {home[zone].map((deployed) => (
           <span key={deployed.card.id} className="v8-chip">{deployed.card.name}<b>{deployed.card.printedAttack}/{deployed.card.printedDefence}</b></span>
         ))}
-        {Array.from({ length: Math.max(0, 4 - home[zone].length) }).map((_, index) => <i key={`home-${index}`} />)}
+        {transients.map((play) => (
+          <span key={play.handId} className="v8-chip v8-chip--transient">
+            {play.kind === 'manager' ? MANAGER_NAME : play.card.name}
+            <b>{play.kind === 'manager' ? 'MANAGER · REVEAL' : 'CHANCE · REVEAL'}</b>
+          </span>
+        ))}
+        {Array.from({ length: emptyHomeSlots }).map((_, index) => <i key={`home-${index}`} />)}
       </div>
     </button>
   );
@@ -427,9 +449,11 @@ export default function V8MatchLab() {
 
   const queueToZone = (zone: V8Zone) => {
     if (finished || !selected) return;
+    const reservations = slotReservations(pending);
 
     if (selected.kind === 'manager') {
       if (!home.managerAvailable || energyLeft < MANAGER_COST || pendingIds.has('manager')) return;
+      if (!canPlayToZone(home.board, zone, reservations)) return;
       setPending((current) => [...current, { kind: 'manager', handId: 'manager', zone, cost: MANAGER_COST }]);
       setSelected(null);
       return;
@@ -439,14 +463,13 @@ export default function V8MatchLab() {
     if (!handCard || handCard.card.cost > energyLeft) return;
 
     if (handCard.kind === 'chance') {
-      if (zone !== 'ATT') return;
+      if (zone !== 'ATT' || !canPlayToZone(home.board, zone, reservations)) return;
       setPending((current) => [...current, { kind: 'chance', handId: handCard.card.id, card: handCard.card, zone: 'ATT', cost: handCard.card.cost }]);
       setSelected(null);
       return;
     }
 
-    const queuedInZone = pending.filter((play) => play.kind === 'player' && play.zone === zone).length;
-    if (home.board[zone].length + queuedInZone >= 4) return;
+    if (!canPlayToZone(home.board, zone, reservations)) return;
     setPending((current) => [...current, { kind: 'player', handId: handCard.card.id, card: handCard.card, zone, cost: handCard.card.cost }]);
     setSelected(null);
   };
@@ -538,14 +561,23 @@ export default function V8MatchLab() {
 
       <section className="v8-pitch" aria-label="DEF MID ATT board">
         {ZONES.map((zone) => (
-          <ZoneBoard key={zone} zone={zone} home={projectedHome} away={away.board} selectedPlayer={selectedPlayer} onZone={queueToZone} />
+          <ZoneBoard
+            key={zone}
+            zone={zone}
+            home={projectedHome}
+            liveHome={home.board}
+            away={away.board}
+            pending={pending}
+            selectedPlayer={selectedPlayer}
+            onZone={queueToZone}
+          />
         ))}
       </section>
 
       <section className="v8-commit">
         <div>
           <strong>{pending.length ? `${pending.length} queued` : 'Choose a card, then a zone'}</strong>
-          <span>Opponent plays are hidden until you end the period.</span>
+          <span>All queued cards reserve a slot until reveal. Manager and Chances disappear after activating.</span>
         </div>
         <button onClick={undoLast} disabled={!pending.length}>UNDO</button>
         <button className="v8-primary" onClick={endPeriod} disabled={finished}>END PERIOD</button>
