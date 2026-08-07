@@ -34,6 +34,17 @@ jobs:
         continue-on-error: true
         run: npm test
 
+      - name: Upload V8 calibration matrix evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v8-calibration-matrix
+          path: |
+            test-results/v8-calibration-matrix.json
+            test-results/v8-calibration-matrix.txt
+          if-no-files-found: error
+          retention-days: 14
+
       - name: TypeScript
         run: npx tsc --noEmit
 
