@@ -53,8 +53,10 @@ export interface V8DeployedPlayer {
 export type V8Board = Record<V8Zone, readonly V8DeployedPlayer[]>;
 
 /**
- * Any card committed to a zone reserves one of its four physical slots until reveal resolves.
- * Players then remain on the board; Manager and Chance reservations are released after activation.
+ * Player cards and a committed Manager reserve one of a zone's four player slots.
+ * Tactical / Chance cards are played to a zone but do not consume a player slot. `chance`
+ * remains in this compatibility type for the superseded prototype adapter and is ignored by
+ * the shared occupancy calculation.
  */
 export interface V8SlotReservation {
   zone: V8Zone;
@@ -210,7 +212,7 @@ export function zoneOccupancy(
   zone: V8Zone,
   reservations: readonly V8SlotReservation[] = [],
 ): number {
-  return board[zone].length + reservations.filter((reservation) => reservation.zone === zone).length;
+  return board[zone].length + reservations.filter((reservation) => reservation.zone === zone && reservation.kind !== 'chance').length;
 }
 
 export function canPlayToZone(
@@ -266,10 +268,7 @@ export function drawPlayers<TPlayer extends V8PlayerCard>(
   };
 }
 
-/**
- * Chance cards are transient hand cards: they spend Energy, reserve a zone slot during reveal,
- * resolve their boost, then disappear and release that slot.
- */
+/** Chance cards are slotless Tactical hand cards: spend Energy, resolve a temporary zone boost, then leave play. */
 export function resolveChanceCard(chance: V8ChanceCard): V8TemporaryZoneBoost {
   return {
     zone: chance.targetZone,
@@ -278,7 +277,7 @@ export function resolveChanceCard(chance: V8ChanceCard): V8TemporaryZoneBoost {
   };
 }
 
-/** Manager cards use the same transient-slot lifecycle; their individual Action decides the effect. */
+/** Manager cards keep the transient player-slot lifecycle; their individual Action decides the effect. */
 export function spendTransientCardEnergy(availableEnergy: number, card: Pick<V8ChanceCard | V8ManagerCard, 'cost'>): number {
   if (card.cost > availableEnergy) throw new Error('Not enough energy');
   return availableEnergy - card.cost;
