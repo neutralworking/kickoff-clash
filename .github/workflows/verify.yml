@@ -1,0 +1,66 @@
+name: Verify
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Vitest
+        run: npm test
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build static export
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Serve static export
+        run: |
+          python3 -m http.server 3001 --directory out > /tmp/kickoff-clash-http.log 2>&1 &
+          echo $! > /tmp/kickoff-clash-http.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3001/lab/match-v7/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/kickoff-clash-http.log
+          exit 1
+
+      - name: Mobile typed chance browser checks
+        run: npx playwright test tests/v7-typed-chances.spec.ts --project=chromium
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-artifacts
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
