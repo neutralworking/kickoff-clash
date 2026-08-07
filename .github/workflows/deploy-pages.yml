@@ -6,7 +6,9 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - agent/v8-three-zone-prototype
   workflow_dispatch:
 
 permissions:
@@ -24,6 +26,8 @@ jobs:
     steps:
       - name: Checkout live main
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: actions/setup-node@v4
         with:
