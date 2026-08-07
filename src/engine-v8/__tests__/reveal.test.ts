@@ -23,7 +23,7 @@ describe('V8 reveal priority', () => {
     expect(revealPriority(0, 3, emptyV8Board(), emptyV8Board(), 1).first).toBe('away');
   });
 
-  it('uses current ATT edge over opposing DEF when the score is level', () => {
+  it('uses current ATT when the score is level', () => {
     const home = deployPlayer(emptyV8Board(), player('home-att', 8, 0, 'ATT'), 'ATT', 1);
     const away = deployPlayer(emptyV8Board(), player('away-att', 4, 0, 'ATT'), 'ATT', 1);
 
@@ -34,13 +34,12 @@ describe('V8 reveal priority', () => {
     });
   });
 
-  it('uses total board strength when ATT edge is tied', () => {
+  it('uses total board strength when current ATT is tied', () => {
     let home = deployPlayer(emptyV8Board(), player('home-att', 6, 0, 'ATT'), 'ATT', 1);
     home = deployPlayer(home, player('home-def', 0, 4, 'DEF'), 'DEF', 2);
     let away = deployPlayer(emptyV8Board(), player('away-att', 6, 0, 'ATT'), 'ATT', 1);
     away = deployPlayer(away, player('away-def', 0, 2, 'DEF'), 'DEF', 2);
 
-    // Both attack edges are 4, but home has the stronger total board.
     expect(revealPriority(0, 0, home, away, 1)).toEqual({
       first: 'home',
       second: 'away',
