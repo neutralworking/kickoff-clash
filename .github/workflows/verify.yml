@@ -68,7 +68,8 @@ jobs:
           python3 -m http.server 3001 --directory out > /tmp/kickoff-clash-http.log 2>&1 &
           echo $! > /tmp/kickoff-clash-http.pid
           for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:3001/lab/match-v7/ > /dev/null; then
+            if curl --fail --silent http://127.0.0.1:3001/lab/match-v7/ > /dev/null \
+              && curl --fail --silent http://127.0.0.1:3001/lab/match-v8/ > /dev/null; then
               exit 0
             fi
             sleep 1
@@ -78,6 +79,9 @@ jobs:
 
       - name: Mobile typed chance browser checks
         run: npx playwright test tests/v7-typed-chances.spec.ts --project=chromium
+
+      - name: Mobile V8 match lab smoke check
+        run: npx playwright test tests/v8-match-lab.spec.ts --project=chromium
 
       - name: Upload Playwright failure artifacts
         if: failure()
