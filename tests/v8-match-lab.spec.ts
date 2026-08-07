@@ -17,7 +17,7 @@ test.describe('V8 three-zone match lab', () => {
     await page.goto('/lab/match-v8');
 
     await expect(page.getByText('0–22', { exact: true })).toBeVisible();
-    await expect(page.getByText('4/4 ENERGY', { exact: true })).toBeVisible();
+    await expect(page.getByText('3/3 ENERGY', { exact: true })).toBeVisible();
     await expect(page.locator('.v8-zone')).toHaveCount(3);
     await expect(page.locator('.v8-card')).toHaveCount(6);
     await expectMobileFit(page);
@@ -25,10 +25,11 @@ test.describe('V8 three-zone match lab', () => {
     await page.locator('.v8-card--manager').click();
     await page.locator('.v8-zone').first().click();
     await expect(page.getByText('1 queued', { exact: true })).toBeVisible();
-    await expect(page.getByText('1/4 ENERGY', { exact: true })).toBeVisible();
+    await expect(page.getByText('0/3 ENERGY', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'END PERIOD' }).click();
     await expect(page.getByText('22–HT', { exact: true })).toBeVisible();
+    await expect(page.getByText('5/5 ENERGY', { exact: true })).toBeVisible();
     await expect(page.locator('.v8-log')).toContainText('0–22:');
     await expectMobileFit(page);
   });
