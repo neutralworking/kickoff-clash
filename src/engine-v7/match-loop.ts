@@ -2,6 +2,7 @@ import {
   BREAK_ENERGY,
   type BreakIndex,
   type BreakPlan,
+  type ChanceToken,
   type MatchReceiptEvent,
   type PeriodNumber,
   type TeamSide,
@@ -17,12 +18,8 @@ import { effectivePlayers, splitByZone, type CardRegistry } from './resolve/stat
 import type { RerollPolicy } from './resolve/rerolls';
 
 // The match loop — a pure orchestration layer over the break resolver and period
-// resolver. It plays period 1, then repeats { resolve the following break →
-// resolve the next period → process the boundary } until the final period ends.
-// Every step returns new immutable state, an appended effect ledger and ordered
-// receipts, so the whole match replays byte-for-byte from a seed + the supplied
-// break plans. It never advances past the final period and never resolves a
-// period twice.
+// resolver. Every chance now enters the receipt stream at engine creation time;
+// the controller no longer needs to invent aggregate chance-created events.
 
 export interface MatchLoopInput {
   state: V7MatchState;
@@ -41,6 +38,11 @@ export interface MatchLoopResult {
   receipts: MatchReceiptEvent[];
   finalScore: Record<TeamSide, number>;
   matchOver: boolean;
+}
+
+export interface BoardChanceCreation {
+  chances: Record<TeamSide, ChanceToken[]>;
+  receipts: MatchReceiptEvent[];
 }
 
 function emptyPlan(side: TeamSide, breakIndex: BreakIndex): BreakPlan {
@@ -66,19 +68,31 @@ function emptyPlan(side: TeamSide, breakIndex: BreakIndex): BreakPlan {
   };
 }
 
-/** Create both sides' chances for a period from the current board + ledger. */
+/** Create both sides' chances + authoritative per-token receipts. */
+export function boardChanceCreation(
+  state: V7MatchState,
+  ledger: readonly LedgerEffect[],
+  registry: CardRegistry,
+  period: PeriodNumber,
+): BoardChanceCreation {
+  const playerActive = splitByZone(effectivePlayers(state.player, registry, ledger)).active;
+  const opponentActive = splitByZone(effectivePlayers(state.opponent, registry, ledger)).active;
+  const player = createChances('player', period, playerActive, opponentActive, createRng(state.seed, `chance:player:${period}`));
+  const opponent = createChances('opponent', period, opponentActive, playerActive, createRng(state.seed, `chance:opponent:${period}`));
+  return {
+    chances: { player: player.tokens, opponent: opponent.tokens },
+    receipts: [...player.receipts, ...opponent.receipts],
+  };
+}
+
+/** Compatibility helper for callers that only need the token board. */
 export function boardChances(
   state: V7MatchState,
   ledger: readonly LedgerEffect[],
   registry: CardRegistry,
   period: PeriodNumber,
-): Record<TeamSide, ReturnType<typeof createChances>['tokens']> {
-  const playerActive = splitByZone(effectivePlayers(state.player, registry, ledger)).active;
-  const opponentActive = splitByZone(effectivePlayers(state.opponent, registry, ledger)).active;
-  return {
-    player: createChances('player', period, playerActive, opponentActive, createRng(state.seed, `chance:player:${period}`)).tokens,
-    opponent: createChances('opponent', period, opponentActive, playerActive, createRng(state.seed, `chance:opponent:${period}`)).tokens,
-  };
+): Record<TeamSide, ChanceToken[]> {
+  return boardChanceCreation(state, ledger, registry, period).chances;
 }
 
 export function playMatch(input: MatchLoopInput): MatchLoopResult {
@@ -91,7 +105,9 @@ export function playMatch(input: MatchLoopInput): MatchLoopResult {
   const receipts: MatchReceiptEvent[] = [];
 
   // Period 1 opens from the initial board; later periods open from their break.
-  let chances = boardChances(current, ledger, registry, current.period);
+  const opening = boardChanceCreation(current, ledger, registry, current.period);
+  let chances = opening.chances;
+  receipts.push(...opening.receipts);
   let matchOver = false;
 
   while (current.period <= FINAL_PERIOD) {
