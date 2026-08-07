@@ -8,11 +8,14 @@ import {
   emptyV8Board,
   goalsFromAttackDefence,
   outOfPositionPenalty,
+  revealPriority,
   teamTotals,
   zoneOccupancy,
   type V8Board,
   type V8ChanceType,
   type V8PlayerCard,
+  type V8RevealPriorityReason,
+  type V8Side,
   type V8SlotReservation,
   type V8Zone,
 } from '@/engine-v8';
@@ -22,6 +25,7 @@ type LabPlayer = V8PlayerCard & {
   actionName?: string;
   createsChance?: Extract<V8ChanceType, 'cross' | 'through_ball'>;
   receivesCross?: boolean;
+  onReveal?: 'press_next';
 };
 
 type LabChance = {
@@ -55,6 +59,15 @@ type SelectedCard = { kind: 'hand'; id: string } | { kind: 'manager'; id: 'manag
 type MatchEvent = {
   period: number;
   text: string;
+};
+
+type ZonePenalty = { attack: number; defence: number };
+
+type RevealWork = {
+  team: TeamState;
+  generated: HandCard[];
+  boost: { attack: number; defence: number };
+  penalties: Map<string, ZonePenalty>;
 };
 
 const ZONES: readonly V8Zone[] = ['DEF', 'MID', 'ATT'];
@@ -93,7 +106,7 @@ const HOME_XI: readonly LabPlayer[] = [
   player('h_gk', 'Otto Kerr', 'GK', 1, 6, 'DEF', 3, { actionName: 'STARFISH' }),
   player('h_lb', 'Rue Vance', 'LB', 2, 2, 'DEF', 1, { actionName: 'OVERLAP', naturalZones: ['DEF', 'MID'] }),
   player('h_lcb', 'Dane Holt', 'CB', 2, 5, 'DEF', 3, { actionName: 'WALL' }),
-  player('h_rcb', 'Ivo Senn', 'CB', 0, 3, 'DEF', 1, { actionName: 'FRONT FOOT' }),
+  player('h_rcb', 'Ivo Senn', 'CB', 0, 3, 'DEF', 1, { actionName: 'FRONT FOOT', onReveal: 'press_next' }),
   player('h_rb', 'Cass Ojo', 'RB', 3, 4, 'DEF', 2),
   player('h_lm', 'Lio Fen', 'LM', 6, 3, 'MID', 5),
   player('h_cm', 'Ren Colm', 'CM', 7, 3, 'MID', 5, { actionName: 'VISION', createsChance: 'through_ball' }),
@@ -107,7 +120,7 @@ const AWAY_XI: readonly LabPlayer[] = [
   player('a_gk', 'Bram Reef', 'GK', 1, 6, 'DEF', 3),
   player('a_lcb', 'Sig Reed', 'CB', 2, 5, 'DEF', 3),
   player('a_ccb', 'Tomas Lock', 'CB', 3, 6, 'DEF', 3),
-  player('a_rcb', 'Gio Pace', 'CB', 0, 3, 'DEF', 1, { actionName: 'STEP UP' }),
+  player('a_rcb', 'Gio Pace', 'CB', 0, 3, 'DEF', 1, { actionName: 'STEP UP', onReveal: 'press_next' }),
   player('a_lwb', 'Kes Rowan', 'LWB', 2, 2, 'DEF', 1, { actionName: 'OVERLAP', naturalZones: ['DEF', 'MID'] }),
   player('a_dm', 'Malik Daro', 'DM', 3, 4, 'MID', 4),
   player('a_cm', 'Aris Nov', 'CM', 6, 3, 'MID', 5, { actionName: 'VISION', createsChance: 'through_ball' }),
@@ -181,28 +194,151 @@ function boardWithPendingPlayers(board: V8Board, pending: readonly PendingPlay[]
   return next;
 }
 
-function transientBoost(board: V8Board, pending: readonly PendingPlay[]): { attack: number; defence: number } {
-  let attack = 0;
-  let defence = 0;
-  for (const play of pending) {
-    if (play.kind === 'chance') {
-      const receiverBonus = play.card.chanceType === 'cross'
-        && board.ATT.some((deployed) => (deployed.card as LabPlayer).receivesCross)
-        ? 2
-        : 0;
-      attack += play.card.attackBoost + receiverBonus;
-    }
-    if (play.kind === 'manager') {
-      const count = board[play.zone].length;
-      if (play.zone === 'ATT') attack += count * 2;
-      if (play.zone === 'DEF') defence += count * 2;
-      if (play.zone === 'MID') {
-        attack += count;
-        defence += count;
-      }
+function pressurePenalty(zone: V8Zone): ZonePenalty {
+  if (zone === 'DEF') return { attack: 0, defence: 2 };
+  if (zone === 'ATT') return { attack: 2, defence: 0 };
+  return { attack: 2, defence: 2 };
+}
+
+function pressurePenaltyText(zone: V8Zone): string {
+  if (zone === 'DEF') return '-2 DEF';
+  if (zone === 'ATT') return '-2 ATT';
+  return '-2 ATT / -2 DEF';
+}
+
+function totalsWithPenalties(board: V8Board, penalties: ReadonlyMap<string, ZonePenalty>): ReturnType<typeof teamTotals> {
+  const byZone: ReturnType<typeof teamTotals>['byZone'] = {
+    DEF: { attack: 0, defence: 0 },
+    MID: { attack: 0, defence: 0 },
+    ATT: { attack: 0, defence: 0 },
+  };
+
+  for (const zone of ZONES) {
+    for (const deployed of board[zone]) {
+      const penalty = penalties.get(deployed.card.id) ?? { attack: 0, defence: 0 };
+      const contribution = contributionInZone({
+        ...deployed.card,
+        printedAttack: deployed.card.printedAttack - penalty.attack,
+        printedDefence: deployed.card.printedDefence - penalty.defence,
+      }, zone);
+      byZone[zone].attack += contribution.attack;
+      byZone[zone].defence += contribution.defence;
     }
   }
-  return { attack, defence };
+
+  return {
+    attack: byZone.ATT.attack + byZone.MID.attack,
+    defence: byZone.DEF.defence + byZone.MID.defence,
+    byZone,
+  };
+}
+
+function priorityReasonLabel(reason: V8RevealPriorityReason): string {
+  if (reason === 'score') return 'score lead';
+  if (reason === 'attack_edge') return 'ATT edge';
+  if (reason === 'board_strength') return 'board strength';
+  return 'seeded tiebreak';
+}
+
+function newRevealWork(team: TeamState): RevealWork {
+  return {
+    team: { ...team },
+    generated: [],
+    boost: { attack: 0, defence: 0 },
+    penalties: new Map(),
+  };
+}
+
+function resolveRevealWindow(
+  home: TeamState,
+  away: TeamState,
+  homePending: readonly PendingPlay[],
+  awayPending: readonly PendingPlay[],
+  homeScore: number,
+  awayScore: number,
+  period: number,
+  seed: number,
+) {
+  const priority = revealPriority(homeScore, awayScore, home.board, away.board, seed);
+  const works: Record<V8Side, RevealWork> = {
+    home: newRevealWork(home),
+    away: newRevealWork(away),
+  };
+  const pendingBySide: Record<V8Side, readonly PendingPlay[]> = {
+    home: homePending,
+    away: awayPending,
+  };
+  const pressureWaiting: Record<V8Side, Record<V8Zone, number>> = {
+    home: { DEF: 0, MID: 0, ATT: 0 },
+    away: { DEF: 0, MID: 0, ATT: 0 },
+  };
+  const log: string[] = [];
+
+  for (const side of [priority.first, priority.second]) {
+    const opponent: V8Side = side === 'home' ? 'away' : 'home';
+    const actor = side === 'home' ? 'YOU' : 'CPU';
+    const work = works[side];
+
+    for (const play of pendingBySide[side]) {
+      if (play.kind === 'player') {
+        const deployOrder = work.team.deployOrder + 1;
+        const board = deployPlayer(work.team.board, play.card, play.zone, deployOrder);
+        work.team = { ...work.team, board, deployOrder };
+        log.push(`${actor} reveal ${play.card.name} → ${play.zone}.`);
+
+        if (pressureWaiting[side][play.zone] > 0) {
+          work.penalties.set(play.card.id, pressurePenalty(play.zone));
+          pressureWaiting[side][play.zone] -= 1;
+          log.push(`${play.card.name} is caught by pressure: ${pressurePenaltyText(play.zone)} this period.`);
+        }
+
+        if (play.card.createsChance) {
+          const chance = chanceFrom(play.card.createsChance, play.card.id, period);
+          work.generated.push({ kind: 'chance', card: chance });
+          log.push(`${play.card.actionName ?? play.card.name}: ${chance.name} added for next period.`);
+        }
+
+        if (play.card.onReveal === 'press_next') {
+          pressureWaiting[opponent][play.zone] += 1;
+          log.push(`${play.card.actionName ?? play.card.name}: pressure waits for the next opposing reveal in ${play.zone}.`);
+        }
+        continue;
+      }
+
+      if (play.kind === 'chance') {
+        const receiverBonus = play.card.chanceType === 'cross'
+          && work.team.board.ATT.some((deployed) => (deployed.card as LabPlayer).receivesCross)
+          ? 2
+          : 0;
+        const attackBoost = play.card.attackBoost + receiverBonus;
+        work.boost.attack += attackBoost;
+        log.push(`${actor} reveal ${play.card.name} → ATT: +${attackBoost} ATT, then the Chance leaves its slot.`);
+        continue;
+      }
+
+      const count = work.team.board[play.zone].length;
+      if (play.zone === 'ATT') work.boost.attack += count * 2;
+      if (play.zone === 'DEF') work.boost.defence += count * 2;
+      if (play.zone === 'MID') {
+        work.boost.attack += count;
+        work.boost.defence += count;
+      }
+      log.push(`${actor} reveal ${MANAGER_NAME} → ${play.zone}: resolves on ${count} player${count === 1 ? '' : 's'}, then the Manager leaves its slot.`);
+    }
+  }
+
+  for (const side of ['home', 'away'] as const) {
+    const work = works[side];
+    const plays = pendingBySide[side];
+    const playedIds = new Set(plays.filter((play) => play.kind !== 'manager').map((play) => play.handId));
+    work.team = {
+      ...work.team,
+      managerAvailable: work.team.managerAvailable && !plays.some((play) => play.kind === 'manager'),
+      hand: work.team.hand.filter((card) => !playedIds.has(handId(card))),
+    };
+  }
+
+  return { home: works.home, away: works.away, priority, log };
 }
 
 function planBot(team: TeamState, opponentBoard: V8Board, energy: number, periodIndex: number): PendingPlay[] {
@@ -278,33 +414,6 @@ function planBot(team: TeamState, opponentBoard: V8Board, energy: number, period
   }
 
   return pending;
-}
-
-function applyPending(team: TeamState, pending: readonly PendingPlay[], period: number): { team: TeamState; generated: HandCard[] } {
-  let board = team.board;
-  let deployOrder = team.deployOrder;
-  const playedIds = new Set(pending.filter((play) => play.kind !== 'manager').map((play) => play.handId));
-  const generated: HandCard[] = [];
-
-  for (const play of pending) {
-    if (play.kind !== 'player') continue;
-    deployOrder += 1;
-    board = deployPlayer(board, play.card, play.zone, deployOrder);
-    if (play.card.createsChance) {
-      generated.push({ kind: 'chance', card: chanceFrom(play.card.createsChance, play.card.id, period) });
-    }
-  }
-
-  return {
-    team: {
-      ...team,
-      board,
-      deployOrder,
-      managerAvailable: team.managerAvailable && !pending.some((play) => play.kind === 'manager'),
-      hand: team.hand.filter((card) => !playedIds.has(handId(card))),
-    },
-    generated,
-  };
 }
 
 function slipperyPitchAdjustment(homeBoard: V8Board, awayBoard: V8Board, periodIndex: number, seed: number) {
@@ -426,6 +535,10 @@ export default function V8MatchLab() {
   const projectedHome = useMemo(() => boardWithPendingPlayers(home.board, pending), [home.board, pending]);
   const homeTotals = teamTotals(home.board);
   const awayTotals = teamTotals(away.board);
+  const currentPriority = useMemo(
+    () => revealPriority(homeScore, awayScore, home.board, away.board, gameSeed + periodIndex * 101),
+    [homeScore, awayScore, home.board, away.board, gameSeed, periodIndex],
+  );
 
   const reset = (nextSeed = gameSeed + 31, nextCurve = curveName) => {
     setGameSeed(nextSeed);
@@ -482,12 +595,20 @@ export default function V8MatchLab() {
   const endPeriod = () => {
     if (finished) return;
     const botPending = planBot(away, home.board, energy, periodIndex);
-    const homeApplied = applyPending(home, pending, periodIndex + 1);
-    const awayApplied = applyPending(away, botPending, periodIndex + 1);
-    const homeBoard = homeApplied.team.board;
-    const awayBoard = awayApplied.team.board;
-    const homeBoost = transientBoost(homeBoard, pending);
-    const awayBoost = transientBoost(awayBoard, botPending);
+    const reveal = resolveRevealWindow(
+      home,
+      away,
+      pending,
+      botPending,
+      homeScore,
+      awayScore,
+      periodIndex + 1,
+      gameSeed + periodIndex * 101,
+    );
+    const homeBoard = reveal.home.team.board;
+    const awayBoard = reveal.away.team.board;
+    const homeBoost = { ...reveal.home.boost };
+    const awayBoost = { ...reveal.away.boost };
     const condition = conditionEnabled ? slipperyPitchAdjustment(homeBoard, awayBoard, periodIndex, gameSeed) : null;
 
     if (condition?.side === 'home') {
@@ -499,8 +620,8 @@ export default function V8MatchLab() {
       awayBoost.defence += condition.defence;
     }
 
-    const homeFinal = teamTotals(homeBoard);
-    const awayFinal = teamTotals(awayBoard);
+    const homeFinal = totalsWithPenalties(homeBoard, reveal.home.penalties);
+    const awayFinal = totalsWithPenalties(awayBoard, reveal.away.penalties);
     const scoredHome = goalsFromAttackDefence(homeFinal.attack + homeBoost.attack, awayFinal.defence + awayBoost.defence);
     const scoredAway = goalsFromAttackDefence(awayFinal.attack + awayBoost.attack, homeFinal.defence + homeBoost.defence);
     const newHomeScore = homeScore + scoredHome;
@@ -508,26 +629,30 @@ export default function V8MatchLab() {
 
     const periodEvents: MatchEvent[] = [];
     const label = PERIOD_LABELS[periodIndex]!;
+    periodEvents.push({
+      period: periodIndex + 1,
+      text: `${label} REVEAL: ${reveal.priority.first === 'home' ? 'YOU' : 'CPU'} first · ${priorityReasonLabel(reveal.priority.reason)}.`,
+    });
+    for (const text of reveal.log) periodEvents.push({ period: periodIndex + 1, text });
+    if (condition) periodEvents.push({ period: periodIndex + 1, text: `Slippery Pitch: ${condition.name} loses 5 ${condition.stat} this period.` });
     periodEvents.push({ period: periodIndex + 1, text: `${label}: ${homeFinal.attack + homeBoost.attack} ATT vs ${awayFinal.defence + awayBoost.defence} DEF → ${scoredHome} goal${scoredHome === 1 ? '' : 's'}` });
     periodEvents.push({ period: periodIndex + 1, text: `${label}: opponent ${awayFinal.attack + awayBoost.attack} ATT vs ${homeFinal.defence + homeBoost.defence} DEF → ${scoredAway} goal${scoredAway === 1 ? '' : 's'}` });
-    if (condition) periodEvents.push({ period: periodIndex + 1, text: `Slippery Pitch: ${condition.name} loses 5 ${condition.stat} this period.` });
-    for (const generated of homeApplied.generated) periodEvents.push({ period: periodIndex + 1, text: `${generated.card.name} added to your hand for the next period.` });
 
     setHomeScore(newHomeScore);
     setAwayScore(newAwayScore);
-    setEvents((current) => [...periodEvents, ...current].slice(0, 10));
+    setEvents((current) => [...periodEvents, ...current].slice(0, 20));
     setPending([]);
     setSelected(null);
 
     if (periodIndex === 3) {
-      setHome({ ...homeApplied.team, hand: [...homeApplied.team.hand, ...homeApplied.generated] });
-      setAway({ ...awayApplied.team, hand: [...awayApplied.team.hand, ...awayApplied.generated] });
+      setHome({ ...reveal.home.team, hand: [...reveal.home.team.hand, ...reveal.home.generated] });
+      setAway({ ...reveal.away.team, hand: [...reveal.away.team.hand, ...reveal.away.generated] });
       setFinished(true);
       return;
     }
 
-    const nextHome = drawTwo({ ...homeApplied.team, hand: [...homeApplied.team.hand, ...homeApplied.generated] });
-    const nextAway = drawTwo({ ...awayApplied.team, hand: [...awayApplied.team.hand, ...awayApplied.generated] });
+    const nextHome = drawTwo({ ...reveal.home.team, hand: [...reveal.home.team.hand, ...reveal.home.generated] });
+    const nextAway = drawTwo({ ...reveal.away.team, hand: [...reveal.away.team.hand, ...reveal.away.generated] });
     setHome(nextHome);
     setAway(nextAway);
     setPeriodIndex((current) => current + 1);
@@ -577,7 +702,7 @@ export default function V8MatchLab() {
       <section className="v8-commit">
         <div>
           <strong>{pending.length ? `${pending.length} queued` : 'Choose a card, then a zone'}</strong>
-          <span>All queued cards reserve a slot until reveal. Manager and Chances disappear after activating.</span>
+          <span>{currentPriority.first === 'home' ? 'YOU REVEAL FIRST' : 'CPU REVEALS FIRST'} · {priorityReasonLabel(currentPriority.reason)} · cards resolve in play order.</span>
         </div>
         <button onClick={undoLast} disabled={!pending.length}>UNDO</button>
         <button className="v8-primary" onClick={endPeriod} disabled={finished}>END PERIOD</button>
