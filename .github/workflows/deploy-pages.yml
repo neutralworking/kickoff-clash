@@ -1,14 +1,14 @@
 name: Deploy to GitHub Pages
 
-# Builds the Next.js static export and publishes it to GitHub Pages.
-# The runner has internet, so next/font/google self-hosts the fonts at build time
-# (no offline swap needed). Serves at https://neutralworking.github.io/kickoff-clash/
-# To serve from a custom domain root (chief-scout.com): set the Pages custom domain,
-# point DNS at GitHub Pages, set NEXT_PUBLIC_BASE_PATH to "" below, and add a CNAME.
+# Builds the live main export plus the isolated V8 prototype preview and publishes
+# them together. The live game remains at /kickoff-clash/; the V8 branch is nested
+# under /kickoff-clash/preview/v8/ so preview publishing never replaces the root app.
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - agent/v8-three-zone-prototype
   workflow_dispatch:
 
 permissions:
@@ -24,16 +24,45 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout live main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
-      - run: npm ci
-      - name: Build static export
+
+      - name: Install live dependencies
+        run: npm ci
+
+      - name: Build live static export
         env:
           NEXT_PUBLIC_BASE_PATH: /kickoff-clash
         run: npm run build
+
+      - name: Checkout V8 prototype
+        uses: actions/checkout@v4
+        with:
+          ref: agent/v8-three-zone-prototype
+          path: preview-src
+
+      - name: Install V8 preview dependencies
+        working-directory: preview-src
+        run: npm ci
+
+      - name: Build V8 preview static export
+        working-directory: preview-src
+        env:
+          NEXT_PUBLIC_BASE_PATH: /kickoff-clash/preview/v8
+        run: npm run build
+
+      - name: Nest V8 preview inside live Pages artifact
+        run: |
+          mkdir -p out/preview/v8
+          cp -R preview-src/out/. out/preview/v8/
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
