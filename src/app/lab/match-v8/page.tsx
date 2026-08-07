@@ -1,5 +1,5 @@
-import V8MatchLab from '@/components/match-v8/V8MatchLab';
+import V8CalibrationLab from '@/components/match-v8/V8CalibrationLab';
 
 export default function V8MatchLabPage() {
-  return <V8MatchLab />;
+  return <V8CalibrationLab />;
 }
