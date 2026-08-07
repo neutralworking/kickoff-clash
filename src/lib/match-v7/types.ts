@@ -6,6 +6,9 @@ export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 export type PositionCode =
   | 'GK' | 'LB' | 'RB' | 'CB' | 'LWB' | 'RWB' | 'DM' | 'LM'
   | 'CM' | 'RM' | 'LW' | 'AM' | 'RW' | 'LF' | 'CF' | 'RF';
+export type ChanceType = 'box' | 'cross' | 'through_ball' | 'corner';
+export type FinisherAssignment = 'default' | 'claimed' | 'fallback';
+export type ChanceSelector = 'first_in_sector' | 'last_in_sector' | 'all_in_sector' | 'first';
 
 export const BREAK_ENERGY = { 1: 3, 2: 5, 3: 7 } as const;
 export type BreakIndex = keyof typeof BREAK_ENERGY;
@@ -71,14 +74,16 @@ export type ActionTarget =
   | { type: 'adjacent_player'; side: 'own' | 'enemy' }
   | { type: 'partner'; mode: 'one' | 'selected' | 'all' | 'first' | 'strongest' }
   | { type: 'ranked_players'; side: 'own' | 'enemy'; direction: SelectorDirection; measure: RankingMeasure; count?: number; includePrimaryTies?: boolean }
-  | { type: 'chance'; side: 'own' | 'enemy'; selector: 'first_in_sector' | 'all_in_sector'; sector?: Sector };
+  | { type: 'chance'; side: 'own' | 'enemy'; selector: ChanceSelector; sector?: Sector; chanceTypes?: ChanceType[] };
 
 export type ActionEffect =
   | { type: 'modify_stat'; stat: 'attack' | 'defence'; mode: 'flat' | 'set' | 'multiply'; amount: number }
   | { type: 'swap_stats' }
   | { type: 'modify_cost'; amount: number }
   | { type: 'modify_break_budget'; amount: number; guaranteed: boolean }
-  | { type: 'add_chance'; count: number; sectorMode: 'source' | 'selected' | 'centre' | 'highest_pressure' | 'lowest_pressure' | 'random' }
+  | { type: 'add_chance'; count: number; chanceType: ChanceType; sectorMode: 'source' | 'selected' | 'centre' | 'highest_pressure' | 'lowest_pressure' | 'random' }
+  | { type: 'change_chance_type'; chanceType: ChanceType; count: number }
+  | { type: 'claim_chance' }
   | { type: 'cancel_chance'; count: number }
   | { type: 'move_chance'; destination: Sector | 'selected' | 'highest_pressure' | 'lowest_pressure' }
   | { type: 'set_goal_threshold'; minimumRoll: 3 | 4 | 5 | 6 | 7 }
@@ -227,11 +232,14 @@ export interface ChanceToken {
   side: TeamSide;
   sector: Sector;
   origin: 'calculated' | 'stored' | 'action';
+  chanceType: ChanceType;
   order: number;
   minimumGoalRoll: 3 | 4 | 5 | 6 | 7;
   rerolls: number;
   cancelled: boolean;
   sourceActionInstanceId?: string;
+  finisherId?: string;
+  finisherAssignment?: FinisherAssignment;
 }
 
 export interface MatchReceiptEvent {
