@@ -67,4 +67,23 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(page.getByText(/Cross → MID/)).toBeVisible();
     await expectMobileFit(page);
   });
+
+  test('shows and applies Sinclair action decay after the scoring window', async ({ page }) => {
+    await page.goto('/lab/match-v8');
+    await page.getByRole('button', { name: 'DRIBBLERS', exact: true }).click();
+
+    const sinclair = page.locator('.v8-card').filter({ hasText: 'Christine Sinclair' });
+    await expect(sinclair).toHaveCount(1);
+    await expect(sinclair).toContainText('loses 1 ATT at the end of each period');
+
+    await sinclair.click();
+    const attackZone = page.locator('.v8-zone').nth(2);
+    await attackZone.click();
+    await page.getByRole('button', { name: 'END PERIOD' }).click();
+
+    const deployed = attackZone.locator('.v8-chip').filter({ hasText: 'Christine Sinclair' });
+    await expect(deployed).toContainText('13/1');
+    await expect(page.locator('.v8-log')).toContainText('ARRIVE UNMARKED fades: +4 ATT → +3 ATT');
+    await expectMobileFit(page);
+  });
 });
