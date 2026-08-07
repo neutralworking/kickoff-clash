@@ -235,6 +235,79 @@
 .v8-lab-controls button { flex: 1 1 auto; padding: 5px 7px; font-size: 9px; }
 .v8-lab-controls button.is-active { border-color: #fff; }
 
+.v8-lab-controls--squads {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.v8-lab-controls--squads label { min-width: 0; }
+.v8-lab-controls--squads label > span,
+.v8-lab-controls--squads label > small { display: block; }
+.v8-lab-controls--squads label > span { margin-bottom: 3px; font-size: 8px; letter-spacing: .08em; opacity: .55; }
+.v8-lab-controls--squads label > small { margin-top: 2px; font-size: 8px; opacity: .5; }
+.v8-lab-controls--squads select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 8px;
+  padding: 5px 6px;
+  background: #102219;
+  color: inherit;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.v8-telemetry {
+  margin: 8px 0;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 11px;
+  background: rgba(0,0,0,.14);
+  overflow: hidden;
+}
+.v8-telemetry summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 9px;
+  cursor: pointer;
+  list-style: none;
+}
+.v8-telemetry summary::-webkit-details-marker { display: none; }
+.v8-telemetry summary strong { font-size: 9px; letter-spacing: .08em; }
+.v8-telemetry summary span { font-size: 8px; opacity: .55; text-align: right; }
+.v8-telemetry__body { padding: 0 9px 9px; }
+.v8-telemetry__period > small { display: block; margin-bottom: 5px; font-size: 8px; letter-spacing: .07em; opacity: .5; }
+.v8-telemetry__team {
+  padding: 6px 0;
+  border-top: 1px solid rgba(255,255,255,.07);
+}
+.v8-telemetry__team b,
+.v8-telemetry__team span,
+.v8-telemetry__team small { display: block; }
+.v8-telemetry__team b { font-size: 9px; }
+.v8-telemetry__team span { margin-top: 2px; font-size: 8.5px; line-height: 1.25; opacity: .74; }
+.v8-telemetry__team small { margin-top: 3px; font-size: 8px; line-height: 1.25; opacity: .58; }
+.v8-telemetry__history {
+  display: grid;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255,255,255,.07);
+}
+.v8-telemetry__history span { font-size: 8px; opacity: .58; }
+.v8-telemetry__match {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255,255,255,.13);
+}
+.v8-telemetry__match b,
+.v8-telemetry__match span,
+.v8-telemetry__match small { display: block; }
+.v8-telemetry__match b { font-size: 9px; }
+.v8-telemetry__match span { margin-top: 3px; font-size: 8.5px; line-height: 1.25; opacity: .72; }
+.v8-telemetry__match small { margin-top: 3px; font-size: 8px; opacity: .58; }
+
 .v8-log {
   margin-top: 8px;
   padding: 9px;
@@ -279,4 +352,6 @@
   .v8-commit { grid-template-columns: 1fr auto; }
   .v8-commit .v8-primary { grid-column: 1 / -1; width: 100%; }
   .v8-totals span { font-size: 8px; }
+  .v8-lab-controls--squads { padding: 5px; gap: 4px; }
+  .v8-lab-controls--squads select { padding: 4px; font-size: 8px; }
 }
