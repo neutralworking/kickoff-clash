@@ -29,7 +29,9 @@ import {
   type V8TacticalCardInstance,
   type V8Zone,
 } from '@/engine-v8';
+import { calibrationEnergyForPeriod, calibrationPlayCost } from '@/engine-v8/calibration-balance';
 import './v8lab.css';
+import './v8recap.css';
 
 const ZONES: readonly V8Zone[] = ['DEF', 'MID', 'ATT'];
 const PERIOD_LABELS = ['0–22', '22–HT', 'HT–66', '66–FT'] as const;
@@ -74,6 +76,19 @@ type UndoSnapshot = {
   pending: PendingPlay[];
 };
 
+type PeriodRecap = {
+  period: number;
+  label: string;
+  homeGoals: number;
+  awayGoals: number;
+  homeAttack: number;
+  awayDefence: number;
+  awayAttack: number;
+  homeDefence: number;
+  scoreAfter: string;
+  highlights: string[];
+};
+
 function seededShuffle<T>(items: readonly T[], seed: number): T[] {
   const result = [...items];
   let state = seed >>> 0;
@@ -88,12 +103,23 @@ function seededShuffle<T>(items: readonly T[], seed: number): T[] {
   return result;
 }
 
+function withCalibrationEnergy(state: V8CalibrationState): V8CalibrationState {
+  const energy = calibrationEnergyForPeriod(state.period);
+  return {
+    ...state,
+    teams: {
+      home: { ...state.teams.home, energy },
+      away: { ...state.teams.away, energy },
+    },
+  };
+}
+
 function createPresetMatch(preset: PresetKey, seed: number): V8CalibrationState {
   const definition = PRESETS[preset];
-  return createV8CalibrationMatch(
+  return withCalibrationEnergy(createV8CalibrationMatch(
     seededShuffle(definition.home, seed),
     seededShuffle(definition.away, seed + 1),
-  );
+  ));
 }
 
 function occupiedPlayerSlots(state: V8CalibrationState, side: V8CalibrationSide, zone: V8Zone, pending: readonly PendingPlay[]): number {
@@ -144,6 +170,19 @@ function resolveSequence(state: V8CalibrationState, plays: readonly PendingPlay[
   return next;
 }
 
+function payCalibrationPlayer(state: V8CalibrationState, side: V8CalibrationSide, card: V8CalibrationPlayerCard): V8CalibrationState {
+  const cost = calibrationPlayCost(card);
+  if (state.teams[side].energy < cost) throw new Error('Not enough energy');
+  const removed = removeCalibrationPlayerFromHand(state, side, card.id, { ignoreEnergy: true });
+  return {
+    ...removed,
+    teams: {
+      ...removed.teams,
+      [side]: { ...removed.teams[side], energy: removed.teams[side].energy - cost },
+    },
+  };
+}
+
 function chooseCpuZone(state: V8CalibrationState, card: V8CalibrationPlayerCard, pending: readonly PendingPlay[]): V8Zone | null {
   const natural = card.naturalZones.find((zone) => occupiedPlayerSlots(state, 'away', zone, pending) < 4);
   if (natural) return natural;
@@ -174,13 +213,14 @@ function planCpu(state: V8CalibrationState, managerAvailable: boolean): { state:
     if (tacticalPlayed) continue;
 
     const players = calibrationHandPlayers(next, 'away')
-      .filter((card) => card.cost <= next.teams.away.energy)
-      .sort((a, b) => a.cost - b.cost || b.printedAttack + b.printedDefence - (a.printedAttack + a.printedDefence));
+      .filter((card) => calibrationPlayCost(card) <= next.teams.away.energy)
+      .sort((a, b) => calibrationPlayCost(a) - calibrationPlayCost(b) || b.printedAttack + b.printedDefence - (a.printedAttack + a.printedDefence));
     const chosen = players.find((card) => chooseCpuZone(next, card, pending));
     if (chosen) {
       const zone = chooseCpuZone(next, chosen, pending)!;
-      next = removeCalibrationPlayerFromHand(next, 'away', chosen.id);
-      pending.push({ kind: 'player', side: 'away', cardId: chosen.id, zone, cost: chosen.cost });
+      const cost = calibrationPlayCost(chosen);
+      next = payCalibrationPlayer(next, 'away', chosen);
+      pending.push({ kind: 'player', side: 'away', cardId: chosen.id, zone, cost });
       continue;
     }
 
@@ -220,7 +260,7 @@ function tacticalLabel(card: V8TacticalCardInstance, zone: V8Zone | null = null)
 function PlayerHandCard({ card, selected, onClick }: { card: V8CalibrationPlayerCard; selected: boolean; onClick: () => void }) {
   return (
     <button className={`v8-card${selected ? ' is-selected' : ''}`} onClick={onClick}>
-      <span className="v8-card__cost">{card.cost}</span>
+      <span className="v8-card__cost">{calibrationPlayCost(card)}</span>
       <span className="v8-card__position">{card.position}</span>
       <strong>{card.realName}</strong>
       <small><b>{card.actionName}</b><br />{card.actionText}</small>
@@ -274,6 +314,14 @@ function DeployedChip({ state, side, runtimeId, onMove }: { state: V8Calibration
   );
 }
 
+function recapHighlights(state: V8CalibrationState, period: number): string[] {
+  const useful = new Set(['player_moved', 'action_ignored', 'action_suppressed', 'modifier_changed', 'tactical_generated', 'tactical_modified', 'chance_resolved', 'chance_cancelled']);
+  return state.events
+    .filter((event) => event.period === period && useful.has(event.type))
+    .map((event) => event.text)
+    .slice(-6);
+}
+
 export default function V8CalibrationLab() {
   const [preset, setPreset] = useState<PresetKey>('creators');
   const [seed, setSeed] = useState(8082026);
@@ -285,6 +333,7 @@ export default function V8CalibrationLab() {
   const [homeManagerAvailable, setHomeManagerAvailable] = useState(true);
   const [awayManagerAvailable, setAwayManagerAvailable] = useState(true);
   const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([]);
+  const [recaps, setRecaps] = useState<PeriodRecap[]>([]);
   const [finished, setFinished] = useState(false);
 
   const homePlayers = calibrationHandPlayers(state, 'home');
@@ -292,6 +341,7 @@ export default function V8CalibrationLab() {
   const totalsHome = calibrationTeamTotals(state, 'home');
   const totalsAway = calibrationTeamTotals(state, 'away');
   const currentPriority = useMemo(() => priority(state, homeScore, awayScore, seed + state.period * 101), [state, homeScore, awayScore, seed]);
+  const latestRecap = recaps.at(-1);
 
   const reset = (nextPreset = preset, nextSeed = seed + 31) => {
     setPreset(nextPreset);
@@ -304,6 +354,7 @@ export default function V8CalibrationLab() {
     setHomeManagerAvailable(true);
     setAwayManagerAvailable(true);
     setUndoStack([]);
+    setRecaps([]);
     setFinished(false);
   };
 
@@ -342,13 +393,14 @@ export default function V8CalibrationLab() {
 
     if (selection.kind === 'player') {
       const card = getV8CalibrationPlayer(selection.cardId);
+      const cost = calibrationPlayCost(card);
       if (occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return;
-      if (card.cost > state.teams.home.energy) return;
+      if (cost > state.teams.home.energy) return;
       rememberUndo();
       try {
-        const paid = removeCalibrationPlayerFromHand(state, 'home', card.id);
+        const paid = payCalibrationPlayer(state, 'home', card);
         setState(paid);
-        setPending((plays) => [...plays, { kind: 'player', side: 'home', cardId: card.id, zone, cost: card.cost }]);
+        setPending((plays) => [...plays, { kind: 'player', side: 'home', cardId: card.id, zone, cost }]);
         setSelection(null);
       } catch {
         return;
@@ -390,10 +442,12 @@ export default function V8CalibrationLab() {
     const second = allPending.filter((play) => play.side !== reveal.first);
     let resolved = resolveSequence(cpu.state, first);
     resolved = resolveSequence(resolved, second);
+    const period = resolved.period;
+    const periodLabel = PERIOD_LABELS[period - 1];
     resolved.events.push({
       type: 'action_triggered',
-      period: resolved.period,
-      text: `${PERIOD_LABELS[resolved.period - 1]} REVEAL: ${reveal.first === 'home' ? 'YOU' : 'CPU'} first · ${reveal.reason}.`,
+      period,
+      text: `${periodLabel} REVEAL: ${reveal.first === 'home' ? 'YOU' : 'CPU'} first · ${reveal.reason}.`,
     });
 
     const home = calibrationTeamTotals(resolved, 'home');
@@ -402,11 +456,25 @@ export default function V8CalibrationLab() {
     const scoredAway = goalsFromAttackDefence(away.attack, home.defence);
     const nextHomeScore = homeScore + scoredHome;
     const nextAwayScore = awayScore + scoredAway;
-    resolved.events.push({ type: 'action_triggered', period: resolved.period, text: `${PERIOD_LABELS[resolved.period - 1]}: ${home.attack} ATT vs ${away.defence} DEF → ${scoredHome} goal${scoredHome === 1 ? '' : 's'}.` });
-    resolved.events.push({ type: 'action_triggered', period: resolved.period, text: `${PERIOD_LABELS[resolved.period - 1]}: opponent ${away.attack} ATT vs ${home.defence} DEF → ${scoredAway} goal${scoredAway === 1 ? '' : 's'}.` });
+    resolved.events.push({ type: 'action_triggered', period, text: `${periodLabel}: ${home.attack} ATT vs ${away.defence} DEF → ${scoredHome} goal${scoredHome === 1 ? '' : 's'}.` });
+    resolved.events.push({ type: 'action_triggered', period, text: `${periodLabel}: opponent ${away.attack} ATT vs ${home.defence} DEF → ${scoredAway} goal${scoredAway === 1 ? '' : 's'}.` });
+
+    setRecaps((items) => [...items, {
+      period,
+      label: periodLabel,
+      homeGoals: scoredHome,
+      awayGoals: scoredAway,
+      homeAttack: home.attack,
+      awayDefence: away.defence,
+      awayAttack: away.attack,
+      homeDefence: home.defence,
+      scoreAfter: `${nextHomeScore}–${nextAwayScore}`,
+      highlights: recapHighlights(resolved, period),
+    }]);
 
     const wasFinal = resolved.period === 4;
     resolved = endV8CalibrationPeriod(resolved);
+    if (!wasFinal) resolved = withCalibrationEnergy(resolved);
     setState(resolved);
     setHomeScore(nextHomeScore);
     setAwayScore(nextAwayScore);
@@ -434,7 +502,7 @@ export default function V8CalibrationLab() {
       <div className="v8-condition">
         <button>
           <strong>30-CARD V8 CALIBRATION</strong>
-          <span>Tracker Actions · established KC values where available · 2 marked fallbacks</span>
+          <span>2/4/6/8 Energy · player Costs −1 (min 1) · source values unchanged</span>
         </button>
         <button onClick={() => reset(preset, seed + 31)}>NEW DRAW</button>
       </div>
@@ -496,6 +564,27 @@ export default function V8CalibrationLab() {
         <button onClick={undo} disabled={!undoStack.length}>UNDO</button>
         <button className="v8-primary" onClick={endPeriod} disabled={finished}>END PERIOD</button>
       </section>
+
+      {latestRecap && (
+        <details className="v8-recap" open>
+          <summary>
+            <small>{latestRecap.label}</small>
+            <strong>PERIOD RECAP</strong>
+            <b>{latestRecap.homeGoals}–{latestRecap.awayGoals} · {latestRecap.scoreAfter}</b>
+          </summary>
+          <div className="v8-recap__body">
+            <div className="v8-recap__equations">
+              <span>YOU: <b>{latestRecap.homeAttack} ATT</b> vs {latestRecap.awayDefence} DEF → <b>{latestRecap.homeGoals} goals</b></span>
+              <span>CPU: <b>{latestRecap.awayAttack} ATT</b> vs {latestRecap.homeDefence} DEF → <b>{latestRecap.awayGoals} goals</b></span>
+            </div>
+            {latestRecap.highlights.length > 0 && (
+              <ul className="v8-recap__events">
+                {latestRecap.highlights.map((text, index) => <li key={`${latestRecap.period}-${index}-${text}`}>{text}</li>)}
+              </ul>
+            )}
+          </div>
+        </details>
+      )}
 
       <section className="v8-hand-wrap">
         <div className="v8-hand-heading"><strong>HAND</strong><span>{state.teams.home.drawPile.length} XI cards unseen</span></div>
