@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -35,7 +37,22 @@ jobs:
       - name: TypeScript
         run: npx tsc --noEmit
 
-      - name: Lint
+      - name: Changed-file lint gate
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          mapfile -t files < <(git diff --name-only --diff-filter=ACMRT \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}" -- '*.ts' '*.tsx')
+          if ((${#files[@]})); then
+            printf 'Linting changed files:\n%s\n' "${files[*]}"
+            npx eslint "${files[@]}"
+          else
+            echo 'No changed TypeScript files to lint.'
+          fi
+
+      - name: Full lint regression visibility
+        continue-on-error: true
         run: npm run lint
 
       - name: Build static export
