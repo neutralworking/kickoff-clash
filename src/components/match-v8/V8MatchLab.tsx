@@ -57,7 +57,7 @@ type MatchEvent = {
 const ZONES: readonly V8Zone[] = ['DEF', 'MID', 'ATT'];
 const PERIOD_LABELS = ['0–22', '22–HT', 'HT–66', '66–FT'] as const;
 const ENERGY_CURVES = {
-  controlled: [4, 6, 7, 9],
+  controlled: [3, 5, 7, 9],
   explosive: [4, 6, 8, 10],
 } as const;
 
@@ -583,7 +583,7 @@ export default function V8MatchLab() {
 
       <section className="v8-lab-controls">
         <span>ENERGY TEST</span>
-        <button className={curveName === 'controlled' ? 'is-active' : ''} onClick={() => reset(gameSeed + 31, 'controlled')}>4 / 6 / 7 / 9</button>
+        <button className={curveName === 'controlled' ? 'is-active' : ''} onClick={() => reset(gameSeed + 31, 'controlled')}>3 / 5 / 7 / 9</button>
         <button className={curveName === 'explosive' ? 'is-active' : ''} onClick={() => reset(gameSeed + 31, 'explosive')}>4 / 6 / 8 / 10</button>
       </section>
 
