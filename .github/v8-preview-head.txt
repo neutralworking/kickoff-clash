@@ -1,1 +1,1 @@
-agent/v8-three-zone-prototype @ a613cf20726fa386ec2d19036f2ba062d81a6e1a
+agent/v8-three-zone-prototype @ a39425c8b94d29c64924dfb0c434e3b7b0aee3eb
