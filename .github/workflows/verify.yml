@@ -35,6 +35,8 @@ jobs:
         run: npm run lint
 
       - name: Build static export
+        env:
+          NEXT_PUBLIC_BASE_PATH: ""
         run: npm run build
 
       - name: Install Chromium
