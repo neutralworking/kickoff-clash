@@ -10,33 +10,24 @@ import type {
 import { receiptEvent } from '../runtime/receipt';
 import { createRng } from '../core/rng';
 import type { LedgerEffect } from '../actions/effects';
+import { applyChanceShapeEffects, selectChanceTokens, targetedChanceSide } from './chances';
+import { assignFinishers } from './finishers';
 import { rollToken, type TokenRoll } from './rolls';
 import type { RerollPolicy } from './rerolls';
-import { attributeGoal } from './attribution';
 import { effectivePlayers, type CardRegistry, type EffectivePlayer } from './stats';
 
-// Period resolution. Takes the chance tokens the break resolver created, applies
-// the token-level ledger effects (threshold / reroll / cancel), rolls every
-// surviving token in a stable order on the deterministic RNG, attributes each
-// goal on a separate substream, and returns immutable score + state plus an
-// end-of-period snapshot. It reads the ledger — it does not roll it into state.
-//
-// Token targeting from normalized data: a token effect carries the resolved
-// chance target (`tokenTarget = { side: own | enemy, selector }`) preserved from
-// the action. The effect's `type` drives behavior; the target — never the type —
-// decides which tokens are hit. `own` resolves to the effect's acting `side`,
-// `enemy` to the other side, so debuffing enemy chances is just `side: enemy`.
-// `first_in_sector` targets the lowest-order token per in-scope sector;
-// `all_in_sector` targets every in-scope token. A token effect with no
-// `tokenTarget` (never produced by a chance-targeting action) is ignored.
+// Period resolution. The typed-chance pipeline is intentionally explicit:
+// calculated Box tokens → Action-created tokens → type shaping → movement →
+// claims/default finisher assignment → cancel/threshold/reroll → roll. Origin,
+// type and finisher remain separate facts on the same stable token id throughout.
 
 export const FINAL_PERIOD: PeriodNumber = 4;
 
 const SECTOR_RANK: Record<Sector, number> = { left: 0, centre: 1, right: 2 };
 const SIDE_RANK: Record<TeamSide, number> = { player: 0, opponent: 1 };
-const other = (side: TeamSide): TeamSide => (side === 'player' ? 'opponent' : 'player');
 
 export interface ResolvedToken extends TokenRoll {
+  /** Compatibility alias used by existing presentation code. */
   scorerId?: string;
 }
 
@@ -76,28 +67,15 @@ export interface PeriodResolution {
   snapshot: PeriodSnapshot;
 }
 
-/** The concrete side a token effect targets, from its relative target + acting side. */
-function targetedSide(entry: LedgerEffect): TeamSide | undefined {
-  if (!entry.tokenTarget) return undefined;
-  return entry.tokenTarget.side === 'own' ? entry.side : other(entry.side);
-}
-
-/** The tokens an effect selects: in-scope by sector, narrowed by the selector. */
-function selectTokens(tokens: readonly ChanceToken[], entry: LedgerEffect): ChanceToken[] {
-  const inScope = tokens.filter((token) => entry.sector === undefined || entry.sector === token.sector);
-  if (entry.tokenTarget?.selector === 'all_in_sector') return inScope;
-  // first_in_sector → the lowest-order token in each in-scope sector.
-  const firstBySector = new Map<Sector, ChanceToken>();
-  for (const token of [...inScope].sort((a, b) => a.order - b.order)) {
-    if (!firstBySector.has(token.sector)) firstBySector.set(token.sector, token);
-  }
-  return [...firstBySector.values()];
+function effectDependsOnClaim(entry: LedgerEffect, ledger: readonly LedgerEffect[]): boolean {
+  return ledger.some((other) => other.sourceInstanceId === entry.sourceInstanceId && other.effect.type === 'claim_chance');
 }
 
 /**
- * Apply the token-level ledger effects to one side's chance tokens. Ownership
- * and precision come entirely from each effect's preserved `tokenTarget`; the
- * effect type only decides what to do to the selected tokens.
+ * Apply conversion-level token effects after finishers are fixed. Type filters
+ * are preserved on the ledger target. When an Action couples `claim_chance` with
+ * a threshold/reroll, the conversion modifier applies only if that same source
+ * actually won the claim; a fizzled specialist never grants free value.
  */
 export function applyTokenEffects(
   tokens: readonly ChanceToken[],
@@ -111,9 +89,13 @@ export function applyTokenEffects(
     if (effect.type !== 'set_goal_threshold' && effect.type !== 'add_reroll' && effect.type !== 'cancel_chance') {
       continue;
     }
-    if (!entry.tokenTarget || targetedSide(entry) !== side) continue;
+    if (!entry.tokenTarget || targetedChanceSide(entry) !== side) continue;
 
-    const selected = selectTokens(out, entry);
+    let selected = selectChanceTokens(out, entry);
+    if (effectDependsOnClaim(entry, ledger) && effect.type !== 'cancel_chance') {
+      selected = selected.filter((token) => token.finisherAssignment === 'claimed' && token.finisherId === entry.sourceCardId);
+    }
+
     if (effect.type === 'cancel_chance') {
       const ids = new Set(
         selected
@@ -147,6 +129,19 @@ function stableOrder(tokens: readonly ChanceToken[]): ChanceToken[] {
   );
 }
 
+function tokenData(token: ChanceToken, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    tokenId: token.id,
+    origin: token.origin,
+    chanceType: token.chanceType,
+    sector: token.sector,
+    ...(token.sourceActionInstanceId ? { sourceActionInstanceId: token.sourceActionInstanceId } : {}),
+    ...(token.finisherId ? { finisherId: token.finisherId, scorerId: token.finisherId } : {}),
+    ...(token.finisherAssignment ? { finisherAssignment: token.finisherAssignment } : {}),
+    ...extra,
+  };
+}
+
 export function resolvePeriod(input: PeriodResolutionInput): PeriodResolution {
   const { state, registry, policy } = input;
   const period = state.period;
@@ -155,19 +150,30 @@ export function resolvePeriod(input: PeriodResolutionInput): PeriodResolution {
   }
 
   const ledger = [...input.ledger];
-  const adjusted: Record<TeamSide, ChanceToken[]> = {
-    player: applyTokenEffects(input.chances.player, ledger, 'player'),
-    opponent: applyTokenEffects(input.chances.opponent, ledger, 'opponent'),
-  };
-
   const effective: Record<TeamSide, EffectivePlayer[]> = {
     player: effectivePlayers(state.player, registry, ledger),
     opponent: effectivePlayers(state.opponent, registry, ledger),
   };
   const activeOf = (side: TeamSide): EffectivePlayer[] => effective[side].filter((player) => player.zone === 'active');
+  const teamOf = (side: TeamSide) => side === 'player' ? state.player : state.opponent;
+
+  const receipts: MatchReceiptEvent[] = [];
+  const assigned: Record<TeamSide, ChanceToken[]> = { player: [], opponent: [] };
+
+  for (const side of ['player', 'opponent'] as const) {
+    const shaped = applyChanceShapeEffects(input.chances[side], ledger, side, period, activeOf(side), state.seed);
+    receipts.push(...shaped.receipts);
+    const finishers = assignFinishers(shaped.tokens, ledger, side, period, activeOf(side), teamOf(side), state.seed);
+    receipts.push(...finishers.receipts);
+    assigned[side] = finishers.tokens;
+  }
+
+  const adjusted: Record<TeamSide, ChanceToken[]> = {
+    player: applyTokenEffects(assigned.player, ledger, 'player'),
+    opponent: applyTokenEffects(assigned.opponent, ledger, 'opponent'),
+  };
 
   const rollRng = createRng(state.seed, `rolls:${period}`);
-  const receipts: MatchReceiptEvent[] = [];
   const tokenOutcomes: ResolvedToken[] = [];
   const goals: GoalEvent[] = [];
   const score: Record<TeamSide, number> = { player: state.player.score, opponent: state.opponent.score };
@@ -176,31 +182,30 @@ export function resolvePeriod(input: PeriodResolutionInput): PeriodResolution {
   const receipt = (
     eventType: string,
     message: string,
-    side: TeamSide,
-    tokenId: string,
+    token: ChanceToken,
     data: Record<string, unknown> = {},
   ): MatchReceiptEvent =>
     receiptEvent({
-      id: `rcpt:${eventType}:${side}:${period}:${tokenId}`,
+      id: `rcpt:${eventType}:${token.side}:${period}:${token.id}`,
       period,
       phase: 'period_resolution',
       eventType,
       message,
-      side,
-      data,
+      side: token.side,
+      data: tokenData(token, data),
     });
 
   for (const token of stableOrder([...adjusted.player, ...adjusted.opponent])) {
     const roll = rollToken(token, rollRng, policy);
 
     if (roll.cancelled) {
-      receipts.push(receipt('chance_cancelled', `Chance in the ${token.sector} was cancelled.`, token.side, token.id));
-      tokenOutcomes.push(roll);
+      receipts.push(receipt('chance_cancelled', `${token.chanceType.replace('_', ' ')} chance in the ${token.sector} was cancelled.`, token));
+      tokenOutcomes.push({ ...roll, ...(token.finisherId ? { scorerId: token.finisherId } : {}) });
       continue;
     }
 
     receipts.push(
-      receipt('chance_roll', `Rolled ${roll.rolls.join('/')} vs ${roll.threshold}.`, token.side, token.id, {
+      receipt('chance_roll', `Rolled ${roll.rolls.join('/')} vs ${roll.threshold} for ${token.finisherId ?? 'the attack'}.`, token, {
         rolls: roll.rolls,
         finalRoll: roll.finalRoll,
         threshold: roll.threshold,
@@ -209,13 +214,11 @@ export function resolvePeriod(input: PeriodResolutionInput): PeriodResolution {
     );
 
     if (!roll.scored) {
-      receipts.push(receipt('chance_missed', `Missed (${roll.finalRoll} < ${roll.threshold}).`, token.side, token.id));
-      tokenOutcomes.push(roll);
+      receipts.push(receipt('chance_missed', `Missed (${roll.finalRoll} < ${roll.threshold}).`, token, { finalRoll: roll.finalRoll, threshold: roll.threshold }));
+      tokenOutcomes.push({ ...roll, ...(token.finisherId ? { scorerId: token.finisherId } : {}) });
       continue;
     }
 
-    const attrRng = createRng(state.seed, `attribution:${period}:${token.side}:${token.sector}:${token.order}`);
-    const attribution = attributeGoal(token.side, token.sector, activeOf(token.side), attrRng);
     score[token.side] += 1;
     const goal: GoalEvent = {
       order: goalOrder++,
@@ -223,21 +226,22 @@ export function resolvePeriod(input: PeriodResolutionInput): PeriodResolution {
       period,
       sector: token.sector,
       tokenId: token.id,
-      ...(attribution.scorerId ? { scorerId: attribution.scorerId } : {}),
+      ...(token.finisherId ? { scorerId: token.finisherId } : {}),
     };
     goals.push(goal);
 
-    receipts.push(receipt('goal_scored', `GOAL for ${token.side} (${roll.finalRoll} ≥ ${roll.threshold}).`, token.side, token.id, { goalOrder: goal.order }));
-    if (attribution.fizzled) {
-      receipts.push(receipt('attribution_fizzled', `Goal for ${token.side} has no eligible scorer.`, token.side, token.id));
-    } else {
-      receipts.push(receipt('attribution', `${attribution.scorerId} scores for ${token.side}.`, token.side, token.id, {
-        scorerId: attribution.scorerId,
-        eligible: attribution.eligibleIds,
+    receipts.push(receipt('goal_scored', `GOAL for ${token.side} (${roll.finalRoll} ≥ ${roll.threshold}).`, token, { goalOrder: goal.order }));
+    if (token.finisherId) {
+      receipts.push(receipt('attribution', `${token.finisherId} scores for ${token.side}.`, token, {
+        scorerId: token.finisherId,
+        finisherId: token.finisherId,
+        assignment: token.finisherAssignment,
       }));
+    } else {
+      receipts.push(receipt('attribution_fizzled', `Goal for ${token.side} has no assigned finisher.`, token));
     }
 
-    tokenOutcomes.push({ ...roll, ...(attribution.scorerId ? { scorerId: attribution.scorerId } : {}) });
+    tokenOutcomes.push({ ...roll, ...(token.finisherId ? { scorerId: token.finisherId } : {}) });
   }
 
   const player = {
