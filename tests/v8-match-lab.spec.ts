@@ -38,41 +38,43 @@ async function expectTestingSurfaceAboveFold(page: Page) {
 test.describe('V8 real-card calibration lab', () => {
   test('keeps the core testing surface in one phone viewport', async ({ page }) => {
     await page.goto('/lab/match-v8');
+    await expect(page.getByText('2 ENERGY', { exact: true })).toBeVisible();
     await expectTestingSurfaceAboveFold(page);
     await expectMobileFit(page);
   });
 
-  test('uses real tracker cards and releases the Manager player slot after reveal', async ({ page }) => {
+  test('uses compressed calibration player costs and releases the Manager slot after reveal', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
     await expect(page.getByText('0–22', { exact: true })).toBeVisible();
-    await expect(page.getByText('3 ENERGY', { exact: true })).toBeVisible();
+    await expect(page.getByText('2 ENERGY', { exact: true })).toBeVisible();
     await expect(page.getByText('30-CARD V8 CALIBRATION', { exact: true })).toBeVisible();
+    await expect(page.getByText(/player Costs −1 \(min 1\)/)).toBeVisible();
     await expect(page.locator('.v8-zone')).toHaveCount(3);
-    await expect(page.locator('.v8-card')).toHaveCount(6);
-    await expect(page.locator('.v8-card').filter({ hasText: 'Ángel Di María' })).toHaveCount(1);
-    await expect(page.locator('.v8-card').filter({ hasText: 'RABONA' })).toContainText('If you have a Cross in your hand');
-    await expect(page.getByText(/seeded tiebreak · Tacticals use no player slot/)).toBeVisible();
-    await expectMobileFit(page);
+    await expect(page.locator('.v8-card').filter({ hasText: 'Ángel Di María' }).locator('.v8-card__cost')).toHaveText('2');
+
+    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await expect(page.getByText('22–HT', { exact: true })).toBeVisible();
+    await expect(page.getByText('4 ENERGY', { exact: true })).toBeVisible();
 
     await page.locator('.v8-card--manager').click();
     const defenceZone = page.locator('.v8-zone').first();
     await defenceZone.click();
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
-    await expect(page.getByText('0 ENERGY', { exact: true })).toBeVisible();
+    await expect(page.getByText('1 ENERGY', { exact: true })).toBeVisible();
     await expect(defenceZone.locator('.v8-chip--transient')).toContainText('CONTROL');
     await expect(defenceZone.locator('.v8-zone__heading span')).toHaveText('1/4');
 
     await page.getByRole('button', { name: 'END PERIOD' }).click();
-    await expect(page.getByText('22–HT', { exact: true })).toBeVisible();
-    await expect(page.getByText('5 ENERGY', { exact: true })).toBeVisible();
+    await expect(page.getByText('HT–66', { exact: true })).toBeVisible();
+    await expect(page.getByText('6 ENERGY', { exact: true })).toBeVisible();
     await expect(page.locator('.v8-card--manager')).toHaveCount(0);
     await expect(defenceZone.locator('.v8-chip--transient')).toHaveCount(0);
     await expect(page.locator('.v8-log')).toContainText('reveal CONTROL');
     await expectMobileFit(page);
   });
 
-  test('generates a literal Cross and committing it does not consume a player slot', async ({ page }) => {
+  test('generates a literal Cross, keeps it slotless, and explains the period score', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
     const diMaria = page.locator('.v8-card').filter({ hasText: 'Ángel Di María' });
@@ -80,9 +82,17 @@ test.describe('V8 real-card calibration lab', () => {
     const midfieldZone = page.locator('.v8-zone').nth(1);
     await midfieldZone.click();
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
+    await expect(page.getByText('0 ENERGY', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'END PERIOD' }).click();
 
     await expect(page.getByText('22–HT', { exact: true })).toBeVisible();
+    await expect(page.getByText('4 ENERGY', { exact: true })).toBeVisible();
+    const recap = page.locator('.v8-recap');
+    await expect(recap).toBeVisible();
+    await expect(recap).toContainText('PERIOD RECAP');
+    await expect(recap).toContainText(/YOU: \d+ ATT vs \d+ DEF → \d+ goals/);
+    await expect(recap).toContainText(/CPU: \d+ ATT vs \d+ DEF → \d+ goals/);
+
     const cross = page.locator('.v8-card--chance').filter({ hasText: 'Cross' });
     await expect(cross).toHaveCount(1);
     await expect(cross.locator('.v8-card__cost')).toHaveText('1');
