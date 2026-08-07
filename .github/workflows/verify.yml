@@ -28,7 +28,7 @@ jobs:
       - run: npm ci
 
       - name: Focused Vitest gate
-        run: npx vitest run src/engine-v8/__tests__/core.test.ts src/engine-v8/__tests__/simulation.test.ts src/engine-v7/__tests__/typed-chances.test.ts src/engine-v7/__tests__/finisher-acceptance.test.ts src/game-v7/__tests__/cross-pair-simulation.test.ts src/game-v7/__tests__/through-ball-pair-simulation.test.ts
+        run: npx vitest run src/engine-v8/__tests__/core.test.ts src/engine-v8/__tests__/reveal.test.ts src/engine-v8/__tests__/simulation.test.ts src/engine-v7/__tests__/typed-chances.test.ts src/engine-v7/__tests__/finisher-acceptance.test.ts src/game-v7/__tests__/cross-pair-simulation.test.ts src/game-v7/__tests__/through-ball-pair-simulation.test.ts
 
       - name: Full Vitest regression visibility
         continue-on-error: true
