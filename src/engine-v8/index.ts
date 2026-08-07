@@ -4,6 +4,8 @@ export * from './action-interactions';
 export * from './tactical';
 export * from './calibration-cards';
 export * from './calibration-engine';
+export * from './calibration-squads';
+export * from './calibration-telemetry';
 
 // The playable V8 lab opts into the action-decay calibration extension while
 // direct calibration-engine imports retain the original 30-card baseline.
