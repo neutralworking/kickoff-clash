@@ -82,6 +82,8 @@ The calibration runtime has reusable state for:
 - current ATT and DEF through explicit modifiers;
 - temporary period modifiers;
 - permanent match modifiers;
+- fixed-duration modifiers;
+- decaying modifiers with independent ATT/DEF decay rates;
 - current zone;
 - Action enabled/suppressed state;
 - once-per-period counters;
@@ -93,6 +95,15 @@ The calibration runtime has reusable state for:
 - observable event/action log.
 
 `reduced DEF` is derived as `current DEF < printed DEF`; there is no separate combo flag.
+
+Modifier lifetime vocabulary now has four distinct behaviours:
+
+- `period`: expires at the end of the current period;
+- `duration`: stays at full value for N scoring windows, then expires;
+- `decay`: survives period end but moves its own modifier value toward zero by a configured amount;
+- `match`: remains unchanged for the rest of the match.
+
+Decay and duration belong to the individual modifier, not to the player's whole stat. Different modifier lifetimes can therefore stack independently on the same player.
 
 ## The 30 calibration cards
 
@@ -164,7 +175,7 @@ The runtime now supports the calibration requirements including:
 - Offside Trap cancellation and Baresi rider;
 - reduced-DEF threshold checks;
 - required pre-effect sequencing for Garrincha/Okocha;
-- temporary and permanent player stat modifiers;
+- temporary, fixed-duration, decaying and permanent player stat modifiers;
 - Iniesta first-target protection;
 - Seedorf reduction immunity;
 - Makélélé dynamic local aura;
@@ -175,6 +186,24 @@ The runtime now supports the calibration requirements including:
 - Trigger Press dual DEF/ATT contribution;
 - period reset and match-persistent state.
 
+## Action decay calibration experiment
+
+Action decay is currently an explicit extension layer on top of the stable 30-card calibration runtime. Direct imports from `calibration-engine.ts` retain the original calibration baseline; the playable `/lab/match-v8` export opts into decay so the mechanic can be manually reviewed without silently changing unrelated consumers.
+
+Christine Sinclair is the first live decay example:
+
+**ARRIVE UNMARKED**
+
+> On Reveal: If this is your first player here, she gains +4 ATT. This bonus loses 1 ATT at the end of each period.
+
+The scoring window uses the current value before decay. A Sinclair revealed in period one therefore contributes the full +4 in that period, then carries +3, +2 and +1 into later periods if the match lasts long enough.
+
+This V8 calibration override is deliberately **not written back to the Card Design Tracker yet**. The tracker retains the original permanent +4 text until the decay concept is manually played and accepted.
+
+The reusable duration primitive is implemented and automated as well, but no second calibration player has been converted to duration yet. This avoids changing several tracker Actions before the management value of the mechanic is proven.
+
+Decay/expiry events are written to the Action log, and current deployed stats reflect the remaining modifier value after every period tick.
+
 ## Data sourcing
 
 The Card Design Tracker remains authoritative for:
@@ -182,7 +211,7 @@ The Card Design Tracker remains authoritative for:
 - player identity;
 - match/full card names;
 - position;
-- Action name and text;
+- Action name and text, except the explicit Sinclair decay playtest override above;
 - any populated Cost.
 
 The 30 tracker rows currently have blank ATT/DEF cells. Existing established values from `kc_player_roster_reconciliation_view` are therefore used for 28 players. Where the tracker Cost is blank, the reconciled KC Cost is also used.
@@ -208,6 +237,13 @@ J. Period reset clears period state while retaining once-match/permanent state.
 
 Additional tests cover RABONA, PENDOLINO, two-card Džajić generation, Charlton/Lloyd, Eriksen/Ramos, Garrincha sequencing, Iniesta/Seedorf, Makélélé, Litmanen, Sinclair and Beckenbauer.
 
+A dedicated modifier-decay suite verifies:
+
+- Sinclair +4 → +3 → +2 decay across scoring windows;
+- fixed-duration modifiers retain full value and then expire;
+- the tracker-backed Sinclair card data remains unchanged while the playable hand shows the explicit decay override;
+- remaining decay/duration metadata can be rendered as compact modifier badges.
+
 Existing V7 focused gates remain in CI for regression visibility.
 
 ## Playable lab
@@ -216,11 +252,12 @@ Existing V7 focused gates remain in CI for regression visibility.
 
 It includes:
 
-- real calibration player names and tracker Action text;
+- real calibration player names and tracker Action text, with the explicit Sinclair decay override visible in hand;
 - actual Tactical cards in hand;
 - generated-card ATT/cost/rider feedback;
 - current Energy;
-- temporary current stats on deployed players;
+- current deployed stats, including remaining decay after each period;
+- decay/expiry feedback in the Action log;
 - `NO ACTION` feedback for suppressed cards;
 - Moveable / move-used state;
 - cancellation and Action feedback through the event log;
