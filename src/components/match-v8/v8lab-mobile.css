@@ -1,0 +1,213 @@
+/*
+ * Functional mobile overrides for the V8 calibration lab.
+ * This is intentionally a testing UX pass rather than the final card/board design.
+ */
+
+@media (max-width: 480px) {
+  .v8-shell {
+    min-height: 100dvh;
+    padding: max(6px, env(safe-area-inset-top)) 5px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  /* Keep the only always-needed match state compact and visible. */
+  .v8-scorebar {
+    grid-template-columns: 54px 1fr 54px;
+    gap: 4px;
+    min-height: 48px;
+    padding: 5px 6px;
+    border-radius: 11px;
+  }
+  .v8-scorebar strong { font-size: 24px; }
+  .v8-scorebar section b { font-size: 11px; }
+  .v8-scorebar section span { margin-top: 1px; font-size: 10px; }
+
+  /* Calibration metadata should not push the actual game below the fold. */
+  .v8-condition {
+    grid-template-columns: minmax(0, 1fr) 72px;
+    gap: 4px;
+    margin: 5px 0;
+  }
+  .v8-condition button { min-height: 36px; padding: 5px 7px; border-radius: 8px; }
+  .v8-condition button strong { font-size: 9px; }
+  .v8-condition button span {
+    overflow: hidden;
+    margin-top: 1px;
+    font-size: 7px;
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .v8-lab-controls {
+    flex-wrap: nowrap;
+    gap: 4px;
+    overflow-x: auto;
+    margin-top: 4px;
+    padding: 4px;
+    border-radius: 8px;
+    scrollbar-width: none;
+  }
+  .v8-lab-controls::-webkit-scrollbar { display: none; }
+  .v8-lab-controls span { display: none; }
+  .v8-lab-controls button {
+    flex: 0 0 auto;
+    min-height: 32px;
+    padding: 5px 8px;
+    white-space: nowrap;
+  }
+
+  .v8-totals {
+    gap: 3px;
+    margin: 4px 0;
+  }
+  .v8-totals span {
+    padding: 4px 2px;
+    border-radius: 6px;
+    font-size: 7px;
+    line-height: 1;
+  }
+  .v8-totals b { font-size: 11px; }
+
+  /* Three zones stay side-by-side, but the empty-slot scaffolding is much shallower. */
+  .v8-pitch {
+    gap: 3px;
+    padding: 4px;
+    border-radius: 12px;
+  }
+  .v8-zone {
+    min-height: 202px;
+    padding: 3px;
+    border-radius: 8px;
+  }
+  .v8-zone__heading {
+    min-height: 25px;
+    margin: 3px -1px;
+    padding: 3px;
+    border-radius: 6px;
+  }
+  .v8-zone__heading strong { font-size: 8px; }
+  .v8-zone__heading span {
+    max-width: 64%;
+    overflow: hidden;
+    font-size: 6.5px;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .v8-zone__side {
+    grid-template-rows: repeat(2, minmax(34px, 1fr));
+    gap: 2px;
+    min-height: 76px;
+    padding: 1px 0;
+  }
+  .v8-zone__side i,
+  .v8-chip { min-height: 34px; border-radius: 5px; }
+  .v8-chip {
+    padding: 2px 1px;
+    font-size: 6.5px;
+    line-height: 1;
+  }
+  .v8-chip b { margin-top: 2px; font-size: 7.5px; }
+  .v8-chip small {
+    overflow: hidden;
+    margin-top: 1px;
+    font-size: 5.5px;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* One-row commit controls avoid the old oversized full-width second row. */
+  .v8-commit {
+    grid-template-columns: minmax(0, 1fr) 48px 82px;
+    gap: 4px;
+    margin: 5px 0;
+    padding: 5px;
+    border-radius: 9px;
+  }
+  .v8-commit strong {
+    overflow: hidden;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .v8-commit span {
+    overflow: hidden;
+    margin-top: 1px;
+    font-size: 7px;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .v8-commit span:not(:first-of-type) { display: none; }
+  .v8-commit button {
+    min-height: 38px;
+    padding: 5px 4px;
+    font-size: 8px;
+  }
+  .v8-commit .v8-primary {
+    grid-column: auto;
+    width: auto;
+  }
+
+  /* Hand remains horizontally scrollable but shows more choices at once. */
+  .v8-hand-wrap { margin-top: 4px; }
+  .v8-hand-heading { margin-bottom: 3px; font-size: 8px; }
+  .v8-hand {
+    gap: 5px;
+    padding: 2px 1px 6px;
+    scroll-padding-left: 1px;
+  }
+  .v8-card {
+    flex-basis: 108px;
+    height: 136px;
+    padding: 24px 6px 21px;
+    border-radius: 10px;
+  }
+  .v8-card--manager { flex-basis: 118px; }
+  .v8-card__cost {
+    top: 5px;
+    left: 6px;
+    width: 19px;
+    height: 19px;
+    font-size: 9px;
+  }
+  .v8-card__position { top: 7px; right: 6px; max-width: 72px; font-size: 8px; text-align: right; }
+  .v8-card__att,
+  .v8-card__def { bottom: 5px; font-size: 9px; }
+  .v8-card__att { left: 6px; }
+  .v8-card__def { right: 6px; }
+  .v8-card strong {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 11px;
+    line-height: 1.05;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .v8-card small {
+    display: -webkit-box;
+    overflow: hidden;
+    margin-top: 5px;
+    font-size: 7.5px;
+    line-height: 1.2;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 6;
+  }
+  .v8-card.is-selected { transform: translateY(-2px); }
+
+  /* Logs remain available for debugging but stop dominating the play surface. */
+  .v8-log {
+    max-height: 150px;
+    overflow-y: auto;
+    margin-top: 5px;
+    padding: 7px;
+  }
+  .v8-log p { margin: 2px 0; font-size: 8px; line-height: 1.2; }
+}
+
+@media (max-width: 360px) {
+  .v8-zone { min-height: 194px; }
+  .v8-card { flex-basis: 102px; }
+  .v8-commit { grid-template-columns: minmax(0, 1fr) 44px 76px; }
+}
