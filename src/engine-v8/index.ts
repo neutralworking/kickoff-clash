@@ -11,4 +11,5 @@ export {
   revealCalibrationPlayerWithDecay as revealCalibrationPlayer,
   endV8CalibrationPeriodWithDecay as endV8CalibrationPeriod,
   applyCalibrationDecayModifier as applyCalibrationModifier,
+  calibrationHandPlayersWithDecayText as calibrationHandPlayers,
 } from './calibration-engine';
