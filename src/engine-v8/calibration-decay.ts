@@ -93,6 +93,17 @@ export function calibrationActionText(card: V8CalibrationPlayerCard): string {
   return card.actionText;
 }
 
+export function calibrationHandPlayersWithDecayText(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+): V8CalibrationPlayerCard[] {
+  return base.calibrationHandPlayers(state, side).map((card) => (
+    card.actionKey === 'sinclair_arrive_unmarked'
+      ? { ...card, actionText: calibrationActionText(card) }
+      : card
+  ));
+}
+
 export function revealCalibrationPlayer(
   state: base.V8CalibrationState,
   side: base.V8CalibrationSide,
