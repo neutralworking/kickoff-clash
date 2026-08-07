@@ -25,6 +25,7 @@ test.describe('V8 three-zone match lab', () => {
     const oneCostTempo = page.locator('.v8-card').filter({ hasText: 'FRONT FOOT' });
     await expect(oneCostTempo).toHaveCount(1);
     await expect(oneCostTempo.locator('.v8-card__cost')).toHaveText('1');
+    await expect(oneCostTempo).toContainText('next opposing reveal');
     await expectMobileFit(page);
 
     await page.locator('.v8-card--manager').click();
