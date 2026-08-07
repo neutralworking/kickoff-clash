@@ -52,6 +52,15 @@ export interface V8DeployedPlayer {
 
 export type V8Board = Record<V8Zone, readonly V8DeployedPlayer[]>;
 
+/**
+ * Any card committed to a zone reserves one of its four physical slots until reveal resolves.
+ * Players then remain on the board; Manager and Chance reservations are released after activation.
+ */
+export interface V8SlotReservation {
+  zone: V8Zone;
+  kind: 'player' | 'manager' | 'chance';
+}
+
 export interface V8TeamTotals {
   attack: number;
   defence: number;
@@ -196,8 +205,24 @@ export function resolvePeriodScore(
   };
 }
 
+export function zoneOccupancy(
+  board: V8Board,
+  zone: V8Zone,
+  reservations: readonly V8SlotReservation[] = [],
+): number {
+  return board[zone].length + reservations.filter((reservation) => reservation.zone === zone).length;
+}
+
+export function canPlayToZone(
+  board: V8Board,
+  zone: V8Zone,
+  reservations: readonly V8SlotReservation[] = [],
+): boolean {
+  return zoneOccupancy(board, zone, reservations) < V8_ZONE_CAPACITY;
+}
+
 export function canDeployToZone(board: V8Board, zone: V8Zone): boolean {
-  return board[zone].length < V8_ZONE_CAPACITY;
+  return canPlayToZone(board, zone);
 }
 
 export function deployPlayer(board: V8Board, card: V8PlayerCard, zone: V8Zone, deployedOrder: number): V8Board {
@@ -241,7 +266,10 @@ export function drawPlayers<TPlayer extends V8PlayerCard>(
   };
 }
 
-/** Chance cards are transient hand cards: they cost energy, resolve, disappear, and never use a zone slot. */
+/**
+ * Chance cards are transient hand cards: they spend Energy, reserve a zone slot during reveal,
+ * resolve their boost, then disappear and release that slot.
+ */
 export function resolveChanceCard(chance: V8ChanceCard): V8TemporaryZoneBoost {
   return {
     zone: chance.targetZone,
@@ -250,7 +278,7 @@ export function resolveChanceCard(chance: V8ChanceCard): V8TemporaryZoneBoost {
   };
 }
 
-/** Manager cards are also transient. Their individual Action decides the actual boost/effect. */
+/** Manager cards use the same transient-slot lifecycle; their individual Action decides the effect. */
 export function spendTransientCardEnergy(availableEnergy: number, card: Pick<V8ChanceCard | V8ManagerCard, 'cost'>): number {
   if (card.cost > availableEnergy) throw new Error('Not enough energy');
   return availableEnergy - card.cost;
