@@ -1,8 +1,8 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
-async function expectMobileFit(page: Parameters<typeof test>[0] extends never ? never : import('@playwright/test').Page) {
+async function expectMobileFit(page: Page) {
   const dimensions = await page.evaluate(() => ({
     viewport: window.innerWidth,
     documentWidth: document.documentElement.scrollWidth,
