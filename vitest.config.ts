@@ -7,6 +7,7 @@ import { defineConfig } from 'vitest/config';
 //  • src/engine-v2/    — the superseded NW-139 six-contest engine, kept green as
 //    CI hygiene until removed (spec D2); no longer a live-game gate.
 //  • src/engine/       — the parked two-window resolver, kept green as CI hygiene.
+//  • src/engine-v8/    — the isolated V8 calibration prototype and matchup evidence.
 // Playwright's tests/ tree is out of scope here (it has its own runner).
 export default defineConfig({
   // The game-v7 layer imports the engine via the `@/` path alias (tsconfig
@@ -22,6 +23,7 @@ export default defineConfig({
       'src/engine/__tests__/**/*.test.ts',
       'src/engine-v2/__tests__/**/*.test.ts',
       'src/engine-v7/__tests__/**/*.test.ts',
+      'src/engine-v8/__tests__/**/*.test.ts',
       'src/game-v7/__tests__/**/*.test.ts',
     ],
   },
