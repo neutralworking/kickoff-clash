@@ -1,12 +1,8 @@
-import type { MatchReceiptEvent, PeriodNumber, TeamSide } from '@/engine-v7';
+import type { ChanceType, MatchReceiptEvent, PeriodNumber, Sector, TeamSide } from '@/engine-v7';
 
-// Receipt → event-feed translation. Engine receipts are the AUTHORITATIVE source
-// for the match feed — the UI never diffs old vs new state to invent events. Each
-// receipt maps to zero or more ordered UI events; a couple of receipts (a roll
-// that consumed rerolls) fan out into two events so the feed reads naturally.
-// Chance creation, kickoff and full time have no engine receipt today, so the
-// controller synthesises those from real data (the created tokens / final state),
-// never from a state diff.
+// Receipt → event-feed translation. Engine receipts are authoritative. Typed
+// chance metadata is carried structurally so presentation never parses strings
+// to recover token origin, football type or intended finisher.
 
 export type MatchEventKind =
   | 'kickoff'
@@ -19,6 +15,11 @@ export type MatchEventKind =
   | 'effect_applied'
   | 'effect_expired'
   | 'chance_created'
+  | 'chance_changed'
+  | 'chance_moved'
+  | 'chance_claimed'
+  | 'chance_claim_fizzle'
+  | 'finisher_assigned'
   | 'chance_cancelled'
   | 'die_roll'
   | 'reroll'
@@ -31,12 +32,25 @@ export type MatchEventKind =
   | 'full_time'
   | 'info';
 
+export interface ChanceEventData {
+  tokenId: string;
+  origin?: 'calculated' | 'stored' | 'action';
+  chanceType?: ChanceType;
+  sector?: Sector;
+  sourceActionInstanceId?: string;
+  finisherId?: string;
+  finisherAssignment?: 'default' | 'claimed' | 'fallback';
+  from?: string;
+  to?: string;
+}
+
 export interface MatchEvent {
   id: string;
   kind: MatchEventKind;
   period: PeriodNumber;
   side?: TeamSide;
   text: string;
+  chance?: ChanceEventData;
 }
 
 const EVENT_KIND: Record<string, MatchEventKind> = {
@@ -50,6 +64,12 @@ const EVENT_KIND: Record<string, MatchEventKind> = {
   ongoing_applied: 'effect_applied',
   ongoing_inactive: 'info',
   effect_expired: 'effect_expired',
+  chance_created: 'chance_created',
+  chance_type_changed: 'chance_changed',
+  chance_moved: 'chance_moved',
+  chance_claimed: 'chance_claimed',
+  claim_fizzled: 'chance_claim_fizzle',
+  finisher_assigned: 'finisher_assigned',
   chance_cancelled: 'chance_cancelled',
   chance_roll: 'die_roll',
   chance_missed: 'miss',
@@ -60,19 +80,44 @@ const EVENT_KIND: Record<string, MatchEventKind> = {
   priority_set: 'priority_change',
 };
 
+function stringValue(data: Record<string, unknown>, key: string): string | undefined {
+  return typeof data[key] === 'string' ? data[key] as string : undefined;
+}
+
+function chanceData(receipt: MatchReceiptEvent): ChanceEventData | undefined {
+  const tokenId = stringValue(receipt.data, 'tokenId');
+  if (!tokenId) return undefined;
+  const origin = stringValue(receipt.data, 'origin');
+  const chanceType = stringValue(receipt.data, 'chanceType');
+  const sector = stringValue(receipt.data, 'sector');
+  const assignment = stringValue(receipt.data, 'finisherAssignment') ?? stringValue(receipt.data, 'assignment');
+  return {
+    tokenId,
+    ...(origin === 'calculated' || origin === 'stored' || origin === 'action' ? { origin } : {}),
+    ...(chanceType === 'box' || chanceType === 'cross' || chanceType === 'through_ball' || chanceType === 'corner' ? { chanceType } : {}),
+    ...(sector === 'left' || sector === 'centre' || sector === 'right' ? { sector } : {}),
+    ...(stringValue(receipt.data, 'sourceActionInstanceId') ? { sourceActionInstanceId: stringValue(receipt.data, 'sourceActionInstanceId') } : {}),
+    ...(stringValue(receipt.data, 'finisherId') ? { finisherId: stringValue(receipt.data, 'finisherId') } : {}),
+    ...(assignment === 'default' || assignment === 'claimed' || assignment === 'fallback' ? { finisherAssignment: assignment } : {}),
+    ...(stringValue(receipt.data, 'from') ? { from: stringValue(receipt.data, 'from') } : {}),
+    ...(stringValue(receipt.data, 'to') ? { to: stringValue(receipt.data, 'to') } : {}),
+  };
+}
+
 function baseEvent(receipt: MatchReceiptEvent, kind: MatchEventKind, suffix = ''): MatchEvent {
+  const chance = chanceData(receipt);
   return {
     id: suffix ? `${receipt.id}:${suffix}` : receipt.id,
     kind,
     period: receipt.period,
     ...(receipt.side ? { side: receipt.side } : {}),
     text: receipt.message,
+    ...(chance ? { chance } : {}),
   };
 }
 
 /** Translate one engine receipt into ordered UI events. */
 export function translateReceipt(receipt: MatchReceiptEvent): MatchEvent[] {
-  // A disabled/blocked action is its own event kind.
   if (receipt.eventType === 'action_blocked' || receipt.eventType === 'ongoing_suppressed') {
     return [baseEvent(receipt, receipt.data.reason === 'disabled' ? 'disabled_action' : 'info')];
   }
@@ -80,7 +125,6 @@ export function translateReceipt(receipt: MatchReceiptEvent): MatchEvent[] {
   const kind = EVENT_KIND[receipt.eventType] ?? 'info';
   const events = [baseEvent(receipt, kind)];
 
-  // A roll that consumed rerolls fans out a dedicated reroll event.
   if (receipt.eventType === 'chance_roll' && typeof receipt.data.rerollsUsed === 'number' && receipt.data.rerollsUsed > 0) {
     events.push({
       id: `${receipt.id}:reroll`,
@@ -88,6 +132,7 @@ export function translateReceipt(receipt: MatchReceiptEvent): MatchEvent[] {
       period: receipt.period,
       ...(receipt.side ? { side: receipt.side } : {}),
       text: `Reroll ×${receipt.data.rerollsUsed} → ${String(receipt.data.finalRoll ?? '')}`.trim(),
+      ...(events[0]!.chance ? { chance: events[0]!.chance } : {}),
     });
   }
 
@@ -98,7 +143,7 @@ export function translateReceipts(receipts: readonly MatchReceiptEvent[]): Match
   return receipts.flatMap(translateReceipt);
 }
 
-/** A synthesised feed event (chance creation, kickoff, full time) with a stable id. */
+/** A synthesised non-chance feed event (kickoff / full time) with a stable id. */
 export function syntheticEvent(id: string, kind: MatchEventKind, period: PeriodNumber, text: string, side?: TeamSide): MatchEvent {
   return { id, kind, period, ...(side ? { side } : {}), text };
 }
