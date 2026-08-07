@@ -47,7 +47,7 @@ export const AERIAL_COMMAND = action({
   displayText: "Ongoing: The opponent's first Cross chance each period cannot score on less than 6+.",
   timing: 'ongoing',
   target: { type: 'chance', side: 'enemy', selector: 'first', chanceTypes: ['cross'] },
-  effects: [{ type: 'set_goal_threshold', minimumRoll: 6 }],
+  effects: [{ type: 'set_goal_threshold_floor', minimumRoll: 6 }],
   duration: 'ongoing',
 });
 
@@ -81,7 +81,7 @@ export const SWEEPER = action({
   displayText: "Ongoing: The opponent's first Through Ball chance each period cannot score on less than 6+.",
   timing: 'ongoing',
   target: { type: 'chance', side: 'enemy', selector: 'first', chanceTypes: ['through_ball'] },
-  effects: [{ type: 'set_goal_threshold', minimumRoll: 6 }],
+  effects: [{ type: 'set_goal_threshold_floor', minimumRoll: 6 }],
   duration: 'ongoing',
 });
 
