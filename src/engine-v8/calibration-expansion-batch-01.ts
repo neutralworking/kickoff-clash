@@ -111,7 +111,7 @@ export const V8_EXPANSION_BATCH_01: readonly V8ExpansionCardContract[] = [
   {
     id: 'kante',
     realName: 'N’Golo Kanté',
-    trackerRow: 185,
+    trackerRow: 186,
     position: 'DM / CM',
     naturalZones: ['DEF', 'MID'],
     actionName: 'EVERYWHERE',
