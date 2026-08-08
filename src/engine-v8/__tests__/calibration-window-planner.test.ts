@@ -57,10 +57,12 @@ describe('calibration Generated-Tactical Window sequencing', () => {
     ]);
   });
 
-  it('does not spend THREE LUNGS into an empty ATT line', () => {
+  it('clears THREE LUNGS in its free window even if ATT is empty, avoiding a printed-cost carryover tax', () => {
     let emptyAtt = stateWithEnergy();
     emptyAtt = revealCalibrationPlayer(emptyAtt, 'home', 'park', 'MID');
-    expect(planV8CalibrationWindow(emptyAtt, 'home', 'balanced_midrange')).toEqual([]);
+    expect(planV8CalibrationWindow(emptyAtt, 'home', 'balanced_midrange')).toMatchObject([
+      { side: 'home', zone: 'ATT' },
+    ]);
 
     let occupiedAtt = stateWithEnergy();
     occupiedAtt = seedCalibrationPlayer(occupiedAtt, 'home', 'wambach', 'ATT');
