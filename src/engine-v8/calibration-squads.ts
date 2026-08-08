@@ -29,32 +29,33 @@ export interface V8CalibrationCostProfile {
  * Coherent 11-card calibration squads for V8 balance testing.
  *
  * These are deliberately test archetypes, not roster/source-of-truth changes.
- * Player values still come from the 30-card calibration pool and the lab-only
- * Cost compression remains source Cost - 1, minimum 1.
+ * Player values still come from the 30-card calibration pool. Most cards use the
+ * lab-only source Cost - 1 compression (minimum 1); Wambach and Di María remain
+ * at printed Cost after compact-core testing showed their compressed versions
+ * were too efficient as shallow Cross splashes.
  *
- * The second calibration pass keeps five XIs at 27 effective Cost and the
- * Long Shot / Set Piece XI at 26. The goal is not identical decks: it is to
- * remove the original 30-Cost Through Ball tax and make each mechanic test
- * comparable before any actual card-value tuning.
+ * The Cross reference is intentionally a three-card specialist core surrounded
+ * by broadly useful footballers. The broader deck-validation pass showed this is
+ * healthier than protecting the old six-specialist Cross XI.
  */
 export const V8_CALIBRATION_SQUADS: Readonly<Record<V8CalibrationSquadKey, V8CalibrationSquad>> = {
   cross: {
     key: 'cross',
     label: 'CROSS',
     shortLabel: 'Cross',
-    identity: 'Create Crosses repeatedly, then commit specialist finishers in ATT.',
+    identity: 'Use a compact Beckham / Wambach / Di María Cross core inside a strong balanced structure.',
     playerIds: [
       'beckham',
-      'cafu',
       'wambach',
-      'hegerberg',
-      'dzajic',
       'di-maria',
       'schmeichel',
       'gentile',
-      'makelele',
       'seedorf',
-      'park',
+      'iniesta',
+      'beckenbauer',
+      'makelele',
+      'bremner',
+      'sinclair',
     ],
   },
   through_ball: {
