@@ -1,4 +1,4 @@
-name: V8 Cross Modifier Sensitivity
+name: V8 Cross Neutral Control
 
 on:
   pull_request:
@@ -21,54 +21,72 @@ jobs:
 
       - run: npm ci
 
-      - name: Sweep compact Cross modifier candidates
+      - name: Add zero-card and single-card controls in checkout
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('src/engine-v8/calibration-cross-minimal.ts')
+          text = path.read_text()
+          old = """const CORE_CASES = [
+            { id: 'beckham-wambach', core: ['beckham', 'wambach'] },
+            { id: 'di-maria-wambach', core: ['di-maria', 'wambach'] },
+            { id: 'dzajic-wambach', core: ['dzajic', 'wambach'] },
+            { id: 'beckham-di-maria', core: ['beckham', 'di-maria'] },
+            { id: 'beckham-di-maria-wambach', core: ['beckham', 'di-maria', 'wambach'] },
+            { id: 'beckham-dzajic-wambach', core: ['beckham', 'dzajic', 'wambach'] },
+            { id: 'di-maria-dzajic-wambach', core: ['di-maria', 'dzajic', 'wambach'] },
+            { id: 'beckham-di-maria-dzajic', core: ['beckham', 'di-maria', 'dzajic'] },
+          ] as const;"""
+          new = """const CORE_CASES = [
+            { id: 'neutral', core: [] },
+            { id: 'beckham', core: ['beckham'] },
+            { id: 'wambach', core: ['wambach'] },
+            { id: 'di-maria', core: ['di-maria'] },
+            { id: 'dzajic', core: ['dzajic'] },
+            { id: 'beckham-wambach', core: ['beckham', 'wambach'] },
+            { id: 'di-maria-wambach', core: ['di-maria', 'wambach'] },
+            { id: 'dzajic-wambach', core: ['dzajic', 'wambach'] },
+            { id: 'beckham-di-maria', core: ['beckham', 'di-maria'] },
+            { id: 'beckham-di-maria-wambach', core: ['beckham', 'di-maria', 'wambach'] },
+            { id: 'beckham-dzajic-wambach', core: ['beckham', 'dzajic', 'wambach'] },
+            { id: 'di-maria-dzajic-wambach', core: ['di-maria', 'dzajic', 'wambach'] },
+            { id: 'beckham-di-maria-dzajic', core: ['beckham', 'di-maria', 'dzajic'] },
+          ] as const;"""
+          if old not in text:
+              raise SystemExit('CORE_CASES source did not match expected baseline')
+          path.write_text(text.replace(old, new))
+
+      - name: Create temporary neutral-control reporter
         shell: bash
         run: |
-          set -euo pipefail
-          FILE=src/engine-v8/calibration-runtime.ts
+          cat > src/engine-v8/__tests__/tmp-cross-neutral-control.test.ts <<'EOF'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          import { describe, it } from 'vitest';
+          import {
+            V8_CROSS_MINIMAL_SEEDS,
+            formatV8CrossMinimalReport,
+            runV8CrossMinimalSensitivity,
+          } from '../calibration-cross-minimal';
 
-          run_scenario() {
-            local name="$1"
-            local rabona="$2"
-            local bend="$3"
-            local wambach_att="$4"
-            git checkout -- "$FILE"
-            RABONA="$rabona" BEND="$bend" WAMBACH_ATT="$wambach_att" python - <<'PY'
-          import os
-          from pathlib import Path
-          path = Path('src/engine-v8/calibration-runtime.ts')
-          text = path.read_text()
-          replacements = {
-              "if (!modifyFirstCrossMutable(state, player.side, 3))": f"if (!modifyFirstCrossMutable(state, player.side, {os.environ['RABONA']}))",
-              "generateTacticalMutable(state, player.side, 'cross', card.id, { attModifier: 2 });": f"generateTacticalMutable(state, player.side, 'cross', card.id, {{ attModifier: {os.environ['BEND']} }});",
-              "const amount = zone === 'ATT' ? 4 : 3;": f"const amount = zone === 'ATT' ? {os.environ['WAMBACH_ATT']} : 3;",
-          }
-          for old, new in replacements.items():
-              if old not in text:
-                  raise SystemExit(f'expected runtime source not found: {old}')
-              text = text.replace(old, new, 1)
-          path.write_text(text)
-          PY
-            rm -rf test-results
-            npx vitest run src/engine-v8/__tests__/calibration-matchup-matrix.test.ts src/engine-v8/__tests__/calibration-cross-minimal.test.ts
-            mkdir -p "sensitivity/$name"
-            cp test-results/v8-calibration-matrix.json test-results/v8-calibration-matrix.txt "sensitivity/$name/"
-            cp test-results/v8-calibration-cross-minimal.json test-results/v8-calibration-cross-minimal.txt "sensitivity/$name/"
-          }
+          describe('V8 Cross neutral shell control', () => {
+            it('writes zero/single/pair/triple evidence', () => {
+              const report = runV8CrossMinimalSensitivity(V8_CROSS_MINIMAL_SEEDS);
+              const text = formatV8CrossMinimalReport(report);
+              mkdirSync('test-results', { recursive: true });
+              writeFileSync('test-results/v8-calibration-cross-neutral-control.json', `${JSON.stringify(report, null, 2)}\n`);
+              writeFileSync('test-results/v8-calibration-cross-neutral-control.txt', `${text}\n`);
+              console.log(`\n${text}\n`);
+            }, 30_000);
+          });
+          EOF
 
-          run_scenario rabona2 2 2 4
-          run_scenario bend1 3 1 4
-          run_scenario wambach3 3 2 3
-          run_scenario rabona2_wambach3 2 2 3
-          run_scenario bend1_rabona2 2 1 4
-          run_scenario bend1_wambach3 3 1 3
-
-          git checkout -- "$FILE"
+      - name: Run neutral controls
+        run: npx vitest run src/engine-v8/__tests__/tmp-cross-neutral-control.test.ts
 
       - name: Upload sensitivity evidence
         uses: actions/upload-artifact@v4
         with:
-          name: v8-cross-modifier-sensitivity
-          path: sensitivity/
+          name: v8-cross-neutral-control
+          path: test-results/v8-calibration-cross-neutral-control.*
           if-no-files-found: error
           retention-days: 7
