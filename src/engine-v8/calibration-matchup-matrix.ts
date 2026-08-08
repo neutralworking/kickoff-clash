@@ -144,7 +144,7 @@ const PLANNER_PROFILES: Readonly<Record<V8CalibrationSquadKey, V8CalibrationPlan
     preferredZones: {},
   },
   long_shot_set_piece: {
-    priorityPlayerIds: ['ramos', 'lloyd', 'schmeichel', 'charlton', 'makelele', 'eriksen'],
+    priorityPlayerIds: ['ramos', 'lloyd', 'schmeichel', 'charlton', 'eriksen', 'makelele'],
     preferredZones: {
       ramos: 'ATT',
       lloyd: 'MID',
@@ -252,8 +252,8 @@ function priorityPlayersForState(
   }
   if (squad === 'long_shot_set_piece') {
     return state.period >= 3
-      ? ['ramos', 'lloyd', 'schmeichel', 'charlton', 'makelele', 'eriksen']
-      : ['lloyd', 'schmeichel', 'charlton', 'makelele', 'eriksen'];
+      ? ['ramos', 'lloyd', 'schmeichel', 'charlton', 'eriksen', 'makelele']
+      : ['lloyd', 'schmeichel', 'charlton', 'eriksen', 'makelele'];
   }
   return PLANNER_PROFILES[squad].priorityPlayerIds;
 }
