@@ -1,186 +1,177 @@
-# Kickoff Clash V8 — Calibration Matchup Matrix
+# Kickoff Clash V8 — Calibration Baseline
 
 Date: 2026-08-08  
 Branch: `agent/v8-three-zone-prototype`  
-PR: #105 (keep draft / unmerged)
+PR: #105 — keep draft / unmerged
 
-## Purpose
+## Outcome
 
-Run the six V8 calibration squads against each other before changing scoring, Energy, Costs or individual Action/Tactical values.
+The calibration harness is now stable enough to stop tuning the six test XIs and begin balancing actual gameplay packages.
 
-This is a structural calibration pass, not a balance patch.
+The pass resolved three structural problems before changing card numbers:
 
-## Method
+1. generated-Tactical timing;
+2. deterministic planner coverage of important Actions;
+3. mismatched calibration-XI curves and placements.
 
-The matrix uses the same deliberately simple deterministic calibration planner on both sides.
+After those were corrected, scoring was tested independently on identical resolved boards. The first actual balance change is now live in V8: **one repeat goal for every complete +7 ATT over opposing DEF**, up from +5.
 
-- 6 calibration squads
-- 32 fixed seeded draws
-- every ordered matchup, including both home/away orientations
-- 6 × 6 × 32 = **1,152 four-period matches**
-- self-matchups are excluded from squad ranking summaries
-- each squad therefore has 320 non-self samples
-- each unordered pairing has 64 samples across both orientations
-- current 2 / 4 / 6 / 8 Energy curve
-- current lab-only player Cost compression (source Cost −1, minimum 1)
-- current +5 ATT-over-DEF scoring
-- current Actions, Tacticals, persistence, OOP and decay rules
-- no balance values changed
+No source player Costs, ATT/DEF values or Action/Tactical values were written back during this pass.
 
-The run also records period-by-period ATT, DEF, goals, attacking margin, unused Energy, deployed players, Tactical use and Action deltas.
+## Current V8 rules relevant to calibration
 
-## Important CI correction
+- four periods: 0–22, 22–HT, HT–66, 66–FT;
+- Energy: 2 / 4 / 6 / 8;
+- persistent three-zone board: DEF / MID / ATT;
+- four player slots per side per zone;
+- OOP penalties: 0 / −2 / −5 ATT+DEF;
+- **goal band: +7 ATT over DEF per repeat goal**;
+- one commitment window per period;
+- On Reveal/end-of-period generated Tacticals are banked for the next commitment window;
+- movement-generated Tacticals can still be used immediately during commitment;
+- P4 reveal/end generation fizzles explicitly at FT because no commitment window remains;
+- THREE LUNGS now generates a Trigger Press that is free in the next period, when it can actually be played;
+- Sinclair decay remains +4 → +3 → +2 → +1 after scoring windows.
 
-During this work we found that `vitest.config.ts` did not include `src/engine-v8/__tests__`, so previous focused commands naming V8 files were silently not executing those files.
+## Calibration harness
 
-The config now explicitly includes V8 tests. Once they genuinely ran, two stale interaction fixtures were exposed and corrected without changing runtime rules:
+The matrix runs 32 deterministic seeds over every ordered 6×6 squad matchup:
 
-1. Gentile test: Wambach and Hegerberg are both 11 ATT, so the fixture now makes the deployed-order tiebreak explicit before testing dynamic retargeting.
-2. Valderrama test: Shevchenko is established in ATT before PAUSE AND SLIP reveals, matching the literal requirement for the generated Through Ball to receive +2 ATT.
+**6 × 6 × 32 = 1,152 four-period matches.**
 
-The real focused V8 gate is now green.
+Self-matches are excluded from the squad ranking summaries, leaving 320 non-self samples per squad.
 
-## Overall results
+The planner remains deliberately lightweight rather than optimal. It now exercises only the decisions required to make the named mechanic test valid:
 
-| Squad | Win | Draw | GF | GA | GD | Unused Energy | Players deployed | Tacticals / match | Tactical ATT share |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Control / Defence | **80.3%** | 7.5% | **9.43** | 5.90 | **+3.53** | 2.36 | **7.92** | 0.88 | 2.8% |
-| Balanced / Midrange | 58.8% | 10.3% | 8.83 | 7.45 | +1.38 | 2.53 | 7.25 | 1.72 | 4.6% |
-| Dribbling / Penalty | 51.6% | 8.4% | 7.48 | 6.44 | +1.04 | 3.78 | 7.41 | **0.00** | **0.0%** |
-| Long Shot / Set Piece | 39.4% | 10.0% | 4.71 | 5.16 | −0.45 | 2.77 | 7.78 | 0.95 | 0.8% |
-| Cross | 37.5% | 6.9% | 7.68 | 8.61 | −0.93 | 2.36 | 7.11 | **2.31** | **5.8%** |
-| Through Ball | **9.4%** | 3.1% | 4.81 | **9.38** | **−4.57** | **4.21** | **6.30** | 0.90 | 1.1% |
+- Cafu moves forward so PENDOLINO actually generates Crosses;
+- Beckenbauer exercises DER KAISER where it does not disrupt a deliberately staged archetype;
+- one Cross can be held for RABONA;
+- Through Ball establishes a runner before creator/payoff play;
+- Penalty cards/enablers are staged in ATT, accepting normal OOP penalties;
+- Ramos remains back until P3, then goes to ATT for the late Corner payoff;
+- Long Shot / Corner can be held briefly for their obvious specialist.
 
-Across the six non-self summaries, average scoring is about **14.31 combined goals per match**. This run does not attempt to tune that baseline yet.
+These are calibration policies, not production match AI.
 
-## Pairing extremes
+## Final +7 matrix
 
-### Control / Defence is clearly dominant
+| Squad | Win | Draw | GF | GA | GD | Unused E | Players | Tactical ATT share |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Balanced / Midrange | **54%** | 11% | 6.43 | 5.76 | +0.67 | 1.77 | **7.98** | 2% |
+| Cross | **55%** | 9% | **8.39** | 7.60 | +0.79 | **1.25** | 6.58 | **12%** |
+| Through Ball | **53%** | 12% | 6.98 | 6.24 | +0.74 | 1.60 | 7.07 | 5% |
+| Control / Defence | 43% | **17%** | 3.05 | **2.98** | +0.07 | 3.05 | 7.58 | 3% |
+| Dribbling / Penalty | 38% | 9% | 6.23 | 6.87 | −0.63 | 2.32 | 7.87 | 1% |
+| Long Shot / Set Piece | **20%** | 16% | 3.05 | 4.68 | **−1.63** | 1.78 | 7.69 | 6% |
 
-- 90.6% wins vs Cross; +3.95 GD
-- 95.3% wins vs Through Ball; +6.91 GD
-- 68.8% wins vs Dribbling / Penalty; +2.19 GD
-- 75.0% wins vs Long Shot / Set Piece; +2.31 GD
-- 71.9% wins vs Balanced / Midrange; +2.30 GD
+The reference group is now credible enough for calibration:
 
-This is not being driven by Tactical output: only 2.8% of its measured ATT is Tactical ATT.
+- Cross, Through Ball and Balanced all sit in the low/mid-50s;
+- Control is competitive but draw-heavy rather than an 80%+ defensive/attacking super-deck;
+- Dribbling / Penalty is weak but its Penalty mechanic now genuinely fires;
+- Long Shot / Set Piece is the remaining clear package-level outlier.
 
-### Through Ball is structurally non-competitive in this harness
+## Mechanic activation now observed
 
-Its only relatively better matchup is still a heavy loss to Cross:
+The final matrix contains real examples of the intended specialist interactions rather than proxy results from raw stats alone.
 
-- 10.9% wins vs Cross
-- 14.1% vs Dribbling / Penalty
-- 4.7% vs Control / Defence
-- 10.9% vs Long Shot / Set Piece
-- 6.3% vs Balanced / Midrange
+### Cross
 
-The strongest immediate signal is economy/deployment: it leaves 4.21 Energy unused per match and deploys only 6.30 players on average.
+Frequent chains include:
 
-### Dribbling / Penalty is winning without its named payoff
+- `PENDOLINO → Cross → DIVING HEADER +4 = +6 ATT`
+- `LEFT-FOOT WHIP → Cross → DIVING HEADER +4 = +6 ATT`
+- RABONA-modified Crosses
 
-It has a 51.6% overall win rate and +1.04 GD while playing **zero Penalty Tacticals** in all 320 non-self appearances.
-
-Therefore this result cannot be used as evidence that the Penalty package is well balanced. It is primarily measuring a high-ATT persistent player package plus its defensive/control support.
-
-### Cross is the only specialist Tactical package firing regularly
-
-Cross averages 2.31 Tacticals per match and has the highest Tactical ATT share at 5.8%.
-
-Observed chains include:
-
-- `BEND IT → Cross → DIVING HEADER +4 = +8 ATT`
-- `RABONA → Cross → DIVING HEADER +4 = +6 ATT`
-- Cross cancellations against defensive packages
-
-It crushes Through Ball (84.4% wins) but is slightly behind Long Shot / Set Piece and substantially behind Dribbling, Balanced and Control.
-
-## Period development
-
-### Control / Defence
-
-| Period | GF | GA | ATT | DEF | New players | Unused E |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| P1 | 0.63 | 0.68 | 7.38 | 3.08 | 1.00 | 0.56 |
-| P2 | **2.67** | 1.86 | 24.78 | 6.36 | 1.91 | **0.20** |
-| P3 | **3.52** | 2.37 | 36.88 | 16.82 | 2.22 | 1.00 |
-| P4 | 2.62 | **0.99** | 42.83 | **36.32** | **2.80** | 0.59 |
-
-The defining late-match effect is the defensive lock: P4 DEF reaches 36.3 and goals conceded fall below one despite the opposing persistent boards being at their largest.
+Cross has the highest Tactical ATT share at about 12%.
 
 ### Through Ball
 
-| Period | GF | GA | ATT | DEF | New players | Unused E |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| P1 | 0.24 | 0.50 | 4.61 | 4.38 | 0.92 | 0.61 |
-| P2 | 0.71 | 1.68 | 12.91 | 9.56 | 1.31 | **1.13** |
-| P3 | 1.67 | **3.57** | 28.12 | 12.48 | 1.66 | **1.22** |
-| P4 | 2.19 | **3.64** | 43.51 | 21.95 | 2.41 | **1.26** |
+Observed chains include:
 
-It catches up in raw ATT only after the opponent has accumulated enough DEF/offence to keep it behind. This is consistent with an expensive/awkward deployment curve rather than simply a weak Through Ball modifier.
+- `PAUSE AND SLIP → Through Ball → CURVED RUN +1 = +5 ATT`
+- `PAUSE AND SLIP → Through Ball → RUNS IN BEHIND +4 = +8 ATT`
+- KILLER PASS-generated Through Balls
+
+The original 9.4% win-rate result was largely a timing/curve/harness artefact; the package is now around 53%.
 
 ### Dribbling / Penalty
 
-| Period | GF | GA | ATT | DEF | New players | Tacticals |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| P1 | 0.64 | 0.39 | 7.44 | 4.69 | 1.19 | 0 |
-| P2 | 0.91 | 1.25 | 14.17 | 12.11 | 1.53 | 0 |
-| P3 | 2.42 | 2.37 | 30.14 | 17.84 | 2.08 | 0 |
-| P4 | **3.51** | 2.44 | **48.33** | 26.34 | 2.61 | **0** |
+The package now genuinely produces the intended payoff:
 
-The late surge is raw persistent ATT, not Penalty conversion. This squad needs to be made into an actual mechanic test before any Penalty balance conclusion is valid.
+- **24×** `RAINBOW FLICK → Penalty → CHIPPED PENALTY +3 = +8 ATT`
+
+That activation rate is still low, but it is no longer zero. Its 38% win rate is therefore a real package-balance signal rather than simply a broken harness.
 
 ### Long Shot / Set Piece
 
-It develops a very strong defensive board (34.70 DEF in P4) but only 31.26 ATT; its P4 scoring falls to 0.76 goals while Tactical ATT remains small. The current squad behaves more like a defensive MID/DEF shell with occasional set pieces than a sustained specialist scoring package.
+The named mechanics are firing:
 
-### Balanced / Midrange
+- **155×** `THUNDERBALL → Long Shot → HALFWAY HIT +4 = +7 ATT`
+- **22×** `WHIPPED DELIVERY → Corner → 93RD MINUTE +5 = +9 ATT`
 
-Balanced is the most useful current benchmark: strong early/midgame, reasonable deployment efficiency and no single specialist package dominating its measured output. It still loses clearly to Control, which makes Control the main outlier rather than Balanced looking obviously weak.
+Despite that, the squad wins only 20% of non-self matches. This is now the clearest next **actual gameplay-package balance target**.
 
-## What the matrix says — and does not say
+## Scoring decision
 
-### Strong evidence
+The high-score problem was tested by re-scoring the same 960 non-mirror resolved boards under several policies, so reveal order, card draws and board construction stayed identical.
 
-1. **Deployment efficiency matters enormously.** Across only six squads, win rate tracks deployed-player count much more closely than Tactical volume.
-2. **Control / Defence is an outlier.** It combines efficient deployment, persistent defensive scaling and enough direct ATT to win rather than merely stall.
-3. **Through Ball is being starved before its combo can matter.** High unused Energy and low deployment are more urgent than its +ATT values.
-4. **The Dribbling / Penalty squad is not currently testing Penalties.** Its respectable result is misleading if read as mechanic balance.
-5. **Specialist Tacticals are a minority of total ATT.** Even Cross, the most active package, gets only 5.8% of measured ATT from Tacticals in this harness.
-6. **Persistent boards create very different late-game shapes.** Dribbling becomes an ATT avalanche; Control becomes a DEF lock; Long Shot becomes DEF-heavy; Through Ball arrives late.
+| Scoring | Avg total | Median | P90 | 18+ goals | Draw rate |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| repeat +5 | 17.35 | 16 | 29 | 46% | 9% |
+| repeat +6 | 13.88 | 13 | 24 | 33% | 13% |
+| **repeat +7** | **11.38** | **11** | **20** | **19%** | **13%** |
+| repeat +8 | 9.59 | 9 | 17 | 8% | 16% |
+| +5, max 3/period | 12.76 | 13 | 19 | 18% | 17% |
+| bank each +5 threshold once | 8.49 | 8 | 14 | 2% | 22% |
 
-### Harness / timing limitations
+The +7 option was chosen because it preserves the simple repeat-margin rule and keeps explosive scorelines in the game without making them routine.
 
-These results are evidence about the current V8 lab, but not optimal-play balance.
+A 10–8-type match remains a high-scoring result rather than being designed out: about 19% of non-mirror matches still reach 18+ combined goals on these calibration boards.
 
-1. The planner is intentionally simple and does not search future turns or combos.
-2. It does not move Cafu or Beckenbauer, so PENDOLINO and DER KAISER are underrepresented.
-3. It plays available Tacticals before players. This means it will not deliberately hold an existing Cross for RABONA's modify-existing branch.
-4. Player On Reveal effects resolve at END PERIOD after commitments. Newly generated Tacticals therefore cannot be committed until the following period.
-5. That reveal timing makes Park's current text — `Add a Trigger Press to your hand. It costs 0 this period.` — internally ineffective in the current lab flow: the card is generated at the end-of-period reveal and the free period expires before the next commitment window.
-6. Late P4-generated Tacticals have no later period in which to be played.
+Raising the threshold did **not** solve package imbalance by itself; squad rankings were broadly stable across +5/+6/+7/+8. That is useful evidence that scoring temperature and archetype strength are separate problems.
 
-The Park timing problem is a rules/text consistency issue, not a numerical balance conclusion.
+## Period shape under +7
 
-## Recommendation before any balance-number pass
+Late-game boards are still deliberately large and consequential:
 
-Do **not** change scoring, Energy, Costs or Action/Tactical values from this matrix yet.
+- Cross P4: 58.95 ATT, 3.89 GF;
+- Through Ball P4: 55.26 ATT, 3.53 GF;
+- Balanced P4: 49.33 ATT, 3.02 GF;
+- Control P4: 38.49 DEF, 0.50 GF / 1.15 GA;
+- Set Piece P4: 33.66 ATT / 29.67 DEF, 1.04 GF.
 
-The next calibration pass should first make the six test archetypes genuinely comparable:
+The +7 band reduces scoreboard multiplication without flattening those distinct board identities.
 
-1. resolve the generated-Tactical timing contract, especially Park's impossible same-period discount;
-2. make the calibration planner exercise essential movement/hold decisions that are part of an archetype's identity, without turning it into an optimal AI;
-3. revise the six calibration XI compositions so their effective Cost curves are closer and each named mechanic actually activates at a useful rate;
-4. rerun the same fixed-seed matrix;
-5. only then use residual matchup gaps to tune gameplay numbers.
+## CI correction retained
 
-## Verification / evidence
+`vitest.config.ts` now includes `src/engine-v8/__tests__`. Before this calibration work, explicitly naming V8 files could appear green while those tests were silently excluded by the configured include list.
 
-The matrix and period reports are generated deterministically in Vitest and uploaded from CI as the `v8-calibration-matrix` artifact:
+The current CI evidence includes:
 
-- `v8-calibration-matrix.json`
-- `v8-calibration-matrix.txt`
-- `v8-calibration-periods.json`
-- `v8-calibration-periods.txt`
+- focused V8 + V7 acceptance tests;
+- full Vitest suite with V8 actually included;
+- 1,152-match matrix artifact;
+- period-development artifact;
+- scoring-sensitivity artifact;
+- TypeScript;
+- changed-file lint;
+- full lint;
+- static export;
+- V7 mobile browser regression;
+- V8 390×844 browser suite.
 
-The V8 test directory is now included in the canonical Vitest configuration, preventing the previous false-green omission.
+## What to do next
+
+Freeze the calibration squad/planner work unless a genuine harness defect appears.
+
+Next balance work should be on **Long Shot / Set Piece as a real package**, using the current +7 scoring baseline. Inspect whether the problem is:
+
+1. the Long Shot / Corner Tactical values;
+2. the cost/payoff of Charlton, Lloyd, Eriksen and Ramos;
+3. the amount of board ATT sacrificed to assemble the package;
+4. or a combination of those.
+
+Dribbling / Penalty is the secondary package to revisit after Set Piece.
+
+Do not reopen global scoring, Energy or blanket Cost changes unless package-level tuning fails to produce a healthier matrix.
