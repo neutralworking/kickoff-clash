@@ -42,6 +42,6 @@ describe('V8 compact Neymar Penalty creator', () => {
     const resolution = window.state.tacticalResolutions.find((item) => item.cardId === penalty!.id);
     expect(resolution?.attack).toBe(8);
     expect(resolution?.uncancellable).toBe(true);
-    expect(resolution?.specialistBonuses).toContain('CHIPPED PENALTY +3');
+    expect(resolution?.specialistBonuses).toContain('CHIPPED PENALTY +3 · uncancellable');
   });
 });
