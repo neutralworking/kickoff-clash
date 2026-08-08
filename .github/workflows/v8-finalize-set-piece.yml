@@ -49,8 +49,8 @@ jobs:
 
           integration = Path('src/engine-v8/__tests__/calibration-integration.test.ts')
           text = integration.read_text()
-          old = "expect(resolution).toMatchObject({ type: 'long_shot', attack: 7, cancelled: false });"
-          new = "expect(resolution).toMatchObject({ type: 'long_shot', attack: 8, cancelled: false });"
+          old = "expect(state.tacticalResolutions.at(-1)).toMatchObject({ type: 'long_shot', attack: 7, cancelled: false });"
+          new = "expect(state.tacticalResolutions.at(-1)).toMatchObject({ type: 'long_shot', attack: 8, cancelled: false });"
           assert text.count(old) == 1, 'expected one stale Long Shot +7 assertion'
           integration.write_text(text.replace(old, new))
 
