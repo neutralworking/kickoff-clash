@@ -1,0 +1,30 @@
+cross
+  P1: 0.222 GF / 0.256 GA · 8.119 ATT / 2 DEF · margin 3.844 · 1 deployed · 0 E unused · 0 Tacticals (0 ATT) · window 0 plays / 0 E / 0 ATT · Action Δ -0.225/0
+  P2: 1.334 GF / 1.175 GA · 20.494 ATT / 5.781 DEF · margin 12.1 · 1.531 deployed · 0.266 E unused · 0.594 Tacticals (1.475 ATT) · window 0.125 plays / 0.047 E / 0.219 ATT · Action Δ -0.356/-0.125
+  P3: 3.131 GF / 2.375 GA · 39.65 ATT / 10.869 DEF · margin 24.744 · 2.006 deployed · 0.106 E unused · 1.419 Tacticals (6.119 ATT) · window 0.356 plays / 0.219 E / 1.278 ATT · Action Δ -0.15/-0.187
+  P4: 4.169 GF / 4.044 GA · 60.809 ATT / 12.944 DEF · margin 31.931 · 2.063 deployed · 0.281 E unused · 2.381 Tacticals (10.353 ATT) · window 0.572 plays / 0.328 E / 2.541 ATT · Action Δ -0.469/-0.081
+through_ball
+  P1: 0 GF / 0.103 GA · 4.203 ATT / 5.375 DEF · margin 0.603 · 1 deployed · 0.281 E unused · 0.531 Tacticals (0 ATT) · window 0.531 plays / 0 E / 0 ATT · Action Δ -0.234/0
+  P2: 0.888 GF / 1.047 GA · 17.109 ATT / 7.256 DEF · margin 8.997 · 1.375 deployed · 0.625 E unused · 0 Tacticals (0 ATT) · window 0 plays / 0 E / 0 ATT · Action Δ -0.141/-0.056
+  P3: 2.497 GF / 2.491 GA · 35.381 ATT / 11.063 DEF · margin 20.491 · 2 deployed · 0.063 E unused · 0.078 Tacticals (0.216 ATT) · window 0.078 plays / 0.031 E / 0.216 ATT · Action Δ -0.131/-0.062
+  P4: 3.7 GF / 2.859 GA · 56.403 ATT / 21.891 DEF · margin 29.163 · 2.722 deployed · 0.469 E unused · 1.759 Tacticals (6.603 ATT) · window 0.519 plays / 0.097 E / 1.434 ATT · Action Δ -0.262/-0.125
+dribbling_penalty
+  P1: 0.131 GF / 0.213 GA · 5.769 ATT / 3.625 DEF · margin 1.819 · 1.172 deployed · 0.609 E unused · 0 Tacticals (0 ATT) · window 0 plays / 0 E / 0 ATT · Action Δ -0.122/0
+  P2: 1.028 GF / 1.341 GA · 17.741 ATT / 5.094 DEF · margin 9.559 · 1.391 deployed · 0.641 E unused · 0 Tacticals (0 ATT) · window 0 plays / 0 E / 0 ATT · Action Δ 0.881/0
+  P3: 2.444 GF / 2.9 GA · 35.081 ATT / 8.034 DEF · margin 20.059 · 2.203 deployed · 0.344 E unused · 0 Tacticals (0 ATT) · window 0 plays / 0 E / 0 ATT · Action Δ 0.441/-0.044
+  P4: 2.644 GF / 2.688 GA · 47.141 ATT / 24.256 DEF · margin 21.166 · 3.103 deployed · 0.644 E unused · 0.156 Tacticals (0.675 ATT) · window 0.081 plays / 0.081 E / 0.075 ATT · Action Δ 0.466/-0.044
+control_defence
+  P1: 0.2 GF / 0.134 GA · 6.2 ATT / 4.188 DEF · margin 2.363 · 1 deployed · 0.563 E unused · 0 Tacticals (0 ATT) · window 0 plays / 0 E / 0 ATT · Action Δ 0.606/0
+  P2: 0.978 GF / 0.569 GA · 16.594 ATT / 11.581 DEF · margin 9.35 · 1.906 deployed · 0.203 E unused · 0.094 Tacticals (0.175 ATT) · window 0 plays / 0 E / 0 ATT · Action Δ 0.309/-0.075
+  P3: 1.369 GF / 1.194 GA · 24.559 ATT / 23.031 DEF · margin 12.075 · 2.188 deployed · 1.047 E unused · 0.531 Tacticals (0.856 ATT) · window 0.031 plays / 0.031 E / 0 ATT · Action Δ 0.359/-0.187
+  P4: 0.503 GF / 1.234 GA · 28.319 ATT / 38.484 DEF · margin 4.219 · 2.484 deployed · 0.891 E unused · 0.938 Tacticals (0.9 ATT) · window 0.344 plays / 0.344 E / 0 ATT · Action Δ 0.059/-0.156
+long_shot_set_piece
+  P1: 0.206 GF / 0.244 GA · 7.159 ATT / 3.281 DEF · margin 3.141 · 0.984 deployed · 0.359 E unused · 0.047 Tacticals (0 ATT) · window 0.047 plays / 0 E / 0 ATT · Action Δ 0.144/0
+  P2: 0.931 GF / 0.566 GA · 15.006 ATT / 12.116 DEF · margin 7.866 · 1.469 deployed · 0.5 E unused · 0.25 Tacticals (1.047 ATT) · window 0.25 plays / 0.094 E / 1.047 ATT · Action Δ -0.009/-0.056
+  P3: 1.206 GF / 1.65 GA · 23.353 ATT / 18.844 DEF · margin 10.025 · 2.313 deployed · 0.406 E unused · 0.484 Tacticals (2.816 ATT) · window 0.484 plays / 0.156 E / 2.816 ATT · Action Δ 0.1/-0.062
+  P4: 1.122 GF / 2.35 GA · 34.444 ATT / 29.794 DEF · margin 8.556 · 2.938 deployed · 0.203 E unused · 0.766 Tacticals (4.638 ATT) · window 0.609 plays / 0.109 E / 3.778 ATT · Action Δ -0.334/1.138
+balanced_midrange
+  P1: 0.344 GF / 0.153 GA · 6.272 ATT / 4.906 DEF · margin 2.578 · 1 deployed · 0 E unused · 0.109 Tacticals (0 ATT) · window 0.109 plays / 0 E / 0 ATT · Action Δ 1.194/0
+  P2: 0.866 GF / 1.328 GA · 16.863 ATT / 5.603 DEF · margin 8.503 · 1.094 deployed · 0.844 E unused · 0.125 Tacticals (0.238 ATT) · window 0.063 plays / 0 E / 0 ATT · Action Δ 1.016/-0.131
+  P3: 2.306 GF / 2.344 GA · 33.272 ATT / 12.991 DEF · margin 19.072 · 2.297 deployed · 0.641 E unused · 0.313 Tacticals (0.634 ATT) · window 0.313 plays / 0.047 E / 0.634 ATT · Action Δ 1.95/-0.181
+  P4: 3.159 GF / 2.122 GA · 50.544 ATT / 29.85 DEF · margin 25.406 · 3.609 deployed · 0.063 E unused · 0.906 Tacticals (2.625 ATT) · window 0.75 plays / 0.188 E / 2.15 ATT · Action Δ 0.919/-0.15
