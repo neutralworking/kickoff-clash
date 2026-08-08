@@ -270,9 +270,66 @@ function priorityIndex(
   side: V8CalibrationSide,
   squad: V8CalibrationSquadKey,
   cardId: string,
+  override?: readonly string[],
 ): number {
-  const index = priorityPlayersForState(state, side, squad).indexOf(cardId);
+  const index = (override ?? priorityPlayersForState(state, side, squad)).indexOf(cardId);
   return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+interface DribblingPenaltyCommitPlan {
+  priorityPlayerIds: readonly string[];
+  deferredPlayerIds: ReadonlySet<string>;
+}
+
+/**
+ * The Penalty package needs two on-reveals in the same period: a dribbler first reduces
+ * an opposing defender, then Neymar sees that reduced defender and generates the Penalty.
+ * The reduction is period-only, so spending a reducer by itself in P1-P3 destroys the combo.
+ * Panenka can be staged ahead; in P4, if all three pieces are still in hand, 1+3+3 Energy
+ * fits and he reveals before the reducer/generator so the generated Penalty gets his rider.
+ */
+function dribblingPenaltyCommitPlan(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+): DribblingPenaltyCommitPlan {
+  const hand = calibrationHandPlayers(state, side);
+  const byId = new Map(hand.map((card) => [card.id, card] as const));
+  const reducer = byId.get('duff') ?? byId.get('garrincha');
+  const neymar = byId.get('neymar');
+  const panenka = byId.get('panenka');
+  const panenkaDeployed = Boolean(state.players[calibrationRuntimeId(side, 'panenka')]);
+  const pairCost = reducer && neymar ? calibrationPlayCost(reducer) + calibrationPlayCost(neymar) : Number.POSITIVE_INFINITY;
+  const pairFits = Boolean(reducer && neymar && pairCost <= state.teams[side].energy);
+  const tripleFits = Boolean(
+    pairFits
+    && panenka
+    && !panenkaDeployed
+    && pairCost + calibrationPlayCost(panenka) <= state.teams[side].energy,
+  );
+
+  if (pairFits && reducer && neymar) {
+    const deferred = new Set<string>();
+    const alternateReducer = reducer.id === 'duff' ? 'garrincha' : 'duff';
+    if (state.period < 4 && byId.has(alternateReducer)) deferred.add(alternateReducer);
+    return {
+      priorityPlayerIds: tripleFits
+        ? ['panenka', reducer.id, 'neymar']
+        : [reducer.id, 'neymar', 'panenka'],
+      deferredPlayerIds: deferred,
+    };
+  }
+
+  if (state.period < 4) {
+    return {
+      priorityPlayerIds: ['panenka'],
+      deferredPlayerIds: new Set(['duff', 'garrincha', 'neymar']),
+    };
+  }
+
+  return {
+    priorityPlayerIds: PLANNER_PROFILES.dribbling_penalty.priorityPlayerIds,
+    deferredPlayerIds: new Set(),
+  };
 }
 
 function shouldDeferPlayer(state: V8CalibrationState, squad: V8CalibrationSquadKey, cardId: string): boolean {
@@ -408,6 +465,7 @@ export function planV8CalibrationSide(
   const pending: V8CalibrationMatrixPlay[] = [];
   let nextManagerAvailable = managerAvailable;
   const hold = tacticalHoldPlan(next, side, squad, pending);
+  const dribblingPlan = squad === 'dribbling_penalty' ? dribblingPenaltyCommitPlan(next, side) : undefined;
 
   while (next.teams[side].energy > 0) {
     const priorityStillInHand = hold.priorityPlayerId
@@ -432,8 +490,11 @@ export function planV8CalibrationSide(
     if (tacticalPlayed) continue;
 
     const players = calibrationHandPlayers(next, side)
-      .filter((card) => calibrationPlayCost(card) <= next.teams[side].energy && !shouldDeferPlayer(next, squad, card.id))
-      .sort((a, b) => priorityIndex(next, side, squad, a.id) - priorityIndex(next, side, squad, b.id)
+      .filter((card) => calibrationPlayCost(card) <= next.teams[side].energy
+        && !shouldDeferPlayer(next, squad, card.id)
+        && !dribblingPlan?.deferredPlayerIds.has(card.id))
+      .sort((a, b) => priorityIndex(next, side, squad, a.id, dribblingPlan?.priorityPlayerIds)
+        - priorityIndex(next, side, squad, b.id, dribblingPlan?.priorityPlayerIds)
         || calibrationPlayCost(a) - calibrationPlayCost(b)
         || b.printedAttack + b.printedDefence - (a.printedAttack + a.printedDefence));
     const priorityPlayer = hold.priorityPlayerId
