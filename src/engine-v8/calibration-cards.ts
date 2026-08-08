@@ -101,6 +101,12 @@ const V8_EXPANSION_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionText: 'Ongoing: While losing, +3 ATT. While winning, +3 DEF. While level, +1 ATT and +1 DEF.',
   }),
   expansionCard({
+    id: 'ashley-cole', realName: 'Ashley Cole', matchName: 'Colley', fullCardName: 'Anslie Colley', trackerRow: 28, sourceCardId: 'KC-002',
+    position: 'LB / LWB', naturalZones: ['DEF', 'MID'], cost: 3, costSource: 'tracker', attack: 3, defence: 7,
+    actionKey: 'ashley_cole_show_him_outside', actionName: 'SHOW HIM OUTSIDE', timing: 'ongoing',
+    actionText: 'Ongoing: The highest-ATT opposing attacker here has −5 ATT.',
+  }),
+  expansionCard({
     id: 'puyol', realName: 'Carles Puyol', matchName: 'Poya', fullCardName: 'Carles Poya', trackerRow: 39, sourceCardId: 'KC-038',
     position: 'CB / RB', naturalZones: ['DEF'], cost: 3, costSource: 'kc_reconciliation', attack: 2, defence: 9,
     actionKey: 'puyol_body_on_the_line', actionName: 'BODY ON THE LINE', timing: 'triggered',
