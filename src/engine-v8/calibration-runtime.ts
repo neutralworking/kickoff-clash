@@ -3,9 +3,12 @@ export * from './calibration-runtime-base';
 import { getV8CalibrationPlayer } from './calibration-cards';
 import {
   addCalibrationTacticalToHand,
+  applyCalibrationModifier,
   calibrationPlayerCard,
   calibrationPlayersInZone,
   calibrationRuntimeId,
+  currentCalibrationDefence,
+  hasReducedDefence,
   isCalibrationActionEnabled,
   opposingDepthZone,
   refreshCalibrationSuppression,
@@ -19,13 +22,25 @@ function otherSide(side: V8CalibrationSide): V8CalibrationSide {
   return side === 'home' ? 'away' : 'home';
 }
 
+function opposingDefenders(state: V8CalibrationState, side: V8CalibrationSide, zone: V8Zone) {
+  return calibrationPlayersInZone(state, otherSide(side), opposingDepthZone(zone))
+    .filter((opponent) => {
+      const opponentCard = calibrationPlayerCard(opponent);
+      return opponentCard.position !== 'GK' && opponentCard.naturalZones.includes('DEF');
+    });
+}
+
+function highestDefender(state: V8CalibrationState, side: V8CalibrationSide, zone: V8Zone) {
+  return [...opposingDefenders(state, side, zone)].sort((a, b) =>
+    currentCalibrationDefence(state, b.runtimeId) - currentCalibrationDefence(state, a.runtimeId)
+      || a.deployedOrder - b.deployedOrder
+      || a.runtimeId.localeCompare(b.runtimeId)
+  )[0];
+}
+
 /**
- * Calibration runtime override for the compact Dribbling / Penalty redesign.
- *
- * RAINBOW FLICK no longer depends on another dribbler reducing a defender in the
- * same period. Neymar wins the Penalty himself when he reveals into a zone that
- * confronts an opposing defender. Penalty ATT / Cost and every printed player
- * stat remain unchanged.
+ * Calibration runtime overrides for card-quality changes that have passed package-level design review.
+ * Penalty ATT / Cost and every printed player stat remain unchanged.
  */
 export function revealCalibrationPlayer(
   state: V8CalibrationState,
@@ -33,6 +48,25 @@ export function revealCalibrationPlayer(
   cardId: string,
   zone: V8Zone,
 ): V8CalibrationState {
+  if (cardId === 'garrincha') {
+    const target = highestDefender(state, side, zone);
+    const targetWasReduced = target ? hasReducedDefence(state, target.runtimeId) : false;
+    const defenceBefore = target ? currentCalibrationDefence(state, target.runtimeId) : undefined;
+    let next = revealCalibrationPlayerBase(state, side, cardId, zone);
+
+    if (target && !targetWasReduced && defenceBefore !== undefined && next.players[target.runtimeId]) {
+      const actuallyReduced = currentCalibrationDefence(next, target.runtimeId) < defenceBefore;
+      if (actuallyReduced) {
+        next = applyCalibrationModifier(next, calibrationRuntimeId(side, cardId), {
+          attack: 2,
+          lifetime: 'period',
+          source: getV8CalibrationPlayer(cardId).actionName,
+        });
+      }
+    }
+    return next;
+  }
+
   if (cardId !== 'neymar') return revealCalibrationPlayerBase(state, side, cardId, zone);
 
   let next = JSON.parse(JSON.stringify(state)) as V8CalibrationState;
@@ -56,13 +90,9 @@ export function revealCalibrationPlayer(
   const card = getV8CalibrationPlayer(cardId);
   next.events.push({ type: 'action_triggered', period: next.period, text: `${card.realName} · ${card.actionName}.` });
 
-  const hasOpposingDefender = calibrationPlayersInZone(next, otherSide(side), opposingDepthZone(zone))
-    .some((opponent) => {
-      const opponentCard = calibrationPlayerCard(opponent);
-      return opponentCard.position !== 'GK' && opponentCard.naturalZones.includes('DEF');
-    });
-
+  const hasOpposingDefender = opposingDefenders(next, side, zone).length > 0;
   if (!hasOpposingDefender) return next;
+
   const added = addCalibrationTacticalToHand(next, side, 'penalty', { generatedBy: card.id });
   next = added.state;
   next.events.push({
