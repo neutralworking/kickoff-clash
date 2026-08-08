@@ -32,13 +32,13 @@ describe('V8 compact Neymar Penalty creator', () => {
 
   it('lets Panenka amplify Neymar’s generated Penalty without changing the base Tactical', () => {
     let state = createV8CalibrationState();
-    state = seedCalibrationPlayer(state, 'home', 'panenka', 'MID');
+    state = seedCalibrationPlayer(state, 'home', 'panenka', 'ATT');
     state = seedCalibrationPlayer(state, 'away', 'ramos', 'DEF');
     state = revealCalibrationPlayer(state, 'home', 'neymar', 'ATT');
     const penalty = calibrationHandTacticals(state, 'home').find((card) => card.type === 'penalty');
     expect(penalty).toBeDefined();
 
-    const window = resolveGeneratedTacticalWindow(state, [{ side: 'home', cardId: penalty!.id, zone: 'MID' }]);
+    const window = resolveGeneratedTacticalWindow(state, [{ side: 'home', cardId: penalty!.id, zone: 'ATT' }]);
     const resolution = window.state.tacticalResolutions.find((item) => item.cardId === penalty!.id);
     expect(resolution?.attack).toBe(8);
     expect(resolution?.uncancellable).toBe(true);
