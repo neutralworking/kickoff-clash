@@ -1,4 +1,4 @@
-name: V8 Cross Cost Sensitivity
+name: V8 Cross Modifier Sensitivity
 
 on:
   pull_request:
@@ -21,28 +21,33 @@ jobs:
 
       - run: npm ci
 
-      - name: Sweep compact Cross Cost candidates
+      - name: Sweep compact Cross modifier candidates
         shell: bash
         run: |
           set -euo pipefail
-          FILE=src/engine-v8/calibration-balance.ts
+          FILE=src/engine-v8/calibration-runtime.ts
 
           run_scenario() {
             local name="$1"
-            local ids="$2"
+            local rabona="$2"
+            local bend="$3"
+            local wambach_att="$4"
             git checkout -- "$FILE"
-            COST_IDS="$ids" python - <<'PY'
+            RABONA="$rabona" BEND="$bend" WAMBACH_ATT="$wambach_att" python - <<'PY'
           import os
           from pathlib import Path
-          path = Path('src/engine-v8/calibration-balance.ts')
+          path = Path('src/engine-v8/calibration-runtime.ts')
           text = path.read_text()
-          ids = [item for item in os.environ['COST_IDS'].split(',') if item]
-          old = "export function calibrationPlayCost(card: Pick<V8CalibrationPlayerCard, 'cost'>): number {\n  return Math.max(1, card.cost - 1);\n}"
-          listed = ', '.join(repr(item) for item in ids)
-          new = f"export function calibrationPlayCost(card: Pick<V8CalibrationPlayerCard, 'id' | 'cost'>): number {{\n  if ([{listed}].includes(card.id)) return Math.max(1, card.cost);\n  return Math.max(1, card.cost - 1);\n}}"
-          if old not in text:
-              raise SystemExit('calibrationPlayCost source did not match expected baseline')
-          path.write_text(text.replace(old, new))
+          replacements = {
+              "if (!modifyFirstCrossMutable(state, player.side, 3))": f"if (!modifyFirstCrossMutable(state, player.side, {os.environ['RABONA']}))",
+              "generateTacticalMutable(state, player.side, 'cross', card.id, { attModifier: 2 });": f"generateTacticalMutable(state, player.side, 'cross', card.id, {{ attModifier: {os.environ['BEND']} }});",
+              "const amount = zone === 'ATT' ? 4 : 3;": f"const amount = zone === 'ATT' ? {os.environ['WAMBACH_ATT']} : 3;",
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'expected runtime source not found: {old}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
           PY
             rm -rf test-results
             npx vitest run src/engine-v8/__tests__/calibration-matchup-matrix.test.ts src/engine-v8/__tests__/calibration-cross-minimal.test.ts
@@ -51,18 +56,19 @@ jobs:
             cp test-results/v8-calibration-cross-minimal.json test-results/v8-calibration-cross-minimal.txt "sensitivity/$name/"
           }
 
-          run_scenario beckham "beckham"
-          run_scenario di_maria "di-maria"
-          run_scenario wambach "wambach"
-          run_scenario creators "beckham,di-maria"
-          run_scenario all_three "beckham,di-maria,wambach"
+          run_scenario rabona2 2 2 4
+          run_scenario bend1 3 1 4
+          run_scenario wambach3 3 2 3
+          run_scenario rabona2_wambach3 2 2 3
+          run_scenario bend1_rabona2 2 1 4
+          run_scenario bend1_wambach3 3 1 3
 
           git checkout -- "$FILE"
 
       - name: Upload sensitivity evidence
         uses: actions/upload-artifact@v4
         with:
-          name: v8-cross-cost-sensitivity
+          name: v8-cross-modifier-sensitivity
           path: sensitivity/
           if-no-files-found: error
           retention-days: 7
