@@ -27,12 +27,21 @@ jobs:
 
       - run: npm ci
 
-      - name: Typed chance Vitest gate
-        run: npx vitest run src/engine-v7/__tests__/typed-chances.test.ts src/engine-v7/__tests__/finisher-acceptance.test.ts src/game-v7/__tests__/cross-pair-simulation.test.ts src/game-v7/__tests__/through-ball-pair-simulation.test.ts
+      - name: Focused Vitest gate
+        run: npx vitest run src/engine-v8/__tests__/core.test.ts src/engine-v8/__tests__/reveal.test.ts src/engine-v8/__tests__/action-interactions.test.ts src/engine-v8/__tests__/calibration-balance.test.ts src/engine-v8/__tests__/calibration-integration.test.ts src/engine-v8/__tests__/calibration-squads.test.ts src/engine-v8/__tests__/calibration-telemetry.test.ts src/engine-v8/__tests__/calibration-cpu-tactical-placement.test.ts src/engine-v8/__tests__/calibration-planner.test.ts src/engine-v8/__tests__/modifier-decay.test.ts src/engine-v8/__tests__/simulation.test.ts src/engine-v7/__tests__/typed-chances.test.ts src/engine-v7/__tests__/finisher-acceptance.test.ts src/game-v7/__tests__/cross-pair-simulation.test.ts src/game-v7/__tests__/through-ball-pair-simulation.test.ts
 
       - name: Full Vitest regression visibility
         continue-on-error: true
         run: npm test
+
+      - name: Upload V8 calibration matrix evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v8-calibration-matrix
+          path: test-results/v8-calibration-*
+          if-no-files-found: error
+          retention-days: 14
 
       - name: TypeScript
         run: npx tsc --noEmit
@@ -68,7 +77,8 @@ jobs:
           python3 -m http.server 3001 --directory out > /tmp/kickoff-clash-http.log 2>&1 &
           echo $! > /tmp/kickoff-clash-http.pid
           for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:3001/lab/match-v7/ > /dev/null; then
+            if curl --fail --silent http://127.0.0.1:3001/lab/match-v7/ > /dev/null \
+              && curl --fail --silent http://127.0.0.1:3001/lab/match-v8/ > /dev/null; then
               exit 0
             fi
             sleep 1
@@ -78,6 +88,9 @@ jobs:
 
       - name: Mobile typed chance browser checks
         run: npx playwright test tests/v7-typed-chances.spec.ts --project=chromium
+
+      - name: Mobile V8 match lab smoke check
+        run: npx playwright test tests/v8-match-lab.spec.ts --project=chromium
 
       - name: Upload Playwright failure artifacts
         if: failure()
