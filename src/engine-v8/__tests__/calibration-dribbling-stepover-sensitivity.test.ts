@@ -27,7 +27,6 @@ import {
 } from '../calibration-runtime';
 import { goalsFromAttackDefence, type V8Zone } from '../core';
 
-const ZONES: readonly V8Zone[] = ['DEF', 'MID', 'ATT'];
 const MANAGER_COST = 3;
 
 interface SensitivityResult {
@@ -95,7 +94,7 @@ function withCalibrationEnergy(state: V8CalibrationState): V8CalibrationState {
 
 function candidateDeck(): string[] {
   return getV8CalibrationSquad('dribbling_penalty').playerIds
-    .map((id) => id === 'beckenbauer' ? 'okocha' : id);
+    .map((id) => id === 'neymar' ? 'okocha' : id);
 }
 
 function deckFor(squad: V8CalibrationSquadKey): readonly string[] {
@@ -350,8 +349,8 @@ function runSensitivity(): SensitivityResult {
 function format(result: SensitivityResult): string {
   return [
     'V8 Dribbling / Penalty · STEPOVER direct-generation sensitivity',
-    'Candidate only: replace Beckenbauer with Okocha at equal effective Cost; prefer Okocha in ATT; if STEPOVER itself successfully applies −2 DEF, generate a Penalty.',
-    'No Penalty ATT, Energy, Cost, printed stat, FLIP FLAP or accepted runtime change.',
+    'Candidate only: replace Neymar with Okocha at equal effective Cost; prefer Okocha in ATT; if STEPOVER itself successfully applies −2 DEF, generate a Penalty.',
+    'Same four-card attacking package size and same defensive spine. No Penalty ATT, Energy, Cost, printed stat, FLIP FLAP or accepted runtime change.',
     '',
     `Overall: ${result.matches} matches | W ${Math.round(result.winRate * 100)}% | D ${Math.round(result.drawRate * 100)}% | GF ${result.averageGoalsFor} | GA ${result.averageGoalsAgainst} | GD ${result.averageGoalDifference >= 0 ? '+' : ''}${result.averageGoalDifference}`,
     `Penalty resolutions: ${result.penaltyResolutions} | enhanced (>=8 ATT): ${result.enhancedPenaltyResolutions} | direct STEPOVER generations: ${result.directStepoverGenerations}`,
@@ -362,7 +361,7 @@ function format(result: SensitivityResult): string {
 }
 
 describe('V8 STEPOVER direct-generation sensitivity', () => {
-  it('measures the compact standalone Okocha route without changing accepted gameplay', () => {
+  it('measures Okocha as a same-cost Neymar replacement without changing accepted gameplay', () => {
     const result = runSensitivity();
     const outputDir = join(process.cwd(), 'test-results');
     mkdirSync(outputDir, { recursive: true });
