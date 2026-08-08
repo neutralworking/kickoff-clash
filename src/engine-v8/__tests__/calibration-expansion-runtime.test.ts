@@ -83,6 +83,24 @@ describe('V8 expansion Batch 01 runtime primitives', () => {
     expect(state.players[runtimeId]?.modifiers.filter((modifier) => modifier.source === 'END-TO-END RUN')).toHaveLength(1);
   });
 
+  it('SHOW HIM OUTSIDE retargets to the highest-ATT opposing attacker as the board changes', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'home', 'ashley-cole', 'DEF');
+    state = revealCalibrationPlayer(state, 'away', 'dempsey', 'ATT');
+
+    const dempseyId = calibrationRuntimeId('away', 'dempsey');
+    expect(currentCalibrationAttack(state, dempseyId)).toBe(5);
+
+    state = revealCalibrationPlayer(state, 'away', 'ronaldo', 'ATT');
+    const ronaldoId = calibrationRuntimeId('away', 'ronaldo');
+    expect(currentCalibrationAttack(state, dempseyId)).toBe(10);
+    expect(currentCalibrationAttack(state, ronaldoId)).toBe(getV8CalibrationPlayer('ronaldo').printedAttack - 5);
+
+    state = endV8CalibrationPeriod(state);
+    expect(currentCalibrationAttack(state, dempseyId)).toBe(10);
+    expect(currentCalibrationAttack(state, ronaldoId)).toBe(getV8CalibrationPlayer('ronaldo').printedAttack - 5);
+  });
+
   it('BODY ON THE LINE cancels the first otherwise-resolving Chance, then costs Puyol 3 DEF', () => {
     let state = createV8CalibrationState({ awayEnergy: 20 });
     state = seedCalibrationPlayer(state, 'home', 'puyol', 'DEF');
