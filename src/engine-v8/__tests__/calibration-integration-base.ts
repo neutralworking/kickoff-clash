@@ -307,11 +307,11 @@ describe('high-priority calibration interactions', () => {
     expect(endState.events.some((event) => event.period === 4 && event.text.includes('no commitment window remains'))).toBe(true);
   });
 
-  it('JOY OF THE PEOPLE checks reduced DEF before its own debuff', () => {
+  it('JOY OF THE PEOPLE gives +2 for beating a fresh defender and +4 against one already reduced', () => {
     let state = highEnergy();
     state = seedCalibrationPlayer(state, 'away', 'ramos', 'DEF');
     state = revealCalibrationPlayer(state, 'home', 'garrincha', 'ATT');
-    expect(currentCalibrationAttack(state, calibrationRuntimeId('home', 'garrincha'))).toBe(getV8CalibrationPlayer('garrincha').printedAttack);
+    expect(currentCalibrationAttack(state, calibrationRuntimeId('home', 'garrincha'))).toBe(getV8CalibrationPlayer('garrincha').printedAttack + 2);
 
     let primed = highEnergy();
     primed = seedCalibrationPlayer(primed, 'away', 'ramos', 'DEF');
