@@ -13,14 +13,14 @@ import {
 } from '../index';
 
 describe('V8 calibration planner exercise policy', () => {
-  it('holds one available Cross, reserves Di María and commits RABONA instead of spending the Cross first', () => {
-    let state = createV8CalibrationState({ homeDeck: ['di-maria'], homeEnergy: 2 });
+  it('holds one available Cross and commits RABONA when Di María is affordable', () => {
+    let state = createV8CalibrationState({ period: 2, homeDeck: ['di-maria'], homeEnergy: 4 });
     state = addCalibrationTacticalToHand(state, 'home', 'cross').state;
     const cross = calibrationHandTacticals(state, 'home').find((card) => card.type === 'cross')!;
 
     const planned = planV8CalibrationSide(state, 'home', false, 'cross');
 
-    expect(planned.pending).toContainEqual({ kind: 'player', side: 'home', cardId: 'di-maria', zone: 'MID', cost: 2 });
+    expect(planned.pending).toContainEqual({ kind: 'player', side: 'home', cardId: 'di-maria', zone: 'MID', cost: 3 });
     expect(planned.pending.some((play) => play.kind === 'tactical' && play.card.id === cross.id)).toBe(false);
     expect(calibrationHandTacticals(planned.state, 'home').some((card) => card.id === cross.id)).toBe(true);
   });
