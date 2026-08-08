@@ -138,12 +138,14 @@ const PLANNER_PROFILES: Readonly<Record<V8CalibrationSquadKey, V8CalibrationPlan
     },
   },
   dribbling_penalty: {
-    priorityPlayerIds: ['panenka', 'duff', 'garrincha', 'neymar'],
+    priorityPlayerIds: ['panenka', 'duff', 'garrincha', 'neymar', 'okocha', 'ronaldo'],
     preferredZones: {
       panenka: 'ATT',
       duff: 'ATT',
       garrincha: 'ATT',
       neymar: 'ATT',
+      okocha: 'ATT',
+      ronaldo: 'ATT',
     },
   },
   control_defence: {
@@ -282,11 +284,13 @@ interface DribblingPenaltyCommitPlan {
 }
 
 /**
- * The Penalty package needs two on-reveals in the same period: a dribbler first reduces
- * an opposing defender, then Neymar sees that reduced defender and generates the Penalty.
- * The reduction is period-only, so spending a reducer by itself in P1-P3 destroys the combo.
- * Panenka can be staged ahead; in P4, if all three pieces are still in hand, 1+3+3 Energy
- * fits and he reveals before the reducer/generator so the generated Penalty gets his rider.
+ * The Penalty package needs a reducer and a generator to reveal in that order in the same period.
+ * Duff / Garrincha provide the period-only DEF reduction; Neymar / Okocha can turn one such reduction
+ * into a Penalty. Spending either half alone before P4 destroys a future pair, so the calibration
+ * planner preserves unmatched pieces and, when possible, keeps an alternate pair for the next period.
+ * Panenka can be staged ahead; if 1+3+3 fits in P4 he reveals before the pair so the generated Penalty
+ * gets CHIPPED PENALTY. Ronaldo is deliberately not treated as a one-reducer generator: his current
+ * FLIP FLAP text still requires a defender to be at least 3 DEF below base.
  */
 function dribblingPenaltyCommitPlan(
   state: V8CalibrationState,
@@ -294,35 +298,53 @@ function dribblingPenaltyCommitPlan(
 ): DribblingPenaltyCommitPlan {
   const hand = calibrationHandPlayers(state, side);
   const byId = new Map(hand.map((card) => [card.id, card] as const));
-  const reducer = byId.get('duff') ?? byId.get('garrincha');
-  const neymar = byId.get('neymar');
+  const reducers = ['duff', 'garrincha']
+    .map((id) => byId.get(id))
+    .filter((card): card is V8CalibrationPlayerCard => Boolean(card));
+  const generators = ['neymar', 'okocha']
+    .map((id) => byId.get(id))
+    .filter((card): card is V8CalibrationPlayerCard => Boolean(card));
   const panenka = byId.get('panenka');
   const panenkaDeployed = Boolean(state.players[calibrationRuntimeId(side, 'panenka')]);
-  const pairCost = reducer && neymar ? calibrationPlayCost(reducer) + calibrationPlayCost(neymar) : Number.POSITIVE_INFINITY;
-  const pairFits = Boolean(reducer && neymar && pairCost <= state.teams[side].energy);
-  const tripleFits = Boolean(
-    pairFits
-    && panenka
-    && !panenkaDeployed
-    && pairCost + calibrationPlayCost(panenka) <= state.teams[side].energy,
-  );
 
-  if (pairFits && reducer && neymar) {
+  let reducer: V8CalibrationPlayerCard | undefined;
+  let generator: V8CalibrationPlayerCard | undefined;
+  for (const candidateReducer of reducers) {
+    const candidateGenerator = generators.find((item) => (
+      calibrationPlayCost(candidateReducer) + calibrationPlayCost(item) <= state.teams[side].energy
+    ));
+    if (candidateGenerator) {
+      reducer = candidateReducer;
+      generator = candidateGenerator;
+      break;
+    }
+  }
+
+  if (reducer && generator) {
+    const pairCost = calibrationPlayCost(reducer) + calibrationPlayCost(generator);
+    const tripleFits = Boolean(
+      panenka
+      && !panenkaDeployed
+      && pairCost + calibrationPlayCost(panenka) <= state.teams[side].energy,
+    );
     const deferred = new Set<string>();
-    const alternateReducer = reducer.id === 'duff' ? 'garrincha' : 'duff';
-    if (state.period < 4 && byId.has(alternateReducer)) deferred.add(alternateReducer);
+    if (state.period < 4) {
+      for (const card of [...reducers, ...generators]) {
+        if (card.id !== reducer.id && card.id !== generator.id) deferred.add(card.id);
+      }
+    }
     return {
       priorityPlayerIds: tripleFits
-        ? ['panenka', reducer.id, 'neymar']
-        : [reducer.id, 'neymar', 'panenka'],
+        ? ['panenka', reducer.id, generator.id, 'ronaldo']
+        : [reducer.id, generator.id, 'panenka', 'ronaldo'],
       deferredPlayerIds: deferred,
     };
   }
 
   if (state.period < 4) {
     return {
-      priorityPlayerIds: ['panenka'],
-      deferredPlayerIds: new Set(['duff', 'garrincha', 'neymar']),
+      priorityPlayerIds: ['panenka', 'ronaldo'],
+      deferredPlayerIds: new Set(['duff', 'garrincha', 'neymar', 'okocha']),
     };
   }
 
