@@ -16,6 +16,7 @@ import {
   opposingDepthZone,
   playCalibrationTactical as playCalibrationTacticalBase,
   refreshCalibrationSuppression,
+  removeCalibrationPlayerFromHand as removeCalibrationPlayerFromHandBase,
   revealCalibrationPlayer as revealCalibrationPlayerBase,
   type V8CalibrationSide,
   type V8CalibrationState,
@@ -91,6 +92,54 @@ function scoreRelation(score: V8CalibrationScoreState, side: V8CalibrationSide):
   if (own > opponent) return 'winning';
   if (own < opponent) return 'losing';
   return 'level';
+}
+
+function aitanaDiscountPeriodKey(side: V8CalibrationSide): string {
+  return `aitana-escape-the-press:${side}:period`;
+}
+
+function isMidPlayer(cardId: string): boolean {
+  return getV8CalibrationPlayer(cardId).naturalZones.includes('MID');
+}
+
+/**
+ * First next-period MID-capable player discount. The discount expires automatically because the
+ * stored activation period must exactly equal the current period, and is consumed on first use.
+ */
+export function previewCalibrationPlayerCost(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+  cardId: string,
+): number {
+  const card = getV8CalibrationPlayer(cardId);
+  const activePeriod = state.matchCounters[aitanaDiscountPeriodKey(side)] ?? 0;
+  if (activePeriod !== state.period || !isMidPlayer(cardId)) return card.cost;
+  return Math.max(0, card.cost - 1);
+}
+
+export function removeCalibrationPlayerFromHand(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+  cardId: string,
+  options: { ignoreEnergy?: boolean } = {},
+): V8CalibrationState {
+  const discountedCost = previewCalibrationPlayerCost(state, side, cardId);
+  const printedCost = getV8CalibrationPlayer(cardId).cost;
+  if (discountedCost === printedCost) return removeCalibrationPlayerFromHandBase(state, side, cardId, options);
+
+  const next = clone(state);
+  const index = next.teams[side].hand.findIndex((entry) => entry.kind === 'player' && entry.cardId === cardId);
+  if (index < 0) throw new Error(`${cardId} is not in hand`);
+  if (!options.ignoreEnergy && next.teams[side].energy < discountedCost) throw new Error('Not enough energy');
+  if (!options.ignoreEnergy) next.teams[side].energy -= discountedCost;
+  next.teams[side].hand.splice(index, 1);
+  next.matchCounters[aitanaDiscountPeriodKey(side)] = 0;
+  next.events.push({
+    type: 'action_triggered',
+    period: next.period,
+    text: `ESCAPE THE PRESS: ${getV8CalibrationPlayer(cardId).realName} costs ${discountedCost} Energy.`,
+  });
+  return next;
 }
 
 /**
@@ -205,6 +254,12 @@ export function revealCalibrationPlayer(
   if (cardId === 'di-stefano') {
     const next = revealCalibrationPlayerBase(state, side, cardId, zone);
     return refreshCalibrationScoreState(next, score);
+  }
+
+  if (cardId === 'aitana-bonmati') {
+    const next = revealCalibrationPlayerBase(state, side, cardId, zone);
+    if (next.period < 4) next.matchCounters[aitanaDiscountPeriodKey(side)] = next.period + 1;
+    return next;
   }
 
   if (cardId !== 'neymar') return revealCalibrationPlayerBase(state, side, cardId, zone);
