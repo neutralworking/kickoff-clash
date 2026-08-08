@@ -92,7 +92,7 @@ export const V8_PERIODS = [
 ] as const;
 
 export const V8_ZONE_CAPACITY = 4;
-export const V8_GOAL_BAND = 5;
+export const V8_GOAL_BAND = 7;
 export const V8_OPENING_PLAYER_CARDS = 3;
 export const V8_DRAW_PER_PERIOD = 2;
 
@@ -178,7 +178,7 @@ export function teamTotals(board: V8Board, boosts: readonly V8TemporaryZoneBoost
   };
 }
 
-/** For every complete +5 ATT over opposing DEF, score one goal. */
+/** For every complete +7 ATT over opposing DEF, score one goal. */
 export function goalsFromAttackDefence(attack: number, opposingDefence: number): number {
   return Math.max(0, Math.floor((attack - opposingDefence) / V8_GOAL_BAND));
 }
