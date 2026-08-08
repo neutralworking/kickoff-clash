@@ -35,8 +35,8 @@ describe('V8 coherent calibration squads', () => {
   it('keeps a focused, playable core for each named archetype', () => {
     expect(getV8CalibrationSquad('cross').playerIds).toEqual(expect.arrayContaining(['beckham', 'cafu', 'wambach', 'hegerberg', 'dzajic', 'di-maria']));
     expect(getV8CalibrationSquad('through_ball').playerIds).toEqual(expect.arrayContaining(['valderrama', 'litmanen', 'morgan', 'shevchenko']));
-    expect(getV8CalibrationSquad('dribbling_penalty').playerIds).toEqual(expect.arrayContaining(['duff', 'garrincha', 'okocha', 'neymar', 'panenka', 'baresi']));
-    expect(getV8CalibrationSquad('dribbling_penalty').playerIds).not.toContain('ronaldo');
+    expect(getV8CalibrationSquad('dribbling_penalty').playerIds).toEqual(expect.arrayContaining(['duff', 'garrincha', 'neymar', 'ronaldo', 'panenka', 'baresi']));
+    expect(getV8CalibrationSquad('dribbling_penalty').playerIds).not.toContain('okocha');
     expect(getV8CalibrationSquad('control_defence').playerIds).toEqual(expect.arrayContaining(['makelele', 'gentile', 'seedorf', 'baresi', 'schmeichel', 'bremner', 'iniesta', 'beckenbauer']));
     expect(getV8CalibrationSquad('long_shot_set_piece').playerIds).toEqual(expect.arrayContaining(['charlton', 'lloyd', 'eriksen', 'ramos']));
     expect(getV8CalibrationSquad('balanced_midrange').playerIds).toEqual(expect.arrayContaining(['schmeichel', 'beckenbauer', 'okocha', 'beckham', 'ronaldo', 'sinclair', 'charlton']));
