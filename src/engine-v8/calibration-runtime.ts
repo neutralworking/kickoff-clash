@@ -101,31 +101,21 @@ export function revealCalibrationPlayer(
   }
 
   if (cardId === 'okocha') {
-    let next = deployWithoutOnReveal(state, side, cardId, zone);
-    const runtimeId = calibrationRuntimeId(side, cardId);
-    if (!isCalibrationActionEnabled(next, runtimeId)) return next;
+    const target = lowestDefender(state, side, zone);
+    const defenceBefore = target ? currentCalibrationDefence(state, target.runtimeId) : undefined;
+    let next = revealCalibrationPlayerBase(state, side, cardId, zone);
 
-    const card = getV8CalibrationPlayer(cardId);
-    next.events.push({ type: 'action_triggered', period: next.period, text: `${card.realName} · ${card.actionName}.` });
-    const target = lowestDefender(next, side, zone);
-    if (!target) return next;
-
-    const defenceBefore = currentCalibrationDefence(next, target.runtimeId);
-    next = applyCalibrationModifier(next, target.runtimeId, {
-      defence: -2,
-      lifetime: 'period',
-      source: card.actionName,
-      sourceRuntimeId: runtimeId,
-    });
-    const defenceAfter = currentCalibrationDefence(next, target.runtimeId);
-    if (defenceAfter < defenceBefore && defenceAfter <= 5) {
-      next = applyCalibrationModifier(next, runtimeId, {
-        attack: 3,
-        lifetime: 'period',
-        source: card.actionName,
-      });
+    if (target && defenceBefore !== undefined && next.players[target.runtimeId]) {
+      const actuallyReduced = currentCalibrationDefence(next, target.runtimeId) < defenceBefore;
+      if (actuallyReduced) {
+        next = applyCalibrationModifier(next, calibrationRuntimeId(side, cardId), {
+          attack: 2,
+          lifetime: 'period',
+          source: getV8CalibrationPlayer(cardId).actionName,
+        });
+      }
     }
-    return refreshCalibrationSuppression(next);
+    return next;
   }
 
   if (cardId !== 'neymar') return revealCalibrationPlayerBase(state, side, cardId, zone);
