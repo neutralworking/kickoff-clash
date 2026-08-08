@@ -7,7 +7,7 @@ import {
 
 export const NEYMAR_RAINBOW_FLICK_TEXT = 'On Reveal: If an opposing defender is here, add a Penalty to your hand.';
 export const GARRINCHA_JOY_OF_THE_PEOPLE_TEXT = 'On Reveal: Give the highest-DEF opposing defender here −2 DEF. If you reduce them, gain +2 ATT this period. If they were already reduced, gain +4 instead.';
-export const OKOCHA_STEPOVER_TEXT = 'On Reveal: Give the lowest-DEF opposing defender here −2 DEF. If they finish on 5 DEF or less, gain +3 ATT this period.';
+export const OKOCHA_STEPOVER_TEXT = 'On Reveal: Give the lowest-DEF opposing defender here −2 DEF and gain +2 ATT this period. If they were already reduced, add a Penalty to your hand.';
 
 function withV8CalibrationOverrides(player: V8CalibrationPlayerCard): V8CalibrationPlayerCard {
   let actionText: string | undefined;
