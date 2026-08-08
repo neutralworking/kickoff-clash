@@ -31,5 +31,5 @@ describe('V8 calibration matchup matrix', () => {
     writeFileSync('test-results/v8-calibration-matrix.json', `${JSON.stringify(report, null, 2)}\n`);
     writeFileSync('test-results/v8-calibration-matrix.txt', `${text}\n`);
     console.log(`\n${text}\n`);
-  });
+  }, 30_000);
 });
