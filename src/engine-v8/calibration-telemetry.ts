@@ -14,7 +14,7 @@ import type { V8CalibrationSquadKey } from './calibration-squads';
 
 export type V8CalibrationTelemetryPlay =
   | { kind: 'player'; side: V8CalibrationSide; cardId: string }
-  | { kind: 'tactical'; side: V8CalibrationSide; card: V8TacticalCardInstance }
+  | { kind: 'tactical'; side: V8CalibrationSide; card: V8TacticalCardInstance; window?: boolean; cost?: number }
   | { kind: 'manager'; side: V8CalibrationSide };
 
 export interface V8CalibrationTeamPeriodTelemetry {
@@ -30,6 +30,10 @@ export interface V8CalibrationTeamPeriodTelemetry {
   tacticalsPlayed: number;
   tacticalAttackGenerated: number;
   cancelledChances: number;
+  windowTacticalsPlayed: number;
+  windowEnergySpent: number;
+  windowTacticalAtt: number;
+  windowCancellations: number;
   majorChains: string[];
 }
 
@@ -46,6 +50,10 @@ export interface V8CalibrationTeamMatchTelemetry {
   tacticalsPlayed: number;
   tacticalAttackGenerated: number;
   cancelledChances: number;
+  windowTacticalsPlayed: number;
+  windowEnergySpent: number;
+  windowTacticalAtt: number;
+  windowCancellations: number;
   majorChains: string[];
 }
 
@@ -118,22 +126,23 @@ function majorChainsForSide(
   const chains: string[] = [];
 
   for (const resolution of state.tacticalResolutions.filter((item) => item.side === side)) {
-    const committed = tacticalPlays.find((play) => play.card.id === resolution.cardId)?.card;
-    const creator = committed ? actionLabelFromGeneratedBy(committed) : null;
+    const played = tacticalPlays.find((play) => play.card.id === resolution.cardId)?.card;
+    const creator = played ? actionLabelFromGeneratedBy(played) : null;
     const tacticalName = tacticalDefinition(resolution.type).name;
     const specialists = resolution.specialistBonuses.map(stripSpecialistLabel);
+    const windowFlag = resolution.window ? ' [window]' : '';
 
     if (resolution.cancelled) {
-      chains.push(`${creator ? `${creator} → ` : ''}${tacticalName} → CANCELLED`);
+      chains.push(`${creator ? `${creator} → ` : ''}${tacticalName} → CANCELLED${windowFlag}`);
       continue;
     }
 
-    if (creator || specialists.length > 0 || (committed?.attModifier ?? 0) !== 0 || Number(committed?.metadata.bonusAttInMid ?? 0) !== 0) {
+    if (creator || specialists.length > 0 || (played?.attModifier ?? 0) !== 0 || Number(played?.metadata.bonusAttInMid ?? 0) !== 0) {
       chains.push([
         creator,
         tacticalName,
         ...specialists,
-      ].filter(Boolean).join(' → ') + ` = +${resolution.attack} ATT`);
+      ].filter(Boolean).join(' → ') + ` = +${resolution.attack} ATT${windowFlag}`);
     }
   }
 
@@ -154,6 +163,13 @@ function teamPeriodTelemetry(args: {
   const directTacticalAttack = resolutions.reduce((sum, resolution) => sum + resolution.attack, 0);
   const pressAttack = triggerPressAttack(state, side);
   const actionDeltas = playerActionDeltas(state, side);
+  const windowPlays = plays.filter(
+    (play): play is Extract<V8CalibrationTelemetryPlay, { kind: 'tactical' }> => play.kind === 'tactical' && play.side === side && play.window === true,
+  );
+  const windowResolutions = resolutions.filter((resolution) => resolution.window);
+  // Trigger Press pushes no resolution record; attribute its converted ATT to the window
+  // whenever the press reached the board through a window play.
+  const windowPressAttack = windowPlays.some((play) => play.card.type === 'trigger_press') ? pressAttack : 0;
 
   return {
     goals,
@@ -168,6 +184,10 @@ function teamPeriodTelemetry(args: {
     tacticalsPlayed: plays.filter((play) => play.side === side && play.kind === 'tactical').length,
     tacticalAttackGenerated: directTacticalAttack + pressAttack,
     cancelledChances: resolutions.filter((resolution) => resolution.cancelled).length,
+    windowTacticalsPlayed: windowPlays.length,
+    windowEnergySpent: windowPlays.reduce((sum, play) => sum + (play.cost ?? 0), 0),
+    windowTacticalAtt: windowResolutions.reduce((sum, resolution) => sum + resolution.attack, 0) + windowPressAttack,
+    windowCancellations: windowResolutions.filter((resolution) => resolution.cancelled).length,
     majorChains: majorChainsForSide(state, side, plays),
   };
 }
@@ -220,6 +240,10 @@ function aggregateTeam(
     tacticalsPlayed: teamPeriods.reduce((sum, period) => sum + period.tacticalsPlayed, 0),
     tacticalAttackGenerated: teamPeriods.reduce((sum, period) => sum + period.tacticalAttackGenerated, 0),
     cancelledChances: teamPeriods.reduce((sum, period) => sum + period.cancelledChances, 0),
+    windowTacticalsPlayed: teamPeriods.reduce((sum, period) => sum + period.windowTacticalsPlayed, 0),
+    windowEnergySpent: teamPeriods.reduce((sum, period) => sum + period.windowEnergySpent, 0),
+    windowTacticalAtt: teamPeriods.reduce((sum, period) => sum + period.windowTacticalAtt, 0),
+    windowCancellations: teamPeriods.reduce((sum, period) => sum + period.windowCancellations, 0),
     majorChains: [...new Set(teamPeriods.flatMap((period) => period.majorChains))].slice(0, 10),
   };
 }

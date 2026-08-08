@@ -86,14 +86,12 @@ export function applyCalibrationModifier(
 
 /**
  * Calibration-only text overrides. Source tracker text is not written back while V8 timing and
- * decay semantics are still being proven in the lab.
+ * decay semantics are still being proven in the lab. THREE LUNGS no longer needs an override:
+ * with the Generated-Tactical Window its printed "costs 0 this period" works as written.
  */
 export function calibrationActionText(card: V8CalibrationPlayerCard): string {
   if (card.actionKey === 'sinclair_arrive_unmarked') {
     return 'On Reveal: If this is your first player here, she gains +4 ATT. This bonus loses 1 ATT at the end of each period.';
-  }
-  if (card.actionKey === 'park_three_lungs') {
-    return 'On Reveal: Add a Trigger Press to your hand for next period. It costs 0.';
   }
   return card.actionText;
 }
@@ -103,7 +101,7 @@ export function calibrationHandPlayersWithDecayText(
   side: base.V8CalibrationSide,
 ): V8CalibrationPlayerCard[] {
   return base.calibrationHandPlayers(state, side).map((card) => (
-    card.actionKey === 'sinclair_arrive_unmarked' || card.actionKey === 'park_three_lungs'
+    card.actionKey === 'sinclair_arrive_unmarked'
       ? { ...card, actionText: calibrationActionText(card) }
       : card
   ));
@@ -132,36 +130,23 @@ function removeTacticalsFromHand(
 }
 
 /**
- * V8 uses one commitment window per period. A Tactical created by an On Reveal effect therefore
- * cannot be committed after that reveal; it is banked for the following period instead.
- * Movement-generated Tacticals are unaffected because movement happens during commitment.
+ * Generated-Tactical Window contract (V8): a Tactical generated during a period is playable in
+ * that same period's post-reveal window (resolveGeneratedTacticalWindow), in every period
+ * including P4. This function only guards the COMMITMENT path for held cards: a generated card
+ * not played in its window stays in hand at printed cost and re-enters play through a later
+ * period's commitment phase. Duration-limited discounts (e.g. THREE LUNGS' free Trigger Press)
+ * keep the period they were granted in, so they apply inside that period's window and expire
+ * with it. Movement-generated Tacticals also remain immediately playable during commitment
+ * because movement happens inside the commitment phase itself.
  */
-function bankRevealGeneratedTacticals(
+function holdRevealGeneratedTacticals(
   beforeIds: ReadonlySet<string>,
   next: base.V8CalibrationState,
   side: base.V8CalibrationSide,
   revealedPeriod: number,
 ): void {
-  const generated = newlyGeneratedTacticals(beforeIds, next, side);
-  if (generated.length === 0) return;
-
-  if (revealedPeriod >= 4) {
-    const generatedIds = new Set(generated.map((card) => card.id));
-    removeTacticalsFromHand(next, side, generatedIds);
-    next.events.push({
-      type: 'action_triggered',
-      period: revealedPeriod,
-      text: `${generated.map((card) => card.name).join(' + ')} cannot be banked at FT: no commitment window remains.`,
-    });
-    return;
-  }
-
-  const availableFromPeriod = revealedPeriod + 1;
-  for (const card of generated) {
-    card.metadata.availableFromPeriod = availableFromPeriod;
-    if (card.type === 'trigger_press' && card.generatedBy === 'park') {
-      card.metadata.freeThroughPeriod = availableFromPeriod;
-    }
+  for (const card of newlyGeneratedTacticals(beforeIds, next, side)) {
+    card.metadata.availableFromPeriod = revealedPeriod + 1;
   }
 }
 
@@ -221,7 +206,7 @@ export function revealCalibrationPlayer(
   const beforeIds = tacticalIds(state, side);
   const revealedPeriod = state.period;
   const next = base.revealCalibrationPlayer(state, side, cardId, zone);
-  bankRevealGeneratedTacticals(beforeIds, next, side, revealedPeriod);
+  holdRevealGeneratedTacticals(beforeIds, next, side, revealedPeriod);
 
   if (cardId !== 'sinclair') return next;
 

@@ -18,9 +18,12 @@ import {
   previewCalibrationTacticalCost,
   removeCalibrationPlayerFromHand,
   resolveCommittedCalibrationTactical,
+  resolveGeneratedTacticalWindow,
   tacticalDefinition,
+  windowEligibleCalibrationTacticals,
   type V8CalibrationSide,
   type V8CalibrationState,
+  type V8CalibrationWindowPlay,
 } from './calibration-runtime';
 import {
   V8_CALIBRATION_SQUAD_KEYS,
@@ -89,6 +92,10 @@ export interface V8CalibrationSquadSummary {
   averageTacticalsPlayed: number;
   averageCancelledChances: number;
   tacticalAttackShare: number;
+  averageWindowTacticalsPlayed: number;
+  averageWindowEnergySpent: number;
+  averageWindowTacticalAtt: number;
+  averageWindowCancellations: number;
   topChains: Array<{ chain: string; count: number }>;
 }
 
@@ -495,6 +502,31 @@ function resolveSequence(state: V8CalibrationState, plays: readonly V8Calibratio
   return next;
 }
 
+/**
+ * Generated-Tactical Window policy for the calibration CPU: the deliberate play-immediately
+ * bias — every this-period-generated Tactical that remaining Energy can afford is window-played
+ * using the existing lane preferences (eligibleZones order breaks cost ties). Holding and
+ * sequencing intelligence is planner Step 3, not this pass. Both sides plan from the same
+ * post-reveal state, which is exactly the window's blind-simultaneous commitment.
+ */
+export function planV8CalibrationWindow(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+): V8CalibrationWindowPlay[] {
+  const plays: V8CalibrationWindowPlay[] = [];
+  let budget = state.teams[side].energy;
+  for (const card of windowEligibleCalibrationTacticals(state, side)) {
+    const legal = tacticalDefinition(card.type).eligibleZones
+      .map((zone) => ({ zone, cost: previewCalibrationTacticalCost(state, side, card, zone) }))
+      .filter(({ cost }) => cost <= budget)
+      .sort((a, b) => a.cost - b.cost)[0];
+    if (!legal) continue;
+    budget -= legal.cost;
+    plays.push({ side, cardId: card.id, zone: legal.zone });
+  }
+  return plays;
+}
+
 function priority(
   state: V8CalibrationState,
   homeScore: number,
@@ -538,6 +570,19 @@ export function simulateV8CalibrationMatch(args: {
     let resolved = resolveSequence(away.state, plays.filter((play) => play.side === first));
     resolved = resolveSequence(resolved, plays.filter((play) => play.side !== first));
 
+    // The Generated-Tactical Window: both sides plan blind from the same post-reveal state,
+    // then every window play resolves before the scoring window reads the zone margins.
+    const windowPlays = [
+      ...planV8CalibrationWindow(resolved, 'home'),
+      ...planV8CalibrationWindow(resolved, 'away'),
+    ];
+    const window = resolveGeneratedTacticalWindow(resolved, windowPlays);
+    resolved = window.state;
+    const telemetryPlays = [
+      ...plays,
+      ...window.plays.map((play) => ({ kind: 'tactical' as const, side: play.side, card: play.card, window: true, cost: play.cost })),
+    ];
+
     const homeTotals = calibrationTeamTotals(resolved, 'home');
     const awayTotals = calibrationTeamTotals(resolved, 'away');
     const homeGoals = goalsFromAttackDefence(homeTotals.attack, awayTotals.defence);
@@ -553,7 +598,7 @@ export function simulateV8CalibrationMatch(args: {
       homeDefence: homeTotals.defence,
       awayAttack: awayTotals.attack,
       awayDefence: awayTotals.defence,
-      plays,
+      plays: telemetryPlays,
     }));
 
     const wasFinal = resolved.period === 4;
@@ -637,6 +682,10 @@ function squadSummary(
   let cancelledChances = 0;
   let tacticalAttack = 0;
   let totalAttack = 0;
+  let windowTacticalsPlayed = 0;
+  let windowEnergySpent = 0;
+  let windowTacticalAtt = 0;
+  let windowCancellations = 0;
   const chains = new Map<string, number>();
 
   const relevant = matches.filter((match) => match.homeSquad !== match.awaySquad && (match.homeSquad === squad || match.awaySquad === squad));
@@ -656,6 +705,10 @@ function squadSummary(
     tacticalsPlayed += team.tacticalsPlayed;
     cancelledChances += team.cancelledChances;
     tacticalAttack += team.tacticalAttackGenerated;
+    windowTacticalsPlayed += team.windowTacticalsPlayed;
+    windowEnergySpent += team.windowEnergySpent;
+    windowTacticalAtt += team.windowTacticalAtt;
+    windowCancellations += team.windowCancellations;
     totalAttack += match.telemetry.periods.reduce((sum, period) => sum + period[side].attack, 0);
     for (const chain of team.majorChains) chains.set(chain, (chains.get(chain) ?? 0) + 1);
   }
@@ -677,6 +730,10 @@ function squadSummary(
     averageTacticalsPlayed: rounded(tacticalsPlayed / count),
     averageCancelledChances: rounded(cancelledChances / count),
     tacticalAttackShare: totalAttack > 0 ? rounded(tacticalAttack / totalAttack) : 0,
+    averageWindowTacticalsPlayed: rounded(windowTacticalsPlayed / count),
+    averageWindowEnergySpent: rounded(windowEnergySpent / count),
+    averageWindowTacticalAtt: rounded(windowTacticalAtt / count),
+    averageWindowCancellations: rounded(windowCancellations / count),
     topChains: [...chains.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 5)
@@ -733,6 +790,7 @@ export function formatV8CalibrationMatrixReport(report: V8CalibrationMatrixRepor
       `deployed ${squad.averagePlayersDeployed}`,
       `Tactical share ${Math.round(squad.tacticalAttackShare * 100)}%`,
       `cancelled ${squad.averageCancelledChances}`,
+      `window ${squad.averageWindowTacticalsPlayed} plays / ${squad.averageWindowEnergySpent} E / ${squad.averageWindowTacticalAtt} ATT`,
     ].join(' | '));
   const pairingLines = report.pairings
     .map((pair) => `${pair.squadA} vs ${pair.squadB}: ${Math.round(pair.squadAWinRate * 100)} / ${Math.round(pair.drawRate * 100)} / ${Math.round(pair.squadBWinRate * 100)} · goals ${pair.averageGoalsA}-${pair.averageGoalsB} · GD(A) ${pair.averageGoalDifferenceA >= 0 ? '+' : ''}${pair.averageGoalDifferenceA}`);

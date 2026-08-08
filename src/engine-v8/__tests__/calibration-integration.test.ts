@@ -19,6 +19,7 @@ import {
   playCalibrationTactical,
   previewCalibrationTacticalCost,
   refreshCalibrationSuppression,
+  resolveGeneratedTacticalWindow,
   revealCalibrationPlayer,
   seedCalibrationPlayer,
   type V8CalibrationState,
@@ -156,23 +157,29 @@ describe('high-priority calibration interactions', () => {
     expect(state.zoneDefenceBonus.home.DEF).toBe(2);
   });
 
-  it('H. Park banks a free Trigger Press for next period and DEF then counts toward ATT', () => {
+  it('H. Park’s Trigger Press is free in its own period’s window and printed cost when held', () => {
     let state = highEnergy();
     state = seedCalibrationPlayer(state, 'home', 'wambach', 'ATT');
     state = revealCalibrationPlayer(state, 'home', 'park', 'MID');
     let press = tactical(state, 'home', 'trigger_press');
 
+    // The commitment path stays gated to the next period; the discount lives in THIS period.
     expect(calibrationTacticalAvailableFromPeriod(press)).toBe(2);
-    expect(previewCalibrationTacticalCost(state, 'home', press, 'ATT')).toBe(1);
+    expect(previewCalibrationTacticalCost(state, 'home', press, 'ATT')).toBe(0);
     expect(() => playCalibrationTactical(state, 'home', press.id, 'ATT')).toThrow('banked until Period 2');
 
+    const before = calibrationZoneTotals(state, 'home', 'ATT').attack;
+    const window = resolveGeneratedTacticalWindow(state, [{ side: 'home', cardId: press.id, zone: 'ATT' }]);
+    expect(window.plays[0]?.cost).toBe(0);
+    expect(calibrationZoneTotals(window.state, 'home', 'ATT').attack).toBe(before + getV8CalibrationPlayer('wambach').printedDefence);
+
+    // Held instead of window-played: the discount expired, printed cost applies next period.
     state = advance(state);
     press = tactical(state, 'home', 'trigger_press');
-    const before = calibrationZoneTotals(state, 'home', 'ATT').attack;
-    expect(previewCalibrationTacticalCost(state, 'home', press, 'ATT')).toBe(0);
+    expect(previewCalibrationTacticalCost(state, 'home', press, 'ATT')).toBe(1);
+    const heldBefore = calibrationZoneTotals(state, 'home', 'ATT').attack;
     state = playCalibrationTactical(state, 'home', press.id, 'ATT');
-
-    expect(calibrationZoneTotals(state, 'home', 'ATT').attack).toBe(before + getV8CalibrationPlayer('wambach').printedDefence);
+    expect(calibrationZoneTotals(state, 'home', 'ATT').attack).toBe(heldBefore + getV8CalibrationPlayer('wambach').printedDefence);
   });
 
   it('I. Gentile dynamically retargets the current highest-ATT opposing player and restores the old Action', () => {
@@ -280,12 +287,15 @@ describe('high-priority calibration interactions', () => {
     expect(state.tacticalResolutions.at(-1)).toMatchObject({ type: 'corner', attack: 9, cancelled: false });
   });
 
-  it('final-period reveal and end-of-period generation fizzle instead of leaving dead Tacticals in hand', () => {
+  it('P4 reveal generation is live through the window while end-of-period generation still fizzles at FT', () => {
     let revealState = highEnergy();
     revealState.period = 4;
     revealState = revealCalibrationPlayer(revealState, 'home', 'beckham', 'MID');
-    expect(calibrationHandTacticals(revealState, 'home').filter((card) => card.type === 'cross')).toHaveLength(0);
-    expect(revealState.events.some((event) => event.period === 4 && event.text.includes('no commitment window remains'))).toBe(true);
+    const cross = tactical(revealState, 'home', 'cross');
+    // No commitment window remains, but the P4 Generated-Tactical Window is open.
+    expect(isCalibrationTacticalAvailable(revealState, cross)).toBe(false);
+    const window = resolveGeneratedTacticalWindow(revealState, [{ side: 'home', cardId: cross.id, zone: 'ATT' }]);
+    expect(window.state.tacticalResolutions.at(-1)).toMatchObject({ type: 'cross', attack: 4, cancelled: false, window: true });
 
     let endState = highEnergy();
     endState.period = 4;

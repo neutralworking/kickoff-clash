@@ -21,6 +21,13 @@ export interface V8GeneratedTacticalMetadata {
   freeThroughPeriod?: number;
   /** Franco Baresi: successful cancellation from this exact trap rewards its source zone. */
   baresiPlayerId?: string;
+  /**
+   * The period this instance entered hand. Window eligibility is the equality
+   * `enteredHandPeriod === state.period` (the Generated-Tactical Window contract).
+   */
+  enteredHandPeriod?: number;
+  /** First period whose COMMITMENT phase may play a held generated card (set by the timing layer). */
+  availableFromPeriod?: number;
   /** Open metadata bag for future generated-card riders without inventing new card types. */
   [key: string]: string | number | boolean | undefined;
 }

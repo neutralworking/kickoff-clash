@@ -20,12 +20,15 @@ import {
   isCalibrationActionEnabled,
   moveCalibrationPlayer,
   outOfPositionPenalty,
+  planV8CalibrationWindow,
   previewCalibrationTacticalCost,
   removeCalibrationPlayerFromHand,
   resolveCommittedCalibrationTactical,
+  resolveGeneratedTacticalWindow,
   revealCalibrationPlayer,
   spendCalibrationTacticalFromHand,
   tacticalDefinition,
+  windowEligibleCalibrationTacticals,
   V8_CALIBRATION_SQUAD_KEYS,
   type V8CalibrationMatchTelemetry,
   type V8CalibrationPeriodTelemetry,
@@ -33,6 +36,7 @@ import {
   type V8CalibrationSide,
   type V8CalibrationSquadKey,
   type V8CalibrationState,
+  type V8CalibrationWindowPlay,
   type V8TacticalCardInstance,
   type V8Zone,
 } from '@/engine-v8';
@@ -76,6 +80,19 @@ type PeriodRecap = {
   homeDefence: number;
   scoreAfter: string;
   highlights: string[];
+};
+
+/**
+ * The Generated-Tactical Window pause: reveals have resolved, scoring has not run yet, and the
+ * human side holds at least one affordable this-period-generated Tactical. CPU window plays were
+ * already chosen from the same post-reveal state, so both sides' choices are blind.
+ */
+type WindowPhase = {
+  resolved: V8CalibrationState;
+  allPending: PendingPlay[];
+  cpuPlays: V8CalibrationWindowPlay[];
+  cpuManagerAvailable: boolean;
+  queued: Array<{ cardId: string; name: string; zone: V8Zone; cost: number }>;
 };
 
 function seededShuffle<T>(items: readonly T[], seed: number): T[] {
@@ -303,11 +320,13 @@ function DeployedChip({ state, side, runtimeId, onMove }: { state: V8Calibration
 }
 
 function recapHighlights(state: V8CalibrationState, period: number): string[] {
-  const useful = new Set(['player_moved', 'action_ignored', 'action_suppressed', 'modifier_changed', 'tactical_generated', 'tactical_modified', 'chance_resolved', 'chance_cancelled']);
-  return state.events
-    .filter((event) => event.period === period && useful.has(event.type))
-    .map((event) => event.text)
-    .slice(-6);
+  const useful = new Set(['player_moved', 'action_ignored', 'action_suppressed', 'modifier_changed', 'tactical_generated', 'tactical_modified', 'window_tactical_played', 'chance_resolved', 'chance_cancelled']);
+  // Window plays are their own labelled recap step ("Post-reveal: …"), never folded into
+  // commitment-phase lines, so always keep them alongside the trailing highlights.
+  const events = state.events.filter((event) => event.period === period && useful.has(event.type));
+  const windowLines = events.filter((event) => event.type === 'window_tactical_played').map((event) => event.text);
+  const rest = events.filter((event) => event.type !== 'window_tactical_played').map((event) => event.text);
+  return [...rest.slice(-Math.max(0, 6 - windowLines.length)), ...windowLines];
 }
 
 function signed(value: number): string {
@@ -338,6 +357,7 @@ export default function V8CalibrationLab() {
   const [homeManagerAvailable, setHomeManagerAvailable] = useState(true);
   const [awayManagerAvailable, setAwayManagerAvailable] = useState(true);
   const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([]);
+  const [windowPhase, setWindowPhase] = useState<WindowPhase | null>(null);
   const [recaps, setRecaps] = useState<PeriodRecap[]>([]);
   const [telemetryPeriods, setTelemetryPeriods] = useState<V8CalibrationPeriodTelemetry[]>([]);
   const [matchTelemetry, setMatchTelemetry] = useState<V8CalibrationMatchTelemetry | null>(null);
@@ -376,7 +396,7 @@ export default function V8CalibrationLab() {
   };
 
   const queueToZone = (zone: V8Zone) => {
-    if (!selection || finished) return;
+    if (!selection || finished || windowPhase) return;
 
     if (selection.kind === 'move') {
       const player = state.players[selection.runtimeId];
@@ -447,7 +467,7 @@ export default function V8CalibrationLab() {
   };
 
   const endPeriod = () => {
-    if (finished) return;
+    if (finished || windowPhase) return;
     const cpu = planCpu(state, awayManagerAvailable);
     const allPending = [...pending, ...cpu.pending];
     const reveal = priority(cpu.state, homeScore, awayScore, seed + state.period * 101);
@@ -462,6 +482,41 @@ export default function V8CalibrationLab() {
       period,
       text: `${periodLabel} REVEAL: ${reveal.first === 'home' ? 'YOU' : 'CPU'} first · ${reveal.reason}.`,
     });
+
+    // The Generated-Tactical Window: CPU choices are made blind from the post-reveal state.
+    // Pause for the human only when they actually hold an affordable this-period Tactical;
+    // otherwise the window resolves silently and the period scores in one click as before.
+    const cpuWindowPlays = planV8CalibrationWindow(resolved, 'away');
+    const humanCanPlay = windowEligibleCalibrationTacticals(resolved, 'home').some((card) => (
+      tacticalDefinition(card.type).eligibleZones
+        .some((zone) => previewCalibrationTacticalCost(resolved, 'home', card, zone) <= resolved.teams.home.energy)
+    ));
+    if (humanCanPlay) {
+      setState(resolved);
+      setPending([]);
+      setUndoStack([]);
+      setSelection(null);
+      setWindowPhase({ resolved, allPending, cpuPlays: cpuWindowPlays, cpuManagerAvailable: cpu.managerAvailable, queued: [] });
+      return;
+    }
+    finishPeriod(resolved, allPending, cpuWindowPlays, [], cpu.managerAvailable);
+  };
+
+  const finishPeriod = (
+    postReveal: V8CalibrationState,
+    allPending: PendingPlay[],
+    cpuPlays: V8CalibrationWindowPlay[],
+    humanPlays: V8CalibrationWindowPlay[],
+    cpuManagerAvailable: boolean,
+  ) => {
+    const window = resolveGeneratedTacticalWindow(postReveal, [...humanPlays, ...cpuPlays]);
+    const resolved = window.state;
+    const period = resolved.period;
+    const periodLabel = PERIOD_LABELS[period - 1];
+    const telemetryPlays = [
+      ...allPending,
+      ...window.plays.map((play) => ({ kind: 'tactical' as const, side: play.side, card: play.card, window: true, cost: play.cost })),
+    ];
 
     const home = calibrationTeamTotals(resolved, 'home');
     const away = calibrationTeamTotals(resolved, 'away');
@@ -480,7 +535,7 @@ export default function V8CalibrationLab() {
       homeDefence: home.defence,
       awayAttack: away.attack,
       awayDefence: away.defence,
-      plays: allPending,
+      plays: telemetryPlays,
     });
     const nextTelemetryPeriods = [...telemetryPeriods, periodTelemetry];
     setTelemetryPeriods(nextTelemetryPeriods);
@@ -499,11 +554,11 @@ export default function V8CalibrationLab() {
     }]);
 
     const wasFinal = resolved.period === 4;
-    resolved = endV8CalibrationPeriod(resolved);
-    if (!wasFinal) resolved = withCalibrationEnergy(resolved);
+    let ended = endV8CalibrationPeriod(resolved);
+    if (!wasFinal) ended = withCalibrationEnergy(ended);
     if (wasFinal) {
       setMatchTelemetry(buildV8CalibrationMatchTelemetry({
-        state: resolved,
+        state: ended,
         homeSquad,
         awaySquad,
         homeScore: nextHomeScore,
@@ -511,14 +566,51 @@ export default function V8CalibrationLab() {
         periods: nextTelemetryPeriods,
       }));
     }
-    setState(resolved);
+    setState(ended);
     setHomeScore(nextHomeScore);
     setAwayScore(nextAwayScore);
-    setAwayManagerAvailable(cpu.managerAvailable);
+    setAwayManagerAvailable(cpuManagerAvailable);
     setPending([]);
     setUndoStack([]);
     setSelection(null);
+    setWindowPhase(null);
     if (wasFinal) setFinished(true);
+  };
+
+  const windowRemainingEnergy = windowPhase
+    ? windowPhase.resolved.teams.home.energy - windowPhase.queued.reduce((sum, play) => sum + play.cost, 0)
+    : 0;
+
+  const windowChoices = useMemo(() => {
+    if (!windowPhase) return [];
+    const queuedIds = new Set(windowPhase.queued.map((play) => play.cardId));
+    return windowEligibleCalibrationTacticals(windowPhase.resolved, 'home')
+      .filter((card) => !queuedIds.has(card.id))
+      .flatMap((card) => tacticalDefinition(card.type).eligibleZones.map((zone) => ({
+        card,
+        zone,
+        cost: previewCalibrationTacticalCost(windowPhase.resolved, 'home', card, zone),
+      })))
+      .filter((choice) => choice.cost <= windowRemainingEnergy);
+  }, [windowPhase, windowRemainingEnergy]);
+
+  const queueWindowPlay = (cardId: string, name: string, zone: V8Zone, cost: number) => {
+    setWindowPhase((phase) => (phase ? { ...phase, queued: [...phase.queued, { cardId, name, zone, cost }] } : phase));
+  };
+
+  const unqueueWindowPlay = (index: number) => {
+    setWindowPhase((phase) => (phase ? { ...phase, queued: phase.queued.filter((_, itemIndex) => itemIndex !== index) } : phase));
+  };
+
+  const resolveWindow = () => {
+    if (!windowPhase) return;
+    finishPeriod(
+      windowPhase.resolved,
+      windowPhase.allPending,
+      windowPhase.cpuPlays,
+      windowPhase.queued.map((play) => ({ side: 'home' as const, cardId: play.cardId, zone: play.zone })),
+      windowPhase.cpuManagerAvailable,
+    );
   };
 
   const selectedPlayer = selection?.kind === 'player' ? getV8CalibrationPlayer(selection.cardId) : null;
@@ -601,15 +693,41 @@ export default function V8CalibrationLab() {
         })}
       </section>
 
-      <section className="v8-commit">
-        <div>
-          <strong>{pending.length ? `${pending.length} committed` : selection?.kind === 'move' ? 'Choose destination zone' : 'Choose a card, then a zone'}</strong>
-          <span>{currentPriority.first === 'home' ? 'YOU REVEAL FIRST' : 'CPU REVEALS FIRST'} · {currentPriority.reason} · Tacticals use no player slot.</span>
-          {pending.filter((play) => play.kind === 'tactical').map((play) => play.kind === 'tactical' ? <span key={play.card.id}>{play.card.name} → {play.zone} · {tacticalLabel(play.card, play.zone)}</span> : null)}
-        </div>
-        <button onClick={undo} disabled={!undoStack.length}>UNDO</button>
-        <button className="v8-primary" onClick={endPeriod} disabled={finished}>END PERIOD</button>
-      </section>
+      {windowPhase ? (
+        <section className="v8-commit v8-window" data-testid="v8-window">
+          <div>
+            <strong>POST-REVEAL WINDOW</strong>
+            <span>Tacticals generated this period can be played now from your {windowRemainingEnergy} unused Energy. Unplayed cards stay in hand at printed cost.</span>
+            <div className="v8-window__choices">
+              {windowChoices.map((choice) => (
+                <button
+                  key={`${choice.card.id}-${choice.zone}`}
+                  onClick={() => queueWindowPlay(choice.card.id, choice.card.name, choice.zone, choice.cost)}
+                >
+                  {choice.card.name} → {choice.zone} · {choice.cost}E
+                </button>
+              ))}
+            </div>
+            {windowPhase.queued.map((play, index) => (
+              <span key={`${play.cardId}-${index}`}>
+                Post-reveal: {play.name} ({play.cost}) → {play.zone}
+                <button className="v8-window__remove" onClick={() => unqueueWindowPlay(index)} aria-label={`Remove ${play.name}`}>✕</button>
+              </span>
+            ))}
+          </div>
+          <button className="v8-primary" onClick={resolveWindow}>{windowPhase.queued.length ? 'RESOLVE WINDOW' : 'SKIP WINDOW'}</button>
+        </section>
+      ) : (
+        <section className="v8-commit">
+          <div>
+            <strong>{pending.length ? `${pending.length} committed` : selection?.kind === 'move' ? 'Choose destination zone' : 'Choose a card, then a zone'}</strong>
+            <span>{currentPriority.first === 'home' ? 'YOU REVEAL FIRST' : 'CPU REVEALS FIRST'} · {currentPriority.reason} · Tacticals use no player slot.</span>
+            {pending.filter((play) => play.kind === 'tactical').map((play) => play.kind === 'tactical' ? <span key={play.card.id}>{play.card.name} → {play.zone} · {tacticalLabel(play.card, play.zone)}</span> : null)}
+          </div>
+          <button onClick={undo} disabled={!undoStack.length}>UNDO</button>
+          <button className="v8-primary" onClick={endPeriod} disabled={finished}>END PERIOD</button>
+        </section>
+      )}
 
       {latestRecap && (
         <details className="v8-recap" open>

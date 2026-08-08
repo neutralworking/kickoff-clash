@@ -59,6 +59,8 @@ export interface V8CalibrationTacticalResolution {
   attack: number;
   uncancellable: boolean;
   specialistBonuses: string[];
+  /** True when the card resolved in the period's Generated-Tactical Window rather than at commitment. */
+  window: boolean;
 }
 
 export type V8CalibrationEventType =
@@ -71,6 +73,7 @@ export type V8CalibrationEventType =
   | 'tactical_generated'
   | 'tactical_modified'
   | 'tactical_played'
+  | 'window_tactical_played'
   | 'chance_resolved'
   | 'chance_cancelled'
   | 'period_end'
@@ -402,6 +405,7 @@ function generateTacticalMutable(
   options: Parameters<typeof createTacticalInstance>[2] = {},
 ): V8TacticalCardInstance {
   const instance = createTacticalInstance(type, nextGeneratedId(state, type), { ...options, generatedBy: generatedByCardId });
+  instance.metadata.enteredHandPeriod = state.period;
   state.teams[side].hand.push({ kind: 'tactical', card: instance });
   pushEvent(state, 'tactical_generated', `${getV8CalibrationPlayer(generatedByCardId).realName} generates ${instance.name}${instance.attModifier ? ` (+${instance.attModifier} ATT)` : ''}.`);
   return instance;
@@ -415,6 +419,7 @@ export function addCalibrationTacticalToHand(
 ): { state: V8CalibrationState; card: V8TacticalCardInstance } {
   const next = clone(state);
   const card = createTacticalInstance(type, nextGeneratedId(next, type), options);
+  card.metadata.enteredHandPeriod = card.metadata.enteredHandPeriod ?? next.period;
   next.teams[side].hand.push({ kind: 'tactical', card });
   return { state: next, card };
 }
@@ -710,12 +715,17 @@ function removeTacticalMutable(state: V8CalibrationState, side: V8CalibrationSid
   if (index >= 0) state.teams[side].hand.splice(index, 1);
 }
 
+function windowPlayLabel(card: V8TacticalCardInstance, cost: number, zone: V8Zone): string {
+  const creator = card.generatedBy ? getV8CalibrationPlayer(card.generatedBy).actionName : undefined;
+  return `Post-reveal: ${card.name} (${cost}${creator ? `, ${creator}` : ''}) → ${zone}.`;
+}
+
 export function playCalibrationTactical(
   state: V8CalibrationState,
   side: V8CalibrationSide,
   cardId: string,
   zone: V8Zone,
-  options: { ignoreEnergy?: boolean } = {},
+  options: { ignoreEnergy?: boolean; window?: boolean } = {},
 ): V8CalibrationState {
   const next = clone(state);
   const entry = next.teams[side].hand.find((candidate) => candidate.kind === 'tactical' && candidate.card.id === cardId);
@@ -727,7 +737,11 @@ export function playCalibrationTactical(
   if (!options.ignoreEnergy && next.teams[side].energy < cost) throw new Error('Not enough energy');
   if (!options.ignoreEnergy) next.teams[side].energy -= cost;
   consumeLloydDiscountMutable(next, side, card, zone);
-  pushEvent(next, 'tactical_played', `${side.toUpperCase()} plays ${card.name} in ${zone} for ${cost} Energy.`);
+  if (options.window) {
+    pushEvent(next, 'window_tactical_played', `${side.toUpperCase()} ${windowPlayLabel(card, cost, zone)}`);
+  } else {
+    pushEvent(next, 'tactical_played', `${side.toUpperCase()} plays ${card.name} in ${zone} for ${cost} Energy.`);
+  }
 
   if (card.type === 'offside_trap') {
     next.offsideTraps.push({ id: card.id, side, zone: 'DEF', sourceBaresiRuntimeId: typeof card.metadata.baresiPlayerId === 'string' ? card.metadata.baresiPlayerId : undefined });
@@ -773,6 +787,7 @@ export function playCalibrationTactical(
     attack,
     uncancellable: specialists.uncancellable,
     specialistBonuses: specialists.labels,
+    window: options.window ?? false,
   });
   removeTacticalMutable(next, side, card.id);
   return next;
@@ -893,4 +908,64 @@ export function resolveCommittedCalibrationTactical(
 
 export function tacticalDefinition(type: V8TacticalType) {
   return V8_TACTICAL_DEFINITIONS[type];
+}
+
+export interface V8CalibrationWindowPlay {
+  side: V8CalibrationSide;
+  cardId: string;
+  zone: V8Zone;
+}
+
+export interface V8CalibrationResolvedWindowPlay {
+  side: V8CalibrationSide;
+  card: V8TacticalCardInstance;
+  zone: V8Zone;
+  cost: number;
+}
+
+/**
+ * Generated-Tactical Window eligibility is a plain equality on the period the instance
+ * entered hand: only this-period-generated cards may be window-played. Cards held from
+ * earlier periods re-enter play through a later commitment phase instead.
+ */
+export function isWindowEligibleTactical(state: V8CalibrationState, card: V8TacticalCardInstance): boolean {
+  return card.metadata.enteredHandPeriod === state.period;
+}
+
+export function windowEligibleCalibrationTacticals(state: V8CalibrationState, side: V8CalibrationSide): V8TacticalCardInstance[] {
+  return calibrationHandTacticals(state, side).filter((card) => isWindowEligibleTactical(state, card));
+}
+
+/**
+ * The Generated-Tactical Window: one blind, simultaneous pass after all reveals and
+ * on-reveal effects, before the scoring window. All window plays resolve together —
+ * utility plays (Offside Trap, Trigger Press) are applied before any Chance resolves,
+ * from BOTH sides, so a defensively window-played Tactical can cancel an offensively
+ * window-played one from the same window regardless of the input order. Margins and
+ * goals are only computed by the caller after this returns.
+ */
+export function resolveGeneratedTacticalWindow(
+  state: V8CalibrationState,
+  plays: readonly V8CalibrationWindowPlay[],
+): { state: V8CalibrationState; plays: V8CalibrationResolvedWindowPlay[] } {
+  let next = state;
+  const resolved: V8CalibrationResolvedWindowPlay[] = [];
+  const isUtility = (play: V8CalibrationWindowPlay): boolean => {
+    const card = calibrationHandTacticals(next, play.side).find((candidate) => candidate.id === play.cardId);
+    return card !== undefined && !isV8ChanceType(card.type);
+  };
+  const ordered = [...plays.filter((play) => isUtility(play)), ...plays.filter((play) => !isUtility(play))];
+
+  for (const play of ordered) {
+    const card = calibrationHandTacticals(next, play.side).find((candidate) => candidate.id === play.cardId);
+    if (!card) throw new Error(`Tactical card ${play.cardId} is not in hand`);
+    if (!isWindowEligibleTactical(next, card)) {
+      throw new Error(`${card.name} was not generated this period and is not window-eligible`);
+    }
+    const cost = previewCalibrationTacticalCost(next, play.side, card, play.zone);
+    next = playCalibrationTactical(next, play.side, play.cardId, play.zone, { window: true });
+    resolved.push({ side: play.side, card, zone: play.zone, cost });
+  }
+
+  return { state: next, plays: resolved };
 }

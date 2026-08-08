@@ -180,6 +180,12 @@
 .v8-commit button:disabled { opacity: .35; cursor: default; }
 .v8-commit .v8-primary { background: #e8f3ec; color: #0a1710; }
 
+.v8-window { grid-template-columns: 1fr auto; border: 1px dashed rgba(232,243,236,.35); }
+.v8-window__choices { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.v8-window__choices button { padding: 6px 8px; border-radius: 8px; background: rgba(232,243,236,.12); }
+.v8-window > div > span + span { opacity: 1; }
+.v8-window__remove { margin-left: 6px; padding: 1px 5px; font-size: 8px; border-radius: 6px; background: rgba(255,120,120,.2); }
+
 .v8-hand-wrap { margin-top: 8px; }
 .v8-hand-heading { display: flex; justify-content: space-between; margin: 0 2px 5px; font-size: 10px; }
 .v8-hand-heading span { opacity: .55; }

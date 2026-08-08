@@ -129,6 +129,30 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
+  test('opens the post-reveal window for a Tactical generated this period and recaps it as its own step', async ({ page }) => {
+    await page.goto('/lab/match-v8');
+
+    // P1 banks its Energy so P2 can afford Di María (2) and still hold 2 for the window.
+    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await expect(page.getByText('4 ENERGY', { exact: true })).toBeVisible();
+
+    await page.locator('.v8-card').filter({ hasText: 'Ángel Di María' }).click();
+    await page.locator('.v8-zone').nth(1).click();
+    await page.getByRole('button', { name: 'END PERIOD' }).click();
+
+    const window = page.getByTestId('v8-window');
+    await expect(window).toContainText('POST-REVEAL WINDOW');
+    await expectMobileFit(page);
+
+    await window.locator('.v8-window__choices button').filter({ hasText: 'Cross → ATT' }).click();
+    await expect(window).toContainText('Post-reveal: Cross (1) → ATT');
+    await page.getByRole('button', { name: 'RESOLVE WINDOW' }).click();
+
+    await expect(page.locator('.v8-recap')).toContainText('Post-reveal: Cross (1, RABONA) → ATT.');
+    await expect(page.locator('.v8-card--chance').filter({ hasText: 'Cross' })).toHaveCount(0);
+    await expectMobileFit(page);
+  });
+
   test('shows and applies Sinclair action decay after the scoring window', async ({ page }) => {
     await page.goto('/lab/match-v8');
     await page.getByTestId('home-squad-select').selectOption('control_defence');
