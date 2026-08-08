@@ -257,6 +257,19 @@ function priorityPlayersForState(
       ? ['valderrama', 'litmanen', 'morgan', 'shevchenko', 'park']
       : ['morgan', 'shevchenko', 'valderrama', 'litmanen', 'park'];
   }
+  if (squad === 'dribbling_penalty') {
+    const hand = calibrationHandPlayers(state, side);
+    const neymar = hand.find((card) => card.id === 'neymar');
+    const reducer = hand.find((card) => card.id === 'duff') ?? hand.find((card) => card.id === 'garrincha');
+    if (neymar && reducer && calibrationPlayCost(neymar) + calibrationPlayCost(reducer) <= state.teams[side].energy) {
+      const panenka = hand.find((card) => card.id === 'panenka');
+      const tripleFits = panenka
+        && calibrationPlayCost(neymar) + calibrationPlayCost(reducer) + calibrationPlayCost(panenka) <= state.teams[side].energy;
+      return tripleFits
+        ? ['panenka', reducer.id, 'neymar', 'garrincha', 'duff']
+        : [reducer.id, 'neymar', 'panenka', 'garrincha', 'duff'];
+    }
+  }
   if (squad === 'long_shot_set_piece') {
     return state.period >= 3
       ? ['ramos', 'lloyd', 'schmeichel', 'charlton', 'eriksen', 'makelele']
