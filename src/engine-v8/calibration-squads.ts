@@ -31,6 +31,11 @@ export interface V8CalibrationCostProfile {
  * These are deliberately test archetypes, not roster/source-of-truth changes.
  * Player values still come from the 30-card calibration pool and the lab-only
  * Cost compression remains source Cost - 1, minimum 1.
+ *
+ * The second calibration pass keeps five XIs at 27 effective Cost and the
+ * Long Shot / Set Piece XI at 26. The goal is not identical decks: it is to
+ * remove the original 30-Cost Through Ball tax and make each mechanic test
+ * comparable before any actual card-value tuning.
  */
 export const V8_CALIBRATION_SQUADS: Readonly<Record<V8CalibrationSquadKey, V8CalibrationSquad>> = {
   cross: {
@@ -46,7 +51,7 @@ export const V8_CALIBRATION_SQUADS: Readonly<Record<V8CalibrationSquadKey, V8Cal
       'dzajic',
       'di-maria',
       'schmeichel',
-      'baresi',
+      'gentile',
       'makelele',
       'seedorf',
       'park',
@@ -56,38 +61,38 @@ export const V8_CALIBRATION_SQUADS: Readonly<Record<V8CalibrationSquadKey, V8Cal
     key: 'through_ball',
     label: 'THROUGH BALL',
     shortLabel: 'Through Ball',
-    identity: 'Build MID, create Through Balls, then convert them with ATT runners.',
+    identity: 'Establish an ATT runner, build MID creation, then convert banked Through Balls.',
     playerIds: [
       'valderrama',
       'litmanen',
       'morgan',
       'shevchenko',
-      'iniesta',
       'park',
       'makelele',
-      'baresi',
       'schmeichel',
       'seedorf',
       'bremner',
+      'gentile',
+      'ramos',
     ],
   },
   dribbling_penalty: {
     key: 'dribbling_penalty',
     label: 'DRIBBLING / PENALTY',
     shortLabel: 'Dribble',
-    identity: 'Reduce confronting DEF, turn the opening into Penalties, then amplify the payoff.',
+    identity: 'Open the defensive line with dribbling, generate a Penalty, then amplify it in ATT.',
     playerIds: [
       'duff',
       'garrincha',
-      'okocha',
       'neymar',
-      'ronaldo',
       'panenka',
       'schmeichel',
       'gentile',
       'makelele',
       'seedorf',
       'bremner',
+      'baresi',
+      'beckenbauer',
     ],
   },
   control_defence: {
@@ -113,7 +118,7 @@ export const V8_CALIBRATION_SQUADS: Readonly<Record<V8CalibrationSquadKey, V8Cal
     key: 'long_shot_set_piece',
     label: 'LONG SHOT / SET PIECE',
     shortLabel: 'Set Piece',
-    identity: 'Generate Long Shots and Corners around a stable defensive and midfield platform.',
+    identity: 'Build the MID shooting platform and send Ramos forward for the Corner payoff.',
     playerIds: [
       'charlton',
       'lloyd',
@@ -132,17 +137,17 @@ export const V8_CALIBRATION_SQUADS: Readonly<Record<V8CalibrationSquadKey, V8Cal
     key: 'balanced_midrange',
     label: 'BALANCED / MIDRANGE',
     shortLabel: 'Balanced',
-    identity: 'Baseline XI with defence, MID presence, disruption, flexible scoring and one modest creation package.',
+    identity: 'Reference XI with stable defence, flexible MID play and several independent scoring routes.',
     playerIds: [
       'schmeichel',
       'beckenbauer',
       'gentile',
-      'makelele',
+      'ramos',
       'seedorf',
       'park',
-      'iniesta',
+      'okocha',
       'beckham',
-      'wambach',
+      'ronaldo',
       'sinclair',
       'charlton',
     ],
