@@ -153,7 +153,7 @@ const PLANNER_PROFILES: Readonly<Record<V8CalibrationSquadKey, V8CalibrationPlan
   long_shot_set_piece: {
     priorityPlayerIds: ['ramos', 'lloyd', 'schmeichel', 'charlton', 'eriksen', 'makelele'],
     preferredZones: {
-      ramos: 'ATT',
+      ramos: 'DEF',
       lloyd: 'MID',
       charlton: 'MID',
       eriksen: 'MID',
@@ -258,9 +258,7 @@ function priorityPlayersForState(
       : ['morgan', 'shevchenko', 'valderrama', 'litmanen', 'park'];
   }
   if (squad === 'long_shot_set_piece') {
-    return state.period >= 3
-      ? ['ramos', 'lloyd', 'schmeichel', 'charlton', 'eriksen', 'makelele']
-      : ['lloyd', 'schmeichel', 'charlton', 'eriksen', 'makelele'];
+    return ['ramos', 'lloyd', 'schmeichel', 'charlton', 'eriksen', 'makelele'];
   }
   return PLANNER_PROFILES[squad].priorityPlayerIds;
 }
@@ -275,8 +273,8 @@ function priorityIndex(
   return index < 0 ? Number.MAX_SAFE_INTEGER : index;
 }
 
-function shouldDeferPlayer(state: V8CalibrationState, squad: V8CalibrationSquadKey, cardId: string): boolean {
-  return squad === 'long_shot_set_piece' && cardId === 'ramos' && state.period < 3;
+function shouldDeferPlayer(_state: V8CalibrationState, _squad: V8CalibrationSquadKey, _cardId: string): boolean {
+  return false;
 }
 
 /**
@@ -389,10 +387,8 @@ function tacticalHoldPlan(
   if (squad === 'long_shot_set_piece') {
     const longShotPlan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'long_shot'), 'lloyd');
     if (longShotPlan.priorityPlayerId) return longShotPlan;
-    if (state.period >= 3) {
-      const cornerPlan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'corner'), 'ramos');
-      if (cornerPlan.priorityPlayerId) return cornerPlan;
-    }
+    const cornerPlan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'corner'), 'ramos');
+    if (cornerPlan.priorityPlayerId) return cornerPlan;
   }
 
   return emptyHoldPlan();
@@ -502,18 +498,31 @@ function resolveSequence(state: V8CalibrationState, plays: readonly V8Calibratio
   return next;
 }
 
+/** Calibration-only sensitivity: model 93RD MINUTE as a set-piece run from Ramos's natural DEF role. */
+function applyGlobalRamosCornerBonus(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+  squad: V8CalibrationSquadKey,
+  fromResolutionIndex: number,
+): void {
+  if (squad !== 'long_shot_set_piece') return;
+  const ramos = state.players[calibrationRuntimeId(side, 'ramos')];
+  if (!ramos || state.suppressedActions[ramos.runtimeId] !== undefined) return;
+  const bonus = state.period === 4 ? 5 : 3;
+
+  for (const resolution of state.tacticalResolutions.slice(fromResolutionIndex)) {
+    if (resolution.side !== side || resolution.type !== 'corner' || resolution.cancelled) continue;
+    if (resolution.specialistBonuses.some((label) => label.startsWith('93RD MINUTE'))) continue;
+    resolution.attack += bonus;
+    resolution.specialistBonuses.push(`93RD MINUTE +${bonus}`);
+    state.tacticalAttack[side][resolution.zone] += bonus;
+  }
+}
+
 /**
- * Generated-Tactical Window calibration policy. Matrix evidence showed that holding ordinary
- * Chances for a not-yet-established specialist can cost a second commitment cycle and is worse
- * than cashing the immediate ATT. Step 3 therefore keeps only decisions with a clear timing payoff:
- *
- * - a P3 Corner can wait one window for an already-established Ramos and his P4 +5 spike;
- * - a same-period free Trigger Press is always cleared now; holding it turns a free card into a
- *   printed-cost commitment card next period and can tax deployment even when the current press is 0 ATT;
- * - Offside Trap is not spent unless the opponent has a window Through Ball to cancel;
- * - all other affordable Chances are played immediately, including all P4 Chances.
- *
- * Both sides still plan blind from the same post-reveal state and resolve simultaneously.
+ * Generated-Tactical Window calibration policy settled from the A/B pass:
+ * free THREE LUNGS is cleared now; Offside Trap is held without a current Through Ball;
+ * ordinary Chances cash immediately; a P3 Corner may wait for the P4 Ramos spike.
  */
 export function planV8CalibrationWindow(
   state: V8CalibrationState,
@@ -523,8 +532,7 @@ export function planV8CalibrationWindow(
   const plays: V8CalibrationWindowPlay[] = [];
   let budget = state.teams[side].energy;
   const otherSide: V8CalibrationSide = side === 'home' ? 'away' : 'home';
-  const hasFriendly = (zone: V8Zone, ids: readonly string[]) => calibrationPlayersInZone(state, side, zone)
-    .some((player) => ids.includes(player.cardId));
+  const hasRamos = Boolean(state.players[calibrationRuntimeId(side, 'ramos')]);
   const opponentWindowThroughBall = windowEligibleCalibrationTacticals(state, otherSide)
     .some((card) => card.type === 'through_ball');
 
@@ -534,14 +542,11 @@ export function planV8CalibrationWindow(
     if (card.type === 'corner'
       && squad === 'long_shot_set_piece'
       && state.period === 3
-      && hasFriendly('ATT', ['ramos'])) {
+      && hasRamos) {
       shouldPlay = false;
     }
 
-    if (card.type === 'offside_trap') {
-      shouldPlay = opponentWindowThroughBall;
-    }
-
+    if (card.type === 'offside_trap') shouldPlay = opponentWindowThroughBall;
     if (!shouldPlay) continue;
 
     const legal = tacticalDefinition(card.type).eligibleZones
@@ -595,15 +600,22 @@ export function simulateV8CalibrationMatch(args: {
     awayManagerAvailable = away.managerAvailable;
     const plays = [...home.pending, ...away.pending];
     const first = priority(away.state, homeScore, awayScore, seed + away.state.period * 101);
+    const commitmentResolutionStart = away.state.tacticalResolutions.length;
     let resolved = resolveSequence(away.state, plays.filter((play) => play.side === first));
     resolved = resolveSequence(resolved, plays.filter((play) => play.side !== first));
+    applyGlobalRamosCornerBonus(resolved, 'home', homeSquad, commitmentResolutionStart);
+    applyGlobalRamosCornerBonus(resolved, 'away', awaySquad, commitmentResolutionStart);
 
+    const windowResolutionStart = resolved.tacticalResolutions.length;
     const windowPlays = [
       ...planV8CalibrationWindow(resolved, 'home', homeSquad),
       ...planV8CalibrationWindow(resolved, 'away', awaySquad),
     ];
     const window = resolveGeneratedTacticalWindow(resolved, windowPlays);
     resolved = window.state;
+    applyGlobalRamosCornerBonus(resolved, 'home', homeSquad, windowResolutionStart);
+    applyGlobalRamosCornerBonus(resolved, 'away', awaySquad, windowResolutionStart);
+
     const telemetryPlays = [
       ...plays,
       ...window.plays.map((play) => ({ kind: 'tactical' as const, side: play.side, card: play.card, window: true, cost: play.cost })),
