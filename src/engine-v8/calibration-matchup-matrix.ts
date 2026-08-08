@@ -258,7 +258,9 @@ function priorityPlayersForState(
       : ['morgan', 'shevchenko', 'valderrama', 'litmanen', 'park'];
   }
   if (squad === 'long_shot_set_piece') {
-    return ['ramos', 'lloyd', 'schmeichel', 'charlton', 'eriksen', 'makelele'];
+    return state.period >= 3
+      ? ['ramos', 'lloyd', 'schmeichel', 'charlton', 'eriksen', 'makelele']
+      : ['lloyd', 'schmeichel', 'charlton', 'eriksen', 'makelele'];
   }
   return PLANNER_PROFILES[squad].priorityPlayerIds;
 }
@@ -273,8 +275,8 @@ function priorityIndex(
   return index < 0 ? Number.MAX_SAFE_INTEGER : index;
 }
 
-function shouldDeferPlayer(_state: V8CalibrationState, _squad: V8CalibrationSquadKey, _cardId: string): boolean {
-  return false;
+function shouldDeferPlayer(state: V8CalibrationState, squad: V8CalibrationSquadKey, cardId: string): boolean {
+  return squad === 'long_shot_set_piece' && cardId === 'ramos' && state.period < 3;
 }
 
 /**
@@ -387,8 +389,10 @@ function tacticalHoldPlan(
   if (squad === 'long_shot_set_piece') {
     const longShotPlan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'long_shot'), 'lloyd');
     if (longShotPlan.priorityPlayerId) return longShotPlan;
-    const cornerPlan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'corner'), 'ramos');
-    if (cornerPlan.priorityPlayerId) return cornerPlan;
+    if (state.period >= 3) {
+      const cornerPlan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'corner'), 'ramos');
+      if (cornerPlan.priorityPlayerId) return cornerPlan;
+    }
   }
 
   return emptyHoldPlan();
