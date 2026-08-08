@@ -3,7 +3,9 @@ import './calibration-integration-base';
 import { describe, expect, it } from 'vitest';
 import {
   calibrationHandTacticals,
+  calibrationRuntimeId,
   createV8CalibrationState,
+  currentCalibrationAttack,
   getV8CalibrationPlayer,
   resolveGeneratedTacticalWindow,
   revealCalibrationPlayer,
@@ -43,5 +45,19 @@ describe('V8 compact Neymar Penalty creator', () => {
     expect(resolution?.attack).toBe(8);
     expect(resolution?.uncancellable).toBe(true);
     expect(resolution?.specialistBonuses).toContain('CHIPPED PENALTY +3 · uncancellable');
+  });
+});
+
+describe('V8 individual dribbler quality', () => {
+  it('gives Okocha a standalone ATT payoff when STEPOVER beats a defender', () => {
+    let state = createV8CalibrationState();
+    state = seedCalibrationPlayer(state, 'away', 'ramos', 'DEF');
+    state = revealCalibrationPlayer(state, 'home', 'okocha', 'ATT');
+
+    expect(getV8CalibrationPlayer('okocha').actionText)
+      .toBe('On Reveal: Give the lowest-DEF opposing defender here −2 DEF and gain +2 ATT this period. If they were already reduced, add a Penalty to your hand.');
+    expect(currentCalibrationAttack(state, calibrationRuntimeId('home', 'okocha')))
+      .toBe(getV8CalibrationPlayer('okocha').printedAttack + 2);
+    expect(calibrationHandTacticals(state, 'home').filter((card) => card.type === 'penalty')).toHaveLength(0);
   });
 });
