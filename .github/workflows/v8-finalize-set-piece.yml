@@ -1,0 +1,67 @@
+name: Finalize V8 Set Piece
+
+on:
+  push:
+    branches:
+      - claude/generated-tactical-window-6dxfay
+    paths:
+      - '.github/workflows/v8-finalize-set-piece.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/generated-tactical-window-6dxfay
+          fetch-depth: 0
+      - name: Apply final runtime and acceptance patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          runtime = Path('src/engine-v8/calibration-runtime.ts')
+          text = runtime.read_text()
+          marker = "    case 'baresi_step_up':\n"
+          insertion = """    case 'ramos_93rd_minute':\n      if (state.period >= 3 && player.zone === 'ATT') {\n        applyModifierMutable(state, player.runtimeId, { attack: 5, lifetime: 'match', source: card.actionName });\n      }\n      break;\n"""
+          assert text.count(marker) == 1, 'expected one Baresi switch marker'
+          assert "case 'ramos_93rd_minute':" not in text, 'Ramos reveal runtime already present'
+          runtime.write_text(text.replace(marker, insertion + marker))
+
+          cards = Path('src/engine-v8/calibration-cards.ts')
+          text = cards.read_text()
+          old = "actionKey: 'ramos_93rd_minute', actionName: '93RD MINUTE', timing: 'ongoing', actionText: 'Ongoing: Corners played here have +3 ATT. In the final period, +5 instead.'"
+          new = "actionKey: 'ramos_93rd_minute', actionName: '93RD MINUTE', timing: 'ongoing', actionText: 'From P3: If played in ATT, +5 ATT. Ongoing: Corners played here have +3 ATT. In the final period, +5 instead.'"
+          assert text.count(old) == 1, 'expected one Ramos action text'
+          cards.write_text(text.replace(old, new))
+
+          matrix = Path('src/engine-v8/calibration-matchup-matrix.ts')
+          text = matrix.read_text()
+          helper = """/** Calibration sensitivity: from P3, Ramos in ATT is treated as adjacent rather than wrong-depth. */\nfunction applyRamosLateRunOopRelief(\n  state: V8CalibrationState,\n  side: V8CalibrationSide,\n  squad: V8CalibrationSquadKey,\n): void {\n  if (squad !== 'long_shot_set_piece' || state.period < 3) return;\n  const ramos = state.players[calibrationRuntimeId(side, 'ramos')];\n  if (!ramos || ramos.zone !== 'ATT' || state.suppressedActions[ramos.runtimeId] !== undefined) return;\n  // Wrong-depth is -5; adjacent is -2. ATT-zone scoring therefore gets +3 back this period.\n  state.tacticalAttack[side].ATT += 3;\n}\n\n"""
+          calls = """    applyRamosLateRunOopRelief(resolved, 'home', homeSquad);\n    applyRamosLateRunOopRelief(resolved, 'away', awaySquad);\n\n"""
+          assert text.count(helper) == 1, 'expected one matrix Ramos sensitivity helper'
+          assert text.count(calls) == 1, 'expected one matrix Ramos sensitivity call pair'
+          matrix.write_text(text.replace(helper, '').replace(calls, ''))
+
+          integration = Path('src/engine-v8/__tests__/calibration-integration.test.ts')
+          text = integration.read_text()
+          old = "expect(resolution).toMatchObject({ type: 'long_shot', attack: 7, cancelled: false });"
+          new = "expect(resolution).toMatchObject({ type: 'long_shot', attack: 8, cancelled: false });"
+          assert text.count(old) == 1, 'expected one stale Long Shot +7 assertion'
+          integration.write_text(text.replace(old, new))
+
+          balance_test = Path('src/engine-v8/__tests__/set-piece-balance.test.ts')
+          balance_test.write_text("""import { describe, expect, it } from 'vitest';\nimport {\n  addCalibrationTacticalToHand,\n  calibrationRuntimeId,\n  calibrationZoneTotals,\n  createV8CalibrationState,\n  currentCalibrationAttack,\n  playCalibrationTactical,\n  revealCalibrationPlayer,\n} from '../index';\n\ndescribe('V8 set-piece balance', () => {\n  it('keeps Ramos penalised in ATT before P3, then 93RD MINUTE offsets only his attacking OOP tax', () => {\n    let early = createV8CalibrationState({ period: 2 });\n    early.teams.home.energy = 99;\n    early = revealCalibrationPlayer(early, 'home', 'ramos', 'ATT');\n    expect(currentCalibrationAttack(early, calibrationRuntimeId('home', 'ramos'))).toBe(2);\n    expect(calibrationZoneTotals(early, 'home', 'ATT').attack).toBe(-3);\n\n    let late = createV8CalibrationState({ period: 3 });\n    late.teams.home.energy = 99;\n    late = revealCalibrationPlayer(late, 'home', 'ramos', 'ATT');\n    expect(currentCalibrationAttack(late, calibrationRuntimeId('home', 'ramos'))).toBe(7);\n    expect(calibrationZoneTotals(late, 'home', 'ATT').attack).toBe(2);\n    expect(calibrationZoneTotals(late, 'home', 'ATT').defence).toBe(0);\n  });\n\n  it('makes the Lloyd-amplified THUNDERBALL Long Shot +8 ATT at the new +2 Long Shot baseline', () => {\n    let state = createV8CalibrationState({ period: 3 });\n    state.teams.home.energy = 99;\n    state = revealCalibrationPlayer(state, 'home', 'lloyd', 'MID');\n    state = revealCalibrationPlayer(state, 'home', 'charlton', 'MID');\n    const longShot = addCalibrationTacticalToHand(state, 'home', 'long_shot', { metadata: { bonusAttInMid: 2 } });\n    state = longShot.state;\n    state = playCalibrationTactical(state, 'home', longShot.card.id, 'MID', { ignoreEnergy: true });\n    expect(state.tacticalResolutions.at(-1)).toMatchObject({ type: 'long_shot', attack: 8, cancelled: false });\n  });\n});\n""")
+          PY
+
+          git rm .github/workflows/v8-balance-sensitivity.yml
+          git rm .github/workflows/v8-finalize-set-piece.yml
+          git config user.name 'Neutral Working'
+          git config user.email '13trianglez@gmail.com'
+          git add src/engine-v8
+          git commit -m 'Finalize V8 set-piece balance'
+          git push origin HEAD:claude/generated-tactical-window-6dxfay
