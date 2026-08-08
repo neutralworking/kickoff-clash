@@ -1,4 +1,4 @@
-name: V8 Cross Compact Cost Sensitivity
+name: V8 Cross Reference Sensitivity
 
 on:
   pull_request:
@@ -13,17 +13,23 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
-
       - run: npm ci
 
-      - name: Keep Wambach and Di Maria at printed Cost in the lab
-        shell: python
+      - name: Sweep compact Cross reference XIs
+        shell: bash
         run: |
+          set -euo pipefail
+          BALANCE=src/engine-v8/calibration-balance.ts
+          SQUADS=src/engine-v8/calibration-squads.ts
+          ORIGINAL_BALANCE=$(cat "$BALANCE")
+          ORIGINAL_SQUADS=$(cat "$SQUADS")
+
+          apply_costs() {
+            python - <<'PY'
           from pathlib import Path
           path = Path('src/engine-v8/calibration-balance.ts')
           text = path.read_text()
@@ -32,72 +38,48 @@ jobs:
           if old not in text:
               raise SystemExit('calibrationPlayCost source did not match expected baseline')
           path.write_text(text.replace(old, new))
+          PY
+          }
 
-      - name: Add zero-card and single-card Cross controls
-        shell: python
-        run: |
+          run_candidate() {
+            local name="$1"
+            local ids="$2"
+            printf '%s' "$ORIGINAL_BALANCE" > "$BALANCE"
+            printf '%s' "$ORIGINAL_SQUADS" > "$SQUADS"
+            apply_costs
+            CROSS_IDS="$ids" python - <<'PY'
+          import os
           from pathlib import Path
-          path = Path('src/engine-v8/calibration-cross-minimal.ts')
+          path = Path('src/engine-v8/calibration-squads.ts')
           text = path.read_text()
-          old = """const CORE_CASES = [
-            { id: 'beckham-wambach', core: ['beckham', 'wambach'] },
-            { id: 'di-maria-wambach', core: ['di-maria', 'wambach'] },
-            { id: 'dzajic-wambach', core: ['dzajic', 'wambach'] },
-            { id: 'beckham-di-maria', core: ['beckham', 'di-maria'] },
-            { id: 'beckham-di-maria-wambach', core: ['beckham', 'di-maria', 'wambach'] },
-            { id: 'beckham-dzajic-wambach', core: ['beckham', 'dzajic', 'wambach'] },
-            { id: 'di-maria-dzajic-wambach', core: ['di-maria', 'dzajic', 'wambach'] },
-            { id: 'beckham-di-maria-dzajic', core: ['beckham', 'di-maria', 'dzajic'] },
-          ] as const;"""
-          new = """const CORE_CASES = [
-            { id: 'neutral', core: [] },
-            { id: 'beckham', core: ['beckham'] },
-            { id: 'wambach', core: ['wambach'] },
-            { id: 'di-maria', core: ['di-maria'] },
-            { id: 'dzajic', core: ['dzajic'] },
-            { id: 'beckham-wambach', core: ['beckham', 'wambach'] },
-            { id: 'di-maria-wambach', core: ['di-maria', 'wambach'] },
-            { id: 'dzajic-wambach', core: ['dzajic', 'wambach'] },
-            { id: 'beckham-di-maria', core: ['beckham', 'di-maria'] },
-            { id: 'beckham-di-maria-wambach', core: ['beckham', 'di-maria', 'wambach'] },
-            { id: 'beckham-dzajic-wambach', core: ['beckham', 'dzajic', 'wambach'] },
-            { id: 'di-maria-dzajic-wambach', core: ['di-maria', 'dzajic', 'wambach'] },
-            { id: 'beckham-di-maria-dzajic', core: ['beckham', 'di-maria', 'dzajic'] },
-          ] as const;"""
-          if old not in text:
-              raise SystemExit('CORE_CASES source did not match expected baseline')
-          path.write_text(text.replace(old, new))
+          start = text.index("  cross: {")
+          ids_start = text.index("    playerIds: [", start)
+          ids_end = text.index("    ],", ids_start) + len("    ],")
+          ids = [item for item in os.environ['CROSS_IDS'].split(',') if item]
+          block = "    playerIds: [\n" + ''.join(f"      '{item}',\n" for item in ids) + "    ],"
+          path.write_text(text[:ids_start] + block + text[ids_end:])
+          PY
+            rm -rf test-results
+            npx vitest run --testTimeout 30000 \
+              src/engine-v8/__tests__/calibration-matchup-matrix.test.ts \
+              src/engine-v8/__tests__/calibration-deck-validation.test.ts \
+              src/engine-v8/__tests__/calibration-compact-core.test.ts
+            mkdir -p "sensitivity/$name"
+            cp test-results/v8-calibration-matrix.* "sensitivity/$name/"
+            cp test-results/v8-calibration-deck-validation.* "sensitivity/$name/"
+            cp test-results/v8-calibration-compact-core.* "sensitivity/$name/"
+          }
 
-      - name: Create neutral reporter
-        shell: bash
-        run: |
-          cat > src/engine-v8/__tests__/tmp-cross-neutral-control.test.ts <<'EOF'
-          import { mkdirSync, writeFileSync } from 'node:fs';
-          import { describe, it } from 'vitest';
-          import {
-            V8_CROSS_MINIMAL_SEEDS,
-            formatV8CrossMinimalReport,
-            runV8CrossMinimalSensitivity,
-          } from '../calibration-cross-minimal';
+          run_candidate core3 "beckham,wambach,di-maria,schmeichel,gentile,seedorf,iniesta,beckenbauer,makelele,bremner,sinclair"
+          run_candidate core4 "beckham,wambach,di-maria,dzajic,schmeichel,gentile,seedorf,iniesta,beckenbauer,makelele,bremner"
 
-          describe('V8 Cross neutral shell control', () => {
-            it('writes zero/single/pair/triple evidence', () => {
-              const report = runV8CrossMinimalSensitivity(V8_CROSS_MINIMAL_SEEDS);
-              const text = formatV8CrossMinimalReport(report);
-              mkdirSync('test-results', { recursive: true });
-              writeFileSync('test-results/v8-calibration-cross-neutral-control.json', `${JSON.stringify(report, null, 2)}\n`);
-              writeFileSync('test-results/v8-calibration-cross-neutral-control.txt', `${text}\n`);
-            }, 30_000);
-          });
-          EOF
-
-      - name: Run compact-cost sensitivity
-        run: npx vitest run src/engine-v8/__tests__/calibration-matchup-matrix.test.ts src/engine-v8/__tests__/calibration-deck-validation.test.ts src/engine-v8/__tests__/calibration-compact-core.test.ts src/engine-v8/__tests__/tmp-cross-neutral-control.test.ts
+          printf '%s' "$ORIGINAL_BALANCE" > "$BALANCE"
+          printf '%s' "$ORIGINAL_SQUADS" > "$SQUADS"
 
       - name: Upload sensitivity evidence
         uses: actions/upload-artifact@v4
         with:
-          name: v8-cross-compact-cost-sensitivity
-          path: test-results/v8-calibration-*
+          name: v8-cross-reference-sensitivity
+          path: sensitivity/
           if-no-files-found: error
           retention-days: 7
