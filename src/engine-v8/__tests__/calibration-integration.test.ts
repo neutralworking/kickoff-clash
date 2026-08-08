@@ -6,6 +6,7 @@ import {
   calibrationHandTacticals,
   calibrationPlayersInZone,
   calibrationRuntimeId,
+  calibrationTacticalAvailableFromPeriod,
   calibrationZoneTotals,
   createV8CalibrationState,
   currentCalibrationAttack,
@@ -13,6 +14,7 @@ import {
   endV8CalibrationPeriod,
   getV8CalibrationPlayer,
   isCalibrationActionEnabled,
+  isCalibrationTacticalAvailable,
   moveCalibrationPlayer,
   playCalibrationTactical,
   previewCalibrationTacticalCost,
@@ -28,6 +30,13 @@ function highEnergy(): V8CalibrationState {
   state.teams.home.energy = 99;
   state.teams.away.energy = 99;
   return state;
+}
+
+function advance(state: V8CalibrationState): V8CalibrationState {
+  const next = endV8CalibrationPeriod(state);
+  next.teams.home.energy = 99;
+  next.teams.away.energy = 99;
+  return next;
 }
 
 function tactical(state: V8CalibrationState, side: 'home' | 'away', type: V8TacticalType) {
@@ -47,23 +56,30 @@ describe('high-priority calibration interactions', () => {
     expect(ids.map((id) => getV8CalibrationPlayer(id).id)).toEqual(ids);
   });
 
-  it('A. Beckham + Wambach resolves the enhanced Cross for +8 ATT', () => {
+  it('A. Beckham + Wambach banks the enhanced Cross, then resolves it for +8 ATT next period', () => {
     let state = highEnergy();
     state = revealCalibrationPlayer(state, 'home', 'beckham', 'MID');
     state = revealCalibrationPlayer(state, 'home', 'wambach', 'ATT');
-    const cross = tactical(state, 'home', 'cross');
+    let cross = tactical(state, 'home', 'cross');
 
+    expect(calibrationTacticalAvailableFromPeriod(cross)).toBe(2);
+    expect(isCalibrationTacticalAvailable(state, cross)).toBe(false);
+    expect(() => playCalibrationTactical(state, 'home', cross.id, 'ATT', { ignoreEnergy: true })).toThrow('banked until Period 2');
+
+    state = advance(state);
+    cross = tactical(state, 'home', 'cross');
     state = playCalibrationTactical(state, 'home', cross.id, 'ATT', { ignoreEnergy: true });
 
     expect(state.tacticalResolutions.at(-1)).toMatchObject({ type: 'cross', attack: 8, cancelled: false });
   });
 
-  it('B. Beckham + Wambach + Ada stacks to +12 and ignores cancellation', () => {
+  it('B. Beckham + Wambach + Ada stacks to +12 and ignores cancellation when the banked Cross is played', () => {
     let state = highEnergy();
     state = seedCalibrationPlayer(state, 'away', 'schmeichel', 'DEF');
     state = revealCalibrationPlayer(state, 'home', 'beckham', 'MID');
     state = revealCalibrationPlayer(state, 'home', 'wambach', 'ATT');
     state = revealCalibrationPlayer(state, 'home', 'hegerberg', 'ATT');
+    state = advance(state);
     const cross = tactical(state, 'home', 'cross');
 
     state = playCalibrationTactical(state, 'home', cross.id, 'ATT', { ignoreEnergy: true });
@@ -71,11 +87,12 @@ describe('high-priority calibration interactions', () => {
     expect(state.tacticalResolutions.at(-1)).toMatchObject({ type: 'cross', attack: 12, cancelled: false, uncancellable: true });
   });
 
-  it('C. Valderrama + Shevchenko resolves the first Through Ball for +8 ATT', () => {
+  it('C. Valderrama + Shevchenko resolves the banked first Through Ball for +8 ATT', () => {
     let state = highEnergy();
     // PAUSE AND SLIP only adds +2 when ATT is already occupied, so establish the runner first.
     state = revealCalibrationPlayer(state, 'home', 'shevchenko', 'ATT');
     state = revealCalibrationPlayer(state, 'home', 'valderrama', 'MID');
+    state = advance(state);
     const throughBall = tactical(state, 'home', 'through_ball');
 
     state = playCalibrationTactical(state, 'home', throughBall.id, 'ATT', { ignoreEnergy: true });
@@ -83,12 +100,13 @@ describe('high-priority calibration interactions', () => {
     expect(state.tacticalResolutions.at(-1)).toMatchObject({ type: 'through_ball', attack: 8, cancelled: false });
   });
 
-  it('D. Duff → Neymar → Panenka produces an +8 uncancellable Penalty', () => {
+  it('D. Duff → Neymar → Panenka banks an +8 uncancellable Penalty for the next period', () => {
     let state = highEnergy();
     state = seedCalibrationPlayer(state, 'away', 'ramos', 'DEF');
     state = revealCalibrationPlayer(state, 'home', 'duff', 'ATT');
     state = revealCalibrationPlayer(state, 'home', 'neymar', 'ATT');
     state = revealCalibrationPlayer(state, 'home', 'panenka', 'ATT');
+    state = advance(state);
     const penalty = tactical(state, 'home', 'penalty');
 
     state = playCalibrationTactical(state, 'home', penalty.id, 'ATT', { ignoreEnergy: true });
@@ -106,7 +124,9 @@ describe('high-priority calibration interactions', () => {
     reduced = seedCalibrationPlayer(reduced, 'away', 'ramos', 'DEF');
     reduced = applyCalibrationModifier(reduced, calibrationRuntimeId('away', 'ramos'), { defence: -2, lifetime: 'period', source: 'test' });
     reduced = revealCalibrationPlayer(reduced, 'home', 'okocha', 'ATT');
-    expect(calibrationHandTacticals(reduced, 'home').filter((card) => card.type === 'penalty')).toHaveLength(1);
+    const penalty = calibrationHandTacticals(reduced, 'home').find((card) => card.type === 'penalty');
+    expect(penalty).toBeDefined();
+    expect(calibrationTacticalAvailableFromPeriod(penalty!)).toBe(2);
   });
 
   it('F. Ronaldo requires the defender to be at least 3 DEF below base', () => {
@@ -121,9 +141,10 @@ describe('high-priority calibration interactions', () => {
     expect(currentCalibrationDefence(reloaded.state, calibrationRuntimeId('away', 'ramos'))).toBe(getV8CalibrationPlayer('ramos').printedDefence - 3);
   });
 
-  it('G. Baresi Offside Trap cancels an opposing ATT Through Ball and gives +2 DEF in his DEF zone', () => {
+  it('G. Baresi banks Offside Trap, then cancels an opposing ATT Through Ball next period and gains +2 DEF', () => {
     let state = highEnergy();
     state = revealCalibrationPlayer(state, 'home', 'baresi', 'DEF');
+    state = advance(state);
     const trap = tactical(state, 'home', 'offside_trap');
     state = playCalibrationTactical(state, 'home', trap.id, 'DEF', { ignoreEnergy: true });
     const added = addCalibrationTacticalToHand(state, 'away', 'through_ball');
@@ -135,14 +156,20 @@ describe('high-priority calibration interactions', () => {
     expect(state.zoneDefenceBonus.home.DEF).toBe(2);
   });
 
-  it('H. Park generates a 0-cost Trigger Press this period and DEF also counts toward ATT', () => {
+  it('H. Park banks a free Trigger Press for next period and DEF then counts toward ATT', () => {
     let state = highEnergy();
     state = seedCalibrationPlayer(state, 'home', 'wambach', 'ATT');
-    const before = calibrationZoneTotals(state, 'home', 'ATT').attack;
     state = revealCalibrationPlayer(state, 'home', 'park', 'MID');
-    const press = tactical(state, 'home', 'trigger_press');
-    expect(previewCalibrationTacticalCost(state, 'home', press, 'ATT')).toBe(0);
+    let press = tactical(state, 'home', 'trigger_press');
 
+    expect(calibrationTacticalAvailableFromPeriod(press)).toBe(2);
+    expect(previewCalibrationTacticalCost(state, 'home', press, 'ATT')).toBe(1);
+    expect(() => playCalibrationTactical(state, 'home', press.id, 'ATT')).toThrow('banked until Period 2');
+
+    state = advance(state);
+    press = tactical(state, 'home', 'trigger_press');
+    const before = calibrationZoneTotals(state, 'home', 'ATT').attack;
+    expect(previewCalibrationTacticalCost(state, 'home', press, 'ATT')).toBe(0);
     state = playCalibrationTactical(state, 'home', press.id, 'ATT');
 
     expect(calibrationZoneTotals(state, 'home', 'ATT').attack).toBe(before + getV8CalibrationPlayer('wambach').printedDefence);
@@ -184,7 +211,7 @@ describe('high-priority calibration interactions', () => {
     state = moveCalibrationPlayer(state, 'home', 'cafu', 'MID');
     expect(calibrationHandTacticals(state, 'home').some((card) => card.type === 'cross')).toBe(true);
 
-    state = endV8CalibrationPeriod(state);
+    state = advance(state);
 
     expect(state.period).toBe(2);
     expect(currentCalibrationAttack(state, calibrationRuntimeId('home', 'wambach'))).toBe(getV8CalibrationPlayer('wambach').printedAttack);
@@ -192,7 +219,7 @@ describe('high-priority calibration interactions', () => {
     expect(() => moveCalibrationPlayer(state, 'home', 'cafu', 'ATT')).not.toThrow();
   });
 
-  it('RABONA modifies the first Cross in hand and otherwise generates one', () => {
+  it('RABONA modifies the first Cross in hand and otherwise banks one for next period', () => {
     let state = highEnergy();
     const added = addCalibrationTacticalToHand(state, 'home', 'cross');
     state = revealCalibrationPlayer(added.state, 'home', 'di-maria', 'MID');
@@ -200,30 +227,36 @@ describe('high-priority calibration interactions', () => {
 
     let empty = highEnergy();
     empty = revealCalibrationPlayer(empty, 'home', 'di-maria', 'MID');
-    expect(tactical(empty, 'home', 'cross').attModifier).toBe(0);
+    const generated = tactical(empty, 'home', 'cross');
+    expect(generated.attModifier).toBe(0);
+    expect(calibrationTacticalAvailableFromPeriod(generated)).toBe(2);
   });
 
-  it('PENDOLINO only generates a Cross after forward movement', () => {
+  it('PENDOLINO generates an immediately playable Cross after forward movement', () => {
     let state = highEnergy();
     state = revealCalibrationPlayer(state, 'home', 'cafu', 'DEF');
     expect(calibrationHandTacticals(state, 'home').filter((card) => card.type === 'cross')).toHaveLength(0);
 
     state = moveCalibrationPlayer(state, 'home', 'cafu', 'MID');
-    expect(calibrationHandTacticals(state, 'home').filter((card) => card.type === 'cross')).toHaveLength(1);
+    const cross = tactical(state, 'home', 'cross');
+    expect(isCalibrationTacticalAvailable(state, cross)).toBe(true);
+    expect(() => playCalibrationTactical(state, 'home', cross.id, 'ATT', { ignoreEnergy: true })).not.toThrow();
   });
 
-  it('LEFT-FOOT WHIP generates two independent Cross instances', () => {
+  it('LEFT-FOOT WHIP banks two independent Cross instances for the next period', () => {
     let state = highEnergy();
     state = revealCalibrationPlayer(state, 'home', 'dzajic', 'ATT');
     const crosses = calibrationHandTacticals(state, 'home').filter((card) => card.type === 'cross');
     expect(crosses).toHaveLength(2);
     expect(crosses[0]?.id).not.toBe(crosses[1]?.id);
+    expect(crosses.every((card) => calibrationTacticalAvailableFromPeriod(card) === 2)).toBe(true);
   });
 
-  it('THUNDERBALL carries its MID rider and HALFWAY HIT amplifies Long Shots with a once-match zero cost', () => {
+  it('THUNDERBALL carries its MID rider and HALFWAY HIT amplifies it with a once-match zero cost', () => {
     let state = highEnergy();
     state = revealCalibrationPlayer(state, 'home', 'charlton', 'MID');
     state = revealCalibrationPlayer(state, 'home', 'lloyd', 'MID');
+    state = advance(state);
     const longShot = tactical(state, 'home', 'long_shot');
     expect(previewCalibrationTacticalCost(state, 'home', longShot, 'MID')).toBe(0);
 
@@ -234,16 +267,34 @@ describe('high-priority calibration interactions', () => {
     expect(previewCalibrationTacticalCost(second.state, 'home', second.card, 'MID')).toBe(1);
   });
 
-  it('WHIPPED DELIVERY snapshots attacking CBs and 93RD MINUTE escalates Corners in period four', () => {
+  it('WHIPPED DELIVERY snapshots attacking CBs in P3 and 93RD MINUTE escalates the banked Corner in P4', () => {
     let state = highEnergy();
-    state.period = 4;
+    state.period = 3;
     state = seedCalibrationPlayer(state, 'home', 'ramos', 'ATT');
     state = revealCalibrationPlayer(state, 'home', 'eriksen', 'MID');
+    state = advance(state);
     const corner = tactical(state, 'home', 'corner');
 
     state = playCalibrationTactical(state, 'home', corner.id, 'ATT', { ignoreEnergy: true });
 
     expect(state.tacticalResolutions.at(-1)).toMatchObject({ type: 'corner', attack: 9, cancelled: false });
+  });
+
+  it('final-period reveal and end-of-period generation fizzle instead of leaving dead Tacticals in hand', () => {
+    let revealState = highEnergy();
+    revealState.period = 4;
+    revealState = revealCalibrationPlayer(revealState, 'home', 'beckham', 'MID');
+    expect(calibrationHandTacticals(revealState, 'home').filter((card) => card.type === 'cross')).toHaveLength(0);
+    expect(revealState.events.some((event) => event.period === 4 && event.text.includes('no commitment window remains'))).toBe(true);
+
+    let endState = highEnergy();
+    endState.period = 4;
+    endState = seedCalibrationPlayer(endState, 'home', 'litmanen', 'MID');
+    endState = seedCalibrationPlayer(endState, 'home', 'makelele', 'MID');
+    endState = seedCalibrationPlayer(endState, 'away', 'panenka', 'MID');
+    endState = endV8CalibrationPeriod(endState);
+    expect(calibrationHandTacticals(endState, 'home').filter((card) => card.type === 'through_ball')).toHaveLength(0);
+    expect(endState.events.some((event) => event.period === 4 && event.text.includes('no commitment window remains'))).toBe(true);
   });
 
   it('JOY OF THE PEOPLE checks reduced DEF before its own debuff', () => {
@@ -287,16 +338,18 @@ describe('high-priority calibration interactions', () => {
     expect(currentCalibrationDefence(state, calibrationRuntimeId('home', 'makelele'))).toBe(getV8CalibrationPlayer('makelele').printedDefence);
   });
 
-  it('KILLER PASS generates an enhanced Through Ball after winning MID', () => {
+  it('KILLER PASS generates an enhanced Through Ball after winning MID for the next commitment window', () => {
     let state = highEnergy();
     state = seedCalibrationPlayer(state, 'home', 'litmanen', 'MID');
     state = seedCalibrationPlayer(state, 'home', 'makelele', 'MID');
     state = seedCalibrationPlayer(state, 'away', 'panenka', 'MID');
 
-    state = endV8CalibrationPeriod(state);
+    state = advance(state);
 
     const throughBall = tactical(state, 'home', 'through_ball');
     expect(throughBall.attModifier).toBe(1);
+    expect(calibrationTacticalAvailableFromPeriod(throughBall)).toBe(2);
+    expect(isCalibrationTacticalAvailable(state, throughBall)).toBe(true);
   });
 
   it('ARRIVE UNMARKED is a permanent first-player placement gain', () => {
