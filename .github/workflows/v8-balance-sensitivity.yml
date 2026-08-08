@@ -1,0 +1,41 @@
+name: V8 Balance Sensitivity
+
+on:
+  pull_request:
+    paths:
+      - 'src/engine-v8/**'
+      - '.github/workflows/v8-balance-sensitivity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v8-balance-sensitivity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Run fixed-seed matrix and period diagnostics
+        run: npx vitest run src/engine-v8/__tests__/calibration-matchup-matrix.test.ts src/engine-v8/__tests__/calibration-matchup-periods.test.ts
+      - name: Upload sensitivity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v8-balance-sensitivity
+          path: |
+            test-results/v8-calibration-matrix.json
+            test-results/v8-calibration-matrix.txt
+            test-results/v8-calibration-periods.json
+            test-results/v8-calibration-periods.txt
+          if-no-files-found: error
+          retention-days: 7
