@@ -25,6 +25,18 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      - name: Apply full Ramos late-run ATT sensitivity
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/engine-v8/calibration-matchup-matrix.ts')
+          text = path.read_text()
+          old = 'state.tacticalAttack[side].ATT += 3;'
+          new = 'state.tacticalAttack[side].ATT += 5;'
+          assert text.count(old) == 1, 'expected exactly one Ramos OOP sensitivity line'
+          path.write_text(text.replace(old, new))
+          PY
       - name: Run fixed-seed matrix and period diagnostics
         run: npx vitest run src/engine-v8/__tests__/calibration-matchup-matrix.test.ts src/engine-v8/__tests__/calibration-matchup-periods.test.ts
       - name: Upload sensitivity evidence
