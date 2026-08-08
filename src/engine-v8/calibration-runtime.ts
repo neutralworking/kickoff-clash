@@ -118,6 +118,24 @@ export function revealCalibrationPlayer(
     return next;
   }
 
+  if (cardId === 'ronaldo') {
+    let next = deployWithoutOnReveal(state, side, cardId, zone);
+    const runtimeId = calibrationRuntimeId(side, cardId);
+    if (!isCalibrationActionEnabled(next, runtimeId)) return next;
+    const card = getV8CalibrationPlayer(cardId);
+    next.events.push({ type: 'action_triggered', period: next.period, text: `${card.realName} · ${card.actionName}.` });
+    const target = highestDefender(next, side, zone);
+    if (!target) return next;
+
+    next = applyCalibrationModifier(next, target.runtimeId, {
+      defence: -3,
+      lifetime: 'period',
+      source: card.actionName,
+      sourceRuntimeId: runtimeId,
+    });
+    return refreshCalibrationSuppression(next);
+  }
+
   if (cardId !== 'neymar') return revealCalibrationPlayerBase(state, side, cardId, zone);
 
   let next = deployWithoutOnReveal(state, side, cardId, zone);
