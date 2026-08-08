@@ -38,6 +38,39 @@ function highestDefender(state: V8CalibrationState, side: V8CalibrationSide, zon
   )[0];
 }
 
+function lowestDefender(state: V8CalibrationState, side: V8CalibrationSide, zone: V8Zone) {
+  return [...opposingDefenders(state, side, zone)].sort((a, b) =>
+    currentCalibrationDefence(state, a.runtimeId) - currentCalibrationDefence(state, b.runtimeId)
+      || a.deployedOrder - b.deployedOrder
+      || a.runtimeId.localeCompare(b.runtimeId)
+  )[0];
+}
+
+function deployWithoutOnReveal(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+  cardId: string,
+  zone: V8Zone,
+): V8CalibrationState {
+  let next = JSON.parse(JSON.stringify(state)) as V8CalibrationState;
+  const runtimeId = calibrationRuntimeId(side, cardId);
+  if (next.players[runtimeId]) throw new Error(`${cardId} is already deployed for ${side}`);
+  if (calibrationPlayersInZone(next, side, zone).length >= 4) throw new Error(`${zone} is full`);
+
+  next.teams[side].deployedOrder += 1;
+  next.players[runtimeId] = {
+    runtimeId,
+    side,
+    cardId,
+    zone,
+    deployedOrder: next.teams[side].deployedOrder,
+    modifiers: [],
+  };
+  next.events.push({ type: 'player_revealed', period: next.period, text: `${getV8CalibrationPlayer(cardId).realName} reveals in ${zone}.` });
+  next = refreshCalibrationSuppression(next);
+  return next;
+}
+
 /**
  * Calibration runtime overrides for card-quality changes that have passed package-level design review.
  * Penalty ATT / Cost and every printed player stat remain unchanged.
@@ -67,25 +100,38 @@ export function revealCalibrationPlayer(
     return next;
   }
 
+  if (cardId === 'okocha') {
+    let next = deployWithoutOnReveal(state, side, cardId, zone);
+    const runtimeId = calibrationRuntimeId(side, cardId);
+    if (!isCalibrationActionEnabled(next, runtimeId)) return next;
+
+    const card = getV8CalibrationPlayer(cardId);
+    next.events.push({ type: 'action_triggered', period: next.period, text: `${card.realName} · ${card.actionName}.` });
+    const target = lowestDefender(next, side, zone);
+    if (!target) return next;
+
+    const defenceBefore = currentCalibrationDefence(next, target.runtimeId);
+    next = applyCalibrationModifier(next, target.runtimeId, {
+      defence: -2,
+      lifetime: 'period',
+      source: card.actionName,
+      sourceRuntimeId: runtimeId,
+    });
+    const defenceAfter = currentCalibrationDefence(next, target.runtimeId);
+    if (defenceAfter < defenceBefore && defenceAfter <= 5) {
+      next = applyCalibrationModifier(next, runtimeId, {
+        attack: 3,
+        lifetime: 'period',
+        source: card.actionName,
+      });
+    }
+    return refreshCalibrationSuppression(next);
+  }
+
   if (cardId !== 'neymar') return revealCalibrationPlayerBase(state, side, cardId, zone);
 
-  let next = JSON.parse(JSON.stringify(state)) as V8CalibrationState;
+  let next = deployWithoutOnReveal(state, side, cardId, zone);
   const runtimeId = calibrationRuntimeId(side, cardId);
-  if (next.players[runtimeId]) throw new Error(`${cardId} is already deployed for ${side}`);
-  if (calibrationPlayersInZone(next, side, zone).length >= 4) throw new Error(`${zone} is full`);
-
-  next.teams[side].deployedOrder += 1;
-  next.players[runtimeId] = {
-    runtimeId,
-    side,
-    cardId,
-    zone,
-    deployedOrder: next.teams[side].deployedOrder,
-    modifiers: [],
-  };
-  next.events.push({ type: 'player_revealed', period: next.period, text: `${getV8CalibrationPlayer(cardId).realName} reveals in ${zone}.` });
-  next = refreshCalibrationSuppression(next);
-
   if (!isCalibrationActionEnabled(next, runtimeId)) return next;
   const card = getV8CalibrationPlayer(cardId);
   next.events.push({ type: 'action_triggered', period: next.period, text: `${card.realName} · ${card.actionName}.` });
