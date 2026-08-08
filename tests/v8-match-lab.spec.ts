@@ -59,14 +59,14 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
-  test('uses compressed calibration player costs and releases the Manager slot after reveal', async ({ page }) => {
+  test('uses calibrated player costs and releases the Manager slot after reveal', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
     await expect(page.getByText('0–22', { exact: true })).toBeVisible();
     await expect(page.getByText('2 ENERGY', { exact: true })).toBeVisible();
     await expect(page.getByText(/player Costs −1 \(min 1\)/)).toBeVisible();
     await expect(page.locator('.v8-zone')).toHaveCount(3);
-    await expect(page.locator('.v8-card').filter({ hasText: 'Ángel Di María' }).locator('.v8-card__cost')).toHaveText('2');
+    await expect(page.locator('.v8-card').filter({ hasText: 'Ángel Di María' }).locator('.v8-card__cost')).toHaveText('3');
 
     await page.getByRole('button', { name: 'END PERIOD' }).click();
     await expect(page.getByText('22–HT', { exact: true })).toBeVisible();
@@ -92,47 +92,50 @@ test.describe('V8 real-card calibration lab', () => {
   test('generates a literal Cross, keeps it slotless, explains the score and records period telemetry', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
+    // P1 passes so P2 can afford Di María at her accepted printed 3-Energy calibration Cost.
+    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await expect(page.getByText('22–HT', { exact: true })).toBeVisible();
+    await expect(page.getByText('4 ENERGY', { exact: true })).toBeVisible();
+
     const diMaria = page.locator('.v8-card').filter({ hasText: 'Ángel Di María' });
     await diMaria.click();
     const midfieldZone = page.locator('.v8-zone').nth(1);
     await midfieldZone.click();
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
-    await expect(page.getByText('0 ENERGY', { exact: true })).toBeVisible();
+    await expect(page.getByText('1 ENERGY', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'END PERIOD' }).click();
 
-    await expect(page.getByText('22–HT', { exact: true })).toBeVisible();
-    await expect(page.getByText('4 ENERGY', { exact: true })).toBeVisible();
+    const window = page.getByTestId('v8-window');
+    await expect(window).toContainText('POST-REVEAL WINDOW');
+    const crossChoice = window.locator('.v8-window__choices button').filter({ hasText: 'Cross → MID' });
+    await expect(crossChoice).toBeVisible();
+    await crossChoice.click();
+    await expect(midfieldZone.locator('.v8-zone__heading span')).toHaveText('1/4');
+    await page.getByRole('button', { name: 'RESOLVE WINDOW' }).click();
+
+    await expect(page.getByText('HT–66', { exact: true })).toBeVisible();
+    await expect(page.getByText('6 ENERGY', { exact: true })).toBeVisible();
     const recap = page.locator('.v8-recap');
     await expect(recap).toBeVisible();
     await expect(recap).toContainText('PERIOD RECAP');
     await expect(recap).toContainText(/YOU: \d+ ATT vs \d+ DEF → \d+ goals/);
     await expect(recap).toContainText(/CPU: \d+ ATT vs \d+ DEF → \d+ goals/);
+    await expect(recap).toContainText('Post-reveal: Cross (1, RABONA) → MID.');
 
     const telemetry = page.getByTestId('v8-telemetry');
-    await expect(telemetry).toContainText('1/4 periods');
+    await expect(telemetry).toContainText('2/4 periods');
     await telemetry.locator('summary').click();
-    await expect(page.getByTestId('telemetry-period-1')).toBeVisible();
-    await expect(page.getByTestId('telemetry-period-1')).toContainText('Tactical ATT');
-    await expect(page.getByTestId('telemetry-period-1')).toContainText('Energy unused');
-
-    const cross = page.locator('.v8-card--chance').filter({ hasText: 'Cross' });
-    await expect(cross).toHaveCount(1);
-    await expect(cross.locator('.v8-card__cost')).toHaveText('1');
-    await expect(cross).toContainText('+2 ATT this period');
+    await expect(page.getByTestId('telemetry-period-2')).toBeVisible();
+    await expect(page.getByTestId('telemetry-period-2')).toContainText('Tactical ATT');
+    await expect(page.getByTestId('telemetry-period-2')).toContainText('Energy unused');
     await expect(midfieldZone.locator('.v8-zone__heading span')).toHaveText('1/4');
-
-    await cross.click();
-    await midfieldZone.click();
-    await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
-    await expect(midfieldZone.locator('.v8-zone__heading span')).toHaveText('1/4');
-    await expect(page.getByText(/Cross → MID/)).toBeVisible();
     await expectMobileFit(page);
   });
 
   test('opens the post-reveal window for a Tactical generated this period and recaps it as its own step', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
-    // P1 banks its Energy so P2 can afford Di María (2) and still hold 2 for the window.
+    // P1 passes so P2 can afford Di María (3) and still retain 1 Energy for the Cross window.
     await page.getByRole('button', { name: 'END PERIOD' }).click();
     await expect(page.getByText('4 ENERGY', { exact: true })).toBeVisible();
 
