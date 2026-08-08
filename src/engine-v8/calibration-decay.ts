@@ -1,5 +1,7 @@
 import { getV8CalibrationPlayer, type V8CalibrationPlayerCard } from './calibration-cards';
+import type { V8Zone } from './core';
 import * as base from './calibration-runtime';
+import type { V8TacticalCardInstance } from './tactical';
 
 export type V8ExtendedModifierLifetime = base.V8ModifierLifetime | 'duration' | 'decay';
 
@@ -83,12 +85,15 @@ export function applyCalibrationModifier(
 }
 
 /**
- * Calibration-only text override. The tracker still holds the original ARRIVE UNMARKED wording;
- * this is the first explicit V8 action-decay experiment and is intentionally not written back yet.
+ * Calibration-only text overrides. Source tracker text is not written back while V8 timing and
+ * decay semantics are still being proven in the lab.
  */
 export function calibrationActionText(card: V8CalibrationPlayerCard): string {
   if (card.actionKey === 'sinclair_arrive_unmarked') {
     return 'On Reveal: If this is your first player here, she gains +4 ATT. This bonus loses 1 ATT at the end of each period.';
+  }
+  if (card.actionKey === 'park_three_lungs') {
+    return 'On Reveal: Add a Trigger Press to your hand for next period. It costs 0.';
   }
   return card.actionText;
 }
@@ -98,19 +103,126 @@ export function calibrationHandPlayersWithDecayText(
   side: base.V8CalibrationSide,
 ): V8CalibrationPlayerCard[] {
   return base.calibrationHandPlayers(state, side).map((card) => (
-    card.actionKey === 'sinclair_arrive_unmarked'
+    card.actionKey === 'sinclair_arrive_unmarked' || card.actionKey === 'park_three_lungs'
       ? { ...card, actionText: calibrationActionText(card) }
       : card
   ));
+}
+
+function tacticalIds(state: base.V8CalibrationState, side: base.V8CalibrationSide): Set<string> {
+  return new Set(base.calibrationHandTacticals(state, side).map((card) => card.id));
+}
+
+function newlyGeneratedTacticals(
+  beforeIds: ReadonlySet<string>,
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+): V8TacticalCardInstance[] {
+  return base.calibrationHandTacticals(state, side).filter((card) => !beforeIds.has(card.id));
+}
+
+function removeTacticalsFromHand(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  cardIds: ReadonlySet<string>,
+): void {
+  state.teams[side].hand = state.teams[side].hand.filter(
+    (entry) => entry.kind !== 'tactical' || !cardIds.has(entry.card.id),
+  );
+}
+
+/**
+ * V8 uses one commitment window per period. A Tactical created by an On Reveal effect therefore
+ * cannot be committed after that reveal; it is banked for the following period instead.
+ * Movement-generated Tacticals are unaffected because movement happens during commitment.
+ */
+function bankRevealGeneratedTacticals(
+  beforeIds: ReadonlySet<string>,
+  next: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  revealedPeriod: number,
+): void {
+  const generated = newlyGeneratedTacticals(beforeIds, next, side);
+  if (generated.length === 0) return;
+
+  if (revealedPeriod >= 4) {
+    const generatedIds = new Set(generated.map((card) => card.id));
+    removeTacticalsFromHand(next, side, generatedIds);
+    next.events.push({
+      type: 'action_triggered',
+      period: revealedPeriod,
+      text: `${generated.map((card) => card.name).join(' + ')} cannot be banked at FT: no commitment window remains.`,
+    });
+    return;
+  }
+
+  const availableFromPeriod = revealedPeriod + 1;
+  for (const card of generated) {
+    card.metadata.availableFromPeriod = availableFromPeriod;
+    if (card.type === 'trigger_press' && card.generatedBy === 'park') {
+      card.metadata.freeThroughPeriod = availableFromPeriod;
+    }
+  }
+}
+
+export function calibrationTacticalAvailableFromPeriod(card: V8TacticalCardInstance): number {
+  const value = Number(card.metadata.availableFromPeriod ?? 1);
+  return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1;
+}
+
+export function isCalibrationTacticalAvailable(
+  state: base.V8CalibrationState,
+  card: V8TacticalCardInstance,
+): boolean {
+  return calibrationTacticalAvailableFromPeriod(card) <= state.period;
+}
+
+function assertTacticalAvailable(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  cardId: string,
+): V8TacticalCardInstance {
+  const card = base.calibrationHandTacticals(state, side).find((candidate) => candidate.id === cardId);
+  if (!card) throw new Error(`Tactical card ${cardId} is not in hand`);
+  const availableFrom = calibrationTacticalAvailableFromPeriod(card);
+  if (availableFrom > state.period) {
+    throw new Error(`${card.name} is banked until Period ${availableFrom}`);
+  }
+  return card;
+}
+
+export function playCalibrationTactical(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  cardId: string,
+  zone: V8Zone,
+  options: { ignoreEnergy?: boolean } = {},
+): base.V8CalibrationState {
+  assertTacticalAvailable(state, side, cardId);
+  return base.playCalibrationTactical(state, side, cardId, zone, options);
+}
+
+export function spendCalibrationTacticalFromHand(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  cardId: string,
+  zone: V8Zone,
+): ReturnType<typeof base.spendCalibrationTacticalFromHand> {
+  assertTacticalAvailable(state, side, cardId);
+  return base.spendCalibrationTacticalFromHand(state, side, cardId, zone);
 }
 
 export function revealCalibrationPlayer(
   state: base.V8CalibrationState,
   side: base.V8CalibrationSide,
   cardId: string,
-  zone: import('./core').V8Zone,
+  zone: V8Zone,
 ): base.V8CalibrationState {
+  const beforeIds = tacticalIds(state, side);
+  const revealedPeriod = state.period;
   const next = base.revealCalibrationPlayer(state, side, cardId, zone);
+  bankRevealGeneratedTacticals(beforeIds, next, side, revealedPeriod);
+
   if (cardId !== 'sinclair') return next;
 
   const runtimeId = base.calibrationRuntimeId(side, cardId);
@@ -176,9 +288,37 @@ function tickExtendedModifiers(state: base.V8CalibrationState, endedPeriod: numb
   }
 }
 
+function markEndOfPeriodGeneratedTacticals(
+  beforeBySide: Record<base.V8CalibrationSide, ReadonlySet<string>>,
+  next: base.V8CalibrationState,
+  endedPeriod: number,
+): void {
+  for (const side of ['home', 'away'] as const) {
+    const generated = newlyGeneratedTacticals(beforeBySide[side], next, side);
+    if (generated.length === 0) continue;
+
+    if (endedPeriod >= 4) {
+      removeTacticalsFromHand(next, side, new Set(generated.map((card) => card.id)));
+      next.events.push({
+        type: 'action_triggered',
+        period: endedPeriod,
+        text: `${generated.map((card) => card.name).join(' + ')} cannot be banked at FT: no commitment window remains.`,
+      });
+      continue;
+    }
+
+    for (const card of generated) card.metadata.availableFromPeriod = endedPeriod + 1;
+  }
+}
+
 export function endV8CalibrationPeriod(state: base.V8CalibrationState): base.V8CalibrationState {
   const endedPeriod = state.period;
+  const beforeBySide: Record<base.V8CalibrationSide, ReadonlySet<string>> = {
+    home: tacticalIds(state, 'home'),
+    away: tacticalIds(state, 'away'),
+  };
   let next = base.endV8CalibrationPeriod(state);
+  markEndOfPeriodGeneratedTacticals(beforeBySide, next, endedPeriod);
   tickExtendedModifiers(next, endedPeriod);
   next = base.refreshCalibrationSuppression(next);
   return next;
