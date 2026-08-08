@@ -509,7 +509,7 @@ function resolveSequence(state: V8CalibrationState, plays: readonly V8Calibratio
  *
  * - a P3 Corner can wait one window for an already-established Ramos and his P4 +5 spike;
  * - Trigger Press is not spent into an empty ATT line;
- * - Offside Trap is not spent unless the opponent is expected to play a window Through Ball;
+ * - Offside Trap is not spent unless the opponent has a window Through Ball to cancel;
  * - all other affordable Chances are played immediately, including all P4 Chances.
  *
  * Both sides still plan blind from the same post-reveal state and resolve simultaneously.
@@ -524,12 +524,8 @@ export function planV8CalibrationWindow(
   const otherSide: V8CalibrationSide = side === 'home' ? 'away' : 'home';
   const hasFriendly = (zone: V8Zone, ids: readonly string[]) => calibrationPlayersInZone(state, side, zone)
     .some((player) => ids.includes(player.cardId));
-  const hasOpponent = (zone: V8Zone, ids: readonly string[]) => calibrationPlayersInZone(state, otherSide, zone)
-    .some((player) => ids.includes(player.cardId));
   const opponentWindowThroughBall = windowEligibleCalibrationTacticals(state, otherSide)
     .some((card) => card.type === 'through_ball');
-  const opponentExpectedToUseThroughBall = opponentWindowThroughBall
-    && (state.period === 4 || hasOpponent('ATT', ['morgan', 'shevchenko']));
 
   for (const card of windowEligibleCalibrationTacticals(state, side)) {
     let shouldPlay = true;
@@ -545,7 +541,7 @@ export function planV8CalibrationWindow(
       shouldPlay = calibrationPlayersInZone(state, side, 'ATT')
         .some((player) => getV8CalibrationPlayer(player.cardId).printedDefence > 0);
     } else if (card.type === 'offside_trap') {
-      shouldPlay = opponentExpectedToUseThroughBall;
+      shouldPlay = opponentWindowThroughBall;
     }
 
     if (!shouldPlay) continue;
