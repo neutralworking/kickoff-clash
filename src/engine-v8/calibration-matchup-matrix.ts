@@ -503,19 +503,60 @@ function resolveSequence(state: V8CalibrationState, plays: readonly V8Calibratio
 }
 
 /**
- * Generated-Tactical Window policy for the calibration CPU: the deliberate play-immediately
- * bias — every this-period-generated Tactical that remaining Energy can afford is window-played
- * using the existing lane preferences (eligibleZones order breaks cost ties). Holding and
- * sequencing intelligence is planner Step 3, not this pass. Both sides plan from the same
- * post-reveal state, which is exactly the window's blind-simultaneous commitment.
+ * Generated-Tactical Window calibration policy. It deliberately recognises only obvious
+ * football combinations; there is no look-ahead search or score optimisation here.
+ *
+ * - P1-P3 Chances may be held when this squad has a named specialist that is not yet established.
+ * - A P3 Corner is held for an already-established Ramos so 93RD MINUTE can genuinely spike in P4.
+ * - P4 Chances are always cashed rather than dying in hand.
+ * - Trigger Press is not spent into an empty ATT line.
+ * - Offside Trap is only spent when the opponent is expected to play a window Through Ball.
+ *
+ * Both sides still plan blind from the same post-reveal state and resolve simultaneously.
  */
 export function planV8CalibrationWindow(
   state: V8CalibrationState,
   side: V8CalibrationSide,
+  squad: V8CalibrationSquadKey = 'balanced_midrange',
 ): V8CalibrationWindowPlay[] {
   const plays: V8CalibrationWindowPlay[] = [];
   let budget = state.teams[side].energy;
+  const otherSide: V8CalibrationSide = side === 'home' ? 'away' : 'home';
+  const hasFriendly = (zone: V8Zone, ids: readonly string[]) => calibrationPlayersInZone(state, side, zone)
+    .some((player) => ids.includes(player.cardId));
+  const hasOpponent = (zone: V8Zone, ids: readonly string[]) => calibrationPlayersInZone(state, otherSide, zone)
+    .some((player) => ids.includes(player.cardId));
+  const opponentWindowThroughBall = windowEligibleCalibrationTacticals(state, otherSide)
+    .some((card) => card.type === 'through_ball');
+  const opponentExpectedToUseThroughBall = opponentWindowThroughBall
+    && (state.period === 4 || hasOpponent('ATT', ['morgan', 'shevchenko']));
+
   for (const card of windowEligibleCalibrationTacticals(state, side)) {
+    let shouldPlay = true;
+
+    if (state.period < 4) {
+      if (card.type === 'cross' && ['cross', 'balanced_midrange', 'control_defence'].includes(squad)) {
+        shouldPlay = hasFriendly('ATT', ['wambach', 'hegerberg']);
+      } else if (card.type === 'through_ball' && squad === 'through_ball') {
+        shouldPlay = hasFriendly('ATT', ['morgan', 'shevchenko']);
+      } else if (card.type === 'long_shot' && squad === 'long_shot_set_piece') {
+        shouldPlay = hasFriendly('MID', ['lloyd']);
+      } else if (card.type === 'penalty' && squad === 'dribbling_penalty') {
+        shouldPlay = hasFriendly('ATT', ['panenka']);
+      } else if (card.type === 'corner' && squad === 'long_shot_set_piece' && state.period === 3) {
+        shouldPlay = !hasFriendly('ATT', ['ramos']);
+      }
+    }
+
+    if (card.type === 'trigger_press') {
+      shouldPlay = calibrationPlayersInZone(state, side, 'ATT')
+        .some((player) => getV8CalibrationPlayer(player.cardId).printedDefence > 0);
+    } else if (card.type === 'offside_trap') {
+      shouldPlay = opponentExpectedToUseThroughBall;
+    }
+
+    if (!shouldPlay) continue;
+
     const legal = tacticalDefinition(card.type).eligibleZones
       .map((zone) => ({ zone, cost: previewCalibrationTacticalCost(state, side, card, zone) }))
       .filter(({ cost }) => cost <= budget)
@@ -573,8 +614,8 @@ export function simulateV8CalibrationMatch(args: {
     // The Generated-Tactical Window: both sides plan blind from the same post-reveal state,
     // then every window play resolves before the scoring window reads the zone margins.
     const windowPlays = [
-      ...planV8CalibrationWindow(resolved, 'home'),
-      ...planV8CalibrationWindow(resolved, 'away'),
+      ...planV8CalibrationWindow(resolved, 'home', homeSquad),
+      ...planV8CalibrationWindow(resolved, 'away', awaySquad),
     ];
     const window = resolveGeneratedTacticalWindow(resolved, windowPlays);
     resolved = window.state;
