@@ -99,7 +99,7 @@ export const V8_CALIBRATION_SQUADS: Readonly<Record<V8CalibrationSquadKey, V8Cal
     key: 'control_defence',
     label: 'CONTROL / DEFENCE',
     shortLabel: 'Control',
-    identity: 'Suppress, protect and absorb pressure, then win through midfield control rather than elite forwards.',
+    identity: 'Suppress and absorb pressure, then use one elite outlet rather than a full attacking line.',
     playerIds: [
       'makelele',
       'gentile',
@@ -110,8 +110,8 @@ export const V8_CALIBRATION_SQUADS: Readonly<Record<V8CalibrationSquadKey, V8Cal
       'iniesta',
       'beckenbauer',
       'cafu',
-      'ramos',
       'lloyd',
+      'sinclair',
     ],
   },
   long_shot_set_piece: {
