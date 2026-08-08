@@ -33,7 +33,7 @@ import {
   type V8CalibrationMatchTelemetry,
   type V8CalibrationPeriodTelemetry,
 } from './calibration-telemetry';
-import type { V8TacticalCardInstance } from './tactical';
+import type { V8TacticalCardInstance, V8TacticalType } from './tactical';
 
 const ZONES: readonly V8Zone[] = ['DEF', 'MID', 'ATT'];
 const MANAGER_COST = 3;
@@ -99,6 +99,68 @@ export interface V8CalibrationMatrixReport {
   squads: V8CalibrationSquadSummary[];
 }
 
+interface V8CalibrationPlannerProfile {
+  priorityPlayerIds: readonly string[];
+  preferredZones: Readonly<Record<string, V8Zone>>;
+}
+
+/**
+ * Calibration-only intent. These are not production AI instructions and they do not waive OOP.
+ * The profile makes the named archetype actually attempt its defining football sequence.
+ */
+const PLANNER_PROFILES: Readonly<Record<V8CalibrationSquadKey, V8CalibrationPlannerProfile>> = {
+  cross: {
+    priorityPlayerIds: ['wambach', 'beckham', 'di-maria', 'cafu', 'dzajic', 'hegerberg'],
+    preferredZones: {
+      wambach: 'ATT',
+      hegerberg: 'ATT',
+      dzajic: 'ATT',
+      beckham: 'MID',
+      'di-maria': 'MID',
+      cafu: 'DEF',
+    },
+  },
+  through_ball: {
+    priorityPlayerIds: ['morgan', 'shevchenko', 'valderrama', 'litmanen', 'park'],
+    preferredZones: {
+      morgan: 'ATT',
+      shevchenko: 'ATT',
+      valderrama: 'MID',
+      litmanen: 'MID',
+      park: 'MID',
+    },
+  },
+  dribbling_penalty: {
+    priorityPlayerIds: ['panenka', 'duff', 'garrincha', 'neymar'],
+    preferredZones: {
+      panenka: 'ATT',
+      duff: 'ATT',
+      garrincha: 'ATT',
+      neymar: 'ATT',
+    },
+  },
+  control_defence: {
+    priorityPlayerIds: [],
+    preferredZones: {},
+  },
+  long_shot_set_piece: {
+    priorityPlayerIds: ['ramos', 'lloyd', 'charlton', 'eriksen'],
+    preferredZones: {
+      ramos: 'ATT',
+      lloyd: 'MID',
+      charlton: 'MID',
+      eriksen: 'MID',
+    },
+  },
+  balanced_midrange: {
+    priorityPlayerIds: ['ronaldo', 'okocha'],
+    preferredZones: {
+      ronaldo: 'ATT',
+      okocha: 'ATT',
+    },
+  },
+};
+
 export const V8_CALIBRATION_MATRIX_SEEDS = Array.from(
   { length: 32 },
   (_, index) => 8_082_026 + index * 104_729,
@@ -148,9 +210,12 @@ function occupiedPlayerSlots(
 function choosePlayerZone(
   state: V8CalibrationState,
   side: V8CalibrationSide,
+  squad: V8CalibrationSquadKey,
   card: V8CalibrationPlayerCard,
   pending: readonly V8CalibrationMatrixPlay[],
 ): V8Zone | null {
+  const preferred = PLANNER_PROFILES[squad].preferredZones[card.id];
+  if (preferred && occupiedPlayerSlots(state, side, preferred, pending) < 4) return preferred;
   const natural = card.naturalZones.find((zone) => occupiedPlayerSlots(state, side, zone, pending) < 4);
   if (natural) return natural;
   return ZONES.find((zone) => occupiedPlayerSlots(state, side, zone, pending) < 4) ?? null;
@@ -173,12 +238,39 @@ function payPlayer(
   };
 }
 
+function priorityPlayersForState(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+  squad: V8CalibrationSquadKey,
+): readonly string[] {
+  if (squad !== 'through_ball') return PLANNER_PROFILES[squad].priorityPlayerIds;
+  const runnerEstablished = calibrationPlayersInZone(state, side, 'ATT')
+    .some((player) => player.cardId === 'morgan' || player.cardId === 'shevchenko');
+  return runnerEstablished
+    ? ['valderrama', 'litmanen', 'morgan', 'shevchenko', 'park']
+    : ['morgan', 'shevchenko', 'valderrama', 'litmanen', 'park'];
+}
+
+function priorityIndex(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+  squad: V8CalibrationSquadKey,
+  cardId: string,
+): number {
+  const index = priorityPlayersForState(state, side, squad).indexOf(cardId);
+  return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+}
+
 /**
  * Lightweight calibration movement policy, not production AI.
- * Cafu always tries to go one line forward so PENDOLINO actually produces Crosses.
- * Beckenbauer toggles between his two natural lines so DER KAISER is exercised once per period.
+ * Cafu goes one line forward so PENDOLINO creates Crosses. Beckenbauer toggles between his two
+ * natural lines where doing so does not occupy the deliberately staged Penalty / set-piece lanes.
  */
-function exerciseMovement(state: V8CalibrationState, side: V8CalibrationSide): V8CalibrationState {
+function exerciseMovement(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+  squad: V8CalibrationSquadKey,
+): V8CalibrationState {
   let next = state;
 
   const cafu = next.players[calibrationRuntimeId(side, 'cafu')];
@@ -193,8 +285,9 @@ function exerciseMovement(state: V8CalibrationState, side: V8CalibrationSide): V
     }
   }
 
+  const shouldExerciseKaiser = squad !== 'dribbling_penalty' && squad !== 'long_shot_set_piece';
   const beckenbauer = next.players[calibrationRuntimeId(side, 'beckenbauer')];
-  if (beckenbauer) {
+  if (shouldExerciseKaiser && beckenbauer) {
     const target: V8Zone | null = beckenbauer.zone === 'DEF' ? 'MID' : beckenbauer.zone === 'MID' ? 'DEF' : null;
     if (target && calibrationPlayersInZone(next, side, target).length < 4) {
       try {
@@ -214,38 +307,87 @@ type TacticalHoldPlan = {
   reservedEnergy: number;
 };
 
-/**
- * RABONA's modify-existing-Cross branch can never be observed if the CPU always spends every
- * available Tactical before committing players. Hold exactly one Cross when Di María can be
- * committed this period, reserve his Energy, and prioritise his deployment. No other combo is
- * optimised here: this is deliberately the smallest hold rule needed to exercise the Action.
- */
-function rabonaHoldPlan(
+function emptyHoldPlan(): TacticalHoldPlan {
+  return { heldIds: new Set(), reservedEnergy: 0 };
+}
+
+function availableTactical(
   state: V8CalibrationState,
   side: V8CalibrationSide,
+  type: V8TacticalType,
+): V8TacticalCardInstance | undefined {
+  return calibrationHandTacticals(state, side)
+    .find((card) => card.type === type && isCalibrationTacticalAvailable(state, card));
+}
+
+function holdForPlayer(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+  squad: V8CalibrationSquadKey,
+  pending: readonly V8CalibrationMatrixPlay[],
+  tactical: V8TacticalCardInstance | undefined,
+  playerId: string,
+): TacticalHoldPlan {
+  if (!tactical || state.players[calibrationRuntimeId(side, playerId)]) return emptyHoldPlan();
+  const player = calibrationHandPlayers(state, side).find((card) => card.id === playerId);
+  if (!player) return emptyHoldPlan();
+  const cost = calibrationPlayCost(player);
+  if (cost > state.teams[side].energy || !choosePlayerZone(state, side, squad, player, pending)) return emptyHoldPlan();
+  return { heldIds: new Set([tactical.id]), priorityPlayerId: playerId, reservedEnergy: cost };
+}
+
+/**
+ * A few explicit hold decisions are part of the calibration harness because spending the Tactical
+ * before its obvious enabler reveals would make the named mechanic impossible to observe.
+ */
+function tacticalHoldPlan(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+  squad: V8CalibrationSquadKey,
   pending: readonly V8CalibrationMatrixPlay[],
 ): TacticalHoldPlan {
-  const diMaria = calibrationHandPlayers(state, side).find((card) => card.id === 'di-maria');
-  if (!diMaria) return { heldIds: new Set(), reservedEnergy: 0 };
-  const cost = calibrationPlayCost(diMaria);
-  if (cost > state.teams[side].energy || !choosePlayerZone(state, side, diMaria, pending)) {
-    return { heldIds: new Set(), reservedEnergy: 0 };
+  if (squad === 'cross') {
+    const plan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'cross'), 'di-maria');
+    if (plan.priorityPlayerId) return plan;
   }
-  const cross = calibrationHandTacticals(state, side)
-    .find((card) => card.type === 'cross' && isCalibrationTacticalAvailable(state, card));
-  if (!cross) return { heldIds: new Set(), reservedEnergy: 0 };
-  return { heldIds: new Set([cross.id]), priorityPlayerId: diMaria.id, reservedEnergy: cost };
+
+  if (squad === 'through_ball') {
+    const throughBall = availableTactical(state, side, 'through_ball');
+    const hasRunner = calibrationPlayersInZone(state, side, 'ATT')
+      .some((player) => player.cardId === 'morgan' || player.cardId === 'shevchenko');
+    if (throughBall && !hasRunner) {
+      for (const runnerId of ['morgan', 'shevchenko'] as const) {
+        const plan = holdForPlayer(state, side, squad, pending, throughBall, runnerId);
+        if (plan.priorityPlayerId) return plan;
+      }
+    }
+  }
+
+  if (squad === 'dribbling_penalty') {
+    const plan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'penalty'), 'panenka');
+    if (plan.priorityPlayerId) return plan;
+  }
+
+  if (squad === 'long_shot_set_piece') {
+    const longShotPlan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'long_shot'), 'lloyd');
+    if (longShotPlan.priorityPlayerId) return longShotPlan;
+    const cornerPlan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'corner'), 'ramos');
+    if (cornerPlan.priorityPlayerId) return cornerPlan;
+  }
+
+  return emptyHoldPlan();
 }
 
 export function planV8CalibrationSide(
   state: V8CalibrationState,
   side: V8CalibrationSide,
   managerAvailable: boolean,
+  squad: V8CalibrationSquadKey = 'balanced_midrange',
 ): V8CalibrationPlannerResult {
-  let next = exerciseMovement(state, side);
+  let next = exerciseMovement(state, side, squad);
   const pending: V8CalibrationMatrixPlay[] = [];
   let nextManagerAvailable = managerAvailable;
-  const hold = rabonaHoldPlan(next, side, pending);
+  const hold = tacticalHoldPlan(next, side, squad, pending);
 
   while (next.teams[side].energy > 0) {
     const priorityStillInHand = hold.priorityPlayerId
@@ -271,14 +413,15 @@ export function planV8CalibrationSide(
 
     const players = calibrationHandPlayers(next, side)
       .filter((card) => calibrationPlayCost(card) <= next.teams[side].energy)
-      .sort((a, b) => calibrationPlayCost(a) - calibrationPlayCost(b)
+      .sort((a, b) => priorityIndex(next, side, squad, a.id) - priorityIndex(next, side, squad, b.id)
+        || calibrationPlayCost(a) - calibrationPlayCost(b)
         || b.printedAttack + b.printedDefence - (a.printedAttack + a.printedDefence));
     const priorityPlayer = hold.priorityPlayerId
-      ? players.find((card) => card.id === hold.priorityPlayerId && choosePlayerZone(next, side, card, pending))
+      ? players.find((card) => card.id === hold.priorityPlayerId && choosePlayerZone(next, side, squad, card, pending))
       : undefined;
-    const chosen = priorityPlayer ?? players.find((card) => choosePlayerZone(next, side, card, pending));
+    const chosen = priorityPlayer ?? players.find((card) => choosePlayerZone(next, side, squad, card, pending));
     if (chosen) {
-      const zone = choosePlayerZone(next, side, chosen, pending)!;
+      const zone = choosePlayerZone(next, side, squad, chosen, pending)!;
       const cost = calibrationPlayCost(chosen);
       next = payPlayer(next, side, chosen);
       pending.push({ kind: 'player', side, cardId: chosen.id, zone, cost });
@@ -373,8 +516,8 @@ export function simulateV8CalibrationMatch(args: {
   const periods: V8CalibrationPeriodTelemetry[] = [];
 
   for (let periodIndex = 0; periodIndex < 4; periodIndex += 1) {
-    const home = planV8CalibrationSide(state, 'home', homeManagerAvailable);
-    const away = planV8CalibrationSide(home.state, 'away', awayManagerAvailable);
+    const home = planV8CalibrationSide(state, 'home', homeManagerAvailable, homeSquad);
+    const away = planV8CalibrationSide(home.state, 'away', awayManagerAvailable, awaySquad);
     homeManagerAvailable = home.managerAvailable;
     awayManagerAvailable = away.managerAvailable;
     const plays = [...home.pending, ...away.pending];
