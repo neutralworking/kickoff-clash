@@ -118,6 +118,12 @@ const V8_EXPANSION_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionKey: 'dempsey_cheeky_chip', actionName: 'CHEEKY CHIP', timing: 'on_reveal',
     actionText: 'On Reveal: If you are losing here, gain +5 ATT this period.',
   }),
+  expansionCard({
+    id: 'berbatov', realName: 'Dimitar Berbatov', matchName: 'Bagadov', fullCardName: 'Dimitar Bagadov', trackerRow: 66,
+    position: 'CF / SS', naturalZones: ['ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 11, defence: 1,
+    actionKey: 'berbatov_berba_spin', actionName: 'BERBA SPIN', timing: 'triggered',
+    actionText: 'The first opposing defender Action each period that targets this is ignored; then move this to an adjacent zone.',
+  }),
 ] as const;
 
 /**
