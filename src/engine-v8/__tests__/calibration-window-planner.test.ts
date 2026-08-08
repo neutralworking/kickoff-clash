@@ -15,48 +15,31 @@ function stateWithEnergy(period = 1, energy = 9): V8CalibrationState {
 }
 
 describe('calibration Generated-Tactical Window sequencing', () => {
-  it('holds a Cross until the Cross squad has a finisher, but cashes it in P4', () => {
-    let noFinisher = stateWithEnergy();
-    noFinisher = revealCalibrationPlayer(noFinisher, 'home', 'beckham', 'MID');
-    expect(planV8CalibrationWindow(noFinisher, 'home', 'cross')).toEqual([]);
-
-    let withFinisher = stateWithEnergy();
-    withFinisher = seedCalibrationPlayer(withFinisher, 'home', 'wambach', 'ATT');
-    withFinisher = revealCalibrationPlayer(withFinisher, 'home', 'beckham', 'MID');
-    expect(planV8CalibrationWindow(withFinisher, 'home', 'cross')).toMatchObject([
+  it('cashes ordinary generated Chances immediately rather than waiting a second commitment cycle', () => {
+    let cross = stateWithEnergy();
+    cross = revealCalibrationPlayer(cross, 'home', 'beckham', 'MID');
+    expect(planV8CalibrationWindow(cross, 'home', 'cross')).toMatchObject([
       { side: 'home', zone: 'ATT' },
     ]);
 
-    let finalPeriod = stateWithEnergy(4);
-    finalPeriod = revealCalibrationPlayer(finalPeriod, 'home', 'beckham', 'MID');
-    expect(planV8CalibrationWindow(finalPeriod, 'home', 'cross')).toMatchObject([
+    let throughBall = stateWithEnergy();
+    throughBall = revealCalibrationPlayer(throughBall, 'home', 'valderrama', 'MID');
+    expect(planV8CalibrationWindow(throughBall, 'home', 'through_ball')).toMatchObject([
       { side: 'home', zone: 'ATT' },
     ]);
-  });
 
-  it('holds a Through Ball until a runner is established in ATT', () => {
-    let noRunner = stateWithEnergy();
-    noRunner = revealCalibrationPlayer(noRunner, 'home', 'valderrama', 'MID');
-    expect(planV8CalibrationWindow(noRunner, 'home', 'through_ball')).toEqual([]);
-
-    let withRunner = stateWithEnergy();
-    withRunner = seedCalibrationPlayer(withRunner, 'home', 'shevchenko', 'ATT');
-    withRunner = revealCalibrationPlayer(withRunner, 'home', 'valderrama', 'MID');
-    expect(planV8CalibrationWindow(withRunner, 'home', 'through_ball')).toMatchObject([
-      { side: 'home', zone: 'ATT' },
-    ]);
-  });
-
-  it('holds a Long Shot until Lloyd is established in MID', () => {
-    let noLloyd = stateWithEnergy();
-    noLloyd = revealCalibrationPlayer(noLloyd, 'home', 'charlton', 'MID');
-    expect(planV8CalibrationWindow(noLloyd, 'home', 'long_shot_set_piece')).toEqual([]);
-
-    let withLloyd = stateWithEnergy();
-    withLloyd = seedCalibrationPlayer(withLloyd, 'home', 'lloyd', 'MID');
-    withLloyd = revealCalibrationPlayer(withLloyd, 'home', 'charlton', 'MID');
-    expect(planV8CalibrationWindow(withLloyd, 'home', 'long_shot_set_piece')).toMatchObject([
+    let longShot = stateWithEnergy();
+    longShot = revealCalibrationPlayer(longShot, 'home', 'charlton', 'MID');
+    expect(planV8CalibrationWindow(longShot, 'home', 'long_shot_set_piece')).toMatchObject([
       { side: 'home', zone: 'MID' },
+    ]);
+
+    let penalty = stateWithEnergy();
+    penalty = seedCalibrationPlayer(penalty, 'away', 'ramos', 'DEF');
+    penalty = revealCalibrationPlayer(penalty, 'home', 'duff', 'ATT');
+    penalty = revealCalibrationPlayer(penalty, 'home', 'neymar', 'ATT');
+    expect(planV8CalibrationWindow(penalty, 'home', 'dribbling_penalty')).toMatchObject([
+      { side: 'home', zone: 'ATT' },
     ]);
   });
 
@@ -74,23 +57,6 @@ describe('calibration Generated-Tactical Window sequencing', () => {
     ]);
   });
 
-  it('holds a Penalty until Panenka is established in ATT', () => {
-    let noPanenka = stateWithEnergy();
-    noPanenka = seedCalibrationPlayer(noPanenka, 'away', 'ramos', 'DEF');
-    noPanenka = revealCalibrationPlayer(noPanenka, 'home', 'duff', 'ATT');
-    noPanenka = revealCalibrationPlayer(noPanenka, 'home', 'neymar', 'ATT');
-    expect(planV8CalibrationWindow(noPanenka, 'home', 'dribbling_penalty')).toEqual([]);
-
-    let withPanenka = stateWithEnergy();
-    withPanenka = seedCalibrationPlayer(withPanenka, 'away', 'ramos', 'DEF');
-    withPanenka = seedCalibrationPlayer(withPanenka, 'home', 'panenka', 'ATT');
-    withPanenka = revealCalibrationPlayer(withPanenka, 'home', 'duff', 'ATT');
-    withPanenka = revealCalibrationPlayer(withPanenka, 'home', 'neymar', 'ATT');
-    expect(planV8CalibrationWindow(withPanenka, 'home', 'dribbling_penalty')).toMatchObject([
-      { side: 'home', zone: 'ATT' },
-    ]);
-  });
-
   it('does not spend THREE LUNGS into an empty ATT line', () => {
     let emptyAtt = stateWithEnergy();
     emptyAtt = revealCalibrationPlayer(emptyAtt, 'home', 'park', 'MID');
@@ -104,22 +70,22 @@ describe('calibration Generated-Tactical Window sequencing', () => {
     ]);
   });
 
-  it('spends Offside Trap only when a window Through Ball is expected to be played', () => {
-    let noRunner = stateWithEnergy();
-    noRunner = revealCalibrationPlayer(noRunner, 'home', 'baresi', 'DEF');
-    noRunner = revealCalibrationPlayer(noRunner, 'away', 'valderrama', 'MID');
-    expect(planV8CalibrationWindow(noRunner, 'home', 'control_defence')).toEqual([]);
-    expect(planV8CalibrationWindow(noRunner, 'away', 'through_ball')).toEqual([]);
+  it('spends Offside Trap when the opponent has a window Through Ball, because that Chance is cashed now', () => {
+    let state = stateWithEnergy();
+    state = revealCalibrationPlayer(state, 'home', 'baresi', 'DEF');
+    state = revealCalibrationPlayer(state, 'away', 'valderrama', 'MID');
 
-    let withRunner = stateWithEnergy();
-    withRunner = seedCalibrationPlayer(withRunner, 'away', 'shevchenko', 'ATT');
-    withRunner = revealCalibrationPlayer(withRunner, 'home', 'baresi', 'DEF');
-    withRunner = revealCalibrationPlayer(withRunner, 'away', 'valderrama', 'MID');
-    expect(planV8CalibrationWindow(withRunner, 'home', 'control_defence')).toMatchObject([
+    expect(planV8CalibrationWindow(state, 'home', 'control_defence')).toMatchObject([
       { side: 'home', zone: 'DEF' },
     ]);
-    expect(planV8CalibrationWindow(withRunner, 'away', 'through_ball')).toMatchObject([
+    expect(planV8CalibrationWindow(state, 'away', 'through_ball')).toMatchObject([
       { side: 'away', zone: 'ATT' },
     ]);
+  });
+
+  it('holds Offside Trap when there is no opposing window Through Ball to cancel', () => {
+    let state = stateWithEnergy();
+    state = revealCalibrationPlayer(state, 'home', 'baresi', 'DEF');
+    expect(planV8CalibrationWindow(state, 'home', 'control_defence')).toEqual([]);
   });
 });
