@@ -22,8 +22,6 @@ import {
 } from './calibration-squads';
 import { goalsFromAttackDefence, type V8Zone } from './core';
 
-const MANAGER_COST = 3;
-const ZONES: readonly V8Zone[] = ['DEF', 'MID', 'ATT'];
 const VARIANTS_PER_FAMILY = 8;
 
 export const V8_DECK_VALIDATION_SEEDS = [
@@ -424,6 +422,3 @@ export function formatV8DeckValidationReport(report: V8DeckValidationReport): st
     ...bottomDecks,
   ].join('\n');
 }
-
-void MANAGER_COST;
-void ZONES;
