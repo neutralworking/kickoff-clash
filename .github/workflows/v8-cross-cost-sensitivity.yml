@@ -1,0 +1,47 @@
+name: V8 Cross Cost Sensitivity
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sensitivity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Equalise compact Cross core at 3 Energy
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('src/engine-v8/calibration-balance.ts')
+          text = path.read_text()
+          old = "export function calibrationPlayCost(card: Pick<V8CalibrationPlayerCard, 'cost'>): number {\n  return Math.max(1, card.cost - 1);\n}"
+          new = "export function calibrationPlayCost(card: Pick<V8CalibrationPlayerCard, 'id' | 'cost'>): number {\n  if (['beckham', 'wambach', 'di-maria'].includes(card.id)) return Math.max(1, card.cost);\n  return Math.max(1, card.cost - 1);\n}"
+          if old not in text:
+              raise SystemExit('calibrationPlayCost source did not match expected baseline')
+          path.write_text(text.replace(old, new))
+
+      - name: Run compact Cross cost sensitivity
+        run: npx vitest run src/engine-v8/__tests__/calibration-compact-core.test.ts src/engine-v8/__tests__/calibration-cross-minimal.test.ts
+
+      - name: Upload sensitivity evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: v8-cross-cost-sensitivity
+          path: |
+            test-results/v8-calibration-compact-core.*
+            test-results/v8-calibration-cross-minimal.*
+          if-no-files-found: error
+          retention-days: 7
