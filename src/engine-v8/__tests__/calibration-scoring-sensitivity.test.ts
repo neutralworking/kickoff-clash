@@ -8,175 +8,142 @@ import {
   type V8CalibrationSquadKey,
 } from '../index';
 
-type ScoringPolicyKey =
-  | 'repeat_5'
-  | 'repeat_6'
-  | 'repeat_7'
-  | 'repeat_8'
-  | 'repeat_5_cap3'
-  | 'new_thresholds_5';
+type ScoringPolicyKey = 'repeat_5' | 'repeat_6' | 'repeat_7' | 'repeat_8' | 'repeat_5_cap3' | 'new_thresholds_5';
 
-type Score = { home: number; away: number };
-
-type SquadSensitivity = {
-  matches: number;
-  wins: number;
-  draws: number;
-  losses: number;
-  winRate: number;
-  averageGoalsFor: number;
-  averageGoalsAgainst: number;
+type ReScoredMatch = {
+  homeGoals: number;
+  awayGoals: number;
 };
 
-type PolicySensitivity = {
+type ScoringPolicySummary = {
   policy: ScoringPolicyKey;
   matches: number;
   averageTotalGoals: number;
   medianTotalGoals: number;
   p90TotalGoals: number;
-  shareAtLeast18Goals: number;
-  shareAtLeast20Goals: number;
+  shareAtLeast18: number;
+  shareAtLeast20: number;
   drawRate: number;
-  averageWinningMargin: number;
-  squads: Record<V8CalibrationSquadKey, SquadSensitivity>;
-};
-
-function round(value: number, digits = 3): number {
-  const factor = 10 ** digits;
-  return Math.round(value * factor) / factor;
-}
-
-function repeatGoals(margin: number, step: number, cap = Number.POSITIVE_INFINITY): number {
-  return Math.min(cap, Math.max(0, Math.floor(margin / step)));
-}
-
-function rescoreMatch(match: V8CalibrationSimulatedMatch, policy: ScoringPolicyKey): Score {
-  let home = 0;
-  let away = 0;
-  let homeBankedThresholds = 0;
-  let awayBankedThresholds = 0;
-
-  for (const period of match.telemetry.periods) {
-    const homeMargin = period.home.attack - period.away.defence;
-    const awayMargin = period.away.attack - period.home.defence;
-
-    if (policy === 'new_thresholds_5') {
-      const homeThresholds = repeatGoals(homeMargin, 5);
-      const awayThresholds = repeatGoals(awayMargin, 5);
-      home += Math.max(0, homeThresholds - homeBankedThresholds);
-      away += Math.max(0, awayThresholds - awayBankedThresholds);
-      homeBankedThresholds = Math.max(homeBankedThresholds, homeThresholds);
-      awayBankedThresholds = Math.max(awayBankedThresholds, awayThresholds);
-      continue;
-    }
-
-    const step = policy === 'repeat_6' ? 6 : policy === 'repeat_7' ? 7 : policy === 'repeat_8' ? 8 : 5;
-    const cap = policy === 'repeat_5_cap3' ? 3 : Number.POSITIVE_INFINITY;
-    home += repeatGoals(homeMargin, step, cap);
-    away += repeatGoals(awayMargin, step, cap);
-  }
-
-  return { home, away };
-}
-
-function percentile(sorted: readonly number[], fraction: number): number {
-  if (sorted.length === 0) return 0;
-  const index = Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1);
-  return sorted[index] ?? 0;
-}
-
-function summarize(policy: ScoringPolicyKey, matches: readonly V8CalibrationSimulatedMatch[]): PolicySensitivity {
-  const totals: number[] = [];
-  let draws = 0;
-  let winningMargin = 0;
-  let atLeast18 = 0;
-  let atLeast20 = 0;
-  const squadAcc = Object.fromEntries(V8_CALIBRATION_SQUAD_KEYS.map((squad) => [squad, {
-    matches: 0,
-    wins: 0,
-    draws: 0,
-    losses: 0,
-    goalsFor: 0,
-    goalsAgainst: 0,
-  }])) as Record<V8CalibrationSquadKey, {
-    matches: number;
+  averageMargin: number;
+  squads: Record<V8CalibrationSquadKey, {
     wins: number;
     draws: number;
     losses: number;
+    winRate: number;
+    drawRate: number;
     goalsFor: number;
     goalsAgainst: number;
   }>;
+};
+
+function emptySquadRow() {
+  return { wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, samples: 0 };
+}
+
+function scoreMargin(margin: number, policy: ScoringPolicyKey): number {
+  if (margin <= 0) return 0;
+  if (policy === 'new_thresholds_5') {
+    if (margin < 5) return 0;
+    if (margin < 12) return 1;
+    if (margin < 20) return 2;
+    return 3 + Math.floor((margin - 20) / 7);
+  }
+
+  const repeat = Number(policy.match(/repeat_(\d+)/)?.[1] ?? 7);
+  const raw = Math.floor(margin / repeat);
+  if (policy === 'repeat_5_cap3') return Math.min(3, raw);
+  return raw;
+}
+
+function rescore(match: V8CalibrationSimulatedMatch, policy: ScoringPolicyKey): ReScoredMatch {
+  let homeGoals = 0;
+  let awayGoals = 0;
+  for (const period of match.telemetry.periods) {
+    homeGoals += scoreMargin(period.home.attackingMargin, policy);
+    awayGoals += scoreMargin(period.away.attackingMargin, policy);
+  }
+  return { homeGoals, awayGoals };
+}
+
+function percentile(sorted: readonly number[], p: number): number {
+  if (!sorted.length) return 0;
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * p) - 1));
+  return sorted[index] ?? 0;
+}
+
+function round(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function summarize(policy: ScoringPolicyKey, matches: readonly V8CalibrationSimulatedMatch[]): ScoringPolicySummary {
+  const totals: number[] = [];
+  let draws = 0;
+  let margins = 0;
+  const squads = Object.fromEntries(V8_CALIBRATION_SQUAD_KEYS.map((key) => [key, emptySquadRow()])) as Record<V8CalibrationSquadKey, ReturnType<typeof emptySquadRow>>;
 
   for (const match of matches) {
-    const score = rescoreMatch(match, policy);
-    const total = score.home + score.away;
+    const scored = rescore(match, policy);
+    const total = scored.homeGoals + scored.awayGoals;
     totals.push(total);
-    if (score.home === score.away) draws += 1;
-    winningMargin += Math.abs(score.home - score.away);
-    if (total >= 18) atLeast18 += 1;
-    if (total >= 20) atLeast20 += 1;
+    margins += Math.abs(scored.homeGoals - scored.awayGoals);
+    if (scored.homeGoals === scored.awayGoals) draws += 1;
 
-    for (const side of ['home', 'away'] as const) {
-      const squad = side === 'home' ? match.homeSquad : match.awaySquad;
-      const goalsFor = side === 'home' ? score.home : score.away;
-      const goalsAgainst = side === 'home' ? score.away : score.home;
-      const acc = squadAcc[squad];
-      acc.matches += 1;
-      acc.goalsFor += goalsFor;
-      acc.goalsAgainst += goalsAgainst;
-      if (goalsFor === goalsAgainst) acc.draws += 1;
-      else if (goalsFor > goalsAgainst) acc.wins += 1;
-      else acc.losses += 1;
+    const homeRow = squads[match.homeSquad];
+    const awayRow = squads[match.awaySquad];
+    homeRow.samples += 1;
+    awayRow.samples += 1;
+    homeRow.goalsFor += scored.homeGoals;
+    homeRow.goalsAgainst += scored.awayGoals;
+    awayRow.goalsFor += scored.awayGoals;
+    awayRow.goalsAgainst += scored.homeGoals;
+    if (scored.homeGoals > scored.awayGoals) {
+      homeRow.wins += 1;
+      awayRow.losses += 1;
+    } else if (scored.awayGoals > scored.homeGoals) {
+      awayRow.wins += 1;
+      homeRow.losses += 1;
+    } else {
+      homeRow.draws += 1;
+      awayRow.draws += 1;
     }
   }
 
-  totals.sort((a, b) => a - b);
-  const count = matches.length;
-  const squads = Object.fromEntries(V8_CALIBRATION_SQUAD_KEYS.map((squad) => {
-    const acc = squadAcc[squad];
-    return [squad, {
-      matches: acc.matches,
-      wins: acc.wins,
-      draws: acc.draws,
-      losses: acc.losses,
-      winRate: round(acc.wins / acc.matches),
-      averageGoalsFor: round(acc.goalsFor / acc.matches),
-      averageGoalsAgainst: round(acc.goalsAgainst / acc.matches),
-    } satisfies SquadSensitivity];
-  })) as Record<V8CalibrationSquadKey, SquadSensitivity>;
+  const sorted = [...totals].sort((a, b) => a - b);
+  const squadReport = Object.fromEntries(V8_CALIBRATION_SQUAD_KEYS.map((key) => {
+    const row = squads[key];
+    return [key, {
+      wins: row.wins,
+      draws: row.draws,
+      losses: row.losses,
+      winRate: round(row.wins / row.samples),
+      drawRate: round(row.draws / row.samples),
+      goalsFor: round(row.goalsFor / row.samples),
+      goalsAgainst: round(row.goalsAgainst / row.samples),
+    }];
+  })) as ScoringPolicySummary['squads'];
 
   return {
     policy,
-    matches: count,
-    averageTotalGoals: round(totals.reduce((sum, value) => sum + value, 0) / count),
-    medianTotalGoals: percentile(totals, 0.5),
-    p90TotalGoals: percentile(totals, 0.9),
-    shareAtLeast18Goals: round(atLeast18 / count),
-    shareAtLeast20Goals: round(atLeast20 / count),
-    drawRate: round(draws / count),
-    averageWinningMargin: round(winningMargin / count),
-    squads,
+    matches: matches.length,
+    averageTotalGoals: round(totals.reduce((sum, value) => sum + value, 0) / totals.length),
+    medianTotalGoals: percentile(sorted, 0.5),
+    p90TotalGoals: percentile(sorted, 0.9),
+    shareAtLeast18: round(totals.filter((value) => value >= 18).length / totals.length),
+    shareAtLeast20: round(totals.filter((value) => value >= 20).length / totals.length),
+    drawRate: round(draws / matches.length),
+    averageMargin: round(margins / matches.length),
+    squads: squadReport,
   };
 }
 
-function formatReport(report: readonly PolicySensitivity[]): string {
-  const lines = report.map((item) => [
-    item.policy,
-    `avg ${item.averageTotalGoals}`,
-    `median ${item.medianTotalGoals}`,
-    `p90 ${item.p90TotalGoals}`,
-    `>=18 ${Math.round(item.shareAtLeast18Goals * 100)}%`,
-    `>=20 ${Math.round(item.shareAtLeast20Goals * 100)}%`,
-    `draw ${Math.round(item.drawRate * 100)}%`,
-    `avg margin ${item.averageWinningMargin}`,
-  ].join(' | '));
-
+function formatReport(report: readonly ScoringPolicySummary[]): string {
+  const lines = report.map((item) => `${item.policy} | avg ${item.averageTotalGoals} | median ${item.medianTotalGoals} | p90 ${item.p90TotalGoals} | >=18 ${Math.round(item.shareAtLeast18 * 100)}% | >=20 ${Math.round(item.shareAtLeast20 * 100)}% | draw ${Math.round(item.drawRate * 100)}% | avg margin ${item.averageMargin}`);
   const squadLines = report.flatMap((item) => [
     '',
     item.policy,
-    ...V8_CALIBRATION_SQUAD_KEYS.map((squad) => {
-      const row = item.squads[squad];
-      return `  ${squad}: W ${Math.round(row.winRate * 100)}% · ${row.averageGoalsFor}-${row.averageGoalsAgainst}`;
+    ...V8_CALIBRATION_SQUAD_KEYS.map((key) => {
+      const row = item.squads[key];
+      return `  ${key}: W ${Math.round(row.winRate * 100)}% · ${row.goalsFor}-${row.goalsAgainst}`;
     }),
   ]);
 
@@ -221,5 +188,5 @@ describe('V8 scoring sensitivity', () => {
     writeFileSync('test-results/v8-calibration-scoring-sensitivity.json', `${JSON.stringify(report, null, 2)}\n`);
     writeFileSync('test-results/v8-calibration-scoring-sensitivity.txt', `${text}\n`);
     console.log(`\n${text}\n`);
-  });
+  }, 20_000);
 });
