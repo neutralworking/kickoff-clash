@@ -138,13 +138,12 @@ const PLANNER_PROFILES: Readonly<Record<V8CalibrationSquadKey, V8CalibrationPlan
     },
   },
   dribbling_penalty: {
-    priorityPlayerIds: ['panenka', 'duff', 'garrincha', 'neymar', 'okocha', 'ronaldo'],
+    priorityPlayerIds: ['panenka', 'duff', 'garrincha', 'neymar', 'ronaldo'],
     preferredZones: {
       panenka: 'ATT',
       duff: 'ATT',
       garrincha: 'ATT',
       neymar: 'ATT',
-      okocha: 'ATT',
       ronaldo: 'ATT',
     },
   },
@@ -284,13 +283,12 @@ interface DribblingPenaltyCommitPlan {
 }
 
 /**
- * The Penalty package needs a reducer and a generator to reveal in that order in the same period.
- * Duff / Garrincha provide the period-only DEF reduction; Neymar / Okocha can turn one such reduction
- * into a Penalty. Spending either half alone before P4 destroys a future pair, so the calibration
- * planner preserves unmatched pieces and, when possible, keeps an alternate pair for the next period.
- * Panenka can be staged ahead; if 1+3+3 fits in P4 he reveals before the pair so the generated Penalty
- * gets CHIPPED PENALTY. Ronaldo is deliberately not treated as a one-reducer generator: his current
- * FLIP FLAP text still requires a defender to be at least 3 DEF below base.
+ * The compact Penalty package uses two period-only reducers (Duff / Garrincha) and two
+ * single-reduction generators (Neymar / Ronaldo). Spending either half alone before P4
+ * destroys a future pair, so the calibration planner preserves unmatched pieces and,
+ * when possible, keeps the alternate pair for the next period. Panenka can be staged
+ * ahead; if 1+3+3 fits in P4 he reveals before the pair so the generated Penalty gets
+ * CHIPPED PENALTY. This planner assumes the FLIP FLAP −2 sensitivity being tested.
  */
 function dribblingPenaltyCommitPlan(
   state: V8CalibrationState,
@@ -301,7 +299,7 @@ function dribblingPenaltyCommitPlan(
   const reducers = ['duff', 'garrincha']
     .map((id) => byId.get(id))
     .filter((card): card is V8CalibrationPlayerCard => Boolean(card));
-  const generators = ['neymar', 'okocha']
+  const generators = ['neymar', 'ronaldo']
     .map((id) => byId.get(id))
     .filter((card): card is V8CalibrationPlayerCard => Boolean(card));
   const panenka = byId.get('panenka');
@@ -335,16 +333,16 @@ function dribblingPenaltyCommitPlan(
     }
     return {
       priorityPlayerIds: tripleFits
-        ? ['panenka', reducer.id, generator.id, 'ronaldo']
-        : [reducer.id, generator.id, 'panenka', 'ronaldo'],
+        ? ['panenka', reducer.id, generator.id]
+        : [reducer.id, generator.id, 'panenka'],
       deferredPlayerIds: deferred,
     };
   }
 
   if (state.period < 4) {
     return {
-      priorityPlayerIds: ['panenka', 'ronaldo'],
-      deferredPlayerIds: new Set(['duff', 'garrincha', 'neymar', 'okocha']),
+      priorityPlayerIds: ['panenka'],
+      deferredPlayerIds: new Set(['duff', 'garrincha', 'neymar', 'ronaldo']),
     };
   }
 
