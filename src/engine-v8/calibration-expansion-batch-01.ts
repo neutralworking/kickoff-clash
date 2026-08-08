@@ -83,7 +83,7 @@ export const V8_EXPANSION_BATCH_01: readonly V8ExpansionCardContract[] = [
     actionText: 'Ongoing: The highest-ATT opposing attacker here has −5 ATT.',
     timing: 'ongoing',
     primitives: ['dynamic_opponent_target'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'puyol',
