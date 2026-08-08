@@ -6,6 +6,7 @@ import {
   calibrationRuntimeId,
   createV8CalibrationState,
   currentCalibrationAttack,
+  currentCalibrationDefence,
   getV8CalibrationPlayer,
   resolveGeneratedTacticalWindow,
   revealCalibrationPlayer,
@@ -58,6 +59,18 @@ describe('V8 individual dribbler quality', () => {
       .toBe('On Reveal: Give the lowest-DEF opposing defender here −2 DEF and gain +2 ATT this period. If they were already reduced, add a Penalty to your hand.');
     expect(currentCalibrationAttack(state, calibrationRuntimeId('home', 'okocha')))
       .toBe(getV8CalibrationPlayer('okocha').printedAttack + 2);
+    expect(calibrationHandTacticals(state, 'home').filter((card) => card.type === 'penalty')).toHaveLength(0);
+  });
+
+  it('lets Ronaldo break the strongest defender directly without generating a Penalty', () => {
+    let state = createV8CalibrationState();
+    state = seedCalibrationPlayer(state, 'away', 'ramos', 'DEF');
+    const before = currentCalibrationDefence(state, calibrationRuntimeId('away', 'ramos'));
+    state = revealCalibrationPlayer(state, 'home', 'ronaldo', 'ATT');
+
+    expect(getV8CalibrationPlayer('ronaldo').actionText)
+      .toBe('On Reveal: Give the highest-DEF opposing defender here −3 DEF this period.');
+    expect(currentCalibrationDefence(state, calibrationRuntimeId('away', 'ramos'))).toBe(before - 3);
     expect(calibrationHandTacticals(state, 'home').filter((card) => card.type === 'penalty')).toHaveLength(0);
   });
 });
