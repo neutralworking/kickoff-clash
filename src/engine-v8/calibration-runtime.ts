@@ -491,7 +491,7 @@ function runOnRevealMutable(state: V8CalibrationState, player: V8CalibrationRunt
       }
       break;
     case 'ronaldo_flip_flap':
-      if (opponents.filter(isDefender).some((target) => currentCalibrationDefence(state, target.runtimeId) <= calibrationPlayerCard(target).printedDefence - 2)) {
+      if (opponents.filter(isDefender).some((target) => currentCalibrationDefence(state, target.runtimeId) <= calibrationPlayerCard(target).printedDefence - 3)) {
         generateTacticalMutable(state, player.side, 'penalty', card.id, { attModifier: 2 });
       }
       break;
@@ -760,6 +760,8 @@ export function playCalibrationTactical(
   }
   if (!isV8ChanceType(card.type)) throw new Error(`Unsupported Tactical type: ${card.type}`);
 
+  // First-play state and protection are snapped before cancellation. An uncancellable card still
+  // consumes an opposing "first Chance" attempt, matching the calibration handoff.
   const specialists = snapshotChanceSpecialistsMutable(next, side, card, zone);
   const cancellation = cancellationAttemptsMutable(next, side, card, zone);
   const cancelled = cancellation.attempted && !specialists.uncancellable;
@@ -926,6 +928,11 @@ export interface V8CalibrationResolvedWindowPlay {
   cost: number;
 }
 
+/**
+ * Generated-Tactical Window eligibility is a plain equality on the period the instance
+ * entered hand: only this-period-generated cards may be window-played. Cards held from
+ * earlier periods re-enter play through a later commitment phase instead.
+ */
 export function isWindowEligibleTactical(state: V8CalibrationState, card: V8TacticalCardInstance): boolean {
   return card.metadata.enteredHandPeriod === state.period;
 }
@@ -934,6 +941,14 @@ export function windowEligibleCalibrationTacticals(state: V8CalibrationState, si
   return calibrationHandTacticals(state, side).filter((card) => isWindowEligibleTactical(state, card));
 }
 
+/**
+ * The Generated-Tactical Window: one blind, simultaneous pass after all reveals and
+ * on-reveal effects, before the scoring window. All window plays resolve together —
+ * utility plays (Offside Trap, Trigger Press) are applied before any Chance resolves,
+ * from BOTH sides, so a defensively window-played Tactical can cancel an offensively
+ * window-played one from the same window regardless of the input order. Margins and
+ * goals are only computed by the caller after this returns.
+ */
 export function resolveGeneratedTacticalWindow(
   state: V8CalibrationState,
   plays: readonly V8CalibrationWindowPlay[],

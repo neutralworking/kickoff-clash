@@ -60,51 +60,14 @@ describe('V8 calibration planner exercise policy', () => {
     expect(planned.pending[1]).toEqual({ kind: 'player', side: 'home', cardId: 'bremner', zone: 'MID', cost: 1 });
   });
 
-  it('puts Penalty enablers in ATT while preserving isolated combo pieces before the final period', () => {
+  it('puts Penalty enablers in ATT even when Panenka takes the normal OOP penalty', () => {
     const panenkaState = createV8CalibrationState({ homeDeck: ['panenka'], homeEnergy: 1 });
     const panenka = planV8CalibrationSide(panenkaState, 'home', false, 'dribbling_penalty');
     expect(panenka.pending[0]).toEqual({ kind: 'player', side: 'home', cardId: 'panenka', zone: 'ATT', cost: 1 });
 
     const neymarState = createV8CalibrationState({ homeDeck: ['neymar'], homeEnergy: 3 });
-    neymarState.period = 4;
     const neymar = planV8CalibrationSide(neymarState, 'home', false, 'dribbling_penalty');
     expect(neymar.pending[0]).toEqual({ kind: 'player', side: 'home', cardId: 'neymar', zone: 'ATT', cost: 3 });
-  });
-
-  it('stages Panenka but preserves Duff and Neymar until their same-period Penalty line is affordable', () => {
-    const state = createV8CalibrationState({ homeDeck: ['panenka', 'duff', 'neymar'], homeEnergy: 4 });
-    state.period = 2;
-
-    const planned = planV8CalibrationSide(state, 'home', false, 'dribbling_penalty');
-
-    expect(planned.pending).toEqual([
-      { kind: 'player', side: 'home', cardId: 'panenka', zone: 'ATT', cost: 1 },
-    ]);
-  });
-
-  it('commits one reducer before Neymar in P3 instead of wasting the reduction on Garrincha too', () => {
-    const state = createV8CalibrationState({ homeDeck: ['duff', 'garrincha', 'neymar'], homeEnergy: 6 });
-    state.period = 3;
-
-    const planned = planV8CalibrationSide(state, 'home', false, 'dribbling_penalty');
-
-    expect(planned.pending).toEqual([
-      { kind: 'player', side: 'home', cardId: 'duff', zone: 'ATT', cost: 3 },
-      { kind: 'player', side: 'home', cardId: 'neymar', zone: 'ATT', cost: 3 },
-    ]);
-  });
-
-  it('reveals Panenka before the reducer and Neymar when the full P4 Penalty package fits', () => {
-    const state = createV8CalibrationState({ homeDeck: ['panenka', 'duff', 'neymar'], homeEnergy: 8 });
-    state.period = 4;
-
-    const planned = planV8CalibrationSide(state, 'home', false, 'dribbling_penalty');
-
-    expect(planned.pending).toEqual([
-      { kind: 'player', side: 'home', cardId: 'panenka', zone: 'ATT', cost: 1 },
-      { kind: 'player', side: 'home', cardId: 'duff', zone: 'ATT', cost: 3 },
-      { kind: 'player', side: 'home', cardId: 'neymar', zone: 'ATT', cost: 3 },
-    ]);
   });
 
   it('holds an available Penalty long enough to deploy Panenka in ATT first', () => {

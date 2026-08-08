@@ -34,7 +34,8 @@ export interface V8CalibrationCostProfile {
  *
  * The second calibration pass keeps five XIs at 27 effective Cost and the
  * Long Shot / Set Piece XI at 26. The goal is not identical decks: it is to
- * make each mechanic test comparable before any actual card-value tuning.
+ * remove the original 30-Cost Through Ball tax and make each mechanic test
+ * comparable before any actual card-value tuning.
  */
 export const V8_CALIBRATION_SQUADS: Readonly<Record<V8CalibrationSquadKey, V8CalibrationSquad>> = {
   cross: {
@@ -79,12 +80,11 @@ export const V8_CALIBRATION_SQUADS: Readonly<Record<V8CalibrationSquadKey, V8Cal
     key: 'dribbling_penalty',
     label: 'DRIBBLING / PENALTY',
     shortLabel: 'Dribble',
-    identity: 'Use two dribblers to open the defensive line, convert the opening through Neymar or Ronaldo, then amplify the Penalty without abandoning the defensive spine.',
+    identity: 'Open the defensive line with dribbling, generate a Penalty, then amplify it in ATT.',
     playerIds: [
       'duff',
       'garrincha',
       'neymar',
-      'ronaldo',
       'panenka',
       'schmeichel',
       'gentile',
@@ -92,6 +92,7 @@ export const V8_CALIBRATION_SQUADS: Readonly<Record<V8CalibrationSquadKey, V8Cal
       'seedorf',
       'bremner',
       'baresi',
+      'beckenbauer',
     ],
   },
   control_defence: {

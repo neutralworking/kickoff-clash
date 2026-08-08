@@ -138,13 +138,12 @@ const PLANNER_PROFILES: Readonly<Record<V8CalibrationSquadKey, V8CalibrationPlan
     },
   },
   dribbling_penalty: {
-    priorityPlayerIds: ['panenka', 'duff', 'garrincha', 'neymar', 'ronaldo'],
+    priorityPlayerIds: ['panenka', 'duff', 'garrincha', 'neymar'],
     preferredZones: {
       panenka: 'ATT',
       duff: 'ATT',
       garrincha: 'ATT',
       neymar: 'ATT',
-      ronaldo: 'ATT',
     },
   },
   control_defence: {
@@ -271,85 +270,9 @@ function priorityIndex(
   side: V8CalibrationSide,
   squad: V8CalibrationSquadKey,
   cardId: string,
-  override?: readonly string[],
 ): number {
-  const index = (override ?? priorityPlayersForState(state, side, squad)).indexOf(cardId);
+  const index = priorityPlayersForState(state, side, squad).indexOf(cardId);
   return index < 0 ? Number.MAX_SAFE_INTEGER : index;
-}
-
-interface DribblingPenaltyCommitPlan {
-  priorityPlayerIds: readonly string[];
-  deferredPlayerIds: ReadonlySet<string>;
-}
-
-/**
- * The compact Penalty package uses two period-only reducers (Duff / Garrincha) and two
- * single-reduction generators (Neymar / Ronaldo). Spending either half alone before P4
- * destroys a future pair, so the calibration planner preserves unmatched pieces and,
- * when possible, keeps the alternate pair for the next period. Panenka can be staged
- * ahead; if 1+3+3 fits in P4 he reveals before the pair so the generated Penalty gets
- * CHIPPED PENALTY. This planner assumes the FLIP FLAP −2 sensitivity being tested.
- */
-function dribblingPenaltyCommitPlan(
-  state: V8CalibrationState,
-  side: V8CalibrationSide,
-): DribblingPenaltyCommitPlan {
-  const hand = calibrationHandPlayers(state, side);
-  const byId = new Map(hand.map((card) => [card.id, card] as const));
-  const reducers = ['duff', 'garrincha']
-    .map((id) => byId.get(id))
-    .filter((card): card is V8CalibrationPlayerCard => Boolean(card));
-  const generators = ['neymar', 'ronaldo']
-    .map((id) => byId.get(id))
-    .filter((card): card is V8CalibrationPlayerCard => Boolean(card));
-  const panenka = byId.get('panenka');
-  const panenkaDeployed = Boolean(state.players[calibrationRuntimeId(side, 'panenka')]);
-
-  let reducer: V8CalibrationPlayerCard | undefined;
-  let generator: V8CalibrationPlayerCard | undefined;
-  for (const candidateReducer of reducers) {
-    const candidateGenerator = generators.find((item) => (
-      calibrationPlayCost(candidateReducer) + calibrationPlayCost(item) <= state.teams[side].energy
-    ));
-    if (candidateGenerator) {
-      reducer = candidateReducer;
-      generator = candidateGenerator;
-      break;
-    }
-  }
-
-  if (reducer && generator) {
-    const pairCost = calibrationPlayCost(reducer) + calibrationPlayCost(generator);
-    const tripleFits = Boolean(
-      panenka
-      && !panenkaDeployed
-      && pairCost + calibrationPlayCost(panenka) <= state.teams[side].energy,
-    );
-    const deferred = new Set<string>();
-    if (state.period < 4) {
-      for (const card of [...reducers, ...generators]) {
-        if (card.id !== reducer.id && card.id !== generator.id) deferred.add(card.id);
-      }
-    }
-    return {
-      priorityPlayerIds: tripleFits
-        ? ['panenka', reducer.id, generator.id]
-        : [reducer.id, generator.id, 'panenka'],
-      deferredPlayerIds: deferred,
-    };
-  }
-
-  if (state.period < 4) {
-    return {
-      priorityPlayerIds: ['panenka'],
-      deferredPlayerIds: new Set(['duff', 'garrincha', 'neymar', 'ronaldo']),
-    };
-  }
-
-  return {
-    priorityPlayerIds: PLANNER_PROFILES.dribbling_penalty.priorityPlayerIds,
-    deferredPlayerIds: new Set(),
-  };
 }
 
 function shouldDeferPlayer(state: V8CalibrationState, squad: V8CalibrationSquadKey, cardId: string): boolean {
@@ -485,7 +408,6 @@ export function planV8CalibrationSide(
   const pending: V8CalibrationMatrixPlay[] = [];
   let nextManagerAvailable = managerAvailable;
   const hold = tacticalHoldPlan(next, side, squad, pending);
-  const dribblingPlan = squad === 'dribbling_penalty' ? dribblingPenaltyCommitPlan(next, side) : undefined;
 
   while (next.teams[side].energy > 0) {
     const priorityStillInHand = hold.priorityPlayerId
@@ -510,11 +432,8 @@ export function planV8CalibrationSide(
     if (tacticalPlayed) continue;
 
     const players = calibrationHandPlayers(next, side)
-      .filter((card) => calibrationPlayCost(card) <= next.teams[side].energy
-        && !shouldDeferPlayer(next, squad, card.id)
-        && !dribblingPlan?.deferredPlayerIds.has(card.id))
-      .sort((a, b) => priorityIndex(next, side, squad, a.id, dribblingPlan?.priorityPlayerIds)
-        - priorityIndex(next, side, squad, b.id, dribblingPlan?.priorityPlayerIds)
+      .filter((card) => calibrationPlayCost(card) <= next.teams[side].energy && !shouldDeferPlayer(next, squad, card.id))
+      .sort((a, b) => priorityIndex(next, side, squad, a.id) - priorityIndex(next, side, squad, b.id)
         || calibrationPlayCost(a) - calibrationPlayCost(b)
         || b.printedAttack + b.printedDefence - (a.printedAttack + a.printedDefence));
     const priorityPlayer = hold.priorityPlayerId

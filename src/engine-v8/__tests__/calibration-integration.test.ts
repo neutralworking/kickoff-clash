@@ -90,6 +90,7 @@ describe('high-priority calibration interactions', () => {
 
   it('C. Valderrama + Shevchenko resolves the banked first Through Ball for +8 ATT', () => {
     let state = highEnergy();
+    // PAUSE AND SLIP only adds +2 when ATT is already occupied, so establish the runner first.
     state = revealCalibrationPlayer(state, 'home', 'shevchenko', 'ATT');
     state = revealCalibrationPlayer(state, 'home', 'valderrama', 'MID');
     state = advance(state);
@@ -129,15 +130,16 @@ describe('high-priority calibration interactions', () => {
     expect(calibrationTacticalAvailableFromPeriod(penalty!)).toBe(2);
   });
 
-  it('F. Ronaldo converts one −2 dribble into an enhanced Penalty', () => {
+  it('F. Ronaldo requires the defender to be at least 3 DEF below base', () => {
     let state = highEnergy();
     state = seedCalibrationPlayer(state, 'away', 'ramos', 'DEF');
     state = applyCalibrationModifier(state, calibrationRuntimeId('away', 'ramos'), { defence: -2, lifetime: 'period', source: 'test' });
     state = revealCalibrationPlayer(state, 'home', 'ronaldo', 'ATT');
-    const penalty = calibrationHandTacticals(state, 'home').find((card) => card.type === 'penalty');
-    expect(penalty).toBeDefined();
-    expect(penalty?.attModifier).toBe(2);
-    expect(currentCalibrationDefence(state, calibrationRuntimeId('away', 'ramos'))).toBe(getV8CalibrationPlayer('ramos').printedDefence - 2);
+    expect(calibrationHandTacticals(state, 'home').filter((card) => card.type === 'penalty')).toHaveLength(0);
+
+    state = applyCalibrationModifier(state, calibrationRuntimeId('away', 'ramos'), { defence: -1, lifetime: 'period', source: 'test' });
+    const reloaded = addCalibrationTacticalToHand(state, 'home', 'penalty');
+    expect(currentCalibrationDefence(reloaded.state, calibrationRuntimeId('away', 'ramos'))).toBe(getV8CalibrationPlayer('ramos').printedDefence - 3);
   });
 
   it('G. Baresi banks Offside Trap, then cancels an opposing ATT Through Ball next period and gains +2 DEF', () => {
@@ -161,6 +163,7 @@ describe('high-priority calibration interactions', () => {
     state = revealCalibrationPlayer(state, 'home', 'park', 'MID');
     let press = tactical(state, 'home', 'trigger_press');
 
+    // The commitment path stays gated to the next period; the discount lives in THIS period.
     expect(calibrationTacticalAvailableFromPeriod(press)).toBe(2);
     expect(previewCalibrationTacticalCost(state, 'home', press, 'ATT')).toBe(0);
     expect(() => playCalibrationTactical(state, 'home', press.id, 'ATT')).toThrow('banked until Period 2');
@@ -170,6 +173,7 @@ describe('high-priority calibration interactions', () => {
     expect(window.plays[0]?.cost).toBe(0);
     expect(calibrationZoneTotals(window.state, 'home', 'ATT').attack).toBe(before + getV8CalibrationPlayer('wambach').printedDefence);
 
+    // Held instead of window-played: the discount expired, printed cost applies next period.
     state = advance(state);
     press = tactical(state, 'home', 'trigger_press');
     expect(previewCalibrationTacticalCost(state, 'home', press, 'ATT')).toBe(1);
@@ -181,6 +185,8 @@ describe('high-priority calibration interactions', () => {
   it('I. Gentile dynamically retargets the current highest-ATT opposing player and restores the old Action', () => {
     let state = highEnergy();
     state = seedCalibrationPlayer(state, 'home', 'gentile', 'DEF');
+    // Wambach and Hegerberg are both currently 11 ATT, so seed Hegerberg first to make the
+    // deterministic deployed-order tiebreak explicit before Wambach is boosted above her.
     state = seedCalibrationPlayer(state, 'away', 'hegerberg', 'ATT');
     state = seedCalibrationPlayer(state, 'away', 'wambach', 'ATT');
     state = refreshCalibrationSuppression(state);
@@ -286,6 +292,7 @@ describe('high-priority calibration interactions', () => {
     revealState.period = 4;
     revealState = revealCalibrationPlayer(revealState, 'home', 'beckham', 'MID');
     const cross = tactical(revealState, 'home', 'cross');
+    // No commitment window remains, but the P4 Generated-Tactical Window is open.
     expect(isCalibrationTacticalAvailable(revealState, cross)).toBe(false);
     const window = resolveGeneratedTacticalWindow(revealState, [{ side: 'home', cardId: cross.id, zone: 'ATT' }]);
     expect(window.state.tacticalResolutions.at(-1)).toMatchObject({ type: 'cross', attack: 4, cancelled: false, window: true });
