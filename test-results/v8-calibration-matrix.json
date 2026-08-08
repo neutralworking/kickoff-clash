@@ -81,15 +81,15 @@
       "squadA": "cross",
       "squadB": "long_shot_set_piece",
       "matches": 64,
-      "squadAWins": 41,
-      "draws": 10,
-      "squadBWins": 13,
-      "squadAWinRate": 0.641,
-      "drawRate": 0.156,
-      "squadBWinRate": 0.203,
+      "squadAWins": 29,
+      "draws": 8,
+      "squadBWins": 27,
+      "squadAWinRate": 0.453,
+      "drawRate": 0.125,
+      "squadBWinRate": 0.422,
       "averageGoalsA": 7.422,
-      "averageGoalsB": 5.469,
-      "averageGoalDifferenceA": 1.953
+      "averageGoalsB": 6.969,
+      "averageGoalDifferenceA": 0.453
     },
     {
       "squadA": "cross",
@@ -137,15 +137,15 @@
       "squadA": "through_ball",
       "squadB": "long_shot_set_piece",
       "matches": 64,
-      "squadAWins": 46,
-      "draws": 8,
-      "squadBWins": 10,
-      "squadAWinRate": 0.719,
-      "drawRate": 0.125,
-      "squadBWinRate": 0.156,
-      "averageGoalsA": 5.516,
-      "averageGoalsB": 3.578,
-      "averageGoalDifferenceA": 1.938
+      "squadAWins": 32,
+      "draws": 10,
+      "squadBWins": 22,
+      "squadAWinRate": 0.5,
+      "drawRate": 0.156,
+      "squadBWinRate": 0.344,
+      "averageGoalsA": 5.531,
+      "averageGoalsB": 4.984,
+      "averageGoalDifferenceA": 0.547
     },
     {
       "squadA": "through_ball",
@@ -179,15 +179,15 @@
       "squadA": "dribbling_penalty",
       "squadB": "long_shot_set_piece",
       "matches": 64,
-      "squadAWins": 36,
-      "draws": 9,
-      "squadBWins": 19,
-      "squadAWinRate": 0.563,
-      "drawRate": 0.141,
-      "squadBWinRate": 0.297,
-      "averageGoalsA": 4.984,
-      "averageGoalsB": 4.109,
-      "averageGoalDifferenceA": 0.875
+      "squadAWins": 29,
+      "draws": 5,
+      "squadBWins": 30,
+      "squadAWinRate": 0.453,
+      "drawRate": 0.078,
+      "squadBWinRate": 0.469,
+      "averageGoalsA": 5,
+      "averageGoalsB": 5.219,
+      "averageGoalDifferenceA": -0.219
     },
     {
       "squadA": "dribbling_penalty",
@@ -207,15 +207,15 @@
       "squadA": "control_defence",
       "squadB": "long_shot_set_piece",
       "matches": 64,
-      "squadAWins": 25,
+      "squadAWins": 22,
       "draws": 16,
-      "squadBWins": 23,
-      "squadAWinRate": 0.391,
+      "squadBWins": 26,
+      "squadAWinRate": 0.344,
       "drawRate": 0.25,
-      "squadBWinRate": 0.359,
+      "squadBWinRate": 0.406,
       "averageGoalsA": 1.172,
-      "averageGoalsB": 1.219,
-      "averageGoalDifferenceA": -0.047
+      "averageGoalsB": 1.531,
+      "averageGoalDifferenceA": -0.359
     },
     {
       "squadA": "control_defence",
@@ -235,33 +235,33 @@
       "squadA": "long_shot_set_piece",
       "squadB": "balanced_midrange",
       "matches": 64,
-      "squadAWins": 7,
+      "squadAWins": 17,
       "draws": 10,
-      "squadBWins": 47,
-      "squadAWinRate": 0.109,
+      "squadBWins": 37,
+      "squadAWinRate": 0.266,
       "drawRate": 0.156,
-      "squadBWinRate": 0.734,
-      "averageGoalsA": 2.953,
-      "averageGoalsB": 4.953,
-      "averageGoalDifferenceA": -2
+      "squadBWinRate": 0.578,
+      "averageGoalsA": 3.922,
+      "averageGoalsB": 4.969,
+      "averageGoalDifferenceA": -1.047
     }
   ],
   "squads": [
     {
       "squad": "cross",
       "matches": 320,
-      "wins": 175,
-      "draws": 37,
-      "losses": 108,
-      "winRate": 0.547,
-      "drawRate": 0.116,
+      "wins": 163,
+      "draws": 35,
+      "losses": 122,
+      "winRate": 0.509,
+      "drawRate": 0.109,
       "averageGoalsFor": 8.856,
-      "averageGoalsAgainst": 7.85,
-      "averageGoalDifference": 1.006,
+      "averageGoalsAgainst": 8.15,
+      "averageGoalDifference": 0.706,
       "averageUnusedEnergy": 0.653,
       "averagePlayersDeployed": 6.6,
       "averageTacticalsPlayed": 4.394,
-      "averageCancelledChances": 0.406,
+      "averageCancelledChances": 0.413,
       "tacticalAttackShare": 0.139,
       "averageWindowTacticalsPlayed": 1.053,
       "averageWindowEnergySpent": 0.594,
@@ -270,7 +270,7 @@
       "topChains": [
         {
           "chain": "PENDOLINO → Cross → DIVING HEADER +4 = +6 ATT",
-          "count": 144
+          "count": 142
         },
         {
           "chain": "PENDOLINO → Cross = +2 ATT",
@@ -293,18 +293,18 @@
     {
       "squad": "through_ball",
       "matches": 320,
-      "wins": 167,
-      "draws": 35,
-      "losses": 118,
-      "winRate": 0.522,
-      "drawRate": 0.109,
-      "averageGoalsFor": 7.084,
-      "averageGoalsAgainst": 6.5,
-      "averageGoalDifference": 0.584,
+      "wins": 153,
+      "draws": 37,
+      "losses": 130,
+      "winRate": 0.478,
+      "drawRate": 0.116,
+      "averageGoalsFor": 7.088,
+      "averageGoalsAgainst": 6.781,
+      "averageGoalDifference": 0.306,
       "averageUnusedEnergy": 1.438,
       "averagePlayersDeployed": 7.097,
       "averageTacticalsPlayed": 2.369,
-      "averageCancelledChances": 0.131,
+      "averageCancelledChances": 0.134,
       "tacticalAttackShare": 0.06,
       "averageWindowTacticalsPlayed": 1.128,
       "averageWindowEnergySpent": 0.128,
@@ -329,28 +329,28 @@
         },
         {
           "chain": "PAUSE AND SLIP → Through Ball → CANCELLED",
-          "count": 34
+          "count": 35
         }
       ]
     },
     {
       "squad": "dribbling_penalty",
       "matches": 320,
-      "wins": 112,
-      "draws": 39,
-      "losses": 169,
-      "winRate": 0.35,
-      "drawRate": 0.122,
-      "averageGoalsFor": 6.247,
-      "averageGoalsAgainst": 7.141,
-      "averageGoalDifference": -0.894,
-      "averageUnusedEnergy": 2.238,
+      "wins": 105,
+      "draws": 35,
+      "losses": 180,
+      "winRate": 0.328,
+      "drawRate": 0.109,
+      "averageGoalsFor": 6.25,
+      "averageGoalsAgainst": 7.363,
+      "averageGoalDifference": -1.112,
+      "averageUnusedEnergy": 2.306,
       "averagePlayersDeployed": 7.869,
-      "averageTacticalsPlayed": 0.156,
+      "averageTacticalsPlayed": 0.088,
       "averageCancelledChances": 0,
       "tacticalAttackShare": 0.006,
-      "averageWindowTacticalsPlayed": 0.081,
-      "averageWindowEnergySpent": 0.081,
+      "averageWindowTacticalsPlayed": 0.013,
+      "averageWindowEnergySpent": 0.013,
       "averageWindowTacticalAtt": 0.075,
       "averageWindowCancellations": 0,
       "topChains": [
@@ -367,21 +367,21 @@
     {
       "squad": "control_defence",
       "matches": 320,
-      "wins": 129,
+      "wins": 126,
       "draws": 49,
-      "losses": 142,
-      "winRate": 0.403,
+      "losses": 145,
+      "winRate": 0.394,
       "drawRate": 0.153,
       "averageGoalsFor": 3.05,
-      "averageGoalsAgainst": 3.131,
-      "averageGoalDifference": -0.081,
-      "averageUnusedEnergy": 2.703,
+      "averageGoalsAgainst": 3.194,
+      "averageGoalDifference": -0.144,
+      "averageUnusedEnergy": 3.025,
       "averagePlayersDeployed": 7.578,
-      "averageTacticalsPlayed": 1.563,
+      "averageTacticalsPlayed": 1.241,
       "averageCancelledChances": 0.191,
       "tacticalAttackShare": 0.026,
-      "averageWindowTacticalsPlayed": 0.375,
-      "averageWindowEnergySpent": 0.375,
+      "averageWindowTacticalsPlayed": 0.028,
+      "averageWindowEnergySpent": 0.028,
       "averageWindowTacticalAtt": 0,
       "averageWindowCancellations": 0,
       "topChains": [
@@ -398,61 +398,61 @@
     {
       "squad": "long_shot_set_piece",
       "matches": 320,
-      "wins": 72,
-      "draws": 53,
-      "losses": 195,
-      "winRate": 0.225,
-      "drawRate": 0.166,
-      "averageGoalsFor": 3.466,
-      "averageGoalsAgainst": 4.809,
-      "averageGoalDifference": -1.344,
-      "averageUnusedEnergy": 1.469,
-      "averagePlayersDeployed": 7.703,
+      "wins": 122,
+      "draws": 49,
+      "losses": 149,
+      "winRate": 0.381,
+      "drawRate": 0.153,
+      "averageGoalsFor": 4.525,
+      "averageGoalsAgainst": 4.819,
+      "averageGoalDifference": -0.294,
+      "averageUnusedEnergy": 1.516,
+      "averagePlayersDeployed": 7.688,
       "averageTacticalsPlayed": 1.547,
-      "averageCancelledChances": 0.028,
-      "tacticalAttackShare": 0.106,
-      "averageWindowTacticalsPlayed": 1.391,
-      "averageWindowEnergySpent": 0.359,
-      "averageWindowTacticalAtt": 7.641,
-      "averageWindowCancellations": 0.016,
+      "averageCancelledChances": 0.031,
+      "tacticalAttackShare": 0.108,
+      "averageWindowTacticalsPlayed": 1.328,
+      "averageWindowEnergySpent": 0.297,
+      "averageWindowTacticalAtt": 8.216,
+      "averageWindowCancellations": 0.013,
       "topChains": [
         {
-          "chain": "THUNDERBALL → Long Shot → HALFWAY HIT +4 = +7 ATT [window]",
+          "chain": "THUNDERBALL → Long Shot → HALFWAY HIT +4 = +8 ATT [window]",
           "count": 250
         },
         {
-          "chain": "THUNDERBALL → Long Shot = +3 ATT [window]",
+          "chain": "THUNDERBALL → Long Shot = +4 ATT [window]",
           "count": 55
         },
         {
-          "chain": "WHIPPED DELIVERY → Corner = +4 ATT [window]",
-          "count": 21
-        },
-        {
-          "chain": "WHIPPED DELIVERY → Corner → 93RD MINUTE +3 = +7 ATT [window]",
-          "count": 15
+          "chain": "WHIPPED DELIVERY → Corner → 93RD MINUTE +5 = +9 ATT",
+          "count": 26
         },
         {
           "chain": "WHIPPED DELIVERY → Corner = +4 ATT",
-          "count": 15
+          "count": 19
+        },
+        {
+          "chain": "WHIPPED DELIVERY → Corner = +4 ATT [window]",
+          "count": 17
         }
       ]
     },
     {
       "squad": "balanced_midrange",
       "matches": 320,
-      "wins": 176,
+      "wins": 166,
       "draws": 45,
-      "losses": 99,
-      "winRate": 0.55,
+      "losses": 109,
+      "winRate": 0.519,
       "drawRate": 0.141,
-      "averageGoalsFor": 6.675,
-      "averageGoalsAgainst": 5.947,
-      "averageGoalDifference": 0.728,
+      "averageGoalsFor": 6.678,
+      "averageGoalsAgainst": 6.141,
+      "averageGoalDifference": 0.538,
       "averageUnusedEnergy": 1.547,
       "averagePlayersDeployed": 8,
       "averageTacticalsPlayed": 1.453,
-      "averageCancelledChances": 0.122,
+      "averageCancelledChances": 0.125,
       "tacticalAttackShare": 0.033,
       "averageWindowTacticalsPlayed": 1.234,
       "averageWindowEnergySpent": 0.234,
@@ -461,7 +461,7 @@
       "topChains": [
         {
           "chain": "BEND IT → Cross = +4 ATT",
-          "count": 57
+          "count": 56
         },
         {
           "chain": "BEND IT → Cross = +4 ATT [window]",
@@ -473,7 +473,7 @@
         },
         {
           "chain": "BEND IT → Cross → CANCELLED",
-          "count": 13
+          "count": 14
         }
       ]
     }
