@@ -503,14 +503,14 @@ function resolveSequence(state: V8CalibrationState, plays: readonly V8Calibratio
 }
 
 /**
- * Generated-Tactical Window calibration policy. It deliberately recognises only obvious
- * football combinations; there is no look-ahead search or score optimisation here.
+ * Generated-Tactical Window calibration policy. Matrix evidence showed that holding ordinary
+ * Chances for a not-yet-established specialist can cost a second commitment cycle and is worse
+ * than cashing the immediate ATT. Step 3 therefore keeps only decisions with a clear timing payoff:
  *
- * - P1-P3 Chances may be held when this squad has a named specialist that is not yet established.
- * - A P3 Corner is held for an already-established Ramos so 93RD MINUTE can genuinely spike in P4.
- * - P4 Chances are always cashed rather than dying in hand.
- * - Trigger Press is not spent into an empty ATT line.
- * - Offside Trap is only spent when the opponent is expected to play a window Through Ball.
+ * - a P3 Corner can wait one window for an already-established Ramos and his P4 +5 spike;
+ * - Trigger Press is not spent into an empty ATT line;
+ * - Offside Trap is not spent unless the opponent is expected to play a window Through Ball;
+ * - all other affordable Chances are played immediately, including all P4 Chances.
  *
  * Both sides still plan blind from the same post-reveal state and resolve simultaneously.
  */
@@ -534,18 +534,11 @@ export function planV8CalibrationWindow(
   for (const card of windowEligibleCalibrationTacticals(state, side)) {
     let shouldPlay = true;
 
-    if (state.period < 4) {
-      if (card.type === 'cross' && ['cross', 'balanced_midrange', 'control_defence'].includes(squad)) {
-        shouldPlay = hasFriendly('ATT', ['wambach', 'hegerberg']);
-      } else if (card.type === 'through_ball' && squad === 'through_ball') {
-        shouldPlay = hasFriendly('ATT', ['morgan', 'shevchenko']);
-      } else if (card.type === 'long_shot' && squad === 'long_shot_set_piece') {
-        shouldPlay = hasFriendly('MID', ['lloyd']);
-      } else if (card.type === 'penalty' && squad === 'dribbling_penalty') {
-        shouldPlay = hasFriendly('ATT', ['panenka']);
-      } else if (card.type === 'corner' && squad === 'long_shot_set_piece' && state.period === 3) {
-        shouldPlay = !hasFriendly('ATT', ['ramos']);
-      }
+    if (card.type === 'corner'
+      && squad === 'long_shot_set_piece'
+      && state.period === 3
+      && hasFriendly('ATT', ['ramos'])) {
+      shouldPlay = false;
     }
 
     if (card.type === 'trigger_press') {
