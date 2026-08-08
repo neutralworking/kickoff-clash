@@ -143,11 +143,9 @@ Late-game boards are still deliberately large and consequential:
 
 The +7 band reduces scoreboard multiplication without flattening those distinct board identities.
 
-## CI correction retained
+## Verification
 
-`vitest.config.ts` now includes `src/engine-v8/__tests__`. Before this calibration work, explicitly naming V8 files could appear green while those tests were silently excluded by the configured include list.
-
-The current CI evidence includes:
+The current gameplay head passes:
 
 - focused V8 + V7 acceptance tests;
 - full Vitest suite with V8 actually included;
@@ -165,12 +163,7 @@ The current CI evidence includes:
 
 Freeze the calibration squad/planner work unless a genuine harness defect appears.
 
-Next balance work should be on **Long Shot / Set Piece as a real package**, using the current +7 scoring baseline. Inspect whether the problem is:
-
-1. the Long Shot / Corner Tactical values;
-2. the cost/payoff of Charlton, Lloyd, Eriksen and Ramos;
-3. the amount of board ATT sacrificed to assemble the package;
-4. or a combination of those.
+Next balance work should be on **Long Shot / Set Piece as a real package**, using the current +7 scoring baseline. Inspect whether the problem is the Tactical values, the cost/payoff of Charlton/Lloyd/Eriksen/Ramos, or the amount of board ATT sacrificed to assemble the package.
 
 Dribbling / Penalty is the secondary package to revisit after Set Piece.
 
