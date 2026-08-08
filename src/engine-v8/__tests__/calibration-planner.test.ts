@@ -70,6 +70,43 @@ describe('V8 calibration planner exercise policy', () => {
     expect(neymar.pending[0]).toEqual({ kind: 'player', side: 'home', cardId: 'neymar', zone: 'ATT', cost: 3 });
   });
 
+  it('sequences Duff before Neymar in P3 when the ready Penalty pair already fits', () => {
+    const state = createV8CalibrationState({ homeDeck: ['duff', 'neymar'], homeEnergy: 6 });
+    state.period = 3;
+
+    const planned = planV8CalibrationSide(state, 'home', false, 'dribbling_penalty');
+
+    expect(planned.pending).toEqual([
+      { kind: 'player', side: 'home', cardId: 'duff', zone: 'ATT', cost: 3 },
+      { kind: 'player', side: 'home', cardId: 'neymar', zone: 'ATT', cost: 3 },
+    ]);
+  });
+
+  it('sequences Panenka before Duff and Neymar in P4 when the whole ready Penalty line fits', () => {
+    const state = createV8CalibrationState({ homeDeck: ['panenka', 'duff', 'neymar'], homeEnergy: 8 });
+    state.period = 4;
+
+    const planned = planV8CalibrationSide(state, 'home', false, 'dribbling_penalty');
+
+    expect(planned.pending).toEqual([
+      { kind: 'player', side: 'home', cardId: 'panenka', zone: 'ATT', cost: 1 },
+      { kind: 'player', side: 'home', cardId: 'duff', zone: 'ATT', cost: 3 },
+      { kind: 'player', side: 'home', cardId: 'neymar', zone: 'ATT', cost: 3 },
+    ]);
+  });
+
+  it('does not hoard a future Penalty pair when Duff and Neymar do not both fit this period', () => {
+    const state = createV8CalibrationState({ homeDeck: ['panenka', 'duff', 'neymar'], homeEnergy: 4 });
+    state.period = 2;
+
+    const planned = planV8CalibrationSide(state, 'home', false, 'dribbling_penalty');
+
+    expect(planned.pending).toEqual([
+      { kind: 'player', side: 'home', cardId: 'panenka', zone: 'ATT', cost: 1 },
+      { kind: 'player', side: 'home', cardId: 'duff', zone: 'ATT', cost: 3 },
+    ]);
+  });
+
   it('holds an available Penalty long enough to deploy Panenka in ATT first', () => {
     let state = createV8CalibrationState({ homeDeck: ['panenka'], homeEnergy: 1 });
     state = addCalibrationTacticalToHand(state, 'home', 'penalty').state;
