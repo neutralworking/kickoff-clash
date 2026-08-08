@@ -153,7 +153,7 @@ const PLANNER_PROFILES: Readonly<Record<V8CalibrationSquadKey, V8CalibrationPlan
   long_shot_set_piece: {
     priorityPlayerIds: ['ramos', 'lloyd', 'schmeichel', 'charlton', 'eriksen', 'makelele'],
     preferredZones: {
-      ramos: 'DEF',
+      ramos: 'ATT',
       lloyd: 'MID',
       charlton: 'MID',
       eriksen: 'MID',
@@ -502,25 +502,17 @@ function resolveSequence(state: V8CalibrationState, plays: readonly V8Calibratio
   return next;
 }
 
-/** Calibration-only sensitivity: model 93RD MINUTE as a set-piece run from Ramos's natural DEF role. */
-function applyGlobalRamosCornerBonus(
+/** Calibration sensitivity: from P3, Ramos in ATT is treated as adjacent rather than wrong-depth. */
+function applyRamosLateRunOopRelief(
   state: V8CalibrationState,
   side: V8CalibrationSide,
   squad: V8CalibrationSquadKey,
-  fromResolutionIndex: number,
 ): void {
-  if (squad !== 'long_shot_set_piece') return;
+  if (squad !== 'long_shot_set_piece' || state.period < 3) return;
   const ramos = state.players[calibrationRuntimeId(side, 'ramos')];
-  if (!ramos || state.suppressedActions[ramos.runtimeId] !== undefined) return;
-  const bonus = state.period === 4 ? 5 : 3;
-
-  for (const resolution of state.tacticalResolutions.slice(fromResolutionIndex)) {
-    if (resolution.side !== side || resolution.type !== 'corner' || resolution.cancelled) continue;
-    if (resolution.specialistBonuses.some((label) => label.startsWith('93RD MINUTE'))) continue;
-    resolution.attack += bonus;
-    resolution.specialistBonuses.push(`93RD MINUTE +${bonus}`);
-    state.tacticalAttack[side][resolution.zone] += bonus;
-  }
+  if (!ramos || ramos.zone !== 'ATT' || state.suppressedActions[ramos.runtimeId] !== undefined) return;
+  // Wrong-depth is -5; adjacent is -2. ATT-zone scoring therefore gets +3 back this period.
+  state.tacticalAttack[side].ATT += 3;
 }
 
 /**
@@ -536,7 +528,7 @@ export function planV8CalibrationWindow(
   const plays: V8CalibrationWindowPlay[] = [];
   let budget = state.teams[side].energy;
   const otherSide: V8CalibrationSide = side === 'home' ? 'away' : 'home';
-  const hasRamos = Boolean(state.players[calibrationRuntimeId(side, 'ramos')]);
+  const hasRamosInAtt = calibrationPlayersInZone(state, side, 'ATT').some((player) => player.cardId === 'ramos');
   const opponentWindowThroughBall = windowEligibleCalibrationTacticals(state, otherSide)
     .some((card) => card.type === 'through_ball');
 
@@ -546,7 +538,7 @@ export function planV8CalibrationWindow(
     if (card.type === 'corner'
       && squad === 'long_shot_set_piece'
       && state.period === 3
-      && hasRamos) {
+      && hasRamosInAtt) {
       shouldPlay = false;
     }
 
@@ -604,21 +596,18 @@ export function simulateV8CalibrationMatch(args: {
     awayManagerAvailable = away.managerAvailable;
     const plays = [...home.pending, ...away.pending];
     const first = priority(away.state, homeScore, awayScore, seed + away.state.period * 101);
-    const commitmentResolutionStart = away.state.tacticalResolutions.length;
     let resolved = resolveSequence(away.state, plays.filter((play) => play.side === first));
     resolved = resolveSequence(resolved, plays.filter((play) => play.side !== first));
-    applyGlobalRamosCornerBonus(resolved, 'home', homeSquad, commitmentResolutionStart);
-    applyGlobalRamosCornerBonus(resolved, 'away', awaySquad, commitmentResolutionStart);
 
-    const windowResolutionStart = resolved.tacticalResolutions.length;
     const windowPlays = [
       ...planV8CalibrationWindow(resolved, 'home', homeSquad),
       ...planV8CalibrationWindow(resolved, 'away', awaySquad),
     ];
     const window = resolveGeneratedTacticalWindow(resolved, windowPlays);
     resolved = window.state;
-    applyGlobalRamosCornerBonus(resolved, 'home', homeSquad, windowResolutionStart);
-    applyGlobalRamosCornerBonus(resolved, 'away', awaySquad, windowResolutionStart);
+
+    applyRamosLateRunOopRelief(resolved, 'home', homeSquad);
+    applyRamosLateRunOopRelief(resolved, 'away', awaySquad);
 
     const telemetryPlays = [
       ...plays,
