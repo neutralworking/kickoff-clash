@@ -12,7 +12,7 @@ function withV8CalibrationOverrides(player: V8CalibrationPlayerCard): V8Calibrat
   return {
     ...player,
     actionText: NEYMAR_RAINBOW_FLICK_TEXT,
-    actions: player.actions.map((action) => (
+    actions: (player.actions ?? []).map((action) => (
       action.id === 'neymar_rainbow_flick'
         ? { ...action, text: NEYMAR_RAINBOW_FLICK_TEXT }
         : action
