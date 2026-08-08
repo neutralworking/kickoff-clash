@@ -89,6 +89,12 @@ const V8_EXPANSION_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionText: 'Moveable once per match. When this moves from MID to ATT, it gains +4 ATT.', moveable: true,
   }),
   expansionCard({
+    id: 'aitana-bonmati', realName: 'Aitana Bonmatí', matchName: 'Buenmarti', fullCardName: 'Aitana Buenmarti', trackerRow: 9, sourceCardId: 'KC-065',
+    position: 'CM / AM', naturalZones: ['MID', 'ATT'], cost: 6, costSource: 'tracker', attack: 6, defence: 4,
+    actionKey: 'aitana_escape_the_press', actionName: 'ESCAPE THE PRESS', timing: 'on_reveal',
+    actionText: 'On Reveal: Your first MID player next period costs 1 less.',
+  }),
+  expansionCard({
     id: 'di-stefano', realName: 'Alfredo Di Stéfano', matchName: 'De Stefani', fullCardName: 'Alfredo De Stefani', trackerRow: 16,
     position: 'CF / AM', naturalZones: ['MID', 'ATT'], cost: 6, costSource: 'tracker', attack: 10, defence: 1,
     actionKey: 'di_stefano_end_to_end_run', actionName: 'END-TO-END RUN', timing: 'ongoing',
