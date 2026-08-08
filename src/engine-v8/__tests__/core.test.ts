@@ -36,14 +36,14 @@ describe('V8 three-zone prototype foundations', () => {
 
   it.each([
     [0, 0, 0],
-    [4, 0, 0],
-    [5, 0, 1],
-    [9, 0, 1],
-    [10, 0, 2],
-    [14, 9, 1],
-    [19, 9, 2],
-    [-2, -8, 1],
-  ])('scores one goal for every complete +5 ATT band: %i vs %i', (attack, defence, expected) => {
+    [6, 0, 0],
+    [7, 0, 1],
+    [13, 0, 1],
+    [14, 0, 2],
+    [16, 9, 1],
+    [23, 9, 2],
+    [-1, -8, 1],
+  ])('scores one goal for every complete +7 ATT band: %i vs %i', (attack, defence, expected) => {
     expect(goalsFromAttackDefence(attack, defence)).toBe(expected);
   });
 
@@ -163,13 +163,13 @@ describe('V8 three-zone prototype foundations', () => {
   });
 
   it('banks goals independently in both directions at the end of a period', () => {
-    const homeForward = player({ id: 'home-st', position: 'ST', printedAttack: 14, printedDefence: 1, cost: 6, naturalZones: ['ATT'] });
-    const awayForward = player({ id: 'away-st', position: 'ST', printedAttack: 9, printedDefence: 1, cost: 5, naturalZones: ['ATT'] });
+    const homeForward = player({ id: 'home-st', position: 'ST', printedAttack: 18, printedDefence: 1, cost: 6, naturalZones: ['ATT'] });
+    const awayForward = player({ id: 'away-st', position: 'ST', printedAttack: 11, printedDefence: 1, cost: 5, naturalZones: ['ATT'] });
     const homeKeeper = player({ id: 'home-gk', position: 'GK', printedAttack: 0, printedDefence: 4, cost: 3, naturalZones: ['DEF'] });
     const awayKeeper = player({ id: 'away-gk', position: 'GK', printedAttack: 0, printedDefence: 4, cost: 3, naturalZones: ['DEF'] });
     const home = deployPlayer(deployPlayer(emptyV8Board(), homeForward, 'ATT', 1), homeKeeper, 'DEF', 2);
     const away = deployPlayer(deployPlayer(emptyV8Board(), awayForward, 'ATT', 1), awayKeeper, 'DEF', 2);
-    expect(resolvePeriodScore(home, away)).toMatchObject({ homeGoals: 2, awayGoals: 1, homeAttack: 14, homeDefence: 4, awayAttack: 9, awayDefence: 4 });
+    expect(resolvePeriodScore(home, away)).toMatchObject({ homeGoals: 2, awayGoals: 1, homeAttack: 18, homeDefence: 4, awayAttack: 11, awayDefence: 4 });
   });
 
   it('lets MID contribute simultaneously to attacking and defensive period totals', () => {
