@@ -243,12 +243,19 @@ function priorityPlayersForState(
   side: V8CalibrationSide,
   squad: V8CalibrationSquadKey,
 ): readonly string[] {
-  if (squad !== 'through_ball') return PLANNER_PROFILES[squad].priorityPlayerIds;
-  const runnerEstablished = calibrationPlayersInZone(state, side, 'ATT')
-    .some((player) => player.cardId === 'morgan' || player.cardId === 'shevchenko');
-  return runnerEstablished
-    ? ['valderrama', 'litmanen', 'morgan', 'shevchenko', 'park']
-    : ['morgan', 'shevchenko', 'valderrama', 'litmanen', 'park'];
+  if (squad === 'through_ball') {
+    const runnerEstablished = calibrationPlayersInZone(state, side, 'ATT')
+      .some((player) => player.cardId === 'morgan' || player.cardId === 'shevchenko');
+    return runnerEstablished
+      ? ['valderrama', 'litmanen', 'morgan', 'shevchenko', 'park']
+      : ['morgan', 'shevchenko', 'valderrama', 'litmanen', 'park'];
+  }
+  if (squad === 'long_shot_set_piece') {
+    return state.period >= 3
+      ? ['ramos', 'lloyd', 'charlton', 'eriksen']
+      : ['lloyd', 'charlton', 'eriksen'];
+  }
+  return PLANNER_PROFILES[squad].priorityPlayerIds;
 }
 
 function priorityIndex(
@@ -259,6 +266,10 @@ function priorityIndex(
 ): number {
   const index = priorityPlayersForState(state, side, squad).indexOf(cardId);
   return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+function shouldDeferPlayer(state: V8CalibrationState, squad: V8CalibrationSquadKey, cardId: string): boolean {
+  return squad === 'long_shot_set_piece' && cardId === 'ramos' && state.period < 3;
 }
 
 /**
@@ -330,7 +341,7 @@ function holdForPlayer(
 ): TacticalHoldPlan {
   if (!tactical || state.players[calibrationRuntimeId(side, playerId)]) return emptyHoldPlan();
   const player = calibrationHandPlayers(state, side).find((card) => card.id === playerId);
-  if (!player) return emptyHoldPlan();
+  if (!player || shouldDeferPlayer(state, squad, player.id)) return emptyHoldPlan();
   const cost = calibrationPlayCost(player);
   if (cost > state.teams[side].energy || !choosePlayerZone(state, side, squad, player, pending)) return emptyHoldPlan();
   return { heldIds: new Set([tactical.id]), priorityPlayerId: playerId, reservedEnergy: cost };
@@ -371,8 +382,10 @@ function tacticalHoldPlan(
   if (squad === 'long_shot_set_piece') {
     const longShotPlan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'long_shot'), 'lloyd');
     if (longShotPlan.priorityPlayerId) return longShotPlan;
-    const cornerPlan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'corner'), 'ramos');
-    if (cornerPlan.priorityPlayerId) return cornerPlan;
+    if (state.period >= 3) {
+      const cornerPlan = holdForPlayer(state, side, squad, pending, availableTactical(state, side, 'corner'), 'ramos');
+      if (cornerPlan.priorityPlayerId) return cornerPlan;
+    }
   }
 
   return emptyHoldPlan();
@@ -412,7 +425,7 @@ export function planV8CalibrationSide(
     if (tacticalPlayed) continue;
 
     const players = calibrationHandPlayers(next, side)
-      .filter((card) => calibrationPlayCost(card) <= next.teams[side].energy)
+      .filter((card) => calibrationPlayCost(card) <= next.teams[side].energy && !shouldDeferPlayer(next, squad, card.id))
       .sort((a, b) => priorityIndex(next, side, squad, a.id) - priorityIndex(next, side, squad, b.id)
         || calibrationPlayCost(a) - calibrationPlayCost(b)
         || b.printedAttack + b.printedDefence - (a.printedAttack + a.printedDefence));
