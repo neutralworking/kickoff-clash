@@ -6,7 +6,7 @@ import {
   revealCalibrationPlayer,
   spendCalibrationTacticalFromHand,
 } from './calibration-decay';
-import { getV8CalibrationPlayer, type V8CalibrationPlayerCard } from './calibration-cards';
+import { type V8CalibrationPlayerCard } from './calibration-cards';
 import {
   calibrationHandPlayers,
   calibrationHandTacticals,
@@ -508,7 +508,8 @@ function resolveSequence(state: V8CalibrationState, plays: readonly V8Calibratio
  * than cashing the immediate ATT. Step 3 therefore keeps only decisions with a clear timing payoff:
  *
  * - a P3 Corner can wait one window for an already-established Ramos and his P4 +5 spike;
- * - Trigger Press is not spent into an empty ATT line;
+ * - a same-period free Trigger Press is always cleared now; holding it turns a free card into a
+ *   printed-cost commitment card next period and can tax deployment even when the current press is 0 ATT;
  * - Offside Trap is not spent unless the opponent has a window Through Ball to cancel;
  * - all other affordable Chances are played immediately, including all P4 Chances.
  *
@@ -537,10 +538,7 @@ export function planV8CalibrationWindow(
       shouldPlay = false;
     }
 
-    if (card.type === 'trigger_press') {
-      shouldPlay = calibrationPlayersInZone(state, side, 'ATT')
-        .some((player) => getV8CalibrationPlayer(player.cardId).printedDefence > 0);
-    } else if (card.type === 'offside_trap') {
+    if (card.type === 'offside_trap') {
       shouldPlay = opponentWindowThroughBall;
     }
 
@@ -600,8 +598,6 @@ export function simulateV8CalibrationMatch(args: {
     let resolved = resolveSequence(away.state, plays.filter((play) => play.side === first));
     resolved = resolveSequence(resolved, plays.filter((play) => play.side !== first));
 
-    // The Generated-Tactical Window: both sides plan blind from the same post-reveal state,
-    // then every window play resolves before the scoring window reads the zone margins.
     const windowPlays = [
       ...planV8CalibrationWindow(resolved, 'home', homeSquad),
       ...planV8CalibrationWindow(resolved, 'away', awaySquad),
