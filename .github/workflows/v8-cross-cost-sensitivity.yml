@@ -1,4 +1,4 @@
-name: V8 Cross Structural Sensitivity
+name: V8 Cross Compact Cost Sensitivity
 
 on:
   pull_request:
@@ -21,38 +21,17 @@ jobs:
 
       - run: npm ci
 
-      - name: Apply Wambach Cost and tempo RABONA sensitivity
+      - name: Keep Wambach and Di Maria at printed Cost in the lab
         shell: python
         run: |
           from pathlib import Path
-
-          balance = Path('src/engine-v8/calibration-balance.ts')
-          text = balance.read_text()
+          path = Path('src/engine-v8/calibration-balance.ts')
+          text = path.read_text()
           old = "export function calibrationPlayCost(card: Pick<V8CalibrationPlayerCard, 'cost'>): number {\n  return Math.max(1, card.cost - 1);\n}"
-          new = "export function calibrationPlayCost(card: Pick<V8CalibrationPlayerCard, 'id' | 'cost'>): number {\n  if (card.id === 'wambach') return Math.max(1, card.cost);\n  return Math.max(1, card.cost - 1);\n}"
+          new = "export function calibrationPlayCost(card: Pick<V8CalibrationPlayerCard, 'id' | 'cost'>): number {\n  if (card.id === 'wambach' || card.id === 'di-maria') return Math.max(1, card.cost);\n  return Math.max(1, card.cost - 1);\n}"
           if old not in text:
               raise SystemExit('calibrationPlayCost source did not match expected baseline')
-          balance.write_text(text.replace(old, new))
-
-          runtime = Path('src/engine-v8/calibration-runtime.ts')
-          text = runtime.read_text()
-          old = """function modifyFirstCrossMutable(state: V8CalibrationState, side: V8CalibrationSide, amount: number): boolean {
-            const entry = state.teams[side].hand.find((candidate) => candidate.kind === 'tactical' && candidate.card.type === 'cross');
-            if (!entry || entry.kind !== 'tactical') return false;
-            entry.card.attModifier += amount;
-            pushEvent(state, 'tactical_modified', `${entry.card.name} in hand gains +${amount} ATT.`);
-            return true;
-          }"""
-          new = """function modifyFirstCrossMutable(state: V8CalibrationState, side: V8CalibrationSide, _amount: number): boolean {
-            const entry = state.teams[side].hand.find((candidate) => candidate.kind === 'tactical' && candidate.card.type === 'cross');
-            if (!entry || entry.kind !== 'tactical') return false;
-            entry.card.metadata.freeThroughPeriod = state.period;
-            pushEvent(state, 'tactical_modified', `${entry.card.name} in hand costs 0 this period.`);
-            return true;
-          }"""
-          if old not in text:
-              raise SystemExit('modifyFirstCrossMutable source did not match expected baseline')
-          runtime.write_text(text.replace(old, new))
+          path.write_text(text.replace(old, new))
 
       - name: Add zero-card and single-card Cross controls
         shell: python
@@ -112,13 +91,13 @@ jobs:
           });
           EOF
 
-      - name: Run structural sensitivity
+      - name: Run compact-cost sensitivity
         run: npx vitest run src/engine-v8/__tests__/calibration-matchup-matrix.test.ts src/engine-v8/__tests__/calibration-deck-validation.test.ts src/engine-v8/__tests__/calibration-compact-core.test.ts src/engine-v8/__tests__/tmp-cross-neutral-control.test.ts
 
       - name: Upload sensitivity evidence
         uses: actions/upload-artifact@v4
         with:
-          name: v8-cross-structural-sensitivity
+          name: v8-cross-compact-cost-sensitivity
           path: test-results/v8-calibration-*
           if-no-files-found: error
           retention-days: 7
