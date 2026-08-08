@@ -8,11 +8,13 @@ export * from './calibration-squads';
 export * from './calibration-telemetry';
 export * from './calibration-matchup-matrix';
 
-// The playable V8 lab opts into the action-decay calibration extension while
-// direct calibration-engine imports retain the original 30-card baseline.
+// The playable V8 lab opts into the action-decay and generated-Tactical timing extensions while
+// direct calibration-engine imports retain the original 30-card baseline for isolated tests.
 export {
   revealCalibrationPlayerWithDecay as revealCalibrationPlayer,
   endV8CalibrationPeriodWithDecay as endV8CalibrationPeriod,
   applyCalibrationDecayModifier as applyCalibrationModifier,
+  playCalibrationTacticalWithTiming as playCalibrationTactical,
+  spendCalibrationTacticalFromHandWithTiming as spendCalibrationTacticalFromHand,
   calibrationHandPlayersWithDecayText as calibrationHandPlayers,
 } from './calibration-engine';
