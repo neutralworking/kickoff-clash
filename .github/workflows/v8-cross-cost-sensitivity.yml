@@ -1,4 +1,4 @@
-name: V8 Cross Neutral Control
+name: V8 Cross Cost Redistribution
 
 on:
   pull_request:
@@ -21,9 +21,10 @@ jobs:
 
       - run: npm ci
 
-      - name: Add zero-card and single-card controls in checkout
-        shell: python
+      - name: Create neutral-control reporter
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
           path = Path('src/engine-v8/calibration-cross-minimal.ts')
           text = path.read_text()
@@ -55,10 +56,7 @@ jobs:
           if old not in text:
               raise SystemExit('CORE_CASES source did not match expected baseline')
           path.write_text(text.replace(old, new))
-
-      - name: Create temporary neutral-control reporter
-        shell: bash
-        run: |
+          PY
           cat > src/engine-v8/__tests__/tmp-cross-neutral-control.test.ts <<'EOF'
           import { mkdirSync, writeFileSync } from 'node:fs';
           import { describe, it } from 'vitest';
@@ -75,18 +73,49 @@ jobs:
               mkdirSync('test-results', { recursive: true });
               writeFileSync('test-results/v8-calibration-cross-neutral-control.json', `${JSON.stringify(report, null, 2)}\n`);
               writeFileSync('test-results/v8-calibration-cross-neutral-control.txt', `${text}\n`);
-              console.log(`\n${text}\n`);
             }, 30_000);
           });
           EOF
 
-      - name: Run neutral controls
-        run: npx vitest run src/engine-v8/__tests__/tmp-cross-neutral-control.test.ts
+      - name: Sweep redistribution candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=src/engine-v8/calibration-balance.ts
+          ORIGINAL=$(cat "$FILE")
+
+          run_scenario() {
+            local name="$1"
+            local discount="$2"
+            printf '%s' "$ORIGINAL" > "$FILE"
+            DISCOUNT="$discount" python - <<'PY'
+          import os
+          from pathlib import Path
+          path = Path('src/engine-v8/calibration-balance.ts')
+          text = path.read_text()
+          discount = os.environ['DISCOUNT']
+          old = "export function calibrationPlayCost(card: Pick<V8CalibrationPlayerCard, 'cost'>): number {\n  return Math.max(1, card.cost - 1);\n}"
+          new = f"export function calibrationPlayCost(card: Pick<V8CalibrationPlayerCard, 'id' | 'cost'>): number {{\n  if (card.id === 'wambach') return Math.max(1, card.cost);\n  if (card.id === '{discount}') return Math.max(1, card.cost - 2);\n  return Math.max(1, card.cost - 1);\n}}"
+          if old not in text:
+              raise SystemExit('calibrationPlayCost source did not match expected baseline')
+          path.write_text(text.replace(old, new))
+          PY
+            rm -rf test-results
+            npx vitest run src/engine-v8/__tests__/calibration-matchup-matrix.test.ts src/engine-v8/__tests__/tmp-cross-neutral-control.test.ts
+            mkdir -p "sensitivity/$name"
+            cp test-results/v8-calibration-matrix.json test-results/v8-calibration-matrix.txt "sensitivity/$name/"
+            cp test-results/v8-calibration-cross-neutral-control.json test-results/v8-calibration-cross-neutral-control.txt "sensitivity/$name/"
+          }
+
+          run_scenario dzajic dzajic
+          run_scenario hegerberg hegerberg
+          run_scenario cafu cafu
+          printf '%s' "$ORIGINAL" > "$FILE"
 
       - name: Upload sensitivity evidence
         uses: actions/upload-artifact@v4
         with:
-          name: v8-cross-neutral-control
-          path: test-results/v8-calibration-cross-neutral-control.*
+          name: v8-cross-cost-redistribution
+          path: sensitivity/
           if-no-files-found: error
           retention-days: 7
