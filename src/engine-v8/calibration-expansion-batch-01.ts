@@ -59,7 +59,7 @@ export const V8_EXPANSION_BATCH_01: readonly V8ExpansionCardContract[] = [
     actionText: 'On Reveal: Your first MID player next period costs 1 less.',
     timing: 'on_reveal',
     primitives: ['delayed_player_cost'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'di-stefano',
