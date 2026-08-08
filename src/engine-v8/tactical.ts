@@ -75,10 +75,10 @@ export const V8_TACTICAL_DEFINITIONS: Record<V8TacticalType, V8TacticalDefinitio
     type: 'long_shot',
     name: 'Long Shot',
     baseCost: 1,
-    baseAtt: 3,
+    baseAtt: 2,
     eligibleZones: ['MID', 'DEF', 'ATT'],
     isChance: true,
-    text: '+3 ATT this period.',
+    text: '+2 ATT this period.',
   },
   corner: {
     type: 'corner',
