@@ -6,22 +6,27 @@ import {
 } from './calibration-cards-base';
 
 export const NEYMAR_RAINBOW_FLICK_TEXT = 'On Reveal: If an opposing defender is here, add a Penalty to your hand.';
+export const GARRINCHA_JOY_OF_THE_PEOPLE_TEXT = 'On Reveal: Give the highest-DEF opposing defender here −2 DEF. If you reduce them, gain +2 ATT this period. If they were already reduced, gain +4 instead.';
 
 function withV8CalibrationOverrides(player: V8CalibrationPlayerCard): V8CalibrationPlayerCard {
-  if (player.id !== 'neymar') return player;
+  let actionText: string | undefined;
+  if (player.id === 'neymar') actionText = NEYMAR_RAINBOW_FLICK_TEXT;
+  if (player.id === 'garrincha') actionText = GARRINCHA_JOY_OF_THE_PEOPLE_TEXT;
+  if (!actionText) return player;
+
   return {
     ...player,
-    actionText: NEYMAR_RAINBOW_FLICK_TEXT,
+    actionText,
     actions: (player.actions ?? []).map((action) => (
-      action.id === 'neymar_rainbow_flick'
-        ? { ...action, text: NEYMAR_RAINBOW_FLICK_TEXT }
+      action.id === player.actionKey
+        ? { ...action, text: actionText }
         : action
     )),
   };
 }
 
 /**
- * Calibration-only card overrides that have passed package-level sensitivity testing.
+ * Calibration-only card overrides that have passed or are undergoing focused card-quality validation.
  * Source tracker / reconciliation values remain untouched.
  */
 export const V8_CALIBRATION_PLAYERS: readonly V8CalibrationPlayerCard[] = BASE_CALIBRATION_PLAYERS.map(withV8CalibrationOverrides);
