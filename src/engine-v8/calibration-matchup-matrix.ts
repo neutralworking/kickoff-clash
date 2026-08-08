@@ -1,17 +1,23 @@
 import { goalsFromAttackDefence, type V8Zone } from './core';
 import { calibrationEnergyForPeriod, calibrationPlayCost } from './calibration-balance';
-import { revealCalibrationPlayer, endV8CalibrationPeriod } from './calibration-decay';
+import {
+  endV8CalibrationPeriod,
+  isCalibrationTacticalAvailable,
+  revealCalibrationPlayer,
+  spendCalibrationTacticalFromHand,
+} from './calibration-decay';
 import { getV8CalibrationPlayer, type V8CalibrationPlayerCard } from './calibration-cards';
 import {
   calibrationHandPlayers,
   calibrationHandTacticals,
   calibrationPlayersInZone,
+  calibrationRuntimeId,
   calibrationTeamTotals,
   createV8CalibrationMatch,
+  moveCalibrationPlayer,
   previewCalibrationTacticalCost,
   removeCalibrationPlayerFromHand,
   resolveCommittedCalibrationTactical,
-  spendCalibrationTacticalFromHand,
   tacticalDefinition,
   type V8CalibrationSide,
   type V8CalibrationState,
@@ -36,6 +42,12 @@ export type V8CalibrationMatrixPlay =
   | { kind: 'player'; side: V8CalibrationSide; cardId: string; zone: V8Zone; cost: number }
   | { kind: 'tactical'; side: V8CalibrationSide; card: V8TacticalCardInstance; zone: V8Zone; cost: number }
   | { kind: 'manager'; side: V8CalibrationSide; zone: V8Zone; cost: number };
+
+export interface V8CalibrationPlannerResult {
+  state: V8CalibrationState;
+  pending: V8CalibrationMatrixPlay[];
+  managerAvailable: boolean;
+}
 
 export interface V8CalibrationSimulatedMatch {
   seed: number;
@@ -161,22 +173,92 @@ function payPlayer(
   };
 }
 
-function planSide(
+/**
+ * Lightweight calibration movement policy, not production AI.
+ * Cafu always tries to go one line forward so PENDOLINO actually produces Crosses.
+ * Beckenbauer toggles between his two natural lines so DER KAISER is exercised once per period.
+ */
+function exerciseMovement(state: V8CalibrationState, side: V8CalibrationSide): V8CalibrationState {
+  let next = state;
+
+  const cafu = next.players[calibrationRuntimeId(side, 'cafu')];
+  if (cafu) {
+    const target: V8Zone | null = cafu.zone === 'DEF' ? 'MID' : cafu.zone === 'MID' ? 'ATT' : null;
+    if (target && calibrationPlayersInZone(next, side, target).length < 4) {
+      try {
+        next = moveCalibrationPlayer(next, side, 'cafu', target);
+      } catch {
+        // Suppression/full-lane edge cases simply mean no calibration move this period.
+      }
+    }
+  }
+
+  const beckenbauer = next.players[calibrationRuntimeId(side, 'beckenbauer')];
+  if (beckenbauer) {
+    const target: V8Zone | null = beckenbauer.zone === 'DEF' ? 'MID' : beckenbauer.zone === 'MID' ? 'DEF' : null;
+    if (target && calibrationPlayersInZone(next, side, target).length < 4) {
+      try {
+        next = moveCalibrationPlayer(next, side, 'beckenbauer', target);
+      } catch {
+        // Same calibration-only fallback as Cafu.
+      }
+    }
+  }
+
+  return next;
+}
+
+type TacticalHoldPlan = {
+  heldIds: ReadonlySet<string>;
+  priorityPlayerId?: string;
+  reservedEnergy: number;
+};
+
+/**
+ * RABONA's modify-existing-Cross branch can never be observed if the CPU always spends every
+ * available Tactical before committing players. Hold exactly one Cross when Di María can be
+ * committed this period, reserve his Energy, and prioritise his deployment. No other combo is
+ * optimised here: this is deliberately the smallest hold rule needed to exercise the Action.
+ */
+function rabonaHoldPlan(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+  pending: readonly V8CalibrationMatrixPlay[],
+): TacticalHoldPlan {
+  const diMaria = calibrationHandPlayers(state, side).find((card) => card.id === 'di-maria');
+  if (!diMaria) return { heldIds: new Set(), reservedEnergy: 0 };
+  const cost = calibrationPlayCost(diMaria);
+  if (cost > state.teams[side].energy || !choosePlayerZone(state, side, diMaria, pending)) {
+    return { heldIds: new Set(), reservedEnergy: 0 };
+  }
+  const cross = calibrationHandTacticals(state, side)
+    .find((card) => card.type === 'cross' && isCalibrationTacticalAvailable(state, card));
+  if (!cross) return { heldIds: new Set(), reservedEnergy: 0 };
+  return { heldIds: new Set([cross.id]), priorityPlayerId: diMaria.id, reservedEnergy: cost };
+}
+
+export function planV8CalibrationSide(
   state: V8CalibrationState,
   side: V8CalibrationSide,
   managerAvailable: boolean,
-): { state: V8CalibrationState; pending: V8CalibrationMatrixPlay[]; managerAvailable: boolean } {
-  let next = state;
+): V8CalibrationPlannerResult {
+  let next = exerciseMovement(state, side);
   const pending: V8CalibrationMatrixPlay[] = [];
   let nextManagerAvailable = managerAvailable;
+  const hold = rabonaHoldPlan(next, side, pending);
 
   while (next.teams[side].energy > 0) {
+    const priorityStillInHand = hold.priorityPlayerId
+      ? calibrationHandPlayers(next, side).some((card) => card.id === hold.priorityPlayerId)
+      : false;
+    const reservedEnergy = priorityStillInHand ? hold.reservedEnergy : 0;
     const tacticals = calibrationHandTacticals(next, side);
     let tacticalPlayed = false;
     for (const card of tacticals) {
+      if (hold.heldIds.has(card.id) || !isCalibrationTacticalAvailable(next, card)) continue;
       const legal = tacticalDefinition(card.type).eligibleZones
         .map((zone) => ({ zone, cost: previewCalibrationTacticalCost(next, side, card, zone) }))
-        .filter(({ cost }) => cost <= next.teams[side].energy)
+        .filter(({ cost }) => cost <= next.teams[side].energy - reservedEnergy)
         .sort((a, b) => a.cost - b.cost)[0];
       if (!legal) continue;
       const spent = spendCalibrationTacticalFromHand(next, side, card.id, legal.zone);
@@ -191,7 +273,10 @@ function planSide(
       .filter((card) => calibrationPlayCost(card) <= next.teams[side].energy)
       .sort((a, b) => calibrationPlayCost(a) - calibrationPlayCost(b)
         || b.printedAttack + b.printedDefence - (a.printedAttack + a.printedDefence));
-    const chosen = players.find((card) => choosePlayerZone(next, side, card, pending));
+    const priorityPlayer = hold.priorityPlayerId
+      ? players.find((card) => card.id === hold.priorityPlayerId && choosePlayerZone(next, side, card, pending))
+      : undefined;
+    const chosen = priorityPlayer ?? players.find((card) => choosePlayerZone(next, side, card, pending));
     if (chosen) {
       const zone = choosePlayerZone(next, side, chosen, pending)!;
       const cost = calibrationPlayCost(chosen);
@@ -288,8 +373,8 @@ export function simulateV8CalibrationMatch(args: {
   const periods: V8CalibrationPeriodTelemetry[] = [];
 
   for (let periodIndex = 0; periodIndex < 4; periodIndex += 1) {
-    const home = planSide(state, 'home', homeManagerAvailable);
-    const away = planSide(home.state, 'away', awayManagerAvailable);
+    const home = planV8CalibrationSide(state, 'home', homeManagerAvailable);
+    const away = planV8CalibrationSide(home.state, 'away', awayManagerAvailable);
     homeManagerAvailable = home.managerAvailable;
     awayManagerAvailable = away.managerAvailable;
     const plays = [...home.pending, ...away.pending];
@@ -401,7 +486,6 @@ function squadSummary(
   const relevant = matches.filter((match) => match.homeSquad !== match.awaySquad && (match.homeSquad === squad || match.awaySquad === squad));
   for (const match of relevant) {
     const side: V8CalibrationSide = match.homeSquad === squad ? 'home' : 'away';
-    const opponent: V8CalibrationSide = side === 'home' ? 'away' : 'home';
     const scoreFor = side === 'home' ? match.homeScore : match.awayScore;
     const scoreAgainst = side === 'home' ? match.awayScore : match.homeScore;
     goalsFor += scoreFor;
@@ -418,10 +502,6 @@ function squadSummary(
     tacticalAttack += team.tacticalAttackGenerated;
     totalAttack += match.telemetry.periods.reduce((sum, period) => sum + period[side].attack, 0);
     for (const chain of team.majorChains) chains.set(chain, (chains.get(chain) ?? 0) + 1);
-
-    // Keep TypeScript honest that both sides are being read symmetrically; opponent is intentionally
-    // derived here rather than hard-coded even though only the score is needed above.
-    void opponent;
   }
 
   const count = relevant.length;
