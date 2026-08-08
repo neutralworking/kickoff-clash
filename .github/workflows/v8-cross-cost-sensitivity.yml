@@ -1,4 +1,4 @@
-name: V8 Cross Cost Redistribution
+name: V8 Cross Deep Rebate Sensitivity
 
 on:
   pull_request:
@@ -77,7 +77,7 @@ jobs:
           });
           EOF
 
-      - name: Sweep redistribution candidates
+      - name: Sweep deep rebate candidates
         shell: bash
         run: |
           set -euo pipefail
@@ -86,16 +86,18 @@ jobs:
 
           run_scenario() {
             local name="$1"
-            local discount="$2"
+            local rebate_a="$2"
+            local rebate_b="$3"
             printf '%s' "$ORIGINAL" > "$FILE"
-            DISCOUNT="$discount" python - <<'PY'
+            REBATE_A="$rebate_a" REBATE_B="$rebate_b" python - <<'PY'
           import os
           from pathlib import Path
           path = Path('src/engine-v8/calibration-balance.ts')
           text = path.read_text()
-          discount = os.environ['DISCOUNT']
+          a = os.environ['REBATE_A']
+          b = os.environ['REBATE_B']
           old = "export function calibrationPlayCost(card: Pick<V8CalibrationPlayerCard, 'cost'>): number {\n  return Math.max(1, card.cost - 1);\n}"
-          new = f"export function calibrationPlayCost(card: Pick<V8CalibrationPlayerCard, 'id' | 'cost'>): number {{\n  if (card.id === 'wambach') return Math.max(1, card.cost);\n  if (card.id === '{discount}') return Math.max(1, card.cost - 2);\n  return Math.max(1, card.cost - 1);\n}}"
+          new = f"export function calibrationPlayCost(card: Pick<V8CalibrationPlayerCard, 'id' | 'cost'>): number {{\n  if (card.id === 'wambach' || card.id === 'di-maria') return Math.max(1, card.cost);\n  if (card.id === '{a}' || card.id === '{b}') return Math.max(1, card.cost - 2);\n  return Math.max(1, card.cost - 1);\n}}"
           if old not in text:
               raise SystemExit('calibrationPlayCost source did not match expected baseline')
           path.write_text(text.replace(old, new))
@@ -107,15 +109,15 @@ jobs:
             cp test-results/v8-calibration-cross-neutral-control.json test-results/v8-calibration-cross-neutral-control.txt "sensitivity/$name/"
           }
 
-          run_scenario dzajic dzajic
-          run_scenario hegerberg hegerberg
-          run_scenario cafu cafu
+          run_scenario dzajic_cafu dzajic cafu
+          run_scenario dzajic_hegerberg dzajic hegerberg
+          run_scenario cafu_hegerberg cafu hegerberg
           printf '%s' "$ORIGINAL" > "$FILE"
 
       - name: Upload sensitivity evidence
         uses: actions/upload-artifact@v4
         with:
-          name: v8-cross-cost-redistribution
+          name: v8-cross-deep-rebate-sensitivity
           path: sensitivity/
           if-no-files-found: error
           retention-days: 7
