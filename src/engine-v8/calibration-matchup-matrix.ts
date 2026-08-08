@@ -502,19 +502,6 @@ function resolveSequence(state: V8CalibrationState, plays: readonly V8Calibratio
   return next;
 }
 
-/** Calibration sensitivity: from P3, Ramos in ATT is treated as adjacent rather than wrong-depth. */
-function applyRamosLateRunOopRelief(
-  state: V8CalibrationState,
-  side: V8CalibrationSide,
-  squad: V8CalibrationSquadKey,
-): void {
-  if (squad !== 'long_shot_set_piece' || state.period < 3) return;
-  const ramos = state.players[calibrationRuntimeId(side, 'ramos')];
-  if (!ramos || ramos.zone !== 'ATT' || state.suppressedActions[ramos.runtimeId] !== undefined) return;
-  // Wrong-depth is -5; adjacent is -2. ATT-zone scoring therefore gets +3 back this period.
-  state.tacticalAttack[side].ATT += 3;
-}
-
 /**
  * Generated-Tactical Window calibration policy settled from the A/B pass:
  * free THREE LUNGS is cleared now; Offside Trap is held without a current Through Ball;
@@ -605,9 +592,6 @@ export function simulateV8CalibrationMatch(args: {
     ];
     const window = resolveGeneratedTacticalWindow(resolved, windowPlays);
     resolved = window.state;
-
-    applyRamosLateRunOopRelief(resolved, 'home', homeSquad);
-    applyRamosLateRunOopRelief(resolved, 'away', awaySquad);
 
     const telemetryPlays = [
       ...plays,

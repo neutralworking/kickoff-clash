@@ -269,7 +269,7 @@ describe('high-priority calibration interactions', () => {
 
     state = playCalibrationTactical(state, 'home', longShot.id, 'MID', { ignoreEnergy: true });
 
-    expect(state.tacticalResolutions.at(-1)).toMatchObject({ type: 'long_shot', attack: 7, cancelled: false });
+    expect(state.tacticalResolutions.at(-1)).toMatchObject({ type: 'long_shot', attack: 8, cancelled: false });
     const second = addCalibrationTacticalToHand(state, 'home', 'long_shot');
     expect(previewCalibrationTacticalCost(second.state, 'home', second.card, 'MID')).toBe(1);
   });

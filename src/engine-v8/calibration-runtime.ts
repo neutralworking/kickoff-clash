@@ -500,6 +500,11 @@ function runOnRevealMutable(state: V8CalibrationState, player: V8CalibrationRunt
       if (target) applyModifierMutable(state, target.runtimeId, { attack: -3, lifetime: 'period', source: card.actionName, sourceRuntimeId: player.runtimeId });
       break;
     }
+    case 'ramos_93rd_minute':
+      if (state.period >= 3 && player.zone === 'ATT') {
+        applyModifierMutable(state, player.runtimeId, { attack: 5, lifetime: 'match', source: card.actionName });
+      }
+      break;
     case 'baresi_step_up':
       generateTacticalMutable(state, player.side, 'offside_trap', card.id, { metadata: { baresiPlayerId: player.runtimeId } });
       break;
