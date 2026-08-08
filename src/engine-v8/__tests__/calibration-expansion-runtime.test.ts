@@ -5,10 +5,13 @@ import {
   createV8CalibrationState,
   currentCalibrationAttack,
   currentCalibrationDefence,
+  endV8CalibrationPeriod,
   getV8CalibrationPlayer,
   moveCalibrationPlayer,
   playCalibrationTactical,
+  previewCalibrationPlayerCost,
   refreshCalibrationScoreState,
+  removeCalibrationPlayerFromHand,
   revealCalibrationPlayer,
   seedCalibrationPlayer,
 } from '../index';
@@ -24,6 +27,31 @@ describe('V8 expansion Batch 01 runtime primitives', () => {
     expect(currentCalibrationAttack(state, runtimeId)).toBe(13);
     expect(state.players[runtimeId]?.zone).toBe('ATT');
     expect(() => moveCalibrationPlayer(state, 'home', 'abedi-pele', 'MID')).toThrow('already moved this match');
+  });
+
+  it('ESCAPE THE PRESS discounts only the first MID-capable player next period', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'home', 'aitana-bonmati', 'MID');
+    state.teams.home.hand.push({ kind: 'player', cardId: 'seedorf' });
+    state.teams.home.hand.push({ kind: 'player', cardId: 'beckham' });
+    state = endV8CalibrationPeriod(state);
+
+    expect(state.period).toBe(2);
+    expect(previewCalibrationPlayerCost(state, 'home', 'seedorf')).toBe(getV8CalibrationPlayer('seedorf').cost - 1);
+    const energyBefore = state.teams.home.energy;
+    state = removeCalibrationPlayerFromHand(state, 'home', 'seedorf');
+    expect(state.teams.home.energy).toBe(energyBefore - (getV8CalibrationPlayer('seedorf').cost - 1));
+    expect(previewCalibrationPlayerCost(state, 'home', 'beckham')).toBe(getV8CalibrationPlayer('beckham').cost);
+  });
+
+  it('ESCAPE THE PRESS expires if its next-period discount is not used', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'home', 'aitana-bonmati', 'MID');
+    state = endV8CalibrationPeriod(state);
+    state = endV8CalibrationPeriod(state);
+
+    expect(state.period).toBe(3);
+    expect(previewCalibrationPlayerCost(state, 'home', 'seedorf')).toBe(getV8CalibrationPlayer('seedorf').cost);
   });
 
   it('CHEEKY CHIP reads the live zone confrontation rather than match score', () => {
