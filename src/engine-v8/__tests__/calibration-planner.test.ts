@@ -81,14 +81,14 @@ describe('V8 calibration planner exercise policy', () => {
     expect(planned.pending.some((play) => play.kind === 'tactical' && play.card.id === penalty.id)).toBe(false);
   });
 
-  it('keeps Ramos back before P3, then sends him to ATT for the late set-piece payoff', () => {
+  it('keeps Ramos in his natural DEF role while the set-piece package uses his attacking Corner run', () => {
     const early = createV8CalibrationState({ homeDeck: ['ramos'], homeEnergy: 4 });
     const earlyPlan = planV8CalibrationSide(early, 'home', false, 'long_shot_set_piece');
-    expect(earlyPlan.pending).toHaveLength(0);
+    expect(earlyPlan.pending[0]).toEqual({ kind: 'player', side: 'home', cardId: 'ramos', zone: 'DEF', cost: 2 });
 
     const late = createV8CalibrationState({ homeDeck: ['ramos'], homeEnergy: 6 });
     late.period = 3;
     const latePlan = planV8CalibrationSide(late, 'home', false, 'long_shot_set_piece');
-    expect(latePlan.pending[0]).toEqual({ kind: 'player', side: 'home', cardId: 'ramos', zone: 'ATT', cost: 2 });
+    expect(latePlan.pending[0]).toEqual({ kind: 'player', side: 'home', cardId: 'ramos', zone: 'DEF', cost: 2 });
   });
 });
