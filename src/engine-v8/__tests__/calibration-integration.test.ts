@@ -49,7 +49,7 @@ describe('V8 compact Neymar Penalty creator', () => {
   });
 });
 
-describe('V8 individual dribbler quality', () => {
+describe('V8 individual Action quality', () => {
   it('gives Okocha a standalone ATT payoff when STEPOVER beats a defender', () => {
     let state = createV8CalibrationState();
     state = seedCalibrationPlayer(state, 'away', 'ramos', 'DEF');
@@ -72,5 +72,18 @@ describe('V8 individual dribbler quality', () => {
       .toBe('On Reveal: Give the highest-DEF opposing defender here −3 DEF this period.');
     expect(currentCalibrationDefence(state, calibrationRuntimeId('away', 'ramos'))).toBe(before - 3);
     expect(calibrationHandTacticals(state, 'home').filter((card) => card.type === 'penalty')).toHaveLength(0);
+  });
+
+  it('renames Makélélé without changing the local defensive aura', () => {
+    let state = createV8CalibrationState();
+    state = seedCalibrationPlayer(state, 'home', 'makelele', 'MID');
+    state = seedCalibrationPlayer(state, 'home', 'seedorf', 'MID');
+
+    expect(getV8CalibrationPlayer('makelele').actionName).toBe('THE MAKÉLÉLÉ ROLE');
+    expect(getV8CalibrationPlayer('makelele').actionText).toBe('Ongoing: Your other players here have +2 DEF.');
+    expect(currentCalibrationDefence(state, calibrationRuntimeId('home', 'seedorf')))
+      .toBe(getV8CalibrationPlayer('seedorf').printedDefence + 2);
+    expect(currentCalibrationDefence(state, calibrationRuntimeId('home', 'makelele')))
+      .toBe(getV8CalibrationPlayer('makelele').printedDefence);
   });
 });
