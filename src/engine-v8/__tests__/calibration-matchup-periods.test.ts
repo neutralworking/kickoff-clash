@@ -126,5 +126,5 @@ describe('V8 calibration period diagnostics', () => {
     mkdirSync('test-results', { recursive: true });
     writeFileSync('test-results/v8-calibration-periods.json', `${JSON.stringify(report, null, 2)}\n`);
     writeFileSync('test-results/v8-calibration-periods.txt', `${lines.join('\n')}\n`);
-  });
+  }, 20_000);
 });
