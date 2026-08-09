@@ -1,3 +1,5 @@
+import './calibration-expansion-batch-06-cards';
+
 export * from './core';
 export * from './reveal';
 export * from './action-interactions';
@@ -15,6 +17,8 @@ export * from './calibration-expansion-batch-02';
 export * from './calibration-expansion-batch-03';
 export * from './calibration-expansion-batch-04';
 export * from './calibration-expansion-batch-05';
+export * from './calibration-expansion-batch-06';
+export * from './calibration-expansion-batch-06-cards';
 export * from './calibration-expansion-integration';
 export * from './calibration-presence';
 
