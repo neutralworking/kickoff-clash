@@ -107,7 +107,7 @@ describe('V8 larger-roster mixed expansion integration', () => {
     expect(state.periodCounters[`cavani-get-across-him:${cavaniId}`] ?? 0).toBe(0);
   });
 
-  it('composes Ellen White transformation with Yashin suppression in the opposing mixed XI', () => {
+  it('composes Ellen White transformation, Bergkamp enhancement and Yashin suppression', () => {
     let state = deployMixedMatch('mix_beta', 'mix_alpha');
     const chance = addCalibrationTacticalToHand(state, 'home', 'through_ball');
     state = playCalibrationTactical(chance.state, 'home', chance.card.id, 'ATT');
@@ -115,7 +115,7 @@ describe('V8 larger-roster mixed expansion integration', () => {
 
     expect(resolution?.type).toBe('long_shot');
     expect(resolution?.cancelled).toBe(false);
-    expect(resolution?.attack).toBe(3);
+    expect(resolution?.attack).toBe(5);
     expect(state.events.some((event) => event.text.includes('FIRST-TIME LOB'))).toBe(true);
     expect(state.events.some((event) => event.text.includes('BLACK SPIDER reduces'))).toBe(true);
   });
