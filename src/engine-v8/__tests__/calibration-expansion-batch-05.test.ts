@@ -38,16 +38,22 @@ describe('V8 Action expansion Batch 05 source-first audit', () => {
     expect(shilton.actionText).toContain('Through Ball');
   });
 
-  it('keeps strong source identities while refusing obvious duplicate implementations', () => {
+  it('keeps strong source identities without shipping the rejected Scholes duplicate', () => {
     expect(getV8ExpansionBatch05Card('roberto-carlos').actionName).toBe('THUNDERBOLT');
     expect(getV8ExpansionBatch05Card('ole-gunnar-solskjaer').actionName).toBe('SUPERSUB');
     expect(getV8ExpansionBatch05Card('ronaldinho').actionName).toBe('SHOWBOAT');
     expect(getV8ExpansionBatch05Card('paul-scholes').actionName).toBe('HOLLYWOOD BALL');
     expect(getV8ExpansionBatch05Card('shunsuke-nakamura').actionName).toBe('DEAD BALL ARTIST');
 
-    expect(getV8ExpansionBatch05Card('paul-scholes').auditDecision).toBe('mechanic_design');
-    expect(getV8ExpansionBatch05Card('paul-scholes').auditNote).toContain('DIAGONAL SWITCH');
-    expect(getV8ExpansionBatch05Card('shunsuke-nakamura').auditDecision).toBe('mechanic_design');
+    const scholes = getV8ExpansionBatch05Card('paul-scholes');
+    expect(scholes.auditDecision).toBe('keep_translate');
+    expect(scholes.actionText).toContain('add a Cross');
+    expect(scholes.actionText).not.toContain('becomes a Cross in ATT');
+    expect(scholes.auditNote).toContain('DIAGONAL SWITCH');
+
+    const nakamura = getV8ExpansionBatch05Card('shunsuke-nakamura');
+    expect(nakamura.auditDecision).toBe('mechanic_design');
+    expect(nakamura.auditNote).toContain('not claimed as source-authored');
   });
 
   it('identifies a reusable typed Chance suppression primitive instead of bespoke copies', () => {
@@ -59,7 +65,7 @@ describe('V8 Action expansion Batch 05 source-first audit', () => {
     expect(mcgrath.actionText).toContain('Cross');
   });
 
-  it('promotes six contracts and leaves only the deliberate design collisions pending', () => {
+  it('promotes the complete eight-card Batch 05 only after focused runtime coverage exists', () => {
     const ready = V8_EXPANSION_BATCH_05
       .filter((card) => card.implementationState === 'runtime_ready')
       .map((card) => card.id)
@@ -72,11 +78,13 @@ describe('V8 Action expansion Batch 05 source-first audit', () => {
     expect(ready).toEqual([
       'ole-gunnar-solskjaer',
       'paul-mcgrath',
+      'paul-scholes',
       'peter-shilton',
       'roberto-carlos',
       'ronaldinho',
+      'shunsuke-nakamura',
       'tony-adams',
     ]);
-    expect(pending).toEqual(['paul-scholes', 'shunsuke-nakamura']);
+    expect(pending).toEqual([]);
   });
 });
