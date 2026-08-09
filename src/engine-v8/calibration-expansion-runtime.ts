@@ -2,7 +2,7 @@ export * from './calibration-runtime';
 
 import { getV8CalibrationPlayer } from './calibration-cards';
 import type { V8Zone } from './core';
-import { isV8ChanceType } from './tactical';
+import { isV8ChanceType, type V8TacticalCardInstance } from './tactical';
 import * as base from './calibration-runtime';
 
 const ZONE_INDEX: Record<V8Zone, number> = { DEF: 0, MID: 1, ATT: 2 };
@@ -230,4 +230,53 @@ export function playCalibrationTactical(
     text: `${tacticalBefore.name} is cancelled by ${getV8CalibrationPlayer('nesta').actionName}.`,
   });
   return next;
+}
+
+export function resolveCommittedCalibrationTactical(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  card: V8TacticalCardInstance,
+  zone: V8Zone,
+  paidCost: number,
+): base.V8CalibrationState {
+  const next = clone(state);
+  next.teams[side].hand.push({ kind: 'tactical', card });
+  const resolved = playCalibrationTactical(next, side, card.id, zone, { ignoreEnergy: true });
+  const latest = resolved.tacticalResolutions[resolved.tacticalResolutions.length - 1];
+  if (latest) latest.cost = paidCost;
+  return resolved;
+}
+
+export interface V8ExpansionResolvedWindowPlay {
+  side: base.V8CalibrationSide;
+  card: V8TacticalCardInstance;
+  zone: V8Zone;
+  cost: number;
+}
+
+/** Uses the Batch 02 Tactical wrapper for generated-window Chances while preserving utility-first ordering. */
+export function resolveGeneratedTacticalWindow(
+  state: base.V8CalibrationState,
+  plays: readonly base.V8CalibrationWindowPlay[],
+): { state: base.V8CalibrationState; plays: V8ExpansionResolvedWindowPlay[] } {
+  let next = state;
+  const resolved: V8ExpansionResolvedWindowPlay[] = [];
+  const isUtility = (play: base.V8CalibrationWindowPlay): boolean => {
+    const card = base.calibrationHandTacticals(next, play.side).find((candidate) => candidate.id === play.cardId);
+    return card !== undefined && !isV8ChanceType(card.type);
+  };
+  const ordered = [...plays.filter((play) => isUtility(play)), ...plays.filter((play) => !isUtility(play))];
+
+  for (const play of ordered) {
+    const card = base.calibrationHandTacticals(next, play.side).find((candidate) => candidate.id === play.cardId);
+    if (!card) throw new Error(`Tactical card ${play.cardId} is not in hand`);
+    if (!base.isWindowEligibleTactical(next, card)) {
+      throw new Error(`${card.name} was not generated this period and is not window-eligible`);
+    }
+    const cost = base.previewCalibrationTacticalCost(next, play.side, card, play.zone);
+    next = playCalibrationTactical(next, play.side, play.cardId, play.zone, { window: true });
+    resolved.push({ side: play.side, card, zone: play.zone, cost });
+  }
+
+  return { state: next, plays: resolved };
 }
