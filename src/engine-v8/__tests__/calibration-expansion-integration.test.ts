@@ -49,11 +49,11 @@ function zoneCount(state: V8CalibrationState, side: V8CalibrationSide): number {
 }
 
 describe('V8 larger-roster mixed expansion integration', () => {
-  it('has 45 runtime-ready cards, two source-stat blockers and only Robben as a design blocker', () => {
-    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(45);
+  it('has 46 runtime-ready cards, two source-stat blockers and no primitive blockers through Batch 06', () => {
+    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(46);
     expect([...V8_EXPANSION_STATS_BLOCKED_IDS].sort()).toEqual(['kante', 'ozil']);
     expect(V8_EXPANSION_BLOCKED_IDS).toEqual(V8_EXPANSION_STATS_BLOCKED_IDS);
-    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].sort()).toEqual(['arjen-robben']);
+    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].sort()).toEqual([]);
 
     const covered = new Set(
       V8_EXPANSION_INTEGRATION_SQUAD_KEYS
@@ -61,7 +61,6 @@ describe('V8 larger-roster mixed expansion integration', () => {
     );
     expect([...V8_EXPANSION_RUNTIME_READY_IDS].every((cardId) => covered.has(cardId))).toBe(true);
     expect([...V8_EXPANSION_STATS_BLOCKED_IDS].some((cardId) => covered.has(cardId))).toBe(false);
-    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].some((cardId) => covered.has(cardId))).toBe(false);
   });
 
   it('builds five coherent 11-player integration XIs without changing the six balance squads', () => {
