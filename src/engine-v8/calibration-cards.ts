@@ -166,6 +166,24 @@ const V8_EXPANSION_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionKey: 'cruyff_total_football', actionName: 'TOTAL FOOTBALL', timing: 'ongoing',
     actionText: 'Ongoing: Your players ignore out-of-position penalties while this Action is active.',
   }),
+  expansionCard({
+    id: 'cannavaro', realName: 'Fabio Cannavaro', matchName: 'Camavero', fullCardName: 'Fabio Camavero', trackerRow: 82, sourceCardId: 'KC-040',
+    position: 'CB', naturalZones: ['DEF'], cost: 3, costSource: 'kc_reconciliation', attack: 1, defence: 10,
+    actionKey: 'cannavaro_reads_it_early', actionName: 'READS IT EARLY', timing: 'ongoing',
+    actionText: 'Ongoing: If the opposing ATT facing this zone is greater than your DEF here without this effect, +4 DEF.',
+  }),
+  expansionCard({
+    id: 'maradona', realName: 'Diego Maradona', matchName: 'Maravilla', fullCardName: 'Dario Maravilla', trackerRow: 65, sourceCardId: 'KC-061',
+    position: 'AM / LF', naturalZones: ['MID', 'ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 9, defence: 2,
+    actionKey: 'maradona_slalom_run', actionName: 'SLALOM RUN', timing: 'triggered',
+    actionText: 'Moveable once per match. When this moves from MID to ATT, gain +4 ATT this period and your first Chance in ATT this period cannot be cancelled.', moveable: true,
+  }),
+  expansionCard({
+    id: 'bergkamp', realName: 'Dennis Bergkamp', matchName: 'Bandcamp', fullCardName: 'Dennis Bandcamp', trackerRow: 61, sourceCardId: 'KC-049',
+    position: 'CF / AM', naturalZones: ['MID', 'ATT'], cost: 3, costSource: 'kc_reconciliation', attack: 10, defence: 1,
+    actionKey: 'bergkamp_first_touch', actionName: 'FIRST TOUCH', timing: 'triggered',
+    actionText: 'Your first Chance each period has +2 ATT.',
+  }),
 ] as const;
 
 /**
