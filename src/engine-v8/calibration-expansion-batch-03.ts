@@ -52,7 +52,7 @@ export const V8_EXPANSION_BATCH_03: readonly V8ExpansionBatch03CardContract[] = 
     actionText: 'The first opposing Chance played in ATT each period has −2 ATT, to a minimum of 0.',
     timing: 'triggered',
     primitives: ['first_chance_attack_suppression'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'cavani',
@@ -64,7 +64,7 @@ export const V8_EXPANSION_BATCH_03: readonly V8ExpansionBatch03CardContract[] = 
     actionText: 'The first time each period a Cross played here would be cancelled, prevent that cancellation.',
     timing: 'triggered',
     primitives: ['chance_cancellation_interception'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'lucy-bronze',
@@ -76,7 +76,7 @@ export const V8_EXPANSION_BATCH_03: readonly V8ExpansionBatch03CardContract[] = 
     actionText: 'Ongoing: While this is in MID and you have a friendly WF in ATT, this and your highest-ATT friendly WF in ATT have +2 ATT.',
     timing: 'ongoing',
     primitives: ['dynamic_friendly_target'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'alexia-putellas',
