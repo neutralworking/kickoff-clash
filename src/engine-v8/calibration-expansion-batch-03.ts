@@ -28,7 +28,7 @@ export const V8_EXPANSION_BATCH_03: readonly V8ExpansionBatch03CardContract[] = 
     actionText: 'Ongoing: If the opposing ATT facing this zone is greater than your DEF here without this effect, +4 DEF.',
     timing: 'ongoing',
     primitives: ['zone_advantage_modifier'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'maradona',
@@ -40,7 +40,7 @@ export const V8_EXPANSION_BATCH_03: readonly V8ExpansionBatch03CardContract[] = 
     actionText: 'Moveable once per match. When this moves from MID to ATT, gain +4 ATT this period and your first Chance in ATT this period cannot be cancelled.',
     timing: 'triggered',
     primitives: ['move_once', 'move_chance_protection'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'yashin',
@@ -112,7 +112,7 @@ export const V8_EXPANSION_BATCH_03: readonly V8ExpansionBatch03CardContract[] = 
     actionText: 'Your first Chance each period has +2 ATT.',
     timing: 'triggered',
     primitives: ['first_chance_enhancement'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
 ] as const;
 
