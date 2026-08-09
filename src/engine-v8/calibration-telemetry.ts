@@ -1,6 +1,7 @@
 import { outOfPositionPenalty } from './core';
 import { getV8CalibrationPlayer } from './calibration-cards';
 import {
+  calibrationEffectiveStats,
   calibrationPlayerCard,
   calibrationPlayersInZone,
   currentCalibrationAttack,
@@ -25,6 +26,8 @@ export interface V8CalibrationTeamPeriodTelemetry {
   tacticalAttack: number;
   actionAttackDelta: number;
   actionDefenceDelta: number;
+  contributionRuleAttackDelta: number;
+  contributionRuleDefenceDelta: number;
   unusedEnergy: number;
   playersDeployed: number;
   tacticalsPlayed: number;
@@ -50,6 +53,8 @@ export interface V8CalibrationTeamMatchTelemetry {
   tacticalsPlayed: number;
   tacticalAttackGenerated: number;
   cancelledChances: number;
+  contributionRuleAttackDelta: number;
+  contributionRuleDefenceDelta: number;
   windowTacticalsPlayed: number;
   windowEnergySpent: number;
   windowTacticalAtt: number;
@@ -95,13 +100,40 @@ function playerActionDeltas(state: V8CalibrationState, side: V8CalibrationSide):
   return { attack, defence };
 }
 
+/**
+ * Attribution for rules-layer contribution changes such as TOTAL FOOTBALL.
+ * This is deliberately separate from Action stat deltas: ignored OOP penalties change what a
+ * player contributes to the board without changing current ATT/DEF or firing stat-gain listeners.
+ */
+function contributionRuleDeltas(state: V8CalibrationState, side: V8CalibrationSide): { attack: number; defence: number } {
+  let attack = 0;
+  let defence = 0;
+
+  for (const player of Object.values(state.players).filter((candidate) => candidate.side === side)) {
+    const card = calibrationPlayerCard(player);
+    const normalPenalty = outOfPositionPenalty(card, player.zone);
+    const effectivePenalty = calibrationEffectiveStats(state, player).penalty;
+    const ignoredPenalty = normalPenalty - effectivePenalty;
+    if (ignoredPenalty <= 0) continue;
+
+    if (player.zone === 'DEF') {
+      defence += ignoredPenalty;
+    } else if (player.zone === 'MID') {
+      attack += ignoredPenalty;
+      defence += ignoredPenalty;
+    } else {
+      attack += ignoredPenalty;
+      if (state.triggerPress[side].ATT) attack += ignoredPenalty;
+    }
+  }
+
+  return { attack, defence };
+}
+
 function triggerPressAttack(state: V8CalibrationState, side: V8CalibrationSide): number {
   if (!state.triggerPress[side].ATT) return 0;
-  return calibrationPlayersInZone(state, side, 'ATT').reduce((sum, player) => {
-    const card = calibrationPlayerCard(player);
-    const penalty = outOfPositionPenalty(card, 'ATT');
-    return sum + currentCalibrationDefence(state, player.runtimeId) - penalty;
-  }, 0);
+  return calibrationPlayersInZone(state, side, 'ATT').reduce((sum, player) =>
+    sum + calibrationEffectiveStats(state, player).defence, 0);
 }
 
 function actionLabelFromGeneratedBy(card: V8TacticalCardInstance): string | null {
@@ -163,6 +195,7 @@ function teamPeriodTelemetry(args: {
   const directTacticalAttack = resolutions.reduce((sum, resolution) => sum + resolution.attack, 0);
   const pressAttack = triggerPressAttack(state, side);
   const actionDeltas = playerActionDeltas(state, side);
+  const ruleDeltas = contributionRuleDeltas(state, side);
   const windowPlays = plays.filter(
     (play): play is Extract<V8CalibrationTelemetryPlay, { kind: 'tactical' }> => play.kind === 'tactical' && play.side === side && play.window === true,
   );
@@ -179,6 +212,8 @@ function teamPeriodTelemetry(args: {
     tacticalAttack: directTacticalAttack + pressAttack,
     actionAttackDelta: actionDeltas.attack,
     actionDefenceDelta: actionDeltas.defence,
+    contributionRuleAttackDelta: ruleDeltas.attack,
+    contributionRuleDefenceDelta: ruleDeltas.defence,
     unusedEnergy: state.teams[side].energy,
     playersDeployed: plays.filter((play) => play.side === side && play.kind === 'player').length,
     tacticalsPlayed: plays.filter((play) => play.side === side && play.kind === 'tactical').length,
@@ -240,6 +275,8 @@ function aggregateTeam(
     tacticalsPlayed: teamPeriods.reduce((sum, period) => sum + period.tacticalsPlayed, 0),
     tacticalAttackGenerated: teamPeriods.reduce((sum, period) => sum + period.tacticalAttackGenerated, 0),
     cancelledChances: teamPeriods.reduce((sum, period) => sum + period.cancelledChances, 0),
+    contributionRuleAttackDelta: teamPeriods.reduce((sum, period) => sum + period.contributionRuleAttackDelta, 0),
+    contributionRuleDefenceDelta: teamPeriods.reduce((sum, period) => sum + period.contributionRuleDefenceDelta, 0),
     windowTacticalsPlayed: teamPeriods.reduce((sum, period) => sum + period.windowTacticalsPlayed, 0),
     windowEnergySpent: teamPeriods.reduce((sum, period) => sum + period.windowEnergySpent, 0),
     windowTacticalAtt: teamPeriods.reduce((sum, period) => sum + period.windowTacticalAtt, 0),
