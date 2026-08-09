@@ -177,11 +177,7 @@ function makeChanceUncancellable(
   return next;
 }
 
-/**
- * GET ACROSS HIM only intervenes when a Cross would actually be cancelled. The cancelled attempt is
- * discarded and replayed once from the identical pre-resolution state as uncancellable, so Energy,
- * first-Chance counters and specialist effects are consumed exactly once in the accepted result.
- */
+/** GET ACROSS HIM only spends on an actual cancelled Cross. */
 function interceptCancelledCross(
   before: runtime.V8CalibrationState,
   after: runtime.V8CalibrationState,
@@ -263,9 +259,14 @@ export function playCalibrationTactical(
     return runtime.playCalibrationTactical(state, side, cardId, zone, options);
   }
 
+  const preview = prepareChanceTransformations(state, side, cardId, zone);
+  if (!preview.transformed) {
+    // Preserve the established payment/telemetry path when Alexia/Pirlo do not intervene.
+    return resolvePreparedChance(state, side, cardId, zone, options);
+  }
+
   if (options.ignoreEnergy) {
-    const prepared = prepareChanceTransformations(state, side, cardId, zone);
-    return resolvePreparedChance(prepared.state, side, cardId, prepared.zone, options);
+    return resolvePreparedChance(preview.state, side, cardId, preview.zone, options);
   }
 
   // Pay and consume live Cost rules against the ORIGINAL Tactical before type/zone transformation.
