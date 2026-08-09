@@ -1,0 +1,66 @@
+import { describe, expect, it } from 'vitest';
+import {
+  V8_EXPANSION_BATCH_06,
+  getV8ExpansionBatch06Card,
+} from '../calibration-expansion-batch-06';
+
+describe('V8 Action expansion Batch 06 source-first audit', () => {
+  it('contains eight unique tracker-grounded contracts across multiple roles', () => {
+    expect(V8_EXPANSION_BATCH_06).toHaveLength(8);
+    expect(new Set(V8_EXPANSION_BATCH_06.map((card) => card.id)).size).toBe(8);
+    expect(V8_EXPANSION_BATCH_06.some((card) => card.naturalZones.includes('DEF'))).toBe(true);
+    expect(V8_EXPANSION_BATCH_06.some((card) => card.naturalZones.includes('MID'))).toBe(true);
+    expect(V8_EXPANSION_BATCH_06.some((card) => card.naturalZones.includes('ATT'))).toBe(true);
+  });
+
+  it('keeps tracker Action identity instead of older generic reconciliation Action names', () => {
+    expect(getV8ExpansionBatch06Card('carli-lloyd').actionName).toBe('HALFWAY HIT');
+    expect(getV8ExpansionBatch06Card('carlos-valderrama').actionName).toBe('PAUSE AND SLIP');
+    expect(getV8ExpansionBatch06Card('christian-eriksen').actionName).toBe('WHIPPED DELIVERY');
+    expect(getV8ExpansionBatch06Card('jari-litmanen').actionName).toBe('KILLER PASS');
+  });
+
+  it('promotes only the four cards whose V8 primitives already exist', () => {
+    const ready = V8_EXPANSION_BATCH_06
+      .filter((card) => card.implementationState === 'runtime_ready')
+      .map((card) => card.id)
+      .sort();
+    const pending = V8_EXPANSION_BATCH_06
+      .filter((card) => card.implementationState === 'primitive_required')
+      .map((card) => card.id)
+      .sort();
+
+    expect(ready).toEqual([
+      'carli-lloyd',
+      'carlos-valderrama',
+      'christian-eriksen',
+      'jari-litmanen',
+    ]);
+    expect(pending).toEqual([
+      'arjen-robben',
+      'caroline-graham-hansen',
+      'keira-walsh',
+      'rory-delap',
+    ]);
+  });
+
+  it('refuses to fake obsolete or missing mechanics for Robben, Delap and Walsh', () => {
+    const robben = getV8ExpansionBatch06Card('arjen-robben');
+    const delap = getV8ExpansionBatch06Card('rory-delap');
+    const walsh = getV8ExpansionBatch06Card('keira-walsh');
+
+    expect(robben.auditDecision).toBe('mechanic_design');
+    expect(robben.auditNote).toContain('wide-versus-centre geometry');
+    expect(delap.auditNote).toContain('not automatically a Cross or Corner');
+    expect(walsh.auditNote).toContain('Do not inherit');
+  });
+
+  it('identifies Graham Hansen as a shared interception primitive rather than a post-hoc stat repair', () => {
+    const hansen = getV8ExpansionBatch06Card('caroline-graham-hansen');
+    expect(hansen.auditDecision).toBe('keep_translate');
+    expect(hansen.primitives).toContain('targeted_defender_action_evasion');
+    expect(hansen.implementationState).toBe('primitive_required');
+    expect(hansen.actionText).toContain('ignored');
+    expect(hansen.actionText).toContain('+2 ATT');
+  });
+});
