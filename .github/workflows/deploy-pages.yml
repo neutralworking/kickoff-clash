@@ -1,8 +1,8 @@
 name: Deploy to GitHub Pages
 
-# Builds the live main export plus the isolated V8 prototype preview and publishes
-# them together. The live game remains at /kickoff-clash/; the V8 branch is nested
-# under /kickoff-clash/preview/v8/ so preview publishing never replaces the root app.
+# Builds the live main export plus isolated V8 previews and publishes them together.
+# The live game remains at /kickoff-clash/; previews are nested under /kickoff-clash/preview/
+# so preview publishing never replaces the root app.
 
 on:
   push:
@@ -62,6 +62,27 @@ jobs:
         run: |
           mkdir -p out/preview/v8
           cp -R preview-src/out/. out/preview/v8/
+
+      - name: Checkout ME UI preview
+        uses: actions/checkout@v4
+        with:
+          ref: agent/v8-me-ui-pass-01
+          path: me-ui-preview-src
+
+      - name: Install ME UI preview dependencies
+        working-directory: me-ui-preview-src
+        run: npm ci
+
+      - name: Build ME UI preview static export
+        working-directory: me-ui-preview-src
+        env:
+          NEXT_PUBLIC_BASE_PATH: /kickoff-clash/preview/me-ui-pass-01
+        run: npm run build
+
+      - name: Nest ME UI preview inside live Pages artifact
+        run: |
+          mkdir -p out/preview/me-ui-pass-01
+          cp -R me-ui-preview-src/out/. out/preview/me-ui-pass-01/
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
