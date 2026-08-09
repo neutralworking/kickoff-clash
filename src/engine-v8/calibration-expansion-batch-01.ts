@@ -9,7 +9,13 @@ export type V8ExpansionPrimitive =
   | 'chance_cancellation_with_self_cost'
   | 'multi_zone_presence'
   | 'action_target_interception'
-  | 'reactive_move';
+  | 'reactive_move'
+  | 'opponent_attack_gain_listener'
+  | 'typed_chance_cancellation'
+  | 'move_chance_protection'
+  | 'opponent_move_follow'
+  | 'oop_override'
+  | 'zone_advantage_modifier';
 
 export type V8ExpansionImplementationState =
   | 'runtime_ready'
