@@ -129,7 +129,7 @@ export const V8_EXPANSION_INTEGRATION_SQUADS: Readonly<Record<V8ExpansionIntegra
       { cardId: 'tony-adams', zone: 'DEF' },
       { cardId: 'keira-walsh', zone: 'MID' },
       { cardId: 'carli-lloyd', zone: 'MID' },
-      { cardId: 'carlos-valderrama', zone: 'MID' },
+      { cardId: 'rory-delap', zone: 'MID' },
       { cardId: 'paul-scholes', zone: 'MID' },
       { cardId: 'caroline-graham-hansen', zone: 'ATT' },
       { cardId: 'ronaldinho', zone: 'ATT' },
