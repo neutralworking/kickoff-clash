@@ -160,6 +160,12 @@ const V8_EXPANSION_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionKey: 'davids_pitbull', actionName: 'PITBULL', timing: 'triggered',
     actionText: 'The first time each period an opposing midfielder moves out of this zone, follow them and give them −2 ATT this period.', moveable: true,
   }),
+  expansionCard({
+    id: 'cruyff', realName: 'Johan Cruyff', matchName: 'Kroy', fullCardName: 'Johan Kroy', trackerRow: 140, sourceCardId: 'KC-063',
+    position: 'CF / AM', naturalZones: ['MID', 'ATT'], cost: 3, costSource: 'kc_reconciliation', attack: 10, defence: 1,
+    actionKey: 'cruyff_total_football', actionName: 'TOTAL FOOTBALL', timing: 'ongoing',
+    actionText: 'Ongoing: Your players ignore out-of-position penalties while this Action is active.',
+  }),
 ] as const;
 
 /**
