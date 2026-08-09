@@ -11,10 +11,11 @@ import {
   playCalibrationTactical,
   previewCalibrationTacticalCost,
   revealCalibrationPlayer,
+  windowEligibleCalibrationTacticals,
 } from '../index';
 
-describe('V8 expansion Batch 06 Slice A runtime', () => {
-  it('registers the five Slice A cards with reconciliation values and tracker identity', () => {
+describe('V8 expansion Batch 06 runtime', () => {
+  it('registers the six runtime cards with reconciliation values and tracker identity', () => {
     expect(getV8CalibrationPlayer('carli-lloyd')).toMatchObject({
       printedAttack: 6, printedDefence: 4, cost: 3, actionName: 'HALFWAY HIT',
     });
@@ -29,6 +30,9 @@ describe('V8 expansion Batch 06 Slice A runtime', () => {
     });
     expect(getV8CalibrationPlayer('jari-litmanen')).toMatchObject({
       printedAttack: 9, printedDefence: 2, cost: 4, actionName: 'KILLER PASS',
+    });
+    expect(getV8CalibrationPlayer('keira-walsh')).toMatchObject({
+      printedAttack: 4, printedDefence: 7, cost: 3, actionName: 'BEAT THE PRESS',
     });
   });
 
@@ -87,7 +91,6 @@ describe('V8 expansion Batch 06 Slice A runtime', () => {
     expect(currentCalibrationAttack(state, hansenId)).toBe(12);
     expect(state.events.some((event) => event.text.includes('ONE ON ONE ignores SHOW HIM OUTSIDE'))).toBe(true);
 
-    // A later board refresh in the same period must not resurrect Ashley's already-ignored Action.
     state = revealCalibrationPlayer(state, 'away', 'tony-adams', 'DEF');
     expect(currentCalibrationAttack(state, hansenId)).toBe(12);
     expect(state.players[hansenId]?.modifiers.filter((modifier) => modifier.source === 'ONE ON ONE')).toHaveLength(1);
@@ -100,7 +103,6 @@ describe('V8 expansion Batch 06 Slice A runtime', () => {
     state = revealCalibrationPlayer(state, 'away', 'tymoshchuk', 'MID');
     expect(currentCalibrationAttack(state, hansenId)).toBe(12);
 
-    // Ashley is a second, different defender Action in the same period and therefore lands.
     state = revealCalibrationPlayer(state, 'away', 'ashley-cole', 'MID');
     expect(currentCalibrationAttack(state, hansenId)).toBe(7);
     expect(state.players[hansenId]?.modifiers.filter((modifier) => modifier.source === 'ONE ON ONE')).toHaveLength(1);
@@ -119,6 +121,37 @@ describe('V8 expansion Batch 06 Slice A runtime', () => {
     state = revealCalibrationPlayer(state, 'home', 'cavani', 'ATT');
     expect(isCalibrationActionEnabled(state, hansenId)).toBe(true);
     expect(currentCalibrationAttack(state, hansenId)).toBe(12);
+  });
+
+  it('BEAT THE PRESS lets Trigger Press resolve and creates one +2 Through Ball per period', () => {
+    let state = createV8CalibrationState({ homeEnergy: 20, awayEnergy: 20 });
+    state = revealCalibrationPlayer(state, 'home', 'keira-walsh', 'MID');
+
+    const firstPress = addCalibrationTacticalToHand(state, 'away', 'trigger_press');
+    state = playCalibrationTactical(firstPress.state, 'away', firstPress.card.id, 'ATT');
+    expect(state.triggerPress.away.ATT).toBe(true);
+
+    const firstReward = calibrationHandTacticals(state, 'home')
+      .find((card) => card.generatedBy === 'keira-walsh');
+    expect(firstReward).toMatchObject({ type: 'through_ball', attModifier: 2 });
+    expect(windowEligibleCalibrationTacticals(state, 'home').some((card) => card.id === firstReward?.id)).toBe(true);
+
+    const secondPress = addCalibrationTacticalToHand(state, 'away', 'trigger_press');
+    state = playCalibrationTactical(secondPress.state, 'away', secondPress.card.id, 'ATT');
+    expect(calibrationHandTacticals(state, 'home').filter((card) => card.generatedBy === 'keira-walsh')).toHaveLength(1);
+  });
+
+  it('BEAT THE PRESS is disabled by suppression rather than granting blanket press immunity', () => {
+    let state = createV8CalibrationState({ homeEnergy: 20, awayEnergy: 20 });
+    const walshId = calibrationRuntimeId('home', 'keira-walsh');
+    state = revealCalibrationPlayer(state, 'home', 'keira-walsh', 'MID');
+    state = revealCalibrationPlayer(state, 'away', 'gentile', 'MID');
+    expect(isCalibrationActionEnabled(state, walshId)).toBe(false);
+
+    const press = addCalibrationTacticalToHand(state, 'away', 'trigger_press');
+    state = playCalibrationTactical(press.state, 'away', press.card.id, 'ATT');
+    expect(state.triggerPress.away.ATT).toBe(true);
+    expect(calibrationHandTacticals(state, 'home').some((card) => card.generatedBy === 'keira-walsh')).toBe(false);
   });
 
   it('KILLER PASS creates a +1 Through Ball at period end only for the MID winner', () => {
