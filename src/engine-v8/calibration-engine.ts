@@ -1,9 +1,10 @@
-export * from './calibration-expansion-chance-reactions';
+export * from './calibration-expansion-batch-04-runtime';
+export * from './calibration-expansion-batch-04-cards';
 
 import * as decay from './calibration-decay';
 import { refreshCalibrationExpansionOngoingEffects } from './calibration-expansion-ongoing';
 import { applyCalibrationAttackGainReactions } from './calibration-expansion-reactions';
-import * as runtime from './calibration-expansion-chance-reactions';
+import * as runtime from './calibration-expansion-batch-04-runtime';
 import type { V8Zone } from './core';
 
 function withExpansionReactions(
