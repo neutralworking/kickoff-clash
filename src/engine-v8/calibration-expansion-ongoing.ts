@@ -66,7 +66,10 @@ function tryBerbatovInterception(
   target: V8CalibrationRuntimePlayer,
 ): boolean {
   if (target.cardId !== 'berbatov' || source.side === target.side || !isDefender(source)) return false;
-  if (!isCalibrationActionEnabled(state, target.runtimeId)) return false;
+  // A suppression Action has to be allowed to reach BERBA SPIN before that same suppression disables it.
+  // A different, already-active suppressor still prevents BERBA SPIN from firing.
+  const activeSuppressor = state.suppressedActions[target.runtimeId];
+  if (activeSuppressor !== undefined && activeSuppressor !== source.runtimeId) return false;
   const key = `${BERBATOV_COUNTER_PREFIX}${target.runtimeId}`;
   if ((state.periodCounters[key] ?? 0) > 0) return false;
 
