@@ -14,10 +14,7 @@
 
 .v8-shell button { font: inherit; }
 
-/*
- * Match-first hierarchy.
- * Calibration/debug surfaces stay fully available, but they live below the playable match surface.
- */
+/* Match-first hierarchy. Calibration/debug surfaces stay below the playable match surface. */
 .v8-scorebar { order: 10; }
 .v8-pitch { order: 20; }
 .v8-commit { order: 30; }
@@ -47,7 +44,6 @@
   box-shadow: 0 8px 26px rgba(0,0,0,.24);
   backdrop-filter: blur(14px);
 }
-
 .v8-scorebar > div { text-align: center; }
 .v8-scorebar small { display: block; font-size: 8px; font-weight: 800; letter-spacing: .15em; opacity: .52; }
 .v8-scorebar strong { display: block; margin-top: 1px; font-size: 30px; line-height: .9; font-variant-numeric: tabular-nums; }
@@ -61,7 +57,6 @@
 .v8-scorebar section b { display: block; font-size: 13px; letter-spacing: .09em; }
 .v8-scorebar section span { display: block; margin-top: 2px; font-size: 10px; font-weight: 800; letter-spacing: .035em; opacity: .82; }
 
-/* Lab controls are deliberately visually secondary to the actual match. */
 .v8-condition {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -70,7 +65,6 @@
   padding-top: 10px;
   border-top: 1px solid rgba(255,255,255,.09);
 }
-
 .v8-condition::before {
   content: 'LAB TOOLS';
   grid-column: 1 / -1;
@@ -79,7 +73,6 @@
   letter-spacing: .14em;
   opacity: .42;
 }
-
 .v8-condition button,
 .v8-lab-controls button,
 .v8-commit button,
@@ -91,7 +84,6 @@
   color: inherit;
   cursor: pointer;
 }
-
 .v8-condition button { background: rgba(255,255,255,.035); }
 .v8-condition button:first-child { text-align: left; }
 .v8-condition button strong { display: block; font-size: 9px; letter-spacing: .08em; }
@@ -104,7 +96,6 @@
   gap: 5px;
   margin: 6px 0 0;
 }
-
 .v8-totals span {
   padding: 6px 4px;
   border-radius: 8px;
@@ -130,7 +121,6 @@
     linear-gradient(180deg, #123a25 0%, #0e3420 48%, #0d2f1d 52%, #103923 100%);
   box-shadow: inset 0 0 30px rgba(0,0,0,.18), 0 10px 35px rgba(0,0,0,.18);
 }
-
 .v8-pitch::after {
   content: 'OPPONENT  ·  YOU';
   position: absolute;
@@ -158,11 +148,29 @@
   text-align: left;
   cursor: pointer;
   overflow: hidden;
-  transition: border-color .12s ease, background .12s ease, transform .12s ease;
+  touch-action: manipulation;
+  transition: border-color .12s ease, background .12s ease, transform .12s ease, box-shadow .12s ease;
 }
-
 .v8-zone:hover { border-color: rgba(255,255,255,.42); }
 .v8-zone:active { transform: scale(.995); }
+
+/* Selecting a card visibly turns the board into a placement surface. */
+.v8-shell:has(.v8-card.is-selected) .v8-pitch {
+  border-color: rgba(255,255,255,.36);
+  box-shadow: inset 0 0 30px rgba(0,0,0,.18), 0 0 0 1px rgba(255,255,255,.08), 0 10px 35px rgba(0,0,0,.18);
+}
+.v8-shell:has(.v8-card.is-selected) .v8-zone {
+  border-color: rgba(255,255,255,.28);
+  background: rgba(255,255,255,.035);
+}
+.v8-shell:has(.v8-card.is-selected) .v8-zone__heading {
+  border-color: rgba(255,255,255,.28);
+  background: rgba(8,28,17,.96);
+}
+.v8-shell:has(.v8-card.is-selected) .v8-zone__heading span {
+  opacity: 1;
+}
+
 .v8-zone__heading {
   order: 2;
   display: flex;
@@ -278,10 +286,11 @@
 .v8-hand-heading span { font-size: 8px; opacity: .42; }
 .v8-hand {
   display: flex;
+  align-items: flex-end;
   gap: 6px;
   overflow-x: auto;
   padding: 4px 2px 8px;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
   scrollbar-width: none;
 }
 .v8-hand::-webkit-scrollbar { display: none; }
@@ -300,18 +309,22 @@
   scroll-snap-align: start;
   cursor: pointer;
   overflow: hidden;
-  transition: transform .12s ease, border-color .12s ease, opacity .12s ease, box-shadow .12s ease;
+  touch-action: manipulation;
+  transition: flex-basis .16s ease, height .16s ease, transform .12s ease, border-color .12s ease, opacity .12s ease, box-shadow .12s ease;
 }
 .v8-card:hover { transform: translateY(-2px); }
 .v8-card.is-selected {
   z-index: 2;
-  border-color: rgba(255,255,255,.9);
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0,0,0,.38), 0 0 0 1px rgba(255,255,255,.16);
+  flex-basis: 196px;
+  height: 178px;
+  border-color: rgba(255,255,255,.92);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(0,0,0,.42), 0 0 0 1px rgba(255,255,255,.18);
 }
 .v8-card.is-pending { opacity: .3; }
 .v8-card--chance { background: linear-gradient(165deg, #65491d, #2c1e0d); }
 .v8-card--manager { flex-basis: 116px; background: linear-gradient(165deg, #493a62, #20182f); }
+.v8-card--manager.is-selected { flex-basis: 196px; }
 .v8-card__cost,
 .v8-card__position,
 .v8-card__att,
@@ -340,7 +353,7 @@
   line-height: 1.03;
 }
 
-/* Player cards show the action identity in-match; expanded card text belongs in focus/detail UI. */
+/* Compact cards show Action identity; selected cards become the expanded card version. */
 .v8-card small {
   display: block;
   max-height: 27px;
@@ -356,11 +369,28 @@
   line-height: 1.15;
   letter-spacing: .035em;
 }
+.v8-card.is-selected small {
+  max-height: 96px;
+  margin-top: 9px;
+  font-size: 8.5px;
+  line-height: 1.28;
+  opacity: .92;
+}
+.v8-card.is-selected small b {
+  margin-bottom: 5px;
+  font-size: 9px;
+  letter-spacing: .045em;
+}
 .v8-card--chance small,
 .v8-card--manager small {
   max-height: 48px;
   font-size: 8px;
   line-height: 1.18;
+}
+.v8-card--chance.is-selected small,
+.v8-card--manager.is-selected small {
+  max-height: 96px;
+  font-size: 8.5px;
 }
 
 .v8-lab-controls {
@@ -502,7 +532,9 @@
   .v8-commit .v8-primary { grid-column: 1 / -1; width: 100%; padding-block: 7px; }
   .v8-window > div { max-height: none; }
   .v8-card { flex-basis: 104px; height: 132px; }
+  .v8-card.is-selected { flex-basis: 184px; height: 172px; }
   .v8-card--manager { flex-basis: 112px; }
+  .v8-card--manager.is-selected { flex-basis: 184px; }
   .v8-totals span { font-size: 7px; }
   .v8-lab-controls--squads { padding: 5px; gap: 4px; }
   .v8-lab-controls--squads select { padding: 4px; font-size: 8px; }
