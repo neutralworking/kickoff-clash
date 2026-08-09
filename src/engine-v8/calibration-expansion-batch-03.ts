@@ -88,7 +88,7 @@ export const V8_EXPANSION_BATCH_03: readonly V8ExpansionBatch03CardContract[] = 
     actionText: 'The first non-Through-Ball Chance played here each period becomes a Through Ball before it resolves.',
     timing: 'triggered',
     primitives: ['generated_tactical_transformation'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'pirlo',
@@ -100,7 +100,7 @@ export const V8_EXPANSION_BATCH_03: readonly V8ExpansionBatch03CardContract[] = 
     actionText: 'Your first Chance played in MID each period resolves in ATT instead; if it was not a Cross, it becomes a Cross before it resolves.',
     timing: 'triggered',
     primitives: ['generated_tactical_transformation'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'bergkamp',
