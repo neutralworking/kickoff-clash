@@ -23,9 +23,21 @@ interface AttackGain {
   amount: number;
 }
 
+function positiveAttackBySource(player: runtime.V8CalibrationRuntimePlayer | undefined): Map<string, number> {
+  const totals = new Map<string, number>();
+  if (!player) return totals;
+  for (const modifier of player.modifiers) {
+    if (modifier.attack <= 0) continue;
+    const key = modifier.source ?? modifier.id;
+    totals.set(key, (totals.get(key) ?? 0) + modifier.attack);
+  }
+  return totals;
+}
+
 /**
- * Reads newly-added positive ATT modifiers, not net ATT changes. This prevents a removed opposing
- * debuff (for example SHOW HIM OUTSIDE retargeting) from masquerading as an attacker "gaining ATT".
+ * Reads increases in positive ATT contribution by modifier source, not raw net ATT changes or IDs.
+ * This prevents removed debuffs from masquerading as gains and prevents a same-value live modifier
+ * replacement from retriggering a reaction merely because it received a new modifier id.
  */
 function newAttackGains(
   before: runtime.V8CalibrationState,
@@ -33,10 +45,10 @@ function newAttackGains(
 ): AttackGain[] {
   const gains: AttackGain[] = [];
   for (const player of Object.values(after.players)) {
-    const beforeIds = new Set((before.players[player.runtimeId]?.modifiers ?? []).map((modifier) => modifier.id));
-    const amount = player.modifiers
-      .filter((modifier) => !beforeIds.has(modifier.id) && modifier.attack > 0)
-      .reduce((sum, modifier) => sum + modifier.attack, 0);
+    const previous = positiveAttackBySource(before.players[player.runtimeId]);
+    const current = positiveAttackBySource(player);
+    let amount = 0;
+    for (const [source, value] of current) amount += Math.max(0, value - (previous.get(source) ?? 0));
     if (amount > 0) gains.push({ player, amount });
   }
   return gains.sort((a, b) =>
@@ -61,7 +73,7 @@ function firstQualifyingGain(
 
 /**
  * Shared reactive-defender primitive used by READ THE RUN and RECOVERY RUN.
- * Each defender can trigger once per period and mirrors the first qualifying positive ATT modifier
+ * Each defender can trigger once per period and mirrors the first qualifying positive ATT increase
  * applied to an opposing attacker in its current depth confrontation.
  */
 export function applyCalibrationAttackGainReactions(
