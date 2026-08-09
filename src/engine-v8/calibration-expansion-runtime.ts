@@ -27,6 +27,18 @@ function laudrupProtectionKey(runtimeId: string): string {
   return `laudrup-gliding-run-protection:${runtimeId}`;
 }
 
+function maradonaMoveKey(runtimeId: string): string {
+  return `maradona-slalom-run:${runtimeId}`;
+}
+
+function maradonaProtectionKey(runtimeId: string): string {
+  return `maradona-slalom-run-protection:${runtimeId}`;
+}
+
+function bergkampFirstTouchKey(runtimeId: string): string {
+  return `bergkamp-first-touch:${runtimeId}`;
+}
+
 function zoneCode(zone: V8Zone): number {
   return ZONE_INDEX[zone] + 1;
 }
@@ -112,9 +124,45 @@ function moveLaudrup(
   return base.refreshCalibrationSuppression(next);
 }
 
+function moveMaradona(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  toZone: V8Zone,
+): base.V8CalibrationState {
+  let next = clone(state);
+  const runtimeId = base.calibrationRuntimeId(side, 'maradona');
+  const player = next.players[runtimeId];
+  if (!player) throw new Error('maradona is not deployed');
+  if (player.zone === toZone) throw new Error('Player is already in that zone');
+  if (!adjacent(player.zone, toZone)) throw new Error('SLALOM RUN moves one adjacent zone');
+  if (!getV8CalibrationPlayer('maradona').naturalZones.includes(toZone)) throw new Error('SLALOM RUN can only move between natural zones');
+  if (base.calibrationPlayersInZone(next, side, toZone).length >= 4) throw new Error(`${toZone} is full`);
+  if (!base.isCalibrationActionEnabled(next, runtimeId)) throw new Error('Player has no active movement Action');
+  if ((next.matchCounters[maradonaMoveKey(runtimeId)] ?? 0) > 0) throw new Error('Player has already moved this match');
+
+  const from = player.zone;
+  player.zone = toZone;
+  next.matchCounters[maradonaMoveKey(runtimeId)] = 1;
+  next.events.push({
+    type: 'player_moved',
+    period: next.period,
+    text: `${getV8CalibrationPlayer('maradona').realName} · SLALOM RUN ${from} → ${toZone}.`,
+  });
+
+  if (from === 'MID' && toZone === 'ATT') {
+    next = base.applyCalibrationModifier(next, runtimeId, {
+      attack: 4,
+      lifetime: 'period',
+      source: 'SLALOM RUN',
+    });
+    next.periodCounters[maradonaProtectionKey(runtimeId)] = zoneCode('ATT');
+  }
+  return base.refreshCalibrationSuppression(next);
+}
+
 /**
- * Movement listener layer: GLIDING RUN owns a once-per-period manual move; PITBULL reacts to any
- * opposing midfielder movement produced by this runtime and follows into the destination.
+ * Movement listener layer: GLIDING RUN and SLALOM RUN own their movement allowances; PITBULL reacts
+ * to opposing midfielder movement produced by this runtime and follows into the destination.
  */
 export function moveCalibrationPlayer(
   state: base.V8CalibrationState,
@@ -128,28 +176,47 @@ export function moveCalibrationPlayer(
 
   let next = cardId === 'brian-laudrup'
     ? moveLaudrup(state, side, toZone)
-    : base.moveCalibrationPlayer(state, side, cardId, toZone);
+    : cardId === 'maradona'
+      ? moveMaradona(state, side, toZone)
+      : base.moveCalibrationPlayer(state, side, cardId, toZone);
 
   next = applyDavidsPursuit(next, side, cardId, fromZone, toZone);
   return next;
 }
 
-function activeLaudrupProtection(
+interface ActiveChanceProtection {
+  player: base.V8CalibrationRuntimePlayer;
+  counterKey: string;
+  actionName: string;
+}
+
+function activeChanceProtection(
   state: base.V8CalibrationState,
   side: base.V8CalibrationSide,
   zone: V8Zone,
-): base.V8CalibrationRuntimePlayer | undefined {
-  return Object.values(state.players)
-    .filter((player) =>
-      player.side === side
-      && player.cardId === 'brian-laudrup'
-      && base.isCalibrationActionEnabled(state, player.runtimeId)
-      && zoneFromCode(state.periodCounters[laudrupProtectionKey(player.runtimeId)] ?? 0) === zone
-    )
-    .sort((a, b) => a.deployedOrder - b.deployedOrder || a.runtimeId.localeCompare(b.runtimeId))[0];
+): ActiveChanceProtection | undefined {
+  const protections: ActiveChanceProtection[] = [];
+  for (const player of Object.values(state.players)) {
+    if (player.side !== side || !base.isCalibrationActionEnabled(state, player.runtimeId)) continue;
+    if (player.cardId === 'brian-laudrup') {
+      const key = laudrupProtectionKey(player.runtimeId);
+      if (zoneFromCode(state.periodCounters[key] ?? 0) === zone) {
+        protections.push({ player, counterKey: key, actionName: 'GLIDING RUN' });
+      }
+    }
+    if (player.cardId === 'maradona') {
+      const key = maradonaProtectionKey(player.runtimeId);
+      if (zoneFromCode(state.periodCounters[key] ?? 0) === zone) {
+        protections.push({ player, counterKey: key, actionName: 'SLALOM RUN' });
+      }
+    }
+  }
+  return protections.sort((a, b) =>
+    a.player.deployedOrder - b.player.deployedOrder || a.player.runtimeId.localeCompare(b.player.runtimeId)
+  )[0];
 }
 
-function prepareLaudrupProtection(
+function prepareChanceProtection(
   state: base.V8CalibrationState,
   side: base.V8CalibrationSide,
   cardId: string,
@@ -157,18 +224,48 @@ function prepareLaudrupProtection(
 ): base.V8CalibrationState {
   const tactical = base.calibrationHandTacticals(state, side).find((card) => card.id === cardId);
   if (!tactical || !isV8ChanceType(tactical.type)) return state;
-  const laudrup = activeLaudrupProtection(state, side, zone);
-  if (!laudrup) return state;
+  const protection = activeChanceProtection(state, side, zone);
+  if (!protection) return state;
 
   const next = clone(state);
   const entry = next.teams[side].hand.find((candidate) => candidate.kind === 'tactical' && candidate.card.id === cardId);
   if (!entry || entry.kind !== 'tactical') return state;
   entry.card.cancellable = false;
-  next.periodCounters[laudrupProtectionKey(laudrup.runtimeId)] = 0;
+  next.periodCounters[protection.counterKey] = 0;
   next.events.push({
     type: 'action_triggered',
     period: next.period,
-    text: `${getV8CalibrationPlayer('brian-laudrup').realName} · GLIDING RUN protects ${entry.card.name} in ${zone}.`,
+    text: `${getV8CalibrationPlayer(protection.player.cardId).realName} · ${protection.actionName} protects ${entry.card.name} in ${zone}.`,
+  });
+  return next;
+}
+
+function prepareBergkampFirstTouch(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  cardId: string,
+): base.V8CalibrationState {
+  const tactical = base.calibrationHandTacticals(state, side).find((card) => card.id === cardId);
+  if (!tactical || !isV8ChanceType(tactical.type)) return state;
+  const bergkamp = Object.values(state.players)
+    .filter((player) =>
+      player.side === side
+      && player.cardId === 'bergkamp'
+      && base.isCalibrationActionEnabled(state, player.runtimeId)
+      && (state.periodCounters[bergkampFirstTouchKey(player.runtimeId)] ?? 0) === 0
+    )
+    .sort((a, b) => a.deployedOrder - b.deployedOrder || a.runtimeId.localeCompare(b.runtimeId))[0];
+  if (!bergkamp) return state;
+
+  const next = clone(state);
+  const entry = next.teams[side].hand.find((candidate) => candidate.kind === 'tactical' && candidate.card.id === cardId);
+  if (!entry || entry.kind !== 'tactical') return state;
+  entry.card.attModifier += 2;
+  next.periodCounters[bergkampFirstTouchKey(bergkamp.runtimeId)] = 1;
+  next.events.push({
+    type: 'action_triggered',
+    period: next.period,
+    text: `${getV8CalibrationPlayer('bergkamp').realName} · FIRST TOUCH gives ${entry.card.name} +2 ATT.`,
   });
   return next;
 }
@@ -187,8 +284,8 @@ function removeLatestResolvedEvent(
 }
 
 /**
- * Chance-resolution layer: GLIDING RUN can protect one destination Chance; TIMED SLIDE then
- * cancels the first otherwise-resolving Through Ball in Nesta's confrontation each period.
+ * Chance-resolution layer: FIRST TOUCH enhances the first team Chance; movement Actions can protect
+ * one destination Chance; TIMED SLIDE then cancels an otherwise-resolving Through Ball.
  */
 export function playCalibrationTactical(
   state: base.V8CalibrationState,
@@ -198,7 +295,8 @@ export function playCalibrationTactical(
   options: { ignoreEnergy?: boolean; window?: boolean } = {},
 ): base.V8CalibrationState {
   const tacticalBefore = base.calibrationHandTacticals(state, side).find((card) => card.id === cardId);
-  const prepared = prepareLaudrupProtection(state, side, cardId, zone);
+  const touched = prepareBergkampFirstTouch(state, side, cardId);
+  const prepared = prepareChanceProtection(touched, side, cardId, zone);
   let next = base.playCalibrationTactical(prepared, side, cardId, zone, options);
   if (!tacticalBefore || tacticalBefore.type !== 'through_ball') return next;
 
@@ -254,7 +352,7 @@ export interface V8ExpansionResolvedWindowPlay {
   cost: number;
 }
 
-/** Uses the Batch 02 Tactical wrapper for generated-window Chances while preserving utility-first ordering. */
+/** Uses the expansion Tactical wrapper for generated-window Chances while preserving utility-first ordering. */
 export function resolveGeneratedTacticalWindow(
   state: base.V8CalibrationState,
   plays: readonly base.V8CalibrationWindowPlay[],
