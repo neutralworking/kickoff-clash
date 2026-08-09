@@ -49,7 +49,7 @@ function batch07Card(args: {
 /** Batch 07 runtime cards. Nadine Angerer remains audit-only until V8 has a real save event. */
 export const V8_BATCH_07_PLAYERS: readonly V8CalibrationPlayerCard[] = [
   batch07Card({
-    id: 'achraf-hakimi', realName: 'Achraf Hakimi', matchName: 'Hockami', fullCardName: 'Achraf Hockami', trackerRow: 7, sourceCardId: 'KC-071',
+    id: 'achraf-hakimi', realName: 'Achraf Hakimi', matchName: 'Hockami', fullCardName: 'Achraf Hockami', trackerRow: 7,
     position: 'FB / WB', naturalZones: ['DEF', 'MID'], cost: 3, attack: 4, defence: 6,
     actionKey: 'hakimi_bomb_on', actionName: 'BOMB ON', timing: 'ongoing',
     actionText: 'Ongoing: While this is in MID and you are losing the match, your first Through Ball or Long Shot played in ATT each period becomes a Cross before it resolves.',
