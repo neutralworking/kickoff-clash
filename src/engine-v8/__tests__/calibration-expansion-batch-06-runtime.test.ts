@@ -3,19 +3,22 @@ import {
   addCalibrationTacticalToHand,
   calibrationHandTacticals,
   calibrationRuntimeId,
+  calibrationTacticalAvailableFromPeriod,
   createV8CalibrationState,
   currentCalibrationAttack,
   endV8CalibrationPeriod,
   getV8CalibrationPlayer,
   isCalibrationActionEnabled,
+  isV8ChanceType,
   playCalibrationTactical,
   previewCalibrationTacticalCost,
   revealCalibrationPlayer,
+  tacticalDefinition,
   windowEligibleCalibrationTacticals,
 } from '../index';
 
 describe('V8 expansion Batch 06 runtime', () => {
-  it('registers the six runtime cards with reconciliation values and tracker identity', () => {
+  it('registers the seven runtime cards with reconciliation values and tracker identity', () => {
     expect(getV8CalibrationPlayer('carli-lloyd')).toMatchObject({
       printedAttack: 6, printedDefence: 4, cost: 3, actionName: 'HALFWAY HIT',
     });
@@ -33,6 +36,9 @@ describe('V8 expansion Batch 06 runtime', () => {
     });
     expect(getV8CalibrationPlayer('keira-walsh')).toMatchObject({
       printedAttack: 4, printedDefence: 7, cost: 3, actionName: 'BEAT THE PRESS',
+    });
+    expect(getV8CalibrationPlayer('rory-delap')).toMatchObject({
+      printedAttack: 5, printedDefence: 5, cost: 3, actionName: 'HURLER',
     });
   });
 
@@ -152,6 +158,35 @@ describe('V8 expansion Batch 06 runtime', () => {
     state = playCalibrationTactical(press.state, 'away', press.card.id, 'ATT');
     expect(state.triggerPress.away.ATT).toBe(true);
     expect(calibrationHandTacticals(state, 'home').some((card) => card.generatedBy === 'keira-walsh')).toBe(false);
+  });
+
+  it('Long Throw is a normal ATT-only Chance at the neutral Cost 1 / +2 ATT baseline', () => {
+    const definition = tacticalDefinition('long_throw');
+    expect(definition).toMatchObject({ name: 'Long Throw', baseCost: 1, baseAtt: 2, eligibleZones: ['ATT'], isChance: true });
+    expect(isV8ChanceType('long_throw')).toBe(true);
+
+    let state = createV8CalibrationState({ homeEnergy: 20, awayEnergy: 20 });
+    const generated = addCalibrationTacticalToHand(state, 'home', 'long_throw');
+    state = playCalibrationTactical(generated.state, 'home', generated.card.id, 'ATT');
+    const resolution = state.tacticalResolutions.find((item) => item.cardId === generated.card.id);
+    expect(resolution).toMatchObject({ type: 'long_throw', cost: 1, attack: 2, cancelled: false });
+  });
+
+  it('HURLER generates one Long Throw after P1-P3 and intentionally fizzles after P4', () => {
+    let state = createV8CalibrationState({ homeEnergy: 20, awayEnergy: 20 });
+    state = revealCalibrationPlayer(state, 'home', 'rory-delap', 'MID');
+
+    for (let completedPeriod = 1; completedPeriod <= 3; completedPeriod += 1) {
+      state = endV8CalibrationPeriod(state, { home: 0, away: 0 });
+      const throws = calibrationHandTacticals(state, 'home').filter((card) => card.generatedBy === 'rory-delap');
+      expect(throws).toHaveLength(completedPeriod);
+      expect(throws.at(-1)).toMatchObject({ type: 'long_throw' });
+      expect(calibrationTacticalAvailableFromPeriod(throws.at(-1)!)).toBe(completedPeriod + 1);
+    }
+
+    expect(state.period).toBe(4);
+    state = endV8CalibrationPeriod(state, { home: 0, away: 0 });
+    expect(calibrationHandTacticals(state, 'home').filter((card) => card.generatedBy === 'rory-delap')).toHaveLength(3);
   });
 
   it('KILLER PASS creates a +1 Through Ball at period end only for the MID winner', () => {
