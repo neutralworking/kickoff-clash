@@ -257,12 +257,43 @@ export function hasReducedDefence(state: V8CalibrationState, runtimeId: string):
   return currentCalibrationDefence(state, runtimeId) < calibrationPlayerCard(player).printedDefence;
 }
 
-function effectiveStats(state: V8CalibrationState, player: V8CalibrationRuntimePlayer): { attack: number; defence: number } {
-  const card = calibrationPlayerCard(player);
-  const penalty = outOfPositionPenalty(card, player.zone);
+export interface V8CalibrationContributionRules {
+  ignoreOutOfPositionPenalty: boolean;
+}
+
+/**
+ * Central rules-layer context for zone contribution. Rule-changing Actions belong here rather than
+ * as hidden ATT/DEF modifiers so targeting and stat-gain listeners continue to read real stats.
+ */
+export function calibrationContributionRules(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+): V8CalibrationContributionRules {
+  const totalFootballActive = Object.values(state.players).some((player) =>
+    player.side === side
+    && player.cardId === 'cruyff'
+    && isCalibrationActionEnabled(state, player.runtimeId)
+  );
+  return { ignoreOutOfPositionPenalty: totalFootballActive };
+}
+
+export function calibrationEffectiveOutOfPositionPenalty(
+  state: V8CalibrationState,
+  player: V8CalibrationRuntimePlayer,
+): 0 | 2 | 5 {
+  if (calibrationContributionRules(state, player.side).ignoreOutOfPositionPenalty) return 0;
+  return outOfPositionPenalty(calibrationPlayerCard(player), player.zone);
+}
+
+export function calibrationEffectiveStats(
+  state: V8CalibrationState,
+  player: V8CalibrationRuntimePlayer,
+): { attack: number; defence: number; penalty: 0 | 2 | 5 } {
+  const penalty = calibrationEffectiveOutOfPositionPenalty(state, player);
   return {
     attack: currentCalibrationAttack(state, player.runtimeId) - penalty,
     defence: currentCalibrationDefence(state, player.runtimeId) - penalty,
+    penalty,
   };
 }
 
@@ -271,7 +302,7 @@ export function calibrationZoneTotals(state: V8CalibrationState, side: V8Calibra
   let defence = state.zoneDefenceBonus[side][zone];
 
   for (const player of calibrationPlayersInZone(state, side, zone)) {
-    const stats = effectiveStats(state, player);
+    const stats = calibrationEffectiveStats(state, player);
     if (zone === 'DEF') defence += stats.defence;
     else if (zone === 'MID') {
       attack += stats.attack;
