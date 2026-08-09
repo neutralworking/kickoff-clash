@@ -1,11 +1,11 @@
-export * from './calibration-expansion-batch-04-runtime';
-export * from './calibration-expansion-batch-04-cards';
+export * from './calibration-expansion-batch-05-runtime';
+export * from './calibration-expansion-batch-05-cards';
 
 import * as decay from './calibration-decay';
 import { getV8CalibrationPlayer } from './calibration-cards';
-import { refreshCalibrationExpansionOngoingEffects } from './calibration-expansion-ongoing';
+import { refreshV8Batch05OngoingEffects } from './calibration-expansion-batch-05-ongoing';
 import { applyCalibrationAttackGainReactions } from './calibration-expansion-reactions';
-import * as runtime from './calibration-expansion-batch-04-runtime';
+import * as runtime from './calibration-expansion-batch-05-runtime';
 import type { V8Zone } from './core';
 
 export interface V8CalibrationMatchScore {
@@ -17,14 +17,49 @@ function withExpansionReactions(
   before: runtime.V8CalibrationState,
   after: runtime.V8CalibrationState,
 ): runtime.V8CalibrationState {
-  const refreshed = refreshCalibrationExpansionOngoingEffects(after);
+  const refreshed = refreshV8Batch05OngoingEffects(after);
   return applyCalibrationAttackGainReactions(before, refreshed);
 }
 
+function applyBatch05RevealEffects(
+  state: runtime.V8CalibrationState,
+  side: runtime.V8CalibrationSide,
+  cardId: string,
+  zone: V8Zone,
+): runtime.V8CalibrationState {
+  if (cardId !== 'roberto-carlos' || zone !== 'MID') return state;
+  const runtimeId = runtime.calibrationRuntimeId(side, cardId);
+  if (!runtime.isCalibrationActionEnabled(state, runtimeId)) return state;
+
+  let next = state;
+  const generated = runtime.addCalibrationTacticalToHand(next, side, 'long_shot', {
+    attModifier: 3,
+    generatedBy: cardId,
+  });
+  next = generated.state;
+  generated.card.metadata.availableFromPeriod = next.period + 1;
+  next.events.push({
+    type: 'tactical_generated',
+    period: next.period,
+    text: `${getV8CalibrationPlayer(cardId).realName} · THUNDERBOLT generates ${generated.card.name} (+3 ATT).`,
+  });
+  next = runtime.applyCalibrationModifier(next, runtimeId, {
+    defence: -3,
+    lifetime: 'period',
+    source: 'THUNDERBOLT',
+  });
+  return next;
+}
+
 export function revealCalibrationPlayerWithDecay(
-  ...args: Parameters<typeof decay.revealCalibrationPlayer>
-): ReturnType<typeof decay.revealCalibrationPlayer> {
-  return withExpansionReactions(args[0], decay.revealCalibrationPlayer(...args));
+  state: runtime.V8CalibrationState,
+  side: runtime.V8CalibrationSide,
+  cardId: string,
+  zone: V8Zone,
+): runtime.V8CalibrationState {
+  let next = decay.revealCalibrationPlayer(state, side, cardId, zone);
+  next = applyBatch05RevealEffects(next, side, cardId, zone);
+  return withExpansionReactions(state, next);
 }
 
 function applyCaptainMarvelAtPeriodEnd(
@@ -68,7 +103,7 @@ export function endV8CalibrationPeriodWithDecay(
   score?: V8CalibrationMatchScore,
 ): ReturnType<typeof decay.endV8CalibrationPeriod> {
   const prepared = applyCaptainMarvelAtPeriodEnd(state, score);
-  return refreshCalibrationExpansionOngoingEffects(decay.endV8CalibrationPeriod(prepared));
+  return refreshV8Batch05OngoingEffects(decay.endV8CalibrationPeriod(prepared));
 }
 
 export function moveCalibrationPlayer(
@@ -94,20 +129,20 @@ export function playCalibrationTacticalWithTiming(
   if (!card) throw new Error(`Tactical card ${cardId} is not in hand`);
   const availableFrom = decay.calibrationTacticalAvailableFromPeriod(card);
   if (availableFrom > state.period) throw new Error(`${card.name} is banked until Period ${availableFrom}`);
-  return refreshCalibrationExpansionOngoingEffects(runtime.playCalibrationTactical(state, side, cardId, zone, options));
+  return refreshV8Batch05OngoingEffects(runtime.playCalibrationTactical(state, side, cardId, zone, options));
 }
 
 export function resolveCommittedCalibrationTactical(
   ...args: Parameters<typeof runtime.resolveCommittedCalibrationTactical>
 ): ReturnType<typeof runtime.resolveCommittedCalibrationTactical> {
-  return refreshCalibrationExpansionOngoingEffects(runtime.resolveCommittedCalibrationTactical(...args));
+  return refreshV8Batch05OngoingEffects(runtime.resolveCommittedCalibrationTactical(...args));
 }
 
 export function resolveGeneratedTacticalWindow(
   ...args: Parameters<typeof runtime.resolveGeneratedTacticalWindow>
 ): ReturnType<typeof runtime.resolveGeneratedTacticalWindow> {
   const result = runtime.resolveGeneratedTacticalWindow(...args);
-  return { ...result, state: refreshCalibrationExpansionOngoingEffects(result.state) };
+  return { ...result, state: refreshV8Batch05OngoingEffects(result.state) };
 }
 
 export {
