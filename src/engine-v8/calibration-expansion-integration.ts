@@ -3,6 +3,7 @@ import { V8_EXPANSION_BATCH_02 } from './calibration-expansion-batch-02';
 import { V8_EXPANSION_BATCH_03 } from './calibration-expansion-batch-03';
 import { V8_EXPANSION_BATCH_04 } from './calibration-expansion-batch-04';
 import { V8_EXPANSION_BATCH_05 } from './calibration-expansion-batch-05';
+import { V8_EXPANSION_BATCH_06 } from './calibration-expansion-batch-06';
 import type { V8Zone } from './core';
 
 export type V8ExpansionIntegrationSquadKey = 'mix_alpha' | 'mix_beta' | 'mix_gamma' | 'mix_delta';
@@ -24,6 +25,7 @@ const ALL_EXPANSION_CONTRACTS = [
   ...V8_EXPANSION_BATCH_03,
   ...V8_EXPANSION_BATCH_04,
   ...V8_EXPANSION_BATCH_05,
+  ...V8_EXPANSION_BATCH_06,
 ] as const;
 
 /** Larger-roster integration cohort, split by why a card is not yet playable. */
@@ -92,7 +94,7 @@ export const V8_EXPANSION_INTEGRATION_SQUADS: Readonly<Record<V8ExpansionIntegra
       { cardId: 'bryan-robson', zone: 'MID' },
       { cardId: 'di-stefano', zone: 'MID' },
       { cardId: 'abedi-pele', zone: 'MID' },
-      { cardId: 'cruyff', zone: 'MID' },
+      { cardId: 'carli-lloyd', zone: 'MID' },
       { cardId: 'brian-laudrup', zone: 'ATT' },
       { cardId: 'berbatov', zone: 'ATT' },
       { cardId: 'dempsey', zone: 'ATT' },
@@ -110,10 +112,10 @@ export const V8_EXPANSION_INTEGRATION_SQUADS: Readonly<Record<V8ExpansionIntegra
       { cardId: 'ronaldinho', zone: 'MID' },
       { cardId: 'paul-scholes', zone: 'MID' },
       { cardId: 'shunsuke-nakamura', zone: 'MID' },
-      { cardId: 'bryan-robson', zone: 'MID' },
-      { cardId: 'alan-shearer', zone: 'ATT' },
+      { cardId: 'carlos-valderrama', zone: 'MID' },
+      { cardId: 'christian-eriksen', zone: 'ATT' },
       { cardId: 'ole-gunnar-solskjaer', zone: 'ATT' },
-      { cardId: 'ali-daei', zone: 'ATT' },
+      { cardId: 'jari-litmanen', zone: 'ATT' },
     ],
   },
 } as const;
