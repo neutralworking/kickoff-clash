@@ -59,15 +59,18 @@ describe('V8 expansion Batch 02 runtime primitives', () => {
     let state = createV8CalibrationState();
     state = seedCalibrationPlayer(state, 'home', 'bobby-moore', 'DEF');
     state = revealCalibrationPlayer(state, 'home', 'ashley-cole', 'DEF');
-    state = revealCalibrationPlayer(state, 'away', 'dempsey', 'ATT');
+    state = revealCalibrationPlayer(state, 'away', 'litmanen', 'ATT');
     const mooreId = calibrationRuntimeId('home', 'bobby-moore');
-    const dempseyId = calibrationRuntimeId('away', 'dempsey');
+    const litmanenId = calibrationRuntimeId('away', 'litmanen');
+    const wambachId = calibrationRuntimeId('away', 'wambach');
 
-    // CHEEKY CHIP is +5 this period, then SHOW HIM OUTSIDE removes 5 from that live total.
-    expect(currentCalibrationAttack(state, dempseyId)).toBe(getV8CalibrationPlayer('dempsey').printedAttack);
-    state = revealCalibrationPlayer(state, 'away', 'ronaldo', 'ATT');
-    // Ashley retargets; removing her −5 is not a new positive ATT modifier and must not trigger Moore.
-    expect(currentCalibrationAttack(state, dempseyId)).toBe(getV8CalibrationPlayer('dempsey').printedAttack + 5);
+    expect(currentCalibrationAttack(state, litmanenId)).toBe(getV8CalibrationPlayer('litmanen').printedAttack - 5);
+    state = revealCalibrationPlayer(state, 'away', 'wambach', 'ATT');
+
+    // Wambach's higher printed ATT makes Ashley retarget. Litmanen's restored 5 ATT comes solely
+    // from removal of a negative modifier, so READ THE RUN must not interpret it as an ATT gain.
+    expect(currentCalibrationAttack(state, litmanenId)).toBe(getV8CalibrationPlayer('litmanen').printedAttack);
+    expect(currentCalibrationAttack(state, wambachId)).toBe(getV8CalibrationPlayer('wambach').printedAttack - 5);
     expect(currentCalibrationDefence(state, mooreId)).toBe(getV8CalibrationPlayer('bobby-moore').printedDefence);
   });
 
