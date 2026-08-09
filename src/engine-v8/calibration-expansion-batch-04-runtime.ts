@@ -47,6 +47,26 @@ function counter(prefix: string, runtimeId: string): string {
   return `${prefix}:${runtimeId}`;
 }
 
+function zoneCode(zone: V8Zone): number {
+  return zone === 'DEF' ? 1 : zone === 'MID' ? 2 : 3;
+}
+
+function waddleMoveKey(runtimeId: string): string {
+  return counter('waddle-drop-the-shoulder-move', runtimeId);
+}
+
+function waddleTransformKey(runtimeId: string): string {
+  return counter('waddle-drop-the-shoulder-transform', runtimeId);
+}
+
+function shearerChanceKey(runtimeId: string): string {
+  return counter('shearer-laces-through-it', runtimeId);
+}
+
+function cavaniProtectionKey(runtimeId: string): string {
+  return counter('cavani-get-across-him', runtimeId);
+}
+
 function removeLatestChanceResolvedEvent(state: runtime.V8CalibrationState, minimumIndex: number): void {
   for (let index = state.events.length - 1; index >= minimumIndex; index -= 1) {
     if (state.events[index]?.type === 'chance_resolved') {
@@ -56,12 +76,85 @@ function removeLatestChanceResolvedEvent(state: runtime.V8CalibrationState, mini
   }
 }
 
+function applyDavidsPursuitAfterWaddle(
+  state: runtime.V8CalibrationState,
+  movingSide: runtime.V8CalibrationSide,
+  movingRuntimeId: string,
+  fromZone: V8Zone,
+  toZone: V8Zone,
+): runtime.V8CalibrationState {
+  const candidates = runtime.calibrationPlayersInZone(state, otherSide(movingSide), fromZone)
+    .filter((player) =>
+      player.cardId === 'davids'
+      && runtime.isCalibrationActionEnabled(state, player.runtimeId)
+      && (state.periodCounters[counter('davids-pitbull', player.runtimeId)] ?? 0) === 0
+    )
+    .sort((a, b) => a.deployedOrder - b.deployedOrder || a.runtimeId.localeCompare(b.runtimeId));
+  const davids = candidates.find((player) => runtime.calibrationPlayersInZone(state, player.side, toZone).length < 4);
+  if (!davids) return state;
+
+  let next = clone(state);
+  const liveDavids = next.players[davids.runtimeId]!;
+  liveDavids.zone = toZone;
+  next.periodCounters[counter('davids-pitbull', liveDavids.runtimeId)] = 1;
+  next.events.push({
+    type: 'action_triggered',
+    period: next.period,
+    text: `${getV8CalibrationPlayer('davids').realName} · PITBULL follows ${getV8CalibrationPlayer('chris-waddle').realName}.`,
+  });
+  next.events.push({
+    type: 'player_moved',
+    period: next.period,
+    text: `${getV8CalibrationPlayer('davids').realName} follows ${fromZone} → ${toZone}.`,
+  });
+  next = runtime.applyCalibrationModifier(next, movingRuntimeId, {
+    attack: -2,
+    lifetime: 'period',
+    source: 'PITBULL',
+    sourceRuntimeId: liveDavids.runtimeId,
+  });
+  return runtime.refreshCalibrationSuppression(next);
+}
+
+/** DROP THE SHOULDER owns its MID ↔ ATT movement allowance, then enters shared movement reactions. */
+export function moveCalibrationPlayer(
+  state: runtime.V8CalibrationState,
+  side: runtime.V8CalibrationSide,
+  cardId: string,
+  toZone: V8Zone,
+): runtime.V8CalibrationState {
+  if (cardId !== 'chris-waddle') return runtime.moveCalibrationPlayer(state, side, cardId, toZone);
+
+  let next = clone(state);
+  const runtimeId = runtime.calibrationRuntimeId(side, cardId);
+  const player = next.players[runtimeId];
+  if (!player) throw new Error(`${cardId} is not deployed`);
+  if (player.zone === toZone) throw new Error('Player is already in that zone');
+  const validMove = (player.zone === 'MID' && toZone === 'ATT') || (player.zone === 'ATT' && toZone === 'MID');
+  if (!validMove) throw new Error('DROP THE SHOULDER moves between MID and ATT');
+  if (runtime.calibrationPlayersInZone(next, side, toZone).length >= 4) throw new Error(`${toZone} is full`);
+  if (!runtime.isCalibrationActionEnabled(next, runtimeId)) throw new Error('Player has no active movement Action');
+  if ((next.periodCounters[waddleMoveKey(runtimeId)] ?? 0) > 0) throw new Error('Player has already moved this period');
+
+  const from = player.zone;
+  player.zone = toZone;
+  next.periodCounters[waddleMoveKey(runtimeId)] = 1;
+  next.periodCounters[waddleTransformKey(runtimeId)] = zoneCode(toZone);
+  next.events.push({
+    type: 'player_moved',
+    period: next.period,
+    text: `${getV8CalibrationPlayer(cardId).realName} · DROP THE SHOULDER ${from} → ${toZone}.`,
+  });
+  next = runtime.refreshCalibrationSuppression(next);
+  return applyDavidsPursuitAfterWaddle(next, side, runtimeId, from, toZone);
+}
+
 interface TemporarySuppression {
   runtimeId: string;
   previous?: string;
 }
 
-function lockEllenTransformation(
+function lockGenericChanceTransformations(
   state: runtime.V8CalibrationState,
   side: runtime.V8CalibrationSide,
   zone: V8Zone,
@@ -78,7 +171,7 @@ function lockEllenTransformation(
 
   for (const player of candidates) {
     suppressions.push({ runtimeId: player.runtimeId, previous: next.suppressedActions[player.runtimeId] });
-    next.suppressedActions[player.runtimeId] = 'batch04:first-time-lob';
+    next.suppressedActions[player.runtimeId] = 'batch04:signature-transform';
   }
   return { state: next, suppressions };
 }
@@ -96,6 +189,65 @@ function restoreTemporarySuppressions(
   return next;
 }
 
+function prepareShearerLacesThroughIt(
+  state: runtime.V8CalibrationState,
+  side: runtime.V8CalibrationSide,
+  cardId: string,
+  zone: V8Zone,
+): { state: runtime.V8CalibrationState; applied: boolean } {
+  const card = runtime.calibrationHandTacticals(state, side).find((candidate) => candidate.id === cardId);
+  if (zone !== 'ATT' || !card || !isV8ChanceType(card.type)) return { state, applied: false };
+  const shearer = actionPlayer(state, side, 'alan-shearer');
+  if (!shearer) return { state, applied: false };
+  const key = shearerChanceKey(shearer.runtimeId);
+  if ((state.periodCounters[key] ?? 0) > 0) return { state, applied: false };
+
+  const next = clone(state);
+  const entry = next.teams[side].hand.find((candidate) => candidate.kind === 'tactical' && candidate.card.id === cardId);
+  if (!entry || entry.kind !== 'tactical') return { state, applied: false };
+  entry.card.attModifier += 3;
+  entry.card.cancellable = true;
+  entry.card.metadata.protectionLocked = true;
+  next.periodCounters[key] = 1;
+  next.events.push({
+    type: 'action_triggered',
+    period: next.period,
+    text: `${getV8CalibrationPlayer('alan-shearer').realName} · LACES THROUGH IT gives ${entry.card.name} +3 ATT and locks out uncancellable protection.`,
+  });
+  return { state: next, applied: true };
+}
+
+function prepareWaddleTransformation(
+  state: runtime.V8CalibrationState,
+  side: runtime.V8CalibrationSide,
+  cardId: string,
+  zone: V8Zone,
+): { state: runtime.V8CalibrationState; transformed: boolean; suppressions: TemporarySuppression[] } {
+  const card = runtime.calibrationHandTacticals(state, side).find((candidate) => candidate.id === cardId);
+  if (!card || !isV8ChanceType(card.type)) return { state, transformed: false, suppressions: [] };
+  const waddle = actionPlayer(state, side, 'chris-waddle', zone);
+  if (!waddle || (state.periodCounters[waddleTransformKey(waddle.runtimeId)] ?? 0) !== zoneCode(zone)) {
+    return { state, transformed: false, suppressions: [] };
+  }
+
+  const locked = lockGenericChanceTransformations(state, side, zone);
+  const next = locked.state;
+  const entry = next.teams[side].hand.find((candidate) => candidate.kind === 'tactical' && candidate.card.id === cardId);
+  if (!entry || entry.kind !== 'tactical') return { state, transformed: false, suppressions: [] };
+  const fromName = entry.card.name;
+  entry.card.type = 'cross';
+  entry.card.name = V8_TACTICAL_DEFINITIONS.cross.name;
+  entry.card.baseAtt = V8_TACTICAL_DEFINITIONS.cross.baseAtt;
+  entry.card.metadata.batch04DropTheShoulder = true;
+  next.periodCounters[waddleTransformKey(waddle.runtimeId)] = 0;
+  next.events.push({
+    type: 'tactical_modified',
+    period: next.period,
+    text: `${getV8CalibrationPlayer('chris-waddle').realName} · DROP THE SHOULDER turns ${fromName} into a Cross in ${zone}.`,
+  });
+  return { state: next, transformed: true, suppressions: locked.suppressions };
+}
+
 function prepareEllenWhiteTransformation(
   state: runtime.V8CalibrationState,
   side: runtime.V8CalibrationSide,
@@ -110,7 +262,7 @@ function prepareEllenWhiteTransformation(
   const key = counter('ellen-white-first-time-lob', ellen.runtimeId);
   if ((state.matchCounters[key] ?? 0) > 0) return { state, transformed: false, suppressions: [] };
 
-  const locked = lockEllenTransformation(state, side, zone);
+  const locked = lockGenericChanceTransformations(state, side, zone);
   const next = locked.state;
   const entry = next.teams[side].hand.find((candidate) => candidate.kind === 'tactical' && candidate.card.id === cardId);
   if (!entry || entry.kind !== 'tactical') return { state, transformed: false, suppressions: [] };
@@ -294,6 +446,66 @@ function applyBatch04PostResolution(
   return applyTerryHeadWhereItHurts(next, side, cardId, eventStart);
 }
 
+function cleanupFailedCavaniProtection(
+  before: runtime.V8CalibrationState,
+  after: runtime.V8CalibrationState,
+  side: runtime.V8CalibrationSide,
+  cardId: string,
+  eventStart: number,
+  protectionLocked: boolean,
+): runtime.V8CalibrationState {
+  const resolution = latestResolution(after, side, cardId);
+  if (!protectionLocked || !resolution?.cancelled) return after;
+  let changed = false;
+  const next = clone(after);
+  for (const cavani of Object.values(next.players).filter((player) => player.side === side && player.cardId === 'cavani')) {
+    const key = cavaniProtectionKey(cavani.runtimeId);
+    const previous = before.periodCounters[key] ?? 0;
+    if ((next.periodCounters[key] ?? 0) > previous) {
+      next.periodCounters[key] = previous;
+      changed = true;
+    }
+  }
+  for (let index = next.events.length - 1; index >= eventStart; index -= 1) {
+    const event = next.events[index];
+    if (event?.type === 'action_triggered' && event.text.includes('GET ACROSS HIM prevents')) {
+      next.events.splice(index, 1);
+      changed = true;
+    }
+  }
+  return changed ? next : after;
+}
+
+function playWaddleTransformedChance(
+  state: runtime.V8CalibrationState,
+  side: runtime.V8CalibrationSide,
+  cardId: string,
+  zone: V8Zone,
+  options: { ignoreEnergy?: boolean; window?: boolean },
+): runtime.V8CalibrationState | undefined {
+  const preview = prepareWaddleTransformation(state, side, cardId, zone);
+  if (!preview.transformed) return undefined;
+
+  let prepared = preview.state;
+  let paidCost: number | undefined;
+  if (!options.ignoreEnergy) {
+    const spent = runtime.spendCalibrationTacticalFromHand(state, side, cardId, zone);
+    paidCost = spent.cost;
+    prepared = clone(spent.state);
+    prepared.teams[side].hand.push({ kind: 'tactical', card: spent.card });
+    prepared = prepareWaddleTransformation(prepared, side, cardId, zone).state;
+  }
+
+  let resolved = runtime.playCalibrationTactical(prepared, side, cardId, zone, { ...options, ignoreEnergy: true });
+  resolved = restoreTemporarySuppressions(resolved, preview.suppressions);
+  if (paidCost !== undefined) {
+    resolved = clone(resolved);
+    const resolution = latestResolution(resolved, side, cardId);
+    if (resolution) resolution.cost = paidCost;
+  }
+  return resolved;
+}
+
 function playEllenWhiteTransformedChance(
   state: runtime.V8CalibrationState,
   side: runtime.V8CalibrationSide,
@@ -340,9 +552,12 @@ export function playCalibrationTactical(
   }
 
   const eventStart = state.events.length;
-  const ellenResolved = playEllenWhiteTransformedChance(state, side, cardId, zone, options);
-  const resolved = ellenResolved ?? runtime.playCalibrationTactical(state, side, cardId, zone, options);
-  return applyBatch04PostResolution(state, resolved, side, cardId, eventStart);
+  const shearer = prepareShearerLacesThroughIt(state, side, cardId, zone);
+  const waddleResolved = playWaddleTransformedChance(shearer.state, side, cardId, zone, options);
+  const ellenResolved = waddleResolved ? undefined : playEllenWhiteTransformedChance(shearer.state, side, cardId, zone, options);
+  let resolved = waddleResolved ?? ellenResolved ?? runtime.playCalibrationTactical(shearer.state, side, cardId, zone, options);
+  resolved = cleanupFailedCavaniProtection(shearer.state, resolved, side, cardId, eventStart, shearer.applied);
+  return applyBatch04PostResolution(shearer.state, resolved, side, cardId, eventStart);
 }
 
 export function resolveCommittedCalibrationTactical(
