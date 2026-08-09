@@ -49,14 +49,11 @@ function zoneCount(state: V8CalibrationState, side: V8CalibrationSide): number {
 }
 
 describe('V8 larger-roster mixed expansion integration', () => {
-  it('has 44 runtime-ready cards, two source-stat blockers and only Robben/Delap design blockers', () => {
-    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(44);
+  it('has 45 runtime-ready cards, two source-stat blockers and only Robben as a design blocker', () => {
+    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(45);
     expect([...V8_EXPANSION_STATS_BLOCKED_IDS].sort()).toEqual(['kante', 'ozil']);
     expect(V8_EXPANSION_BLOCKED_IDS).toEqual(V8_EXPANSION_STATS_BLOCKED_IDS);
-    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].sort()).toEqual([
-      'arjen-robben',
-      'rory-delap',
-    ]);
+    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].sort()).toEqual(['arjen-robben']);
 
     const covered = new Set(
       V8_EXPANSION_INTEGRATION_SQUAD_KEYS
