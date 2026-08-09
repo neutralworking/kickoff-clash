@@ -41,6 +41,7 @@ import {
   type V8Zone,
 } from '@/engine-v8';
 import { calibrationEnergyForPeriod, calibrationPlayCost } from '@/engine-v8/calibration-balance';
+import { managerPortraitSrc, portraitSrc } from '../cards/portrait';
 import './v8lab.css';
 import './v8recap.css';
 
@@ -288,6 +289,7 @@ function PlayerHandCard({
   onClick: () => void;
   onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
+  const portrait = portraitSrc({ id: card.sourceCardId ?? card.id, name: card.realName, position: card.position });
   return (
     <button
       type="button"
@@ -299,7 +301,7 @@ function PlayerHandCard({
       onClick={onClick}
       onPointerDown={onPointerDown}
     >
-      <span className="v8-card__art" aria-hidden="true"><i>{card.matchName.slice(0, 2).toUpperCase()}</i></span>
+      <span className="v8-card__art" aria-hidden="true"><i>{card.matchName.slice(0, 2).toUpperCase()}</i>{portrait && <img src={portrait} alt="" draggable={false} />}</span>
       <span className="v8-card__cost">{calibrationPlayCost(card)}</span>
       <span className="v8-card__position">{card.position}</span>
       <strong>{card.matchName}</strong>
@@ -335,6 +337,7 @@ function TacticalHandCard({
       onClick={onClick}
       onPointerDown={onPointerDown}
     >
+      <span className="v8-card__art v8-card__art--tactical" aria-hidden="true"><i>{card.name.slice(0, 1)}</i><em>TACTICAL</em></span>
       <span className="v8-card__cost">{cost}</span>
       <span className="v8-card__position">TACTICAL</span>
       <strong>{card.name}</strong>
@@ -346,6 +349,7 @@ function TacticalHandCard({
 function DeployedChip({ state, side, runtimeId, onMove }: { state: V8CalibrationState; side: V8CalibrationSide; runtimeId: string; onMove?: () => void }) {
   const player = state.players[runtimeId]!;
   const card = calibrationPlayerCard(player);
+  const portrait = portraitSrc({ id: card.sourceCardId ?? card.id, name: card.realName, position: card.position });
   const attack = currentCalibrationAttack(state, runtimeId);
   const defence = currentCalibrationDefence(state, runtimeId);
   const suppressed = !isCalibrationActionEnabled(state, runtimeId);
@@ -378,7 +382,8 @@ function DeployedChip({ state, side, runtimeId, onMove }: { state: V8Calibration
       }}
     >
       <span className="v8-card__sr">{card.realName}</span>
-      {card.matchName}
+      <span className="v8-chip__portrait" aria-hidden="true"><i>{card.matchName.slice(0, 1)}</i>{portrait && <img src={portrait} alt="" draggable={false} />}</span>
+      <span className="v8-chip__name">{card.matchName}</span>
       <b>{attack}/{defence}</b>
       <small>{suppressed ? 'NO ACTION' : moveable ? (moved ? 'MOVE USED' : 'MOVEABLE') : card.actionName}</small>
     </span>
@@ -428,6 +433,7 @@ export default function V8CalibrationLab() {
   const [telemetryPeriods, setTelemetryPeriods] = useState<V8CalibrationPeriodTelemetry[]>([]);
   const [matchTelemetry, setMatchTelemetry] = useState<V8CalibrationMatchTelemetry | null>(null);
   const [finished, setFinished] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
   const [handDrag, setHandDrag] = useState<HandDragState | null>(null);
   const handDragRef = useRef<HandDragState | null>(null);
   const suppressHandClick = useRef<string | null>(null);
@@ -565,10 +571,17 @@ export default function V8CalibrationLab() {
   };
 
   const zoneAtPoint = (x: number, y: number): V8Zone | null => {
-    const element = document.elementFromPoint(x, y);
-    const zoneElement = element?.closest<HTMLElement>('[data-v8-zone]');
-    const zone = zoneElement?.dataset.v8Zone as V8Zone | undefined;
-    return zone && ZONES.includes(zone) ? zone : null;
+    const pitch = document.querySelector<HTMLElement>('.v8-pitch');
+    const rect = pitch?.getBoundingClientRect();
+    if (!rect || x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return null;
+
+    // Mobile pitch is laid out in football depth: ATT at the opponent end, MID centrally,
+    // DEF nearest the user's goal. Resolve the finger position against those thirds directly
+    // instead of relying on nested slot/label DOM hitboxes.
+    const progress = (y - rect.top) / rect.height;
+    if (progress < 1 / 3) return 'ATT';
+    if (progress < 2 / 3) return 'MID';
+    return 'DEF';
   };
 
   const isHandDragZoneLegal = (drag: Pick<HandDragState, 'kind' | 'cardId'>, zone: V8Zone): boolean => {
@@ -833,6 +846,8 @@ export default function V8CalibrationLab() {
   const selectedTactical = selection?.kind === 'tactical' ? calibrationHandTacticals(windowPhase?.resolved ?? state, 'home').find((card) => card.id === selection.cardId) ?? null : null;
   const draggedPlayer = handDrag?.kind === 'player' ? getV8CalibrationPlayer(handDrag.cardId) : null;
   const draggedTactical = handDrag?.kind === 'tactical' ? calibrationHandTacticals(windowPhase?.resolved ?? state, 'home').find((card) => card.id === handDrag.cardId) ?? null : null;
+  const draggedPlayerPortrait = draggedPlayer ? portraitSrc({ id: draggedPlayer.sourceCardId ?? draggedPlayer.id, name: draggedPlayer.realName, position: draggedPlayer.position }) : null;
+  const managerPortrait = managerPortraitSrc('control');
   const interactionLabel = handDrag?.moved
     ? handDrag.overZone
       ? isHandDragZoneLegal(handDrag, handDrag.overZone)
@@ -858,7 +873,7 @@ export default function V8CalibrationLab() {
                   : 'DRAG A CARD TO THE PITCH';
 
   return (
-    <main className={`v8-shell${handDrag ? ' is-dragging' : ''}`}>
+    <main className={`v8-shell${handDrag ? ' is-dragging' : ''}${debugOpen ? ' is-debug-open' : ''}`}>
       <header className="v8-scorebar">
         <div><small>YOU</small><strong>{homeScore}</strong></div>
         <section>
@@ -868,7 +883,7 @@ export default function V8CalibrationLab() {
         <div><small>CPU</small><strong>{awayScore}</strong></div>
       </header>
 
-      <div className="v8-condition">
+      <div className="v8-condition" hidden={!debugOpen}>
         <button>
           <strong>V8 SQUAD CALIBRATION</strong>
           <span>2/4/6/8 Energy · player Costs −1 (min 1) · source values unchanged</span>
@@ -876,7 +891,7 @@ export default function V8CalibrationLab() {
         <button onClick={() => reset(homeSquad, awaySquad, seed + 31)}>NEW DRAW</button>
       </div>
 
-      <section className="v8-lab-controls v8-lab-controls--squads" aria-label="Calibration squads">
+      <section className="v8-lab-controls v8-lab-controls--squads" aria-label="Calibration squads" hidden={!debugOpen}>
         <label>
           <span>YOU SQUAD</span>
           <select data-testid="home-squad-select" value={homeSquad} onChange={(event) => reset(event.target.value as V8CalibrationSquadKey, awaySquad, seed + 31)}>
@@ -893,14 +908,14 @@ export default function V8CalibrationLab() {
         </label>
       </section>
 
-      <section className="v8-totals">
+      <section className="v8-totals" hidden={!debugOpen}>
         <span>YOUR <b>{totalsHome.attack}</b> ATT</span>
         <span>YOUR <b>{totalsHome.defence}</b> DEF</span>
         <span>CPU <b>{totalsAway.attack}</b> ATT</span>
         <span>CPU <b>{totalsAway.defence}</b> DEF</span>
       </section>
 
-      <section className="v8-pitch" aria-label="DEF MID ATT board">
+      <section className="v8-pitch" aria-label="DEF MID ATT board"><div className="v8-pitch__stadium" aria-hidden="true"><i /><i /><i /></div>
         {ZONES.map((zone) => {
           const homeZone = calibrationPlayersInZone(state, 'home', zone);
           const awayZone = calibrationPlayersInZone(state, 'away', zone);
@@ -1011,7 +1026,7 @@ export default function V8CalibrationLab() {
       )}
 
       {latestTelemetry && (
-        <details className="v8-telemetry" data-testid="v8-telemetry" open={finished}>
+        <details className="v8-telemetry" data-testid="v8-telemetry" open={finished} hidden={!debugOpen}>
           <summary>
             <strong>CALIBRATION TELEMETRY</strong>
             <span>{getV8CalibrationSquad(homeSquad).shortLabel} vs {getV8CalibrationSquad(awaySquad).shortLabel} · {telemetryPeriods.length}/4 periods</span>
@@ -1096,6 +1111,7 @@ export default function V8CalibrationLab() {
               }}
               onPointerDown={(event) => startHandDrag(event, { kind: 'manager', cardId: 'manager', label: 'MANAGER SKILL' })}
             >
+              <span className="v8-card__art v8-card__art--manager" aria-hidden="true"><i>CO</i>{managerPortrait && <img src={managerPortrait} alt="" draggable={false} />}</span>
               <span className="v8-card__cost">{MANAGER_COST}</span>
               <span className="v8-card__position">MANAGER</span>
               <strong>{MANAGER_NAME}</strong>
@@ -1105,6 +1121,15 @@ export default function V8CalibrationLab() {
         </div>
       </section>
 
+      <button
+        type="button"
+        className="v8-debug-toggle"
+        aria-expanded={debugOpen}
+        onClick={() => setDebugOpen((open) => !open)}
+      >
+        {debugOpen ? 'CLOSE LAB TOOLS' : 'OPEN LAB TOOLS'}
+      </button>
+
       {handDrag?.moved && (
         <div
           className={`v8-drag-ghost${handDrag.kind === 'tactical' ? ' v8-card--chance' : handDrag.kind === 'manager' ? ' v8-card--manager' : ''}`}
@@ -1112,7 +1137,7 @@ export default function V8CalibrationLab() {
           style={{ left: handDrag.x, top: handDrag.y }}
           aria-hidden="true"
         >
-          <span className="v8-card__art"><i>{handDrag.kind === 'player' ? draggedPlayer?.matchName.slice(0, 2).toUpperCase() : handDrag.kind === 'tactical' ? 'TX' : 'CO'}</i></span>
+          <span className={`v8-card__art${handDrag.kind === 'tactical' ? ' v8-card__art--tactical' : handDrag.kind === 'manager' ? ' v8-card__art--manager' : ''}`}><i>{handDrag.kind === 'player' ? draggedPlayer?.matchName.slice(0, 2).toUpperCase() : handDrag.kind === 'tactical' ? 'TX' : 'CO'}</i>{handDrag.kind === 'player' && draggedPlayerPortrait && <img src={draggedPlayerPortrait} alt="" draggable={false} />}{handDrag.kind === 'manager' && managerPortrait && <img src={managerPortrait} alt="" draggable={false} />}</span>
           <span className="v8-card__cost">{handDrag.kind === 'player' && draggedPlayer
             ? calibrationPlayCost(draggedPlayer)
             : handDrag.kind === 'tactical' && draggedTactical
@@ -1131,7 +1156,7 @@ export default function V8CalibrationLab() {
       )}
 
       {state.events.length > 0 && (
-        <section className="v8-log">
+        <section className="v8-log" hidden={!debugOpen}>
           <strong>MATCH / ACTION LOG</strong>
           {[...state.events].reverse().slice(0, 30).map((event, index) => <p key={`${event.period}-${index}-${event.text}`}>{event.text}</p>)}
         </section>

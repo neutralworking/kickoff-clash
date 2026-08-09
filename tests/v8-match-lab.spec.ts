@@ -25,14 +25,25 @@ async function expectTestingSurfaceAboveFold(page: Page) {
       pitch: rect('.v8-pitch'),
       commit: rect('.v8-commit'),
       firstCard: rect('.v8-hand .v8-card'),
+      debugToggle: rect('.v8-debug-toggle'),
     };
   });
 
   expect(positions.pitch.top).toBeGreaterThanOrEqual(0);
   expect(positions.pitch.bottom).toBeLessThan(positions.viewportHeight);
+  expect(positions.pitch.bottom - positions.pitch.top).toBeGreaterThanOrEqual(380);
   expect(positions.commit.bottom).toBeLessThan(positions.viewportHeight);
   expect(positions.firstCard.top).toBeLessThan(positions.viewportHeight);
   expect(positions.firstCard.bottom).toBeLessThanOrEqual(positions.viewportHeight);
+  expect(positions.debugToggle.top).toBeGreaterThanOrEqual(positions.viewportHeight);
+}
+
+async function openLabTools(page: Page) {
+  const toggle = page.getByRole('button', { name: 'OPEN LAB TOOLS' });
+  if (await toggle.count()) {
+    await toggle.click();
+    await expect(page.getByRole('button', { name: 'CLOSE LAB TOOLS' })).toBeVisible();
+  }
 }
 
 async function dragCardToZone(page: Page, card: Locator, zone: Locator, pointerId: number) {
@@ -41,13 +52,16 @@ async function dragCardToZone(page: Page, card: Locator, zone: Locator, pointerI
   // hundreds-of-pixels horizontal move from an off-screen card.
   await card.scrollIntoViewIfNeeded();
   const cardBox = await card.boundingBox();
-  const zoneBox = await zone.boundingBox();
+  const pitchBox = await page.locator('.v8-pitch').boundingBox();
+  const zoneName = await zone.getAttribute('data-v8-zone');
   expect(cardBox).not.toBeNull();
-  expect(zoneBox).not.toBeNull();
+  expect(pitchBox).not.toBeNull();
+  expect(zoneName).toMatch(/^(DEF|MID|ATT)$/);
   const startX = cardBox!.x + cardBox!.width / 2;
   const startY = cardBox!.y + cardBox!.height / 2;
-  const endX = zoneBox!.x + zoneBox!.width / 2;
-  const endY = zoneBox!.y + zoneBox!.height * 0.74;
+  const endX = pitchBox!.x + pitchBox!.width / 2;
+  const depth = zoneName === 'ATT' ? 1 / 6 : zoneName === 'MID' ? 1 / 2 : 5 / 6;
+  const endY = pitchBox!.y + pitchBox!.height * depth;
   const pointer = { pointerId, pointerType: 'touch', isPrimary: true, bubbles: true };
 
   await card.dispatchEvent('pointerdown', { ...pointer, clientX: startX, clientY: startY, buttons: 1 });
@@ -62,13 +76,15 @@ test.describe('V8 real-card calibration lab', () => {
   test('keeps the core testing surface in one phone viewport', async ({ page }) => {
     await page.goto('/lab/match-v8');
     await expect(page.getByText('2 ENERGY', { exact: true })).toBeVisible();
-    await expect(page.getByText('V8 SQUAD CALIBRATION', { exact: true })).toBeVisible();
+    await expect(page.getByText('V8 SQUAD CALIBRATION', { exact: true })).not.toBeVisible();
+    await expect(page.locator('.v8-hand .v8-card__art img').first()).toBeVisible();
     await expectTestingSurfaceAboveFold(page);
     await expectMobileFit(page);
   });
 
   test('selects coherent calibration squads and exposes their compressed Cost profiles', async ({ page }) => {
     await page.goto('/lab/match-v8');
+    await openLabTools(page);
 
     const homeSquad = page.getByTestId('home-squad-select');
     const awaySquad = page.getByTestId('away-squad-select');
@@ -115,6 +131,7 @@ test.describe('V8 real-card calibration lab', () => {
 
   test('uses calibrated player costs and releases the Manager slot after reveal', async ({ page }) => {
     await page.goto('/lab/match-v8');
+    await openLabTools(page);
 
     await expect(page.getByText('0–22', { exact: true })).toBeVisible();
     await expect(page.getByText('2 ENERGY', { exact: true })).toBeVisible();
@@ -175,6 +192,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(recap).toContainText(/CPU: \d+ ATT vs \d+ DEF → \d+ goals/);
     await expect(recap).toContainText('Post-reveal: Cross (1, RABONA) → MID.');
 
+    await openLabTools(page);
     const telemetry = page.getByTestId('v8-telemetry');
     await expect(telemetry).toContainText('2/4 periods');
     await telemetry.locator('summary').click();
@@ -238,6 +256,7 @@ test.describe('V8 real-card calibration lab', () => {
 
   test('shows and applies Sinclair action decay after the scoring window', async ({ page }) => {
     await page.goto('/lab/match-v8');
+    await openLabTools(page);
     await page.getByTestId('home-squad-select').selectOption('control_defence');
 
     const sinclair = page.locator('.v8-card').filter({ hasText: 'Christine Sinclair' });
@@ -257,6 +276,7 @@ test.describe('V8 real-card calibration lab', () => {
 
   test('completes a match with final matchup telemetry and no horizontal overflow', async ({ page }) => {
     await page.goto('/lab/match-v8');
+    await openLabTools(page);
     await page.getByTestId('home-squad-select').selectOption('balanced_midrange');
     await page.getByTestId('away-squad-select').selectOption('through_ball');
 
