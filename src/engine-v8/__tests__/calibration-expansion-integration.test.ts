@@ -49,11 +49,11 @@ function zoneCount(state: V8CalibrationState, side: V8CalibrationSide): number {
 }
 
 describe('V8 larger-roster mixed expansion integration', () => {
-  it('has 46 runtime-ready cards, two source-stat blockers and no primitive blockers through Batch 06', () => {
-    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(46);
+  it('has 53 runtime-ready cards, two source-stat blockers and only Angerer as a primitive blocker', () => {
+    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(53);
     expect([...V8_EXPANSION_STATS_BLOCKED_IDS].sort()).toEqual(['kante', 'ozil']);
     expect(V8_EXPANSION_BLOCKED_IDS).toEqual(V8_EXPANSION_STATS_BLOCKED_IDS);
-    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].sort()).toEqual([]);
+    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].sort()).toEqual(['nadine-angerer']);
 
     const covered = new Set(
       V8_EXPANSION_INTEGRATION_SQUAD_KEYS
@@ -61,10 +61,11 @@ describe('V8 larger-roster mixed expansion integration', () => {
     );
     expect([...V8_EXPANSION_RUNTIME_READY_IDS].every((cardId) => covered.has(cardId))).toBe(true);
     expect([...V8_EXPANSION_STATS_BLOCKED_IDS].some((cardId) => covered.has(cardId))).toBe(false);
+    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].some((cardId) => covered.has(cardId))).toBe(false);
   });
 
-  it('builds five coherent 11-player integration XIs without changing the six balance squads', () => {
-    expect(V8_EXPANSION_INTEGRATION_SQUAD_KEYS).toHaveLength(5);
+  it('builds six coherent 11-player integration XIs without changing the six balance squads', () => {
+    expect(V8_EXPANSION_INTEGRATION_SQUAD_KEYS).toHaveLength(6);
     for (const key of V8_EXPANSION_INTEGRATION_SQUAD_KEYS) {
       const squad = V8_EXPANSION_INTEGRATION_SQUADS[key];
       expect(squad.placements).toHaveLength(11);
@@ -83,6 +84,7 @@ describe('V8 larger-roster mixed expansion integration', () => {
       ['mix_alpha', 'mix_beta'],
       ['mix_delta', 'mix_gamma'],
       ['mix_epsilon', 'mix_beta'],
+      ['mix_zeta', 'mix_gamma'],
     ] as const) {
       const state = deployMixedMatch(homeKey, awayKey);
       expect(zoneCount(state, 'home')).toBe(11);
@@ -140,5 +142,18 @@ describe('V8 larger-roster mixed expansion integration', () => {
     expect(currentCalibrationAttack(state, robsonId)).toBe(printed.printedAttack + 2);
     expect(currentCalibrationDefence(state, robsonId)).toBe(printed.printedDefence + 2);
     expect(state.events.some((event) => event.text.includes('CAPTAIN MARVEL'))).toBe(true);
+  });
+
+  it('deploys Batch 07 partnership, hierarchy and contribution rules together in Mix Zeta', () => {
+    const state = deployMixedMatch('mix_zeta', 'mix_gamma');
+    const vidicId = calibrationRuntimeId('home', 'nemanja-vidic');
+    const rioId = calibrationRuntimeId('home', 'rio-ferdinand');
+    const campbellId = calibrationRuntimeId('home', 'sol-campbell');
+    const zlatanId = calibrationRuntimeId('home', 'zlatan-ibrahimovic');
+
+    expect(currentCalibrationDefence(state, vidicId)).toBe(getV8CalibrationPlayer('nemanja-vidic').printedDefence + 5);
+    expect(currentCalibrationAttack(state, rioId)).toBe(getV8CalibrationPlayer('rio-ferdinand').printedAttack + 5);
+    expect(currentCalibrationDefence(state, campbellId)).toBe(getV8CalibrationPlayer('sol-campbell').printedDefence);
+    expect(currentCalibrationAttack(state, zlatanId)).toBe(getV8CalibrationPlayer('zlatan-ibrahimovic').printedAttack + 6);
   });
 });
