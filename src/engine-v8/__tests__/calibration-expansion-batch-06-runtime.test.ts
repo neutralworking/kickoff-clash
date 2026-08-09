@@ -10,6 +10,7 @@ import {
   getV8CalibrationPlayer,
   isCalibrationActionEnabled,
   isV8ChanceType,
+  moveCalibrationPlayer,
   playCalibrationTactical,
   previewCalibrationTacticalCost,
   revealCalibrationPlayer,
@@ -18,7 +19,7 @@ import {
 } from '../index';
 
 describe('V8 expansion Batch 06 runtime', () => {
-  it('registers the seven runtime cards with reconciliation values and tracker identity', () => {
+  it('registers all eight Batch 06 cards with reconciliation values and tracker identity', () => {
     expect(getV8CalibrationPlayer('carli-lloyd')).toMatchObject({
       printedAttack: 6, printedDefence: 4, cost: 3, actionName: 'HALFWAY HIT',
     });
@@ -39,6 +40,9 @@ describe('V8 expansion Batch 06 runtime', () => {
     });
     expect(getV8CalibrationPlayer('rory-delap')).toMatchObject({
       printedAttack: 5, printedDefence: 5, cost: 3, actionName: 'HURLER',
+    });
+    expect(getV8CalibrationPlayer('arjen-robben')).toMatchObject({
+      printedAttack: 10, printedDefence: 1, cost: 4, actionName: 'CUT INSIDE',
     });
   });
 
@@ -187,6 +191,50 @@ describe('V8 expansion Batch 06 runtime', () => {
     expect(state.period).toBe(4);
     state = endV8CalibrationPeriod(state, { home: 0, away: 0 });
     expect(calibrationHandTacticals(state, 'home').filter((card) => card.generatedBy === 'rory-delap')).toHaveLength(3);
+  });
+
+  it('CUT INSIDE changes Cross identity without changing its paid Cost or carried modifier', () => {
+    let state = createV8CalibrationState({ homeEnergy: 20, awayEnergy: 20 });
+    state = revealCalibrationPlayer(state, 'home', 'arjen-robben', 'ATT');
+    const cross = addCalibrationTacticalToHand(state, 'home', 'cross', { costModifier: 2, attModifier: 1 });
+    state = cross.state;
+    const beforeEnergy = state.teams.home.energy;
+
+    state = playCalibrationTactical(state, 'home', cross.card.id, 'ATT');
+    const resolution = state.tacticalResolutions.find((item) => item.cardId === cross.card.id);
+    expect(resolution).toMatchObject({ type: 'long_shot', cost: 3, attack: 3, cancelled: false });
+    expect(state.teams.home.energy).toBe(beforeEnergy - 3);
+    expect(state.events.some((event) => event.text.includes('CUT INSIDE turns Cross into a Long Shot'))).toBe(true);
+
+    const second = addCalibrationTacticalToHand(state, 'home', 'cross');
+    state = playCalibrationTactical(second.state, 'home', second.card.id, 'ATT');
+    expect(state.tacticalResolutions.find((item) => item.cardId === second.card.id)?.type).toBe('cross');
+  });
+
+  it('CUT INSIDE outranks generic Alexia transformation, but pending Waddle movement outranks CUT INSIDE', () => {
+    let genericState = createV8CalibrationState({ homeEnergy: 20, awayEnergy: 20 });
+    genericState = revealCalibrationPlayer(genericState, 'home', 'arjen-robben', 'ATT');
+    genericState = revealCalibrationPlayer(genericState, 'home', 'alexia-putellas', 'ATT');
+    const firstCross = addCalibrationTacticalToHand(genericState, 'home', 'cross');
+    genericState = playCalibrationTactical(firstCross.state, 'home', firstCross.card.id, 'ATT');
+    expect(genericState.tacticalResolutions.find((item) => item.cardId === firstCross.card.id)?.type).toBe('long_shot');
+
+    const secondCross = addCalibrationTacticalToHand(genericState, 'home', 'cross');
+    genericState = playCalibrationTactical(secondCross.state, 'home', secondCross.card.id, 'ATT');
+    expect(genericState.tacticalResolutions.find((item) => item.cardId === secondCross.card.id)?.type).toBe('through_ball');
+
+    let movementState = createV8CalibrationState({ homeEnergy: 20, awayEnergy: 20 });
+    movementState = revealCalibrationPlayer(movementState, 'home', 'arjen-robben', 'ATT');
+    movementState = revealCalibrationPlayer(movementState, 'home', 'chris-waddle', 'MID');
+    movementState = moveCalibrationPlayer(movementState, 'home', 'chris-waddle', 'ATT');
+    const waddleCross = addCalibrationTacticalToHand(movementState, 'home', 'cross');
+    movementState = playCalibrationTactical(waddleCross.state, 'home', waddleCross.card.id, 'ATT');
+    expect(movementState.tacticalResolutions.find((item) => item.cardId === waddleCross.card.id)?.type).toBe('cross');
+    expect(movementState.periodCounters[`robben-cut-inside:${calibrationRuntimeId('home', 'arjen-robben')}`] ?? 0).toBe(0);
+
+    const robbenCross = addCalibrationTacticalToHand(movementState, 'home', 'cross');
+    movementState = playCalibrationTactical(robbenCross.state, 'home', robbenCross.card.id, 'ATT');
+    expect(movementState.tacticalResolutions.find((item) => item.cardId === robbenCross.card.id)?.type).toBe('long_shot');
   });
 
   it('KILLER PASS creates a +1 Through Ball at period end only for the MID winner', () => {
