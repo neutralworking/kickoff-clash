@@ -28,10 +28,12 @@ describe('V8 Action expansion Batch 01 contracts', () => {
     expect(getV8ExpansionBatch01Card('berbatov').primitives).toEqual(['action_target_interception', 'reactive_move']);
   });
 
-  it('keeps Kante at semantics-required until multi-zone presence is defined precisely', () => {
+  it('keeps Kante at stats-required after multi-zone presence semantics are resolved', () => {
     const kante = getV8ExpansionBatch01Card('kante');
     expect(kante.trackerRow).toBe(186);
     expect(kante.actionName).toBe('EVERYWHERE');
-    expect(kante.implementationState).toBe('semantics_required');
+    expect(kante.primitives).toEqual(['multi_zone_presence']);
+    expect(kante.actionText).toContain('Its ATT and DEF still contribute only where it is played.');
+    expect(kante.implementationState).toBe('stats_required');
   });
 });
