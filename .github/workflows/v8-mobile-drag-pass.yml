@@ -7,6 +7,7 @@ on:
       - .github/workflows/v8-mobile-drag-pass.yml
       - .github/v8-mobile-drag-pass.py
       - .github/v8-mobile-drag-fix.py
+      - .github/v8-mobile-drag-test-fix.py
 
 permissions:
   contents: write
@@ -30,6 +31,7 @@ jobs:
         run: |
           python3 .github/v8-mobile-drag-pass.py
           python3 .github/v8-mobile-drag-fix.py
+          python3 .github/v8-mobile-drag-test-fix.py
           git diff --check
 
       - run: npm ci
@@ -68,6 +70,7 @@ jobs:
         run: |
           git rm .github/v8-mobile-drag-pass.py
           git rm .github/v8-mobile-drag-fix.py
+          git rm .github/v8-mobile-drag-test-fix.py
           git rm .github/workflows/v8-mobile-drag-pass.yml
           if [ -f .github/workflows/deploy-me-ui-preview.yml ]; then
             git rm .github/workflows/deploy-me-ui-preview.yml
