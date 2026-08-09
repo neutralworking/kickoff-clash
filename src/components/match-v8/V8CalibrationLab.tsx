@@ -63,8 +63,10 @@ type Selection =
   | { kind: 'move'; runtimeId: string }
   | null;
 
-type PlayerDragState = {
+type HandDragState = {
+  kind: 'player' | 'tactical' | 'manager';
   cardId: string;
+  label: string;
   pointerId: number;
   startX: number;
   startY: number;
@@ -309,9 +311,30 @@ function PlayerHandCard({
   );
 }
 
-function TacticalHandCard({ card, cost, selected, onClick }: { card: V8TacticalCardInstance; cost: number; selected: boolean; onClick: () => void }) {
+function TacticalHandCard({
+  card,
+  cost,
+  selected,
+  affordable,
+  onClick,
+  onPointerDown,
+}: {
+  card: V8TacticalCardInstance;
+  cost: number;
+  selected: boolean;
+  affordable: boolean;
+  onClick: () => void;
+  onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+}) {
   return (
-    <button className={`v8-card v8-card--chance${selected ? ' is-selected' : ''}`} onClick={onClick}>
+    <button
+      type="button"
+      data-testid={`tactical-card-${card.id}`}
+      className={`v8-card v8-card--chance${selected ? ' is-selected' : ''}${affordable ? '' : ' is-unaffordable'}`}
+      aria-pressed={selected}
+      onClick={onClick}
+      onPointerDown={onPointerDown}
+    >
       <span className="v8-card__cost">{cost}</span>
       <span className="v8-card__position">TACTICAL</span>
       <strong>{card.name}</strong>
@@ -405,9 +428,9 @@ export default function V8CalibrationLab() {
   const [telemetryPeriods, setTelemetryPeriods] = useState<V8CalibrationPeriodTelemetry[]>([]);
   const [matchTelemetry, setMatchTelemetry] = useState<V8CalibrationMatchTelemetry | null>(null);
   const [finished, setFinished] = useState(false);
-  const [playerDrag, setPlayerDrag] = useState<PlayerDragState | null>(null);
-  const playerDragRef = useRef<PlayerDragState | null>(null);
-  const suppressPlayerClick = useRef<string | null>(null);
+  const [handDrag, setHandDrag] = useState<HandDragState | null>(null);
+  const handDragRef = useRef<HandDragState | null>(null);
+  const suppressHandClick = useRef<string | null>(null);
 
   const homePlayers = calibrationHandPlayers(state, 'home');
   const homeTacticals = calibrationHandTacticals(state, 'home');
@@ -459,10 +482,59 @@ export default function V8CalibrationLab() {
     }
   };
 
+  const queueManagerToZone = (zone: V8Zone): boolean => {
+    if (finished || windowPhase || !homeManagerAvailable || state.teams.home.energy < MANAGER_COST) return false;
+    if (occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return false;
+    rememberUndo();
+    setState({
+      ...state,
+      teams: { ...state.teams, home: { ...state.teams.home, energy: state.teams.home.energy - MANAGER_COST } },
+    });
+    setPending((plays) => [...plays, { kind: 'manager', side: 'home', zone, cost: MANAGER_COST }]);
+    setHomeManagerAvailable(false);
+    setSelection(null);
+    return true;
+  };
+
+  const queueTacticalToZone = (cardId: string, zone: V8Zone): boolean => {
+    if (finished) return false;
+
+    if (windowPhase) {
+      if (windowPhase.queued.some((play) => play.cardId === cardId)) return false;
+      const tactical = windowEligibleCalibrationTacticals(windowPhase.resolved, 'home').find((card) => card.id === cardId);
+      if (!tactical || !tacticalDefinition(tactical.type).eligibleZones.includes(zone)) return false;
+      const remainingEnergy = windowPhase.resolved.teams.home.energy - windowPhase.queued.reduce((sum, play) => sum + play.cost, 0);
+      const cost = previewCalibrationTacticalCost(windowPhase.resolved, 'home', tactical, zone);
+      if (cost > remainingEnergy) return false;
+      setWindowPhase((phase) => (phase ? {
+        ...phase,
+        queued: [...phase.queued, { cardId: tactical.id, name: tactical.name, zone, cost }],
+      } : phase));
+      setSelection(null);
+      return true;
+    }
+
+    const tactical = homeTacticals.find((card) => card.id === cardId);
+    if (!tactical || !tacticalDefinition(tactical.type).eligibleZones.includes(zone)) return false;
+    const cost = previewCalibrationTacticalCost(state, 'home', tactical, zone);
+    if (cost > state.teams.home.energy) return false;
+    rememberUndo();
+    try {
+      const spent = spendCalibrationTacticalFromHand(state, 'home', tactical.id, zone);
+      setState(spent.state);
+      setPending((plays) => [...plays, { kind: 'tactical', side: 'home', card: spent.card, zone, cost: spent.cost }]);
+      setSelection(null);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const queueToZone = (zone: V8Zone) => {
-    if (!selection || finished || windowPhase) return;
+    if (!selection || finished) return;
 
     if (selection.kind === 'move') {
+      if (windowPhase) return;
       const player = state.players[selection.runtimeId];
       if (!player) return;
       try {
@@ -475,16 +547,7 @@ export default function V8CalibrationLab() {
     }
 
     if (selection.kind === 'manager') {
-      if (!homeManagerAvailable || state.teams.home.energy < MANAGER_COST) return;
-      if (occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return;
-      rememberUndo();
-      setState({
-        ...state,
-        teams: { ...state.teams, home: { ...state.teams.home, energy: state.teams.home.energy - MANAGER_COST } },
-      });
-      setPending((plays) => [...plays, { kind: 'manager', side: 'home', zone, cost: MANAGER_COST }]);
-      setHomeManagerAvailable(false);
-      setSelection(null);
+      queueManagerToZone(zone);
       return;
     }
 
@@ -493,24 +556,12 @@ export default function V8CalibrationLab() {
       return;
     }
 
-    const tactical = homeTacticals.find((card) => card.id === selection.cardId);
-    if (!tactical || !tacticalDefinition(tactical.type).eligibleZones.includes(zone)) return;
-    const cost = previewCalibrationTacticalCost(state, 'home', tactical, zone);
-    if (cost > state.teams.home.energy) return;
-    rememberUndo();
-    try {
-      const spent = spendCalibrationTacticalFromHand(state, 'home', tactical.id, zone);
-      setState(spent.state);
-      setPending((plays) => [...plays, { kind: 'tactical', side: 'home', card: spent.card, zone, cost: spent.cost }]);
-      setSelection(null);
-    } catch {
-      return;
-    }
+    queueTacticalToZone(selection.cardId, zone);
   };
 
-  const setDrag = (next: PlayerDragState | null) => {
-    playerDragRef.current = next;
-    setPlayerDrag(next);
+  const setDrag = (next: HandDragState | null) => {
+    handDragRef.current = next;
+    setHandDrag(next);
   };
 
   const zoneAtPoint = (x: number, y: number): V8Zone | null => {
@@ -520,13 +571,39 @@ export default function V8CalibrationLab() {
     return zone && ZONES.includes(zone) ? zone : null;
   };
 
-  const startPlayerDrag = (event: ReactPointerEvent<HTMLButtonElement>, card: V8CalibrationPlayerCard) => {
-    setSelection({ kind: 'player', cardId: card.id });
-    if (finished || windowPhase || calibrationPlayCost(card) > state.teams.home.energy) return;
+  const isHandDragZoneLegal = (drag: Pick<HandDragState, 'kind' | 'cardId'>, zone: V8Zone): boolean => {
+    if (drag.kind === 'player') {
+      if (windowPhase || occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return false;
+      return calibrationPlayCost(getV8CalibrationPlayer(drag.cardId)) <= state.teams.home.energy;
+    }
+
+    if (drag.kind === 'manager') {
+      return !windowPhase
+        && homeManagerAvailable
+        && state.teams.home.energy >= MANAGER_COST
+        && occupiedPlayerSlots(state, 'home', zone, pending) < 4;
+    }
+
+    const sourceState = windowPhase?.resolved ?? state;
+    const tactical = calibrationHandTacticals(sourceState, 'home').find((card) => card.id === drag.cardId);
+    if (!tactical || !tacticalDefinition(tactical.type).eligibleZones.includes(zone)) return false;
+    if (windowPhase?.queued.some((play) => play.cardId === drag.cardId)) return false;
+    const remainingEnergy = windowPhase
+      ? windowPhase.resolved.teams.home.energy - windowPhase.queued.reduce((sum, play) => sum + play.cost, 0)
+      : state.teams.home.energy;
+    return previewCalibrationTacticalCost(sourceState, 'home', tactical, zone) <= remainingEnergy;
+  };
+
+  const startHandDrag = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    drag: Pick<HandDragState, 'kind' | 'cardId' | 'label'>,
+  ) => {
+    setSelection(drag.kind === 'manager' ? { kind: 'manager' } : { kind: drag.kind, cardId: drag.cardId });
+    if (finished || !ZONES.some((zone) => isHandDragZoneLegal(drag, zone))) return;
 
     const pointerId = event.pointerId;
     setDrag({
-      cardId: card.id,
+      ...drag,
       pointerId,
       startX: event.clientX,
       startY: event.clientY,
@@ -544,7 +621,7 @@ export default function V8CalibrationLab() {
 
     const handleMove = (pointerEvent: PointerEvent) => {
       if (pointerEvent.pointerId !== pointerId) return;
-      const current = playerDragRef.current;
+      const current = handDragRef.current;
       if (!current) return;
       const dx = pointerEvent.clientX - current.startX;
       const dy = pointerEvent.clientY - current.startY;
@@ -562,14 +639,17 @@ export default function V8CalibrationLab() {
 
     const handleFinish = (pointerEvent: PointerEvent) => {
       if (pointerEvent.pointerId !== pointerId) return;
-      const current = playerDragRef.current;
+      const current = handDragRef.current;
       cleanup();
       if (!current) return;
       const zone = current.moved ? zoneAtPoint(pointerEvent.clientX, pointerEvent.clientY) ?? current.overZone : null;
       setDrag(null);
       if (!current.moved) return;
-      suppressPlayerClick.current = current.cardId;
-      if (zone) queuePlayerToZone(current.cardId, zone);
+      suppressHandClick.current = `${current.kind}:${current.cardId}`;
+      if (!zone || !isHandDragZoneLegal(current, zone)) return;
+      if (current.kind === 'player') queuePlayerToZone(current.cardId, zone);
+      else if (current.kind === 'tactical') queueTacticalToZone(current.cardId, zone);
+      else queueManagerToZone(zone);
     };
 
     const handleCancel = (pointerEvent: PointerEvent) => {
@@ -581,6 +661,13 @@ export default function V8CalibrationLab() {
     window.addEventListener('pointermove', handleMove, { passive: false });
     window.addEventListener('pointerup', handleFinish);
     window.addEventListener('pointercancel', handleCancel);
+  };
+
+  const consumeSuppressedClick = (kind: HandDragState['kind'], cardId: string): boolean => {
+    const key = `${kind}:${cardId}`;
+    if (suppressHandClick.current !== key) return false;
+    suppressHandClick.current = null;
+    return true;
   };
 
   const undo = () => {
@@ -743,24 +830,35 @@ export default function V8CalibrationLab() {
   const selectedPlayer = selection?.kind === 'player' ? getV8CalibrationPlayer(selection.cardId) : null;
   const selectedPlayerCost = selectedPlayer ? calibrationPlayCost(selectedPlayer) : null;
   const selectedPlayerUnaffordable = selectedPlayerCost !== null && selectedPlayerCost > state.teams.home.energy;
-  const selectedTactical = selection?.kind === 'tactical' ? homeTacticals.find((card) => card.id === selection.cardId) ?? null : null;
-  const draggedPlayer = playerDrag ? getV8CalibrationPlayer(playerDrag.cardId) : null;
-  const interactionLabel = playerDrag?.moved
-    ? playerDrag.overZone
-      ? `DROP ${draggedPlayer?.matchName ?? 'PLAYER'} IN ${playerDrag.overZone}`
-      : 'DRAG OVER DEF / MID / ATT'
+  const selectedTactical = selection?.kind === 'tactical' ? calibrationHandTacticals(windowPhase?.resolved ?? state, 'home').find((card) => card.id === selection.cardId) ?? null : null;
+  const draggedPlayer = handDrag?.kind === 'player' ? getV8CalibrationPlayer(handDrag.cardId) : null;
+  const draggedTactical = handDrag?.kind === 'tactical' ? calibrationHandTacticals(windowPhase?.resolved ?? state, 'home').find((card) => card.id === handDrag.cardId) ?? null : null;
+  const interactionLabel = handDrag?.moved
+    ? handDrag.overZone
+      ? isHandDragZoneLegal(handDrag, handDrag.overZone)
+        ? `DROP ${handDrag.label} IN ${handDrag.overZone}`
+        : `${handDrag.overZone} IS NOT AVAILABLE`
+      : 'DRAG OVER A HIGHLIGHTED ZONE'
     : pending.length
       ? `${pending.length} committed`
       : selection?.kind === 'move'
         ? 'CHOOSE DESTINATION ZONE'
         : selectedPlayerUnaffordable
           ? `${selectedPlayerCost} ENERGY REQUIRED · ${state.teams.home.energy} AVAILABLE`
-          : selectedPlayer
-            ? `DRAG ${selectedPlayer.matchName} TO A ZONE`
-            : 'DRAG A PLAYER TO THE PITCH';
+          : selection?.kind === 'manager'
+            ? state.teams.home.energy < MANAGER_COST
+              ? `${MANAGER_COST} ENERGY REQUIRED · ${state.teams.home.energy} AVAILABLE`
+              : 'DRAG MANAGER SKILL TO A ZONE'
+            : selectedTactical
+              ? `DRAG ${selectedTactical.name.toUpperCase()} TO A HIGHLIGHTED ZONE`
+              : selectedPlayer
+                ? `DRAG ${selectedPlayer.matchName} TO A ZONE`
+                : windowPhase
+                  ? 'DRAG A TACTICAL TO THE PITCH'
+                  : 'DRAG A CARD TO THE PITCH';
 
   return (
-    <main className={`v8-shell${playerDrag ? ' is-dragging' : ''}`}>
+    <main className={`v8-shell${handDrag ? ' is-dragging' : ''}`}>
       <header className="v8-scorebar">
         <div><small>YOU</small><strong>{homeScore}</strong></div>
         <section>
@@ -815,7 +913,16 @@ export default function V8CalibrationLab() {
             const penalty = outOfPositionPenalty(selectedPlayer, zone);
             guide = selectedPlayerUnaffordable ? 'NO ENERGY' : penalty === 0 ? 'NATURAL' : `−${penalty} OOP`;
           }
-          if (selectedTactical) guide = tacticalDefinition(selectedTactical.type).eligibleZones.includes(zone) ? `TACTICAL · ${tacticalLabel(selectedTactical, zone)}` : 'NO';
+          if (selectedTactical) {
+            const sourceState = windowPhase?.resolved ?? state;
+            const remainingEnergy = windowPhase
+              ? windowPhase.resolved.teams.home.energy - windowPhase.queued.reduce((sum, play) => sum + play.cost, 0)
+              : state.teams.home.energy;
+            const eligible = tacticalDefinition(selectedTactical.type).eligibleZones.includes(zone);
+            const tacticalCost = eligible ? previewCalibrationTacticalCost(sourceState, 'home', selectedTactical, zone) : Number.POSITIVE_INFINITY;
+            guide = !eligible ? 'NO' : tacticalCost > remainingEnergy ? 'NO ENERGY' : `TACTICAL · ${tacticalLabel(selectedTactical, zone)}`;
+          }
+          if (selection?.kind === 'manager') guide = playerOccupancy >= 4 ? 'FULL' : state.teams.home.energy < MANAGER_COST ? 'NO ENERGY' : 'MANAGER';
           if (selection?.kind === 'move') guide = 'MOVE';
 
           return (
@@ -823,7 +930,7 @@ export default function V8CalibrationLab() {
               key={zone}
               type="button"
               data-v8-zone={zone}
-              className={`v8-zone${playerDrag ? ' is-drag-target' : ''}${playerDrag?.overZone === zone ? ' is-drag-over' : ''}`}
+              className={`v8-zone${handDrag ? isHandDragZoneLegal(handDrag, zone) ? ' is-drag-target' : ' is-drag-disabled' : ''}${handDrag?.overZone === zone && isHandDragZoneLegal(handDrag, zone) ? ' is-drag-over' : ''}`}
               onClick={() => queueToZone(zone)}
             >
               <div className="v8-zone__heading"><strong>{zone}</strong><span>{guide}</span></div>
@@ -937,31 +1044,58 @@ export default function V8CalibrationLab() {
       )}
 
       <section className="v8-hand-wrap">
-        <div className="v8-hand-heading"><strong>HAND</strong><span>DRAG PLAYER TO PITCH · {state.teams.home.drawPile.length} UNSEEN</span></div>
+        <div className="v8-hand-heading"><strong>HAND</strong><span>{windowPhase ? 'DRAG TACTICAL TO PITCH' : 'DRAG CARD TO PITCH'} · {state.teams.home.drawPile.length} UNSEEN</span></div>
         <div className="v8-hand">
           {homePlayers.map((card) => (
             <PlayerHandCard
               key={card.id}
               card={card}
               selected={selection?.kind === 'player' && selection.cardId === card.id}
-              affordable={calibrationPlayCost(card) <= state.teams.home.energy}
+              affordable={!windowPhase && calibrationPlayCost(card) <= state.teams.home.energy}
               onClick={() => {
-                if (suppressPlayerClick.current === card.id) {
-                  suppressPlayerClick.current = null;
-                  return;
-                }
+                if (consumeSuppressedClick('player', card.id)) return;
                 setSelection({ kind: 'player', cardId: card.id });
               }}
-              onPointerDown={(event) => startPlayerDrag(event, card)}
+              onPointerDown={(event) => startHandDrag(event, { kind: 'player', cardId: card.id, label: card.matchName })}
             />
           ))}
           {homeTacticals.map((card) => {
+            const sourceState = windowPhase?.resolved ?? state;
             const eligible = tacticalDefinition(card.type).eligibleZones;
-            const costs = eligible.map((zone) => previewCalibrationTacticalCost(state, 'home', card, zone));
-            return <TacticalHandCard key={card.id} card={card} cost={Math.min(...costs)} selected={selection?.kind === 'tactical' && selection.cardId === card.id} onClick={() => setSelection({ kind: 'tactical', cardId: card.id })} />;
+            const costs = eligible.map((zone) => previewCalibrationTacticalCost(sourceState, 'home', card, zone));
+            const minimumCost = Math.min(...costs);
+            const remainingEnergy = windowPhase
+              ? windowPhase.resolved.teams.home.energy - windowPhase.queued.reduce((sum, play) => sum + play.cost, 0)
+              : state.teams.home.energy;
+            const windowEligible = !windowPhase || windowEligibleCalibrationTacticals(windowPhase.resolved, 'home').some((candidate) => candidate.id === card.id);
+            const affordable = windowEligible && !windowPhase?.queued.some((play) => play.cardId === card.id) && minimumCost <= remainingEnergy;
+            return (
+              <TacticalHandCard
+                key={card.id}
+                card={card}
+                cost={minimumCost}
+                selected={selection?.kind === 'tactical' && selection.cardId === card.id}
+                affordable={affordable}
+                onClick={() => {
+                  if (consumeSuppressedClick('tactical', card.id)) return;
+                  setSelection({ kind: 'tactical', cardId: card.id });
+                }}
+                onPointerDown={(event) => startHandDrag(event, { kind: 'tactical', cardId: card.id, label: card.name.toUpperCase() })}
+              />
+            );
           })}
           {homeManagerAvailable && (
-            <button className={`v8-card v8-card--manager${selection?.kind === 'manager' ? ' is-selected' : ''}`} onClick={() => setSelection({ kind: 'manager' })}>
+            <button
+              type="button"
+              data-testid="manager-card"
+              className={`v8-card v8-card--manager${selection?.kind === 'manager' ? ' is-selected' : ''}${!windowPhase && state.teams.home.energy >= MANAGER_COST ? '' : ' is-unaffordable'}`}
+              aria-pressed={selection?.kind === 'manager'}
+              onClick={() => {
+                if (consumeSuppressedClick('manager', 'manager')) return;
+                setSelection({ kind: 'manager' });
+              }}
+              onPointerDown={(event) => startHandDrag(event, { kind: 'manager', cardId: 'manager', label: 'MANAGER SKILL' })}
+            >
               <span className="v8-card__cost">{MANAGER_COST}</span>
               <span className="v8-card__position">MANAGER</span>
               <strong>{MANAGER_NAME}</strong>
@@ -971,20 +1105,28 @@ export default function V8CalibrationLab() {
         </div>
       </section>
 
-      {playerDrag?.moved && draggedPlayer && (
+      {handDrag?.moved && (
         <div
-          className="v8-drag-ghost"
+          className={`v8-drag-ghost${handDrag.kind === 'tactical' ? ' v8-card--chance' : handDrag.kind === 'manager' ? ' v8-card--manager' : ''}`}
           data-testid="v8-drag-ghost"
-          style={{ left: playerDrag.x, top: playerDrag.y }}
+          style={{ left: handDrag.x, top: handDrag.y }}
           aria-hidden="true"
         >
-          <span className="v8-card__art"><i>{draggedPlayer.matchName.slice(0, 2).toUpperCase()}</i></span>
-          <span className="v8-card__cost">{calibrationPlayCost(draggedPlayer)}</span>
-          <span className="v8-card__position">{draggedPlayer.position}</span>
-          <strong>{draggedPlayer.matchName}</strong>
-          <small><b>{draggedPlayer.actionName}</b></small>
-          <span className="v8-card__att">{draggedPlayer.printedAttack}<i>ATT</i></span>
-          <span className="v8-card__def">{draggedPlayer.printedDefence}<i>DEF</i></span>
+          <span className="v8-card__art"><i>{handDrag.kind === 'player' ? draggedPlayer?.matchName.slice(0, 2).toUpperCase() : handDrag.kind === 'tactical' ? 'TX' : 'CO'}</i></span>
+          <span className="v8-card__cost">{handDrag.kind === 'player' && draggedPlayer
+            ? calibrationPlayCost(draggedPlayer)
+            : handDrag.kind === 'tactical' && draggedTactical
+              ? Math.min(...tacticalDefinition(draggedTactical.type).eligibleZones.map((zone) => previewCalibrationTacticalCost(windowPhase?.resolved ?? state, 'home', draggedTactical, zone)))
+              : MANAGER_COST}</span>
+          <span className="v8-card__position">{handDrag.kind === 'player' ? draggedPlayer?.position : handDrag.kind === 'tactical' ? 'TACTICAL' : 'MANAGER'}</span>
+          <strong>{handDrag.kind === 'player' ? draggedPlayer?.matchName : handDrag.kind === 'tactical' ? draggedTactical?.name : MANAGER_NAME}</strong>
+          <small><b>{handDrag.kind === 'player' ? draggedPlayer?.actionName : handDrag.kind === 'tactical' ? draggedTactical ? tacticalLabel(draggedTactical) : '' : 'MANAGER SKILL'}</b></small>
+          {handDrag.kind === 'player' && draggedPlayer && (
+            <>
+              <span className="v8-card__att">{draggedPlayer.printedAttack}<i>ATT</i></span>
+              <span className="v8-card__def">{draggedPlayer.printedDefence}<i>DEF</i></span>
+            </>
+          )}
         </div>
       )}
 

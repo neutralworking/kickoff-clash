@@ -706,6 +706,7 @@
 
 .v8-shell.is-dragging .v8-pitch { border-color: rgba(255,211,99,.44); box-shadow: 0 0 0 1px rgba(255,211,99,.08), 0 12px 28px rgba(0,0,0,.42), inset 0 0 28px rgba(0,0,0,.22); }
 .v8-zone.is-drag-target { border-color: rgba(255,211,99,.32); background: rgba(255,211,99,.035); }
+.v8-zone.is-drag-disabled { opacity: .42; filter: saturate(.55); }
 .v8-zone.is-drag-target .v8-zone__heading span { opacity: 1; }
 .v8-zone.is-drag-over {
   z-index: 3;
@@ -801,7 +802,7 @@
 }
 .v8-card.is-unaffordable:not(.is-selected) { opacity: .34; filter: saturate(.3) brightness(.78); }
 .v8-card--chance,
-.v8-card--manager { touch-action: manipulation; }
+.v8-card--manager { touch-action: pan-x; }
 .v8-card--chance { background: linear-gradient(180deg, transparent 45%, rgba(12,8,3,.84) 72%), radial-gradient(circle at 50% 24%, rgba(255,201,75,.27), transparent 37%), linear-gradient(145deg, #5b4319, #21170a 72%); }
 .v8-card--manager { flex-basis: 88px; background: linear-gradient(180deg, transparent 45%, rgba(8,5,13,.86) 72%), radial-gradient(circle at 50% 24%, rgba(189,142,255,.24), transparent 37%), linear-gradient(145deg, #413055, #191321 72%); }
 .v8-card--manager.is-selected { flex-basis: 88px; height: 118px; }

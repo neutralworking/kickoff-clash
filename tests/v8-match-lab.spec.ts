@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -35,6 +35,29 @@ async function expectTestingSurfaceAboveFold(page: Page) {
   expect(positions.firstCard.bottom).toBeLessThanOrEqual(positions.viewportHeight);
 }
 
+async function dragCardToZone(page: Page, card: Locator, zone: Locator, pointerId: number) {
+  // A real mobile user scrolls the horizontal hand until the card is on-screen before lifting it.
+  // Do the same here so the gesture vector tests vertical drag rather than an artificial
+  // hundreds-of-pixels horizontal move from an off-screen card.
+  await card.scrollIntoViewIfNeeded();
+  const cardBox = await card.boundingBox();
+  const zoneBox = await zone.boundingBox();
+  expect(cardBox).not.toBeNull();
+  expect(zoneBox).not.toBeNull();
+  const startX = cardBox!.x + cardBox!.width / 2;
+  const startY = cardBox!.y + cardBox!.height / 2;
+  const endX = zoneBox!.x + zoneBox!.width / 2;
+  const endY = zoneBox!.y + zoneBox!.height * 0.74;
+  const pointer = { pointerId, pointerType: 'touch', isPrimary: true, bubbles: true };
+
+  await card.dispatchEvent('pointerdown', { ...pointer, clientX: startX, clientY: startY, buttons: 1 });
+  await page.locator('body').dispatchEvent('pointermove', { ...pointer, clientX: endX, clientY: endY, buttons: 1 });
+  await expect(page.getByTestId('v8-drag-ghost')).toBeVisible();
+  await expect(zone).toHaveClass(/is-drag-over/);
+  await page.locator('body').dispatchEvent('pointerup', { ...pointer, clientX: endX, clientY: endY, buttons: 0 });
+  await expect(page.getByTestId('v8-drag-ghost')).toHaveCount(0);
+}
+
 test.describe('V8 real-card calibration lab', () => {
   test('keeps the core testing surface in one phone viewport', async ({ page }) => {
     await page.goto('/lab/match-v8');
@@ -66,21 +89,7 @@ test.describe('V8 real-card calibration lab', () => {
     const midfieldZone = page.locator('.v8-zone').nth(1);
     await expect(bremner.locator('.v8-card__cost')).toHaveText('1');
 
-    const cardBox = await bremner.boundingBox();
-    const zoneBox = await midfieldZone.boundingBox();
-    expect(cardBox).not.toBeNull();
-    expect(zoneBox).not.toBeNull();
-    const startX = cardBox!.x + cardBox!.width / 2;
-    const startY = cardBox!.y + cardBox!.height / 2;
-    const endX = zoneBox!.x + zoneBox!.width / 2;
-    const endY = zoneBox!.y + zoneBox!.height * 0.74;
-    const pointer = { pointerId: 7, pointerType: 'touch', isPrimary: true, bubbles: true };
-
-    await bremner.dispatchEvent('pointerdown', { ...pointer, clientX: startX, clientY: startY, buttons: 1 });
-    await page.locator('body').dispatchEvent('pointermove', { ...pointer, clientX: endX, clientY: endY, buttons: 1 });
-    await expect(page.getByTestId('v8-drag-ghost')).toBeVisible();
-    await expect(midfieldZone).toHaveClass(/is-drag-over/);
-    await page.locator('body').dispatchEvent('pointerup', { ...pointer, clientX: endX, clientY: endY, buttons: 0 });
+    await dragCardToZone(page, bremner, midfieldZone, 7);
 
     await expect(page.getByTestId('selected-player-detail')).toHaveCount(0);
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
@@ -117,9 +126,8 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(page.getByText('22–HT', { exact: true })).toBeVisible();
     await expect(page.getByText('4 ENERGY', { exact: true })).toBeVisible();
 
-    await page.locator('.v8-card--manager').click();
     const defenceZone = page.locator('.v8-zone').first();
-    await defenceZone.click();
+    await dragCardToZone(page, page.getByTestId('manager-card'), defenceZone, 8);
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
     await expect(page.getByText('1 ENERGY', { exact: true })).toBeVisible();
     await expect(defenceZone.locator('.v8-chip--transient')).toContainText('CONTROL');
@@ -192,12 +200,39 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(window).toContainText('TACTICAL WINDOW');
     await expectMobileFit(page);
 
-    await window.locator('.v8-window__choices button').filter({ hasText: 'Cross → ATT' }).click();
+    const crossCard = page.locator('.v8-card--chance').filter({ hasText: 'Cross' });
+    await expect(crossCard).toBeVisible();
+    await dragCardToZone(page, crossCard, page.locator('.v8-zone').nth(2), 9);
     await expect(window).toContainText('Post-reveal: Cross (1) → ATT');
     await page.getByRole('button', { name: 'RESOLVE WINDOW' }).click();
 
     await expect(page.locator('.v8-recap')).toContainText('Post-reveal: Cross (1, RABONA) → ATT.');
     await expect(page.locator('.v8-card--chance').filter({ hasText: 'Cross' })).toHaveCount(0);
+    await expectMobileFit(page);
+  });
+
+  test('drags a held Tactical from the hand during normal commitment', async ({ page }) => {
+    await page.goto('/lab/match-v8');
+
+    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await page.locator('.v8-card').filter({ hasText: 'Ángel Di María' }).click();
+    await page.locator('.v8-zone').nth(1).click();
+    await page.getByRole('button', { name: 'END PERIOD' }).click();
+
+    const window = page.getByTestId('v8-window');
+    await expect(window).toContainText('TACTICAL WINDOW');
+    await page.getByRole('button', { name: 'SKIP WINDOW' }).click();
+    await expect(page.getByText('HT–66', { exact: true })).toBeVisible();
+
+    const crossCard = page.locator('.v8-card--chance').filter({ hasText: 'Cross' });
+    const midfieldZone = page.locator('.v8-zone').nth(1);
+    await expect(crossCard).toBeVisible();
+    await dragCardToZone(page, crossCard, midfieldZone, 10);
+
+    await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
+    await expect(page.locator('.v8-commit')).toContainText('Cross → MID');
+    await expect(page.getByText('5 ENERGY', { exact: true })).toBeVisible();
+    await expect(crossCard).toHaveCount(0);
     await expectMobileFit(page);
   });
 
