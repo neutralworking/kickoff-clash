@@ -1,0 +1,233 @@
+export * from './calibration-runtime';
+
+import { getV8CalibrationPlayer } from './calibration-cards';
+import type { V8Zone } from './core';
+import { isV8ChanceType } from './tactical';
+import * as base from './calibration-runtime';
+
+const ZONE_INDEX: Record<V8Zone, number> = { DEF: 0, MID: 1, ATT: 2 };
+
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function otherSide(side: base.V8CalibrationSide): base.V8CalibrationSide {
+  return side === 'home' ? 'away' : 'home';
+}
+
+function adjacent(a: V8Zone, b: V8Zone): boolean {
+  return Math.abs(ZONE_INDEX[a] - ZONE_INDEX[b]) === 1;
+}
+
+function laudrupMoveKey(runtimeId: string): string {
+  return `laudrup-gliding-run:${runtimeId}`;
+}
+
+function laudrupProtectionKey(runtimeId: string): string {
+  return `laudrup-gliding-run-protection:${runtimeId}`;
+}
+
+function zoneCode(zone: V8Zone): number {
+  return ZONE_INDEX[zone] + 1;
+}
+
+function zoneFromCode(value: number): V8Zone | undefined {
+  return value === 1 ? 'DEF' : value === 2 ? 'MID' : value === 3 ? 'ATT' : undefined;
+}
+
+function davidsFollowKey(runtimeId: string): string {
+  return `davids-pitbull:${runtimeId}`;
+}
+
+function applyDavidsPursuit(
+  state: base.V8CalibrationState,
+  movingSide: base.V8CalibrationSide,
+  movingCardId: string,
+  fromZone: V8Zone,
+  toZone: V8Zone,
+): base.V8CalibrationState {
+  const movingCard = getV8CalibrationPlayer(movingCardId);
+  if (!movingCard.naturalZones.includes('MID')) return state;
+
+  let next = state;
+  const movingRuntimeId = base.calibrationRuntimeId(movingSide, movingCardId);
+  const candidates = base.calibrationPlayersInZone(next, otherSide(movingSide), fromZone)
+    .filter((player) =>
+      player.cardId === 'davids'
+      && base.isCalibrationActionEnabled(next, player.runtimeId)
+      && (next.periodCounters[davidsFollowKey(player.runtimeId)] ?? 0) === 0
+    )
+    .sort((a, b) => a.deployedOrder - b.deployedOrder || a.runtimeId.localeCompare(b.runtimeId));
+
+  const davids = candidates.find((player) => base.calibrationPlayersInZone(next, player.side, toZone).length < 4);
+  if (!davids) return next;
+
+  next = clone(next);
+  const liveDavids = next.players[davids.runtimeId]!;
+  liveDavids.zone = toZone;
+  next.periodCounters[davidsFollowKey(liveDavids.runtimeId)] = 1;
+  next.events.push({
+    type: 'action_triggered',
+    period: next.period,
+    text: `${getV8CalibrationPlayer('davids').realName} · PITBULL follows ${movingCard.realName}.`,
+  });
+  next.events.push({
+    type: 'player_moved',
+    period: next.period,
+    text: `${getV8CalibrationPlayer('davids').realName} follows ${fromZone} → ${toZone}.`,
+  });
+  next = base.applyCalibrationModifier(next, movingRuntimeId, {
+    attack: -2,
+    lifetime: 'period',
+    source: 'PITBULL',
+    sourceRuntimeId: liveDavids.runtimeId,
+  });
+  return base.refreshCalibrationSuppression(next);
+}
+
+function moveLaudrup(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  toZone: V8Zone,
+): base.V8CalibrationState {
+  let next = clone(state);
+  const runtimeId = base.calibrationRuntimeId(side, 'brian-laudrup');
+  const player = next.players[runtimeId];
+  if (!player) throw new Error('brian-laudrup is not deployed');
+  if (player.zone === toZone) throw new Error('Player is already in that zone');
+  if (!adjacent(player.zone, toZone)) throw new Error('GLIDING RUN moves one adjacent zone');
+  if (base.calibrationPlayersInZone(next, side, toZone).length >= 4) throw new Error(`${toZone} is full`);
+  if (!base.isCalibrationActionEnabled(next, runtimeId)) throw new Error('Player has no active movement Action');
+  if ((next.periodCounters[laudrupMoveKey(runtimeId)] ?? 0) > 0) throw new Error('Player has already moved this period');
+
+  const from = player.zone;
+  player.zone = toZone;
+  next.periodCounters[laudrupMoveKey(runtimeId)] = 1;
+  next.periodCounters[laudrupProtectionKey(runtimeId)] = zoneCode(toZone);
+  next.events.push({
+    type: 'player_moved',
+    period: next.period,
+    text: `${getV8CalibrationPlayer('brian-laudrup').realName} · GLIDING RUN ${from} → ${toZone}.`,
+  });
+  return base.refreshCalibrationSuppression(next);
+}
+
+/**
+ * Movement listener layer: GLIDING RUN owns a once-per-period manual move; PITBULL reacts to any
+ * opposing midfielder movement produced by this runtime and follows into the destination.
+ */
+export function moveCalibrationPlayer(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  cardId: string,
+  toZone: V8Zone,
+): base.V8CalibrationState {
+  const runtimeId = base.calibrationRuntimeId(side, cardId);
+  const fromZone = state.players[runtimeId]?.zone;
+  if (!fromZone) throw new Error(`${cardId} is not deployed`);
+
+  let next = cardId === 'brian-laudrup'
+    ? moveLaudrup(state, side, toZone)
+    : base.moveCalibrationPlayer(state, side, cardId, toZone);
+
+  next = applyDavidsPursuit(next, side, cardId, fromZone, toZone);
+  return next;
+}
+
+function activeLaudrupProtection(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  zone: V8Zone,
+): base.V8CalibrationRuntimePlayer | undefined {
+  return Object.values(state.players)
+    .filter((player) =>
+      player.side === side
+      && player.cardId === 'brian-laudrup'
+      && base.isCalibrationActionEnabled(state, player.runtimeId)
+      && zoneFromCode(state.periodCounters[laudrupProtectionKey(player.runtimeId)] ?? 0) === zone
+    )
+    .sort((a, b) => a.deployedOrder - b.deployedOrder || a.runtimeId.localeCompare(b.runtimeId))[0];
+}
+
+function prepareLaudrupProtection(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  cardId: string,
+  zone: V8Zone,
+): base.V8CalibrationState {
+  const tactical = base.calibrationHandTacticals(state, side).find((card) => card.id === cardId);
+  if (!tactical || !isV8ChanceType(tactical.type)) return state;
+  const laudrup = activeLaudrupProtection(state, side, zone);
+  if (!laudrup) return state;
+
+  const next = clone(state);
+  const entry = next.teams[side].hand.find((candidate) => candidate.kind === 'tactical' && candidate.card.id === cardId);
+  if (!entry || entry.kind !== 'tactical') return state;
+  entry.card.cancellable = false;
+  next.periodCounters[laudrupProtectionKey(laudrup.runtimeId)] = 0;
+  next.events.push({
+    type: 'action_triggered',
+    period: next.period,
+    text: `${getV8CalibrationPlayer('brian-laudrup').realName} · GLIDING RUN protects ${entry.card.name} in ${zone}.`,
+  });
+  return next;
+}
+
+function removeLatestResolvedEvent(
+  state: base.V8CalibrationState,
+  tacticalName: string,
+): void {
+  for (let index = state.events.length - 1; index >= 0; index -= 1) {
+    const event = state.events[index];
+    if (event?.type === 'chance_resolved' && event.text.startsWith(`${tacticalName} resolves`)) {
+      state.events.splice(index, 1);
+      return;
+    }
+  }
+}
+
+/**
+ * Chance-resolution layer: GLIDING RUN can protect one destination Chance; TIMED SLIDE then
+ * cancels the first otherwise-resolving Through Ball in Nesta's confrontation each period.
+ */
+export function playCalibrationTactical(
+  state: base.V8CalibrationState,
+  side: base.V8CalibrationSide,
+  cardId: string,
+  zone: V8Zone,
+  options: { ignoreEnergy?: boolean; window?: boolean } = {},
+): base.V8CalibrationState {
+  const tacticalBefore = base.calibrationHandTacticals(state, side).find((card) => card.id === cardId);
+  const prepared = prepareLaudrupProtection(state, side, cardId, zone);
+  let next = base.playCalibrationTactical(prepared, side, cardId, zone, options);
+  if (!tacticalBefore || tacticalBefore.type !== 'through_ball') return next;
+
+  const defendingSide = otherSide(side);
+  const defendingZone = base.opposingDepthZone(zone);
+  const nesta = base.calibrationPlayersInZone(prepared, defendingSide, defendingZone)
+    .find((player) =>
+      player.cardId === 'nesta'
+      && base.isCalibrationActionEnabled(prepared, player.runtimeId)
+      && (prepared.periodCounters[`nesta-timed-slide:${player.runtimeId}`] ?? 0) === 0
+    );
+  if (!nesta) return next;
+
+  const resolution = [...next.tacticalResolutions].reverse()
+    .find((candidate) => candidate.cardId === cardId && candidate.side === side);
+  if (!resolution || resolution.cancelled || resolution.uncancellable || resolution.attack <= 0) return next;
+
+  next = clone(next);
+  const liveResolution = [...next.tacticalResolutions].reverse()
+    .find((candidate) => candidate.cardId === cardId && candidate.side === side)!;
+  next.tacticalAttack[side][zone] -= liveResolution.attack;
+  liveResolution.cancelled = true;
+  liveResolution.attack = 0;
+  next.periodCounters[`nesta-timed-slide:${nesta.runtimeId}`] = 1;
+  removeLatestResolvedEvent(next, tacticalBefore.name);
+  next.events.push({
+    type: 'chance_cancelled',
+    period: next.period,
+    text: `${tacticalBefore.name} is cancelled by ${getV8CalibrationPlayer('nesta').actionName}.`,
+  });
+  return next;
+}
