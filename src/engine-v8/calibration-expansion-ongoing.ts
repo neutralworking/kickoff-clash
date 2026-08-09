@@ -2,6 +2,7 @@ import { getV8CalibrationPlayer } from './calibration-cards';
 import {
   applyCalibrationModifier,
   calibrationPlayersInZone,
+  calibrationZoneTotals,
   currentCalibrationAttack,
   isCalibrationActionEnabled,
   opposingDepthZone,
@@ -13,6 +14,7 @@ import type { V8Zone } from './core';
 
 const ASHLEY_SOURCE_PREFIX = 'SHOW HIM OUTSIDE:';
 const TYMOSHCHUK_SOURCE_PREFIX = 'STEP IN:';
+const CANNAVARO_SOURCE_PREFIX = 'READS IT EARLY:';
 const BERBATOV_COUNTER_PREFIX = 'berba-spin:';
 
 function clone<T>(value: T): T {
@@ -43,6 +45,7 @@ function clearDynamicOngoingModifiers(state: V8CalibrationState): void {
     player.modifiers = player.modifiers.filter((modifier) =>
       !modifier.source?.startsWith(ASHLEY_SOURCE_PREFIX)
       && !modifier.source?.startsWith(TYMOSHCHUK_SOURCE_PREFIX)
+      && !modifier.source?.startsWith(CANNAVARO_SOURCE_PREFIX)
     );
   }
 }
@@ -128,8 +131,9 @@ function highestAttack(
 }
 
 /**
- * Rebuilds dynamic bound ongoing effects from the current board rather than allowing their
- * modifiers to stack. Safe after reveals, movement, score refreshes and period cleanup.
+ * Rebuilds dynamic ongoing effects from the current board rather than allowing their modifiers to
+ * stack. The rebuild starts from a state with these dynamic modifiers removed, so READS IT EARLY's
+ * comparison is always evaluated "without this effect" as its card text requires.
  */
 export function refreshCalibrationExpansionOngoingEffects(state: V8CalibrationState): V8CalibrationState {
   let next = clone(state);
@@ -179,6 +183,22 @@ export function refreshCalibrationExpansionOngoingEffects(state: V8CalibrationSt
       lifetime: 'match',
       source: `${TYMOSHCHUK_SOURCE_PREFIX}${tymoshchuk.runtimeId}`,
       sourceRuntimeId: tymoshchuk.runtimeId,
+    });
+  }
+
+  const cannavaros = Object.values(next.players)
+    .filter((player) => player.cardId === 'cannavaro' && isCalibrationActionEnabled(next, player.runtimeId))
+    .sort((a, b) => a.deployedOrder - b.deployedOrder || a.runtimeId.localeCompare(b.runtimeId));
+
+  for (const cannavaro of cannavaros) {
+    const friendlyDefence = calibrationZoneTotals(next, cannavaro.side, cannavaro.zone).defence;
+    const opposingAttack = calibrationZoneTotals(next, otherSide(cannavaro.side), opposingDepthZone(cannavaro.zone)).attack;
+    if (opposingAttack <= friendlyDefence) continue;
+
+    next = applyCalibrationModifier(next, cannavaro.runtimeId, {
+      defence: 4,
+      lifetime: 'match',
+      source: `${CANNAVARO_SOURCE_PREFIX}${cannavaro.runtimeId}`,
     });
   }
 
