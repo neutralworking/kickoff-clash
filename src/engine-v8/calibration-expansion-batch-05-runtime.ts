@@ -112,6 +112,33 @@ function restoreCounters(state: runtime.V8CalibrationState, snapshots: readonly 
   return next;
 }
 
+function prepareDeadBallArtistBonus(
+  state: runtime.V8CalibrationState,
+  side: runtime.V8CalibrationSide,
+  cardId: string,
+): runtime.V8CalibrationState {
+  const card = runtime.calibrationHandTacticals(state, side).find((candidate) => candidate.id === cardId);
+  if (!card || card.metadata.deadBallArtistPeriod !== state.period) return state;
+  const sourceRuntimeId = typeof card.metadata.deadBallArtistRuntimeId === 'string'
+    ? card.metadata.deadBallArtistRuntimeId
+    : undefined;
+  if (!sourceRuntimeId) return state;
+  const key = `nakamura-dead-ball-artist:${sourceRuntimeId}`;
+  if ((state.periodCounters[key] ?? 0) > 0) return state;
+
+  const next = clone(state);
+  const entry = next.teams[side].hand.find((candidate) => candidate.kind === 'tactical' && candidate.card.id === cardId);
+  if (!entry || entry.kind !== 'tactical') return state;
+  entry.card.attModifier += 2;
+  next.periodCounters[key] = 1;
+  next.events.push({
+    type: 'tactical_modified',
+    period: next.period,
+    text: `${getV8CalibrationPlayer('shunsuke-nakamura').realName} · DEAD BALL ARTIST gives ${entry.card.name} +2 ATT.`,
+  });
+  return next;
+}
+
 function cancelResolution(
   state: runtime.V8CalibrationState,
   side: runtime.V8CalibrationSide,
@@ -205,7 +232,8 @@ export function playCalibrationTactical(
   if (!card || !isV8ChanceType(card.type)) return runtime.playCalibrationTactical(state, side, cardId, zone, options);
 
   const eventStart = state.events.length;
-  const deferred = deferThresholdDefenders(state, side);
+  const enhanced = prepareDeadBallArtistBonus(state, side, cardId);
+  const deferred = deferThresholdDefenders(enhanced, side);
   let next = runtime.playCalibrationTactical(deferred.state, side, cardId, zone, options);
   next = restoreCounters(next, deferred.snapshots);
   next = applyV8Batch05TypedChanceSuppression(next, side, cardId);
