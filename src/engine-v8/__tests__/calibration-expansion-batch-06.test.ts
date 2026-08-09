@@ -33,8 +33,8 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
 
     expect(ready).toEqual([
       'carli-lloyd',
-      'caroline-graham-hansen',
       'carlos-valderrama',
+      'caroline-graham-hansen',
       'christian-eriksen',
       'jari-litmanen',
     ]);
