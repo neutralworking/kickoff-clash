@@ -40,7 +40,7 @@ export const V8_EXPANSION_BATCH_02: readonly V8ExpansionCardContract[] = [
     actionText: 'The first time each period an opposing central attacker here gains ATT, gain the same DEF this period.',
     timing: 'triggered',
     primitives: ['opponent_attack_gain_listener'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'andy-robertson',
@@ -52,7 +52,7 @@ export const V8_EXPANSION_BATCH_02: readonly V8ExpansionCardContract[] = [
     actionText: 'The first time each period an opposing wide attacker here gains ATT, gain the same DEF this period.',
     timing: 'triggered',
     primitives: ['opponent_attack_gain_listener'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'nesta',
