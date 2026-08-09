@@ -18,6 +18,7 @@ const CANNAVARO_SOURCE_PREFIX = 'READS IT EARLY:';
 const BRONZE_SOURCE_PREFIX = 'OVERLAP:';
 const BERBATOV_COUNTER_PREFIX = 'berba-spin:';
 const HANSEN_COUNTER_PREFIX = 'hansen-one-on-one:';
+const HANSEN_SOURCE_PREFIX = 'hansen-one-on-one-source:';
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -87,7 +88,8 @@ function activeTargetActionCanFire(
  *
  * - BERBA SPIN consumes once per period, ignores the targeting Action, then moves Berbatov.
  * - ONE ON ONE consumes once per period, ignores the targeting defender Action, then gives Hansen
- *   +2 ATT for the period. The self-buff is not attributed to the opposing source Action.
+ *   +2 ATT for the period. The consumed source binding keeps that same ongoing Action ignored on
+ *   later board refreshes while allowing a different defender Action to target her normally.
  */
 function tryDefenderTargetInterception(
   state: V8CalibrationState,
@@ -123,9 +125,12 @@ function tryDefenderTargetInterception(
   if (target.cardId === 'caroline-graham-hansen') {
     if (!activeTargetActionCanFire(state, source, target)) return 'none';
     const key = `${HANSEN_COUNTER_PREFIX}${target.runtimeId}`;
+    const sourceKey = `${HANSEN_SOURCE_PREFIX}${target.runtimeId}:${source.runtimeId}`;
+    if ((state.periodCounters[sourceKey] ?? 0) > 0) return 'ignored';
     if ((state.periodCounters[key] ?? 0) > 0) return 'none';
 
     state.periodCounters[key] = 1;
+    state.periodCounters[sourceKey] = 1;
     state.events.push({
       type: 'action_ignored',
       period: state.period,
