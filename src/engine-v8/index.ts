@@ -13,6 +13,7 @@ export * from './calibration-expansion-batch-01';
 export * from './calibration-expansion-batch-02';
 export * from './calibration-expansion-batch-03';
 export * from './calibration-expansion-batch-04';
+export * from './calibration-expansion-batch-05';
 export * from './calibration-expansion-integration';
 export * from './calibration-presence';
 
