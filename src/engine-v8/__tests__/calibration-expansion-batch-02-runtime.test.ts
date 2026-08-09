@@ -41,11 +41,18 @@ describe('V8 expansion Batch 02 runtime primitives', () => {
 
     state = endV8CalibrationPeriod(state);
     expect(currentCalibrationDefence(state, mooreId)).toBe(getV8CalibrationPlayer('bobby-moore').printedDefence);
+
     state = refreshCalibrationScoreState(state, { home: 2, away: 0 });
-    expect(currentCalibrationDefence(state, mooreId)).toBe(getV8CalibrationPlayer('bobby-moore').printedDefence + 3);
+    expect(currentCalibrationDefence(state, mooreId)).toBe(getV8CalibrationPlayer('bobby-moore').printedDefence);
+
+    state = refreshCalibrationScoreState(state, { home: 2, away: 1 });
+    expect(currentCalibrationDefence(state, mooreId)).toBe(getV8CalibrationPlayer('bobby-moore').printedDefence);
+
+    state = refreshCalibrationScoreState(state, { home: 3, away: 1 });
+    expect(currentCalibrationDefence(state, mooreId)).toBe(getV8CalibrationPlayer('bobby-moore').printedDefence);
   });
 
-  it('READ THE RUN does not treat removal of an ATT debuff as an ATT gain', () => {
+  it('READ THE RUN ignores ATT restored only because SHOW HIM OUTSIDE retargeted', () => {
     let state = createV8CalibrationState();
     state = seedCalibrationPlayer(state, 'home', 'bobby-moore', 'DEF');
     state = revealCalibrationPlayer(state, 'home', 'ashley-cole', 'DEF');
@@ -59,39 +66,16 @@ describe('V8 expansion Batch 02 runtime primitives', () => {
     expect(currentCalibrationDefence(state, mooreId)).toBe(getV8CalibrationPlayer('bobby-moore').printedDefence);
   });
 
-  it('RECOVERY RUN mirrors the first wide-attacker ATT gain in Robertson confrontation', () => {
+  it('RECOVERY RUN mirrors JINKING RUN when a wide attacker enters Robertson confrontation', () => {
     let state = createV8CalibrationState();
     state = seedCalibrationPlayer(state, 'home', 'andy-robertson', 'DEF');
-    state = seedCalibrationPlayer(state, 'away', 'beckham', 'MID');
-    const robertsonId = calibrationRuntimeId('home', 'andy-robertson');
-    const beckhamId = calibrationRuntimeId('away', 'beckham');
-
-    state.players[beckhamId]!.zone = 'ATT';
-    state.players[beckhamId]!.modifiers.push({ id: 'test-wide-gain', attack: 3, defence: 0, lifetime: 'period', source: 'test' });
-    const before = createV8CalibrationState();
-    before.players = JSON.parse(JSON.stringify(state.players));
-    before.players[beckhamId]!.modifiers = [];
-    before.teams = JSON.parse(JSON.stringify(state.teams));
-    before.period = state.period;
-    before.periodCounters = {};
-    before.matchCounters = {};
-    before.tacticalAttack = JSON.parse(JSON.stringify(state.tacticalAttack));
-    before.zoneDefenceBonus = JSON.parse(JSON.stringify(state.zoneDefenceBonus));
-    before.triggerPress = JSON.parse(JSON.stringify(state.triggerPress));
-    before.offsideTraps = [];
-    before.tacticalResolutions = [];
-    before.events = [];
-    before.nextGeneratedId = state.nextGeneratedId;
-    before.nextModifierId = state.nextModifierId;
-
-    // Exercise the public operation boundary with a genuine positive ATT modifier via Abedi instead.
-    state = createV8CalibrationState();
-    state = seedCalibrationPlayer(state, 'home', 'andy-robertson', 'DEF');
     state = seedCalibrationPlayer(state, 'away', 'abedi-pele', 'MID');
-    state.players[calibrationRuntimeId('away', 'abedi-pele')]!.zone = 'ATT';
-    state = moveCalibrationPlayer(state, 'away', 'abedi-pele', 'MID');
-    state = moveCalibrationPlayer(state, 'away', 'abedi-pele', 'ATT');
+    const robertsonId = calibrationRuntimeId('home', 'andy-robertson');
 
+    state = moveCalibrationPlayer(state, 'away', 'abedi-pele', 'ATT');
+    expect(currentCalibrationDefence(state, robertsonId)).toBe(getV8CalibrationPlayer('andy-robertson').printedDefence + 4);
+
+    state = endV8CalibrationPeriod(state);
     expect(currentCalibrationDefence(state, robertsonId)).toBe(getV8CalibrationPlayer('andy-robertson').printedDefence);
   });
 
