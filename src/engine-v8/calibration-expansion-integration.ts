@@ -56,12 +56,12 @@ export const V8_EXPANSION_INTEGRATION_SQUADS: Readonly<Record<V8ExpansionIntegra
     placements: [
       { cardId: 'yashin', zone: 'DEF' },
       { cardId: 'ashley-cole', zone: 'DEF' },
-      { cardId: 'cannavaro', zone: 'DEF' },
       { cardId: 'lucy-bronze', zone: 'DEF' },
       { cardId: 'davids', zone: 'MID' },
       { cardId: 'aitana-bonmati', zone: 'MID' },
       { cardId: 'cruyff', zone: 'MID' },
       { cardId: 'chris-waddle', zone: 'MID' },
+      { cardId: 'caroline-graham-hansen', zone: 'ATT' },
       { cardId: 'maradona', zone: 'ATT' },
       { cardId: 'alan-shearer', zone: 'ATT' },
       { cardId: 'cavani', zone: 'ATT' },
