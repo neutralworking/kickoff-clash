@@ -64,7 +64,7 @@ export const V8_EXPANSION_BATCH_04: readonly V8ExpansionBatch04CardContract[] = 
     timing: 'triggered',
     auditDecision: 'keep_translate',
     primitives: ['period_end_comeback_scaling'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'chris-waddle',
@@ -77,7 +77,7 @@ export const V8_EXPANSION_BATCH_04: readonly V8ExpansionBatch04CardContract[] = 
     timing: 'triggered',
     auditDecision: 'keep_translate',
     primitives: ['reactive_move', 'move_chance_transform'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'alan-shearer',
@@ -90,7 +90,7 @@ export const V8_EXPANSION_BATCH_04: readonly V8ExpansionBatch04CardContract[] = 
     timing: 'triggered',
     auditDecision: 'keep_translate',
     primitives: ['first_chance_power_with_protection_lock'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'alexandra-popp',
