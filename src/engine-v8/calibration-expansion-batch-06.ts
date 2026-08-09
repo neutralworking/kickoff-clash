@@ -141,12 +141,12 @@ export const V8_EXPANSION_BATCH_06: readonly V8ExpansionBatch06CardContract[] = 
     position: 'DM / CM',
     naturalZones: ['DEF', 'MID'],
     actionName: 'BEAT THE PRESS',
-    actionText: 'Design pending: create a press-resistance consequence distinct from ESCAPE THE PRESS and LA CROQUETA.',
-    timing: 'triggered',
-    auditDecision: 'mechanic_design',
+    actionText: 'Ongoing: The first opposing Trigger Press each period adds a Through Ball to your hand with +2 ATT.',
+    timing: 'ongoing',
+    auditDecision: 'keep_translate',
     primitives: ['press_resistance_design'],
-    implementationState: 'primitive_required',
-    auditNote: 'The tracker supplies a strong on-pitch name but no consequence. Do not inherit the generic reconciliation Tempo Breaker action or clone Aitana/Iniesta just to make the card playable.',
+    implementationState: 'runtime_ready',
+    auditNote: 'The press itself still resolves. Walsh turns the first opposing Trigger Press each period into progression behind it by generating a +2 Through Ball. This is counterplay through progression, not immunity, and stays distinct from ESCAPE THE PRESS, LA CROQUETA and ONE ON ONE.',
   },
 ] as const;
 
