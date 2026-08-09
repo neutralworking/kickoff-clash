@@ -91,6 +91,37 @@ function applyBatch05RevealEffects(
     return next;
   }
 
+  if (cardId === 'paul-scholes' && zone === 'MID') {
+    let next = state;
+    const generated = runtime.addCalibrationTacticalToHand(next, side, 'cross', { generatedBy: cardId });
+    next = generated.state;
+    generated.card.metadata.availableFromPeriod = next.period + 1;
+    generated.card.metadata.freeThroughPeriod = next.period;
+    next.events.push({
+      type: 'tactical_generated',
+      period: next.period,
+      text: `${getV8CalibrationPlayer(cardId).realName} · HOLLYWOOD BALL generates ${generated.card.name} at 0 Energy this period.`,
+    });
+    return next;
+  }
+
+  if (cardId === 'shunsuke-nakamura') {
+    let next = state;
+    for (const type of ['long_shot', 'corner'] as const) {
+      const generated = runtime.addCalibrationTacticalToHand(next, side, type, { generatedBy: cardId });
+      next = generated.state;
+      generated.card.metadata.availableFromPeriod = next.period + 1;
+      generated.card.metadata.deadBallArtistPeriod = next.period;
+      generated.card.metadata.deadBallArtistRuntimeId = runtimeId;
+      next.events.push({
+        type: 'tactical_generated',
+        period: next.period,
+        text: `${getV8CalibrationPlayer(cardId).realName} · DEAD BALL ARTIST generates ${generated.card.name}.`,
+      });
+    }
+    return next;
+  }
+
   return state;
 }
 
