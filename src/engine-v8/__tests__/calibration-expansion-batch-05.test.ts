@@ -59,7 +59,17 @@ describe('V8 Action expansion Batch 05 source-first audit', () => {
     expect(mcgrath.actionText).toContain('Cross');
   });
 
-  it('does not promote audit contracts before their runtime and mixed-XI coverage exist', () => {
-    expect(V8_EXPANSION_BATCH_05.every((card) => card.implementationState === 'primitive_required')).toBe(true);
+  it('promotes only the four contracts with runtime plus mixed-XI coverage', () => {
+    const ready = V8_EXPANSION_BATCH_05
+      .filter((card) => card.implementationState === 'runtime_ready')
+      .map((card) => card.id)
+      .sort();
+    const pending = V8_EXPANSION_BATCH_05
+      .filter((card) => card.implementationState === 'primitive_required')
+      .map((card) => card.id)
+      .sort();
+
+    expect(ready).toEqual(['paul-mcgrath', 'peter-shilton', 'roberto-carlos', 'tony-adams']);
+    expect(pending).toEqual(['ole-gunnar-solskjaer', 'paul-scholes', 'ronaldinho', 'shunsuke-nakamura']);
   });
 });
