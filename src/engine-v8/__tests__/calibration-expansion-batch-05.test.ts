@@ -59,7 +59,7 @@ describe('V8 Action expansion Batch 05 source-first audit', () => {
     expect(mcgrath.actionText).toContain('Cross');
   });
 
-  it('promotes only the four contracts with runtime plus mixed-XI coverage', () => {
+  it('promotes six contracts and leaves only the deliberate design collisions pending', () => {
     const ready = V8_EXPANSION_BATCH_05
       .filter((card) => card.implementationState === 'runtime_ready')
       .map((card) => card.id)
@@ -69,7 +69,14 @@ describe('V8 Action expansion Batch 05 source-first audit', () => {
       .map((card) => card.id)
       .sort();
 
-    expect(ready).toEqual(['paul-mcgrath', 'peter-shilton', 'roberto-carlos', 'tony-adams']);
-    expect(pending).toEqual(['ole-gunnar-solskjaer', 'paul-scholes', 'ronaldinho', 'shunsuke-nakamura']);
+    expect(ready).toEqual([
+      'ole-gunnar-solskjaer',
+      'paul-mcgrath',
+      'peter-shilton',
+      'roberto-carlos',
+      'ronaldinho',
+      'tony-adams',
+    ]);
+    expect(pending).toEqual(['paul-scholes', 'shunsuke-nakamura']);
   });
 });
