@@ -3,7 +3,7 @@ name: Deploy to GitHub Pages
 # Builds the live main export plus isolated V8 previews and publishes them together.
 # The live game remains at /kickoff-clash/; previews are nested under /kickoff-clash/preview/
 # so preview publishing never replaces the root app.
-# ME UI preview verified head: 65690d5ca0c53cb97ed8d9ce6bb869bc378f7810
+# ME UI preview verified head: a7583f0bdad2c3f9aed2b49b0778206989df8552
 
 on:
   push:
