@@ -21,9 +21,10 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
     expect(getV8ExpansionBatch06Card('jari-litmanen').actionName).toBe('KILLER PASS');
     expect(getV8ExpansionBatch06Card('keira-walsh').actionName).toBe('BEAT THE PRESS');
     expect(getV8ExpansionBatch06Card('rory-delap').actionName).toBe('HURLER');
+    expect(getV8ExpansionBatch06Card('arjen-robben').actionName).toBe('CUT INSIDE');
   });
 
-  it('promotes seven cards and leaves only Robben as a deliberate V8 geometry design problem', () => {
+  it('promotes all eight Batch 06 cards after implementing their V8 primitives', () => {
     const ready = V8_EXPANSION_BATCH_06
       .filter((card) => card.implementationState === 'runtime_ready')
       .map((card) => card.id)
@@ -34,6 +35,7 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
       .sort();
 
     expect(ready).toEqual([
+      'arjen-robben',
       'carli-lloyd',
       'carlos-valderrama',
       'caroline-graham-hansen',
@@ -42,14 +44,17 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
       'keira-walsh',
       'rory-delap',
     ]);
-    expect(pending).toEqual(['arjen-robben']);
+    expect(pending).toEqual([]);
   });
 
-  it('refuses to fake Robben wide-versus-centre geometry', () => {
+  it('translates Robben wide-to-centre identity into a Cross-to-Long-Shot pivot without adding power', () => {
     const robben = getV8ExpansionBatch06Card('arjen-robben');
-    expect(robben.auditDecision).toBe('mechanic_design');
-    expect(robben.auditNote).toContain('wide-versus-centre geometry');
-    expect(robben.implementationState).toBe('primitive_required');
+    expect(robben.auditDecision).toBe('keep_translate');
+    expect(robben.implementationState).toBe('runtime_ready');
+    expect(robben.actionText).toContain('Cross');
+    expect(robben.actionText).toContain('Long Shot');
+    expect(robben.auditNote).toContain('no ATT bonus');
+    expect(robben.auditNote).toContain('original paid Cost');
   });
 
   it('implements Graham Hansen through shared defender-target interception rather than post-hoc repair', () => {
