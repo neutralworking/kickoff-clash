@@ -49,11 +49,16 @@ function zoneCount(state: V8CalibrationState, side: V8CalibrationSide): number {
 }
 
 describe('V8 larger-roster mixed expansion integration', () => {
-  it('has 38 runtime-ready cards, two source-stat blockers and no unresolved engine primitives through Batch 05', () => {
-    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(38);
+  it('has 42 runtime-ready cards, two source-stat blockers and four explicit Batch 06 primitive/design blockers', () => {
+    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(42);
     expect([...V8_EXPANSION_STATS_BLOCKED_IDS].sort()).toEqual(['kante', 'ozil']);
     expect(V8_EXPANSION_BLOCKED_IDS).toEqual(V8_EXPANSION_STATS_BLOCKED_IDS);
-    expect(V8_EXPANSION_PRIMITIVE_REQUIRED_IDS).toEqual([]);
+    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].sort()).toEqual([
+      'arjen-robben',
+      'caroline-graham-hansen',
+      'keira-walsh',
+      'rory-delap',
+    ]);
 
     const covered = new Set(
       V8_EXPANSION_INTEGRATION_SQUAD_KEYS
@@ -61,6 +66,7 @@ describe('V8 larger-roster mixed expansion integration', () => {
     );
     expect([...V8_EXPANSION_RUNTIME_READY_IDS].every((cardId) => covered.has(cardId))).toBe(true);
     expect([...V8_EXPANSION_STATS_BLOCKED_IDS].some((cardId) => covered.has(cardId))).toBe(false);
+    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].some((cardId) => covered.has(cardId))).toBe(false);
   });
 
   it('builds four coherent 11-player integration XIs without changing the six balance squads', () => {
