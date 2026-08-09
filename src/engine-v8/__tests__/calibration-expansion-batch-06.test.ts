@@ -20,9 +20,10 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
     expect(getV8ExpansionBatch06Card('caroline-graham-hansen').actionName).toBe('ONE ON ONE');
     expect(getV8ExpansionBatch06Card('jari-litmanen').actionName).toBe('KILLER PASS');
     expect(getV8ExpansionBatch06Card('keira-walsh').actionName).toBe('BEAT THE PRESS');
+    expect(getV8ExpansionBatch06Card('rory-delap').actionName).toBe('HURLER');
   });
 
-  it('promotes six cards and keeps only Robben and Delap as deliberate design problems', () => {
+  it('promotes seven cards and leaves only Robben as a deliberate V8 geometry design problem', () => {
     const ready = V8_EXPANSION_BATCH_06
       .filter((card) => card.implementationState === 'runtime_ready')
       .map((card) => card.id)
@@ -39,20 +40,16 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
       'christian-eriksen',
       'jari-litmanen',
       'keira-walsh',
-    ]);
-    expect(pending).toEqual([
-      'arjen-robben',
       'rory-delap',
     ]);
+    expect(pending).toEqual(['arjen-robben']);
   });
 
-  it('refuses to fake obsolete or missing mechanics for Robben and Delap', () => {
+  it('refuses to fake Robben wide-versus-centre geometry', () => {
     const robben = getV8ExpansionBatch06Card('arjen-robben');
-    const delap = getV8ExpansionBatch06Card('rory-delap');
-
     expect(robben.auditDecision).toBe('mechanic_design');
     expect(robben.auditNote).toContain('wide-versus-centre geometry');
-    expect(delap.auditNote).toContain('not automatically a Cross or Corner');
+    expect(robben.implementationState).toBe('primitive_required');
   });
 
   it('implements Graham Hansen through shared defender-target interception rather than post-hoc repair', () => {
@@ -72,5 +69,13 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
     expect(walsh.actionText).toContain('Trigger Press');
     expect(walsh.actionText).toContain('Through Ball');
     expect(walsh.auditNote).toContain('not immunity');
+  });
+
+  it('makes Delap a typed Long Throw creator rather than a disguised Cross or Corner card', () => {
+    const delap = getV8ExpansionBatch06Card('rory-delap');
+    expect(delap.auditDecision).toBe('keep_translate');
+    expect(delap.implementationState).toBe('runtime_ready');
+    expect(delap.actionText).toContain('Long Throw');
+    expect(delap.auditNote).toContain('explicit typed Chance');
   });
 });
