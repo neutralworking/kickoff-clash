@@ -1,8 +1,9 @@
-export * from './calibration-runtime';
+export * from './calibration-expansion-runtime';
 
 import * as decay from './calibration-decay';
 import { refreshCalibrationExpansionOngoingEffects } from './calibration-expansion-ongoing';
-import * as runtime from './calibration-runtime';
+import * as runtime from './calibration-expansion-runtime';
+import type { V8Zone } from './core';
 
 export function revealCalibrationPlayerWithDecay(
   ...args: Parameters<typeof decay.revealCalibrationPlayer>
@@ -28,9 +29,35 @@ export function refreshCalibrationScoreState(
   return refreshCalibrationExpansionOngoingEffects(runtime.refreshCalibrationScoreState(...args));
 }
 
+export function playCalibrationTacticalWithTiming(
+  state: runtime.V8CalibrationState,
+  side: runtime.V8CalibrationSide,
+  cardId: string,
+  zone: V8Zone,
+  options: { ignoreEnergy?: boolean; window?: boolean } = {},
+): runtime.V8CalibrationState {
+  const card = runtime.calibrationHandTacticals(state, side).find((candidate) => candidate.id === cardId);
+  if (!card) throw new Error(`Tactical card ${cardId} is not in hand`);
+  const availableFrom = decay.calibrationTacticalAvailableFromPeriod(card);
+  if (availableFrom > state.period) throw new Error(`${card.name} is banked until Period ${availableFrom}`);
+  return refreshCalibrationExpansionOngoingEffects(runtime.playCalibrationTactical(state, side, cardId, zone, options));
+}
+
+export function resolveCommittedCalibrationTactical(
+  ...args: Parameters<typeof runtime.resolveCommittedCalibrationTactical>
+): ReturnType<typeof runtime.resolveCommittedCalibrationTactical> {
+  return refreshCalibrationExpansionOngoingEffects(runtime.resolveCommittedCalibrationTactical(...args));
+}
+
+export function resolveGeneratedTacticalWindow(
+  ...args: Parameters<typeof runtime.resolveGeneratedTacticalWindow>
+): ReturnType<typeof runtime.resolveGeneratedTacticalWindow> {
+  const result = runtime.resolveGeneratedTacticalWindow(...args);
+  return { ...result, state: refreshCalibrationExpansionOngoingEffects(result.state) };
+}
+
 export {
   applyCalibrationModifier as applyCalibrationDecayModifier,
-  playCalibrationTactical as playCalibrationTacticalWithTiming,
   spendCalibrationTacticalFromHand as spendCalibrationTacticalFromHandWithTiming,
   calibrationTacticalAvailableFromPeriod,
   isCalibrationTacticalAvailable,
