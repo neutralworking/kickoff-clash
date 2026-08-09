@@ -17,10 +17,11 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
     expect(getV8ExpansionBatch06Card('carli-lloyd').actionName).toBe('HALFWAY HIT');
     expect(getV8ExpansionBatch06Card('carlos-valderrama').actionName).toBe('PAUSE AND SLIP');
     expect(getV8ExpansionBatch06Card('christian-eriksen').actionName).toBe('WHIPPED DELIVERY');
+    expect(getV8ExpansionBatch06Card('caroline-graham-hansen').actionName).toBe('ONE ON ONE');
     expect(getV8ExpansionBatch06Card('jari-litmanen').actionName).toBe('KILLER PASS');
   });
 
-  it('promotes only the four cards whose V8 primitives already exist', () => {
+  it('promotes the five cards with implemented V8 primitives and keeps three design problems explicit', () => {
     const ready = V8_EXPANSION_BATCH_06
       .filter((card) => card.implementationState === 'runtime_ready')
       .map((card) => card.id)
@@ -32,13 +33,13 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
 
     expect(ready).toEqual([
       'carli-lloyd',
+      'caroline-graham-hansen',
       'carlos-valderrama',
       'christian-eriksen',
       'jari-litmanen',
     ]);
     expect(pending).toEqual([
       'arjen-robben',
-      'caroline-graham-hansen',
       'keira-walsh',
       'rory-delap',
     ]);
@@ -55,11 +56,12 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
     expect(walsh.auditNote).toContain('Do not inherit');
   });
 
-  it('identifies Graham Hansen as a shared interception primitive rather than a post-hoc stat repair', () => {
+  it('implements Graham Hansen through shared defender-target interception rather than post-hoc repair', () => {
     const hansen = getV8ExpansionBatch06Card('caroline-graham-hansen');
     expect(hansen.auditDecision).toBe('keep_translate');
     expect(hansen.primitives).toContain('targeted_defender_action_evasion');
-    expect(hansen.implementationState).toBe('primitive_required');
+    expect(hansen.implementationState).toBe('runtime_ready');
+    expect(hansen.auditNote).toContain('shared defender-target interception');
     expect(hansen.actionText).toContain('ignored');
     expect(hansen.actionText).toContain('+2 ATT');
   });
