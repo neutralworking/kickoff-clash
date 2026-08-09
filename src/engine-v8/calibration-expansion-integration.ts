@@ -4,9 +4,10 @@ import { V8_EXPANSION_BATCH_03 } from './calibration-expansion-batch-03';
 import { V8_EXPANSION_BATCH_04 } from './calibration-expansion-batch-04';
 import { V8_EXPANSION_BATCH_05 } from './calibration-expansion-batch-05';
 import { V8_EXPANSION_BATCH_06 } from './calibration-expansion-batch-06';
+import { V8_EXPANSION_BATCH_07 } from './calibration-expansion-batch-07';
 import type { V8Zone } from './core';
 
-export type V8ExpansionIntegrationSquadKey = 'mix_alpha' | 'mix_beta' | 'mix_gamma' | 'mix_delta' | 'mix_epsilon';
+export type V8ExpansionIntegrationSquadKey = 'mix_alpha' | 'mix_beta' | 'mix_gamma' | 'mix_delta' | 'mix_epsilon' | 'mix_zeta';
 
 export interface V8ExpansionIntegrationPlacement {
   cardId: string;
@@ -26,6 +27,7 @@ const ALL_EXPANSION_CONTRACTS = [
   ...V8_EXPANSION_BATCH_04,
   ...V8_EXPANSION_BATCH_05,
   ...V8_EXPANSION_BATCH_06,
+  ...V8_EXPANSION_BATCH_07,
 ] as const;
 
 /** Larger-roster integration cohort, split by why a card is not yet playable. */
@@ -134,6 +136,23 @@ export const V8_EXPANSION_INTEGRATION_SQUADS: Readonly<Record<V8ExpansionIntegra
       { cardId: 'caroline-graham-hansen', zone: 'ATT' },
       { cardId: 'ronaldinho', zone: 'ATT' },
       { cardId: 'arjen-robben', zone: 'ATT' },
+    ],
+  },
+  mix_zeta: {
+    key: 'mix_zeta',
+    label: 'Expansion Mix Zeta',
+    placements: [
+      { cardId: 'yashin', zone: 'DEF' },
+      { cardId: 'annike-krahn', zone: 'DEF' },
+      { cardId: 'nemanja-vidic', zone: 'DEF' },
+      { cardId: 'sol-campbell', zone: 'DEF' },
+      { cardId: 'rio-ferdinand', zone: 'MID' },
+      { cardId: 'achraf-hakimi', zone: 'MID' },
+      { cardId: 'roy-keane', zone: 'MID' },
+      { cardId: 'keira-walsh', zone: 'MID' },
+      { cardId: 'zlatan-ibrahimovic', zone: 'ATT' },
+      { cardId: 'arjen-robben', zone: 'ATT' },
+      { cardId: 'cavani', zone: 'ATT' },
     ],
   },
 } as const;
