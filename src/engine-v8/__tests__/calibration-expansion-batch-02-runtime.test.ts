@@ -1,0 +1,92 @@
+import { describe, expect, it } from 'vitest';
+import {
+  addCalibrationTacticalToHand,
+  calibrationRuntimeId,
+  createV8CalibrationState,
+  currentCalibrationAttack,
+  endV8CalibrationPeriod,
+  getV8CalibrationPlayer,
+  moveCalibrationPlayer,
+  playCalibrationTactical,
+  revealCalibrationPlayer,
+  seedCalibrationPlayer,
+} from '../index';
+
+describe('V8 expansion Batch 02 runtime primitives', () => {
+  it('STEP IN dynamically binds −3 ATT to the strongest opposing midfielder in MID', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'home', 'tymoshchuk', 'MID');
+    state = revealCalibrationPlayer(state, 'away', 'seedorf', 'MID');
+    const seedorfId = calibrationRuntimeId('away', 'seedorf');
+    expect(currentCalibrationAttack(state, seedorfId)).toBe(getV8CalibrationPlayer('seedorf').printedAttack - 3);
+
+    state = revealCalibrationPlayer(state, 'away', 'di-stefano', 'MID');
+    const diStefanoId = calibrationRuntimeId('away', 'di-stefano');
+    expect(currentCalibrationAttack(state, seedorfId)).toBe(getV8CalibrationPlayer('seedorf').printedAttack);
+    expect(currentCalibrationAttack(state, diStefanoId)).toBe(getV8CalibrationPlayer('di-stefano').printedAttack - 2);
+  });
+
+  it('TIMED SLIDE cancels only the first otherwise-resolving Through Ball each period', () => {
+    let state = createV8CalibrationState({ awayEnergy: 20 });
+    state = seedCalibrationPlayer(state, 'home', 'nesta', 'DEF');
+
+    const first = addCalibrationTacticalToHand(state, 'away', 'through_ball');
+    state = playCalibrationTactical(first.state, 'away', first.card.id, 'ATT');
+    expect(state.tacticalResolutions.find((item) => item.cardId === first.card.id)?.cancelled).toBe(true);
+
+    const second = addCalibrationTacticalToHand(state, 'away', 'through_ball');
+    state = playCalibrationTactical(second.state, 'away', second.card.id, 'ATT');
+    expect(state.tacticalResolutions.find((item) => item.cardId === second.card.id)?.cancelled).toBe(false);
+
+    state = endV8CalibrationPeriod(state);
+    state.teams.away.energy = 20;
+    const third = addCalibrationTacticalToHand(state, 'away', 'through_ball');
+    state = playCalibrationTactical(third.state, 'away', third.card.id, 'ATT');
+    expect(state.tacticalResolutions.find((item) => item.cardId === third.card.id)?.cancelled).toBe(true);
+  });
+
+  it('TIMED SLIDE does not consume itself on an uncancellable Through Ball', () => {
+    let state = createV8CalibrationState({ awayEnergy: 20 });
+    state = seedCalibrationPlayer(state, 'home', 'nesta', 'DEF');
+    const protectedBall = addCalibrationTacticalToHand(state, 'away', 'through_ball', { cancellable: false });
+    state = playCalibrationTactical(protectedBall.state, 'away', protectedBall.card.id, 'ATT');
+    expect(state.tacticalResolutions.find((item) => item.cardId === protectedBall.card.id)?.cancelled).toBe(false);
+
+    const ordinary = addCalibrationTacticalToHand(state, 'away', 'through_ball');
+    state = playCalibrationTactical(ordinary.state, 'away', ordinary.card.id, 'ATT');
+    expect(state.tacticalResolutions.find((item) => item.cardId === ordinary.card.id)?.cancelled).toBe(true);
+  });
+
+  it('GLIDING RUN moves once per period and protects the first Chance in its destination', () => {
+    let state = createV8CalibrationState({ homeEnergy: 20 });
+    state = revealCalibrationPlayer(state, 'home', 'brian-laudrup', 'MID');
+    state = moveCalibrationPlayer(state, 'home', 'brian-laudrup', 'ATT');
+    expect(state.players[calibrationRuntimeId('home', 'brian-laudrup')]?.zone).toBe('ATT');
+    expect(() => moveCalibrationPlayer(state, 'home', 'brian-laudrup', 'MID')).toThrow('already moved this period');
+
+    const first = addCalibrationTacticalToHand(state, 'home', 'through_ball');
+    state = playCalibrationTactical(first.state, 'home', first.card.id, 'ATT');
+    expect(state.tacticalResolutions.find((item) => item.cardId === first.card.id)?.uncancellable).toBe(true);
+
+    const second = addCalibrationTacticalToHand(state, 'home', 'through_ball');
+    state = playCalibrationTactical(second.state, 'home', second.card.id, 'ATT');
+    expect(state.tacticalResolutions.find((item) => item.cardId === second.card.id)?.uncancellable).toBe(false);
+
+    state = endV8CalibrationPeriod(state);
+    expect(() => moveCalibrationPlayer(state, 'home', 'brian-laudrup', 'MID')).not.toThrow();
+  });
+
+  it('PITBULL follows the first opposing midfielder movement and gives that mover −2 ATT', () => {
+    let state = createV8CalibrationState();
+    state = seedCalibrationPlayer(state, 'home', 'davids', 'MID');
+    state = seedCalibrationPlayer(state, 'away', 'abedi-pele', 'MID');
+    const abediId = calibrationRuntimeId('away', 'abedi-pele');
+
+    state = moveCalibrationPlayer(state, 'away', 'abedi-pele', 'ATT');
+    expect(state.players[calibrationRuntimeId('home', 'davids')]?.zone).toBe('ATT');
+    expect(currentCalibrationAttack(state, abediId)).toBe(getV8CalibrationPlayer('abedi-pele').printedAttack + 2);
+
+    state = endV8CalibrationPeriod(state);
+    expect(currentCalibrationAttack(state, abediId)).toBe(getV8CalibrationPlayer('abedi-pele').printedAttack + 4);
+  });
+});
