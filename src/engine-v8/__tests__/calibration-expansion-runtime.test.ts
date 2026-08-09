@@ -101,6 +101,32 @@ describe('V8 expansion Batch 01 runtime primitives', () => {
     expect(currentCalibrationAttack(state, ronaldoId)).toBe(getV8CalibrationPlayer('ronaldo').printedAttack - 5);
   });
 
+  it('BERBA SPIN ignores SHOW HIM OUTSIDE, moves away, and only triggers once per period', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'away', 'berbatov', 'ATT');
+    const berbatovId = calibrationRuntimeId('away', 'berbatov');
+
+    state = revealCalibrationPlayer(state, 'home', 'ashley-cole', 'DEF');
+    expect(state.players[berbatovId]?.zone).toBe('MID');
+    expect(currentCalibrationAttack(state, berbatovId)).toBe(getV8CalibrationPlayer('berbatov').printedAttack);
+    expect(state.events.some((event) => event.type === 'action_ignored' && event.text.includes('BERBA SPIN ignores SHOW HIM OUTSIDE'))).toBe(true);
+
+    state = revealCalibrationPlayer(state, 'home', 'gentile', 'MID');
+    expect(state.players[berbatovId]?.zone).toBe('MID');
+    expect(state.suppressedActions[berbatovId]).toBe(calibrationRuntimeId('home', 'gentile'));
+  });
+
+  it('BERBA SPIN can intercept MAN MARKER as the first defender Action of the period', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'away', 'berbatov', 'ATT');
+    const berbatovId = calibrationRuntimeId('away', 'berbatov');
+
+    state = revealCalibrationPlayer(state, 'home', 'gentile', 'DEF');
+    expect(state.players[berbatovId]?.zone).toBe('MID');
+    expect(state.suppressedActions[berbatovId]).toBeUndefined();
+    expect(state.events.some((event) => event.type === 'action_ignored' && event.text.includes('BERBA SPIN ignores MAN MARKER'))).toBe(true);
+  });
+
   it('BODY ON THE LINE cancels the first otherwise-resolving Chance, then costs Puyol 3 DEF', () => {
     let state = createV8CalibrationState({ awayEnergy: 20 });
     state = seedCalibrationPlayer(state, 'home', 'puyol', 'DEF');
