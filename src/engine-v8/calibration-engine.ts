@@ -2,10 +2,16 @@ export * from './calibration-expansion-batch-04-runtime';
 export * from './calibration-expansion-batch-04-cards';
 
 import * as decay from './calibration-decay';
+import { getV8CalibrationPlayer } from './calibration-cards';
 import { refreshCalibrationExpansionOngoingEffects } from './calibration-expansion-ongoing';
 import { applyCalibrationAttackGainReactions } from './calibration-expansion-reactions';
 import * as runtime from './calibration-expansion-batch-04-runtime';
 import type { V8Zone } from './core';
+
+export interface V8CalibrationMatchScore {
+  home: number;
+  away: number;
+}
 
 function withExpansionReactions(
   before: runtime.V8CalibrationState,
@@ -21,10 +27,48 @@ export function revealCalibrationPlayerWithDecay(
   return withExpansionReactions(args[0], decay.revealCalibrationPlayer(...args));
 }
 
+function applyCaptainMarvelAtPeriodEnd(
+  state: runtime.V8CalibrationState,
+  score?: V8CalibrationMatchScore,
+): runtime.V8CalibrationState {
+  if (!score) return state;
+  let next = state;
+  const robsons = Object.values(state.players)
+    .filter((player) => player.cardId === 'bryan-robson')
+    .sort((a, b) => a.deployedOrder - b.deployedOrder || a.runtimeId.localeCompare(b.runtimeId));
+
+  for (const robson of robsons) {
+    if (!runtime.isCalibrationActionEnabled(next, robson.runtimeId)) continue;
+    const own = robson.side === 'home' ? score.home : score.away;
+    const opponent = robson.side === 'home' ? score.away : score.home;
+    if (own >= opponent) continue;
+
+    next = runtime.applyCalibrationModifier(next, robson.runtimeId, {
+      attack: 2,
+      defence: 2,
+      lifetime: 'match',
+      source: 'CAPTAIN MARVEL',
+      sourceRuntimeId: robson.runtimeId,
+    });
+    next.events.push({
+      type: 'action_triggered',
+      period: next.period,
+      text: `${getV8CalibrationPlayer('bryan-robson').realName} · CAPTAIN MARVEL: +2 ATT and +2 DEF for the rest of the match while trailing ${own}–${opponent}.`,
+    });
+  }
+  return next;
+}
+
+/**
+ * Period end accepts the actual banked match score as optional coordinator context. Existing
+ * one-argument callers remain unchanged; CAPTAIN MARVEL only evaluates when a real score is given.
+ */
 export function endV8CalibrationPeriodWithDecay(
-  ...args: Parameters<typeof decay.endV8CalibrationPeriod>
+  state: runtime.V8CalibrationState,
+  score?: V8CalibrationMatchScore,
 ): ReturnType<typeof decay.endV8CalibrationPeriod> {
-  return refreshCalibrationExpansionOngoingEffects(decay.endV8CalibrationPeriod(...args));
+  const prepared = applyCaptainMarvelAtPeriodEnd(state, score);
+  return refreshCalibrationExpansionOngoingEffects(decay.endV8CalibrationPeriod(prepared));
 }
 
 export function moveCalibrationPlayer(
