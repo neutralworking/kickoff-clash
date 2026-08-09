@@ -59,25 +59,30 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
-  test('places a default-hand player through explicit zone controls', async ({ page }) => {
+  test('drags a default-hand player directly onto the pitch', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
-    const bremner = page.locator('.v8-card').filter({ hasText: 'Billy Bremner' });
-    await expect(bremner).toHaveCount(1);
-    await expect(bremner.locator('.v8-card__cost')).toHaveText('1');
-    await bremner.click();
-
-    const detail = page.getByTestId('selected-player-detail');
-    await expect(detail).toBeVisible();
-    await expect(detail).toContainText('CRUNCHING TACKLE');
-    await expect(detail).toContainText('On Reveal');
-
-    const playMid = page.getByTestId('play-selected-mid');
-    await expect(playMid).toBeEnabled();
-    await expect(playMid).toContainText('NATURAL');
-    await playMid.click();
-
+    const bremner = page.getByTestId('player-card-bremner');
     const midfieldZone = page.locator('.v8-zone').nth(1);
+    await expect(bremner.locator('.v8-card__cost')).toHaveText('1');
+
+    const cardBox = await bremner.boundingBox();
+    const zoneBox = await midfieldZone.boundingBox();
+    expect(cardBox).not.toBeNull();
+    expect(zoneBox).not.toBeNull();
+    const startX = cardBox!.x + cardBox!.width / 2;
+    const startY = cardBox!.y + cardBox!.height / 2;
+    const endX = zoneBox!.x + zoneBox!.width / 2;
+    const endY = zoneBox!.y + zoneBox!.height * 0.74;
+    const pointer = { pointerId: 7, pointerType: 'touch', isPrimary: true, bubbles: true };
+
+    await bremner.dispatchEvent('pointerdown', { ...pointer, clientX: startX, clientY: startY, buttons: 1 });
+    await page.locator('body').dispatchEvent('pointermove', { ...pointer, clientX: endX, clientY: endY, buttons: 1 });
+    await expect(page.getByTestId('v8-drag-ghost')).toBeVisible();
+    await expect(midfieldZone).toHaveClass(/is-drag-over/);
+    await page.locator('body').dispatchEvent('pointerup', { ...pointer, clientX: endX, clientY: endY, buttons: 0 });
+
+    await expect(page.getByTestId('selected-player-detail')).toHaveCount(0);
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
     await expect(page.getByText('1 ENERGY', { exact: true })).toBeVisible();
     await expect(midfieldZone.locator('.v8-chip--transient')).toContainText('Billy Bremner');
@@ -85,16 +90,16 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
-  test('explains unaffordable players instead of silently rejecting placement', async ({ page }) => {
+  test('keeps unaffordable players in-hand and explains the Energy constraint in the decision strip', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
-    const iniesta = page.locator('.v8-card').filter({ hasText: 'Andrés Iniesta' });
+    const iniesta = page.getByTestId('player-card-iniesta');
     await expect(iniesta.locator('.v8-card__cost')).toHaveText('4');
     await iniesta.click();
 
-    const detail = page.getByTestId('selected-player-detail');
-    await expect(detail).toContainText('4 ENERGY required · 2 available');
-    await expect(page.getByTestId('play-selected-mid')).toBeDisabled();
+    await expect(iniesta).toHaveClass(/is-unaffordable/);
+    await expect(page.locator('.v8-commit')).toContainText('4 ENERGY REQUIRED · 2 AVAILABLE');
+    await expect(page.getByTestId('selected-player-detail')).toHaveCount(0);
     await expect(page.getByText('2 ENERGY', { exact: true })).toBeVisible();
     await expectMobileFit(page);
   });
@@ -146,7 +151,7 @@ test.describe('V8 real-card calibration lab', () => {
     await page.getByRole('button', { name: 'END PERIOD' }).click();
 
     const window = page.getByTestId('v8-window');
-    await expect(window).toContainText('POST-REVEAL WINDOW');
+    await expect(window).toContainText('TACTICAL WINDOW');
     const crossChoice = window.locator('.v8-window__choices button').filter({ hasText: 'Cross → MID' });
     await expect(crossChoice).toBeVisible();
     await crossChoice.click();
@@ -184,7 +189,7 @@ test.describe('V8 real-card calibration lab', () => {
     await page.getByRole('button', { name: 'END PERIOD' }).click();
 
     const window = page.getByTestId('v8-window');
-    await expect(window).toContainText('POST-REVEAL WINDOW');
+    await expect(window).toContainText('TACTICAL WINDOW');
     await expectMobileFit(page);
 
     await window.locator('.v8-window__choices button').filter({ hasText: 'Cross → ATT' }).click();

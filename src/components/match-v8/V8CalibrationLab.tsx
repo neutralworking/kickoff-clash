@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   buildV8CalibrationMatchTelemetry,
   calibrationHandPlayers,
@@ -62,6 +62,17 @@ type Selection =
   | { kind: 'manager' }
   | { kind: 'move'; runtimeId: string }
   | null;
+
+type PlayerDragState = {
+  cardId: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+  overZone: V8Zone | null;
+  moved: boolean;
+};
 
 type UndoSnapshot = {
   state: V8CalibrationState;
@@ -262,15 +273,38 @@ function tacticalLabel(card: V8TacticalCardInstance, zone: V8Zone | null = null)
   return `${base} ATT${mods.length ? ` · ${mods.join(' · ')}` : ''}`;
 }
 
-function PlayerHandCard({ card, selected, affordable, onClick }: { card: V8CalibrationPlayerCard; selected: boolean; affordable: boolean; onClick: () => void }) {
+function PlayerHandCard({
+  card,
+  selected,
+  affordable,
+  onClick,
+  onPointerDown,
+}: {
+  card: V8CalibrationPlayerCard;
+  selected: boolean;
+  affordable: boolean;
+  onClick: () => void;
+  onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+}) {
   return (
-    <button className={`v8-card${selected ? ' is-selected' : ''}${affordable ? '' : ' is-unaffordable'}`} onClick={onClick}>
+    <button
+      type="button"
+      data-testid={`player-card-${card.id}`}
+      data-card-id={card.id}
+      className={`v8-card${selected ? ' is-selected' : ''}${affordable ? '' : ' is-unaffordable'}`}
+      aria-pressed={selected}
+      aria-label={`${card.realName}, ${card.position}, ${calibrationPlayCost(card)} Energy, ${card.printedAttack} ATT, ${card.printedDefence} DEF, ${card.actionName}`}
+      onClick={onClick}
+      onPointerDown={onPointerDown}
+    >
+      <span className="v8-card__art" aria-hidden="true"><i>{card.matchName.slice(0, 2).toUpperCase()}</i></span>
       <span className="v8-card__cost">{calibrationPlayCost(card)}</span>
       <span className="v8-card__position">{card.position}</span>
-      <strong>{card.realName}</strong>
-      <small><b>{card.actionName}</b><br />{card.actionText}</small>
-      <span className="v8-card__att">{card.printedAttack} ATT</span>
-      <span className="v8-card__def">{card.printedDefence} DEF</span>
+      <strong>{card.matchName}</strong>
+      <span className="v8-card__sr">{card.realName}</span>
+      <small><b>{card.actionName}</b><span className="v8-card__sr">{card.actionText}</span></small>
+      <span className="v8-card__att">{card.printedAttack}<i>ATT</i></span>
+      <span className="v8-card__def">{card.printedDefence}<i>DEF</i></span>
     </button>
   );
 }
@@ -320,7 +354,8 @@ function DeployedChip({ state, side, runtimeId, onMove }: { state: V8Calibration
         onMove?.();
       }}
     >
-      {card.realName}
+      <span className="v8-card__sr">{card.realName}</span>
+      {card.matchName}
       <b>{attack}/{defence}</b>
       <small>{suppressed ? 'NO ACTION' : moveable ? (moved ? 'MOVE USED' : 'MOVEABLE') : card.actionName}</small>
     </span>
@@ -370,6 +405,9 @@ export default function V8CalibrationLab() {
   const [telemetryPeriods, setTelemetryPeriods] = useState<V8CalibrationPeriodTelemetry[]>([]);
   const [matchTelemetry, setMatchTelemetry] = useState<V8CalibrationMatchTelemetry | null>(null);
   const [finished, setFinished] = useState(false);
+  const [playerDrag, setPlayerDrag] = useState<PlayerDragState | null>(null);
+  const playerDragRef = useRef<PlayerDragState | null>(null);
+  const suppressPlayerClick = useRef<string | null>(null);
 
   const homePlayers = calibrationHandPlayers(state, 'home');
   const homeTacticals = calibrationHandTacticals(state, 'home');
@@ -403,6 +441,24 @@ export default function V8CalibrationLab() {
     setUndoStack((stack) => [...stack, { state, homeManagerAvailable, pending }]);
   };
 
+  const queuePlayerToZone = (cardId: string, zone: V8Zone): boolean => {
+    if (finished || windowPhase) return false;
+    const card = getV8CalibrationPlayer(cardId);
+    const cost = calibrationPlayCost(card);
+    if (occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return false;
+    if (cost > state.teams.home.energy) return false;
+    rememberUndo();
+    try {
+      const paid = payCalibrationPlayer(state, 'home', card);
+      setState(paid);
+      setPending((plays) => [...plays, { kind: 'player', side: 'home', cardId: card.id, zone, cost }]);
+      setSelection(null);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const queueToZone = (zone: V8Zone) => {
     if (!selection || finished || windowPhase) return;
 
@@ -433,19 +489,7 @@ export default function V8CalibrationLab() {
     }
 
     if (selection.kind === 'player') {
-      const card = getV8CalibrationPlayer(selection.cardId);
-      const cost = calibrationPlayCost(card);
-      if (occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return;
-      if (cost > state.teams.home.energy) return;
-      rememberUndo();
-      try {
-        const paid = payCalibrationPlayer(state, 'home', card);
-        setState(paid);
-        setPending((plays) => [...plays, { kind: 'player', side: 'home', cardId: card.id, zone, cost }]);
-        setSelection(null);
-      } catch {
-        return;
-      }
+      queuePlayerToZone(selection.cardId, zone);
       return;
     }
 
@@ -462,6 +506,81 @@ export default function V8CalibrationLab() {
     } catch {
       return;
     }
+  };
+
+  const setDrag = (next: PlayerDragState | null) => {
+    playerDragRef.current = next;
+    setPlayerDrag(next);
+  };
+
+  const zoneAtPoint = (x: number, y: number): V8Zone | null => {
+    const element = document.elementFromPoint(x, y);
+    const zoneElement = element?.closest<HTMLElement>('[data-v8-zone]');
+    const zone = zoneElement?.dataset.v8Zone as V8Zone | undefined;
+    return zone && ZONES.includes(zone) ? zone : null;
+  };
+
+  const startPlayerDrag = (event: ReactPointerEvent<HTMLButtonElement>, card: V8CalibrationPlayerCard) => {
+    setSelection({ kind: 'player', cardId: card.id });
+    if (finished || windowPhase || calibrationPlayCost(card) > state.teams.home.energy) return;
+
+    const pointerId = event.pointerId;
+    setDrag({
+      cardId: card.id,
+      pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: event.clientX,
+      y: event.clientY,
+      overZone: null,
+      moved: false,
+    });
+
+    const cleanup = () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleFinish);
+      window.removeEventListener('pointercancel', handleCancel);
+    };
+
+    const handleMove = (pointerEvent: PointerEvent) => {
+      if (pointerEvent.pointerId !== pointerId) return;
+      const current = playerDragRef.current;
+      if (!current) return;
+      const dx = pointerEvent.clientX - current.startX;
+      const dy = pointerEvent.clientY - current.startY;
+      const startsVerticalDrag = Math.abs(dy) > 7 && Math.abs(dy) >= Math.abs(dx) * .72;
+      const moved = current.moved || startsVerticalDrag;
+      if (moved) pointerEvent.preventDefault();
+      setDrag({
+        ...current,
+        x: pointerEvent.clientX,
+        y: pointerEvent.clientY,
+        overZone: moved ? zoneAtPoint(pointerEvent.clientX, pointerEvent.clientY) : null,
+        moved,
+      });
+    };
+
+    const handleFinish = (pointerEvent: PointerEvent) => {
+      if (pointerEvent.pointerId !== pointerId) return;
+      const current = playerDragRef.current;
+      cleanup();
+      if (!current) return;
+      const zone = current.moved ? zoneAtPoint(pointerEvent.clientX, pointerEvent.clientY) ?? current.overZone : null;
+      setDrag(null);
+      if (!current.moved) return;
+      suppressPlayerClick.current = current.cardId;
+      if (zone) queuePlayerToZone(current.cardId, zone);
+    };
+
+    const handleCancel = (pointerEvent: PointerEvent) => {
+      if (pointerEvent.pointerId !== pointerId) return;
+      cleanup();
+      setDrag(null);
+    };
+
+    window.addEventListener('pointermove', handleMove, { passive: false });
+    window.addEventListener('pointerup', handleFinish);
+    window.addEventListener('pointercancel', handleCancel);
   };
 
   const undo = () => {
@@ -623,16 +742,30 @@ export default function V8CalibrationLab() {
 
   const selectedPlayer = selection?.kind === 'player' ? getV8CalibrationPlayer(selection.cardId) : null;
   const selectedPlayerCost = selectedPlayer ? calibrationPlayCost(selectedPlayer) : null;
-  const selectedPlayerAffordable = selectedPlayerCost !== null && selectedPlayerCost <= state.teams.home.energy;
+  const selectedPlayerUnaffordable = selectedPlayerCost !== null && selectedPlayerCost > state.teams.home.energy;
   const selectedTactical = selection?.kind === 'tactical' ? homeTacticals.find((card) => card.id === selection.cardId) ?? null : null;
+  const draggedPlayer = playerDrag ? getV8CalibrationPlayer(playerDrag.cardId) : null;
+  const interactionLabel = playerDrag?.moved
+    ? playerDrag.overZone
+      ? `DROP ${draggedPlayer?.matchName ?? 'PLAYER'} IN ${playerDrag.overZone}`
+      : 'DRAG OVER DEF / MID / ATT'
+    : pending.length
+      ? `${pending.length} committed`
+      : selection?.kind === 'move'
+        ? 'CHOOSE DESTINATION ZONE'
+        : selectedPlayerUnaffordable
+          ? `${selectedPlayerCost} ENERGY REQUIRED · ${state.teams.home.energy} AVAILABLE`
+          : selectedPlayer
+            ? `DRAG ${selectedPlayer.matchName} TO A ZONE`
+            : 'DRAG A PLAYER TO THE PITCH';
 
   return (
-    <main className="v8-shell">
+    <main className={`v8-shell${playerDrag ? ' is-dragging' : ''}`}>
       <header className="v8-scorebar">
         <div><small>YOU</small><strong>{homeScore}</strong></div>
         <section>
           <b>{finished ? 'FULL TIME' : PERIOD_LABELS[state.period - 1]}</b>
-          <span>{finished ? 'Calibration match complete' : `${state.teams.home.energy} ENERGY`}</span>
+          <span>{finished ? 'MATCH COMPLETE' : `${state.teams.home.energy} ENERGY`}</span>
         </section>
         <div><small>CPU</small><strong>{awayScore}</strong></div>
       </header>
@@ -677,12 +810,22 @@ export default function V8CalibrationLab() {
           const queuedManager = pending.find((play) => play.side === 'home' && play.zone === zone && play.kind === 'manager');
           const playerOccupancy = homeZone.length + queuedPlayers.length + (queuedManager ? 1 : 0);
           let guide = `${playerOccupancy}/4`;
-          if (selectedPlayer) guide = outOfPositionPenalty(selectedPlayer, zone) === 0 ? 'NATURAL' : `-${outOfPositionPenalty(selectedPlayer, zone)}/-${outOfPositionPenalty(selectedPlayer, zone)}`;
+          if (playerOccupancy >= 4) guide = 'FULL';
+          else if (selectedPlayer) {
+            const penalty = outOfPositionPenalty(selectedPlayer, zone);
+            guide = selectedPlayerUnaffordable ? 'NO ENERGY' : penalty === 0 ? 'NATURAL' : `−${penalty} OOP`;
+          }
           if (selectedTactical) guide = tacticalDefinition(selectedTactical.type).eligibleZones.includes(zone) ? `TACTICAL · ${tacticalLabel(selectedTactical, zone)}` : 'NO';
           if (selection?.kind === 'move') guide = 'MOVE';
 
           return (
-            <button key={zone} className="v8-zone" onClick={() => queueToZone(zone)}>
+            <button
+              key={zone}
+              type="button"
+              data-v8-zone={zone}
+              className={`v8-zone${playerDrag ? ' is-drag-target' : ''}${playerDrag?.overZone === zone ? ' is-drag-over' : ''}`}
+              onClick={() => queueToZone(zone)}
+            >
               <div className="v8-zone__heading"><strong>{zone}</strong><span>{guide}</span></div>
               <div className="v8-zone__side v8-zone__side--away">
                 {awayZone.map((player) => <DeployedChip key={player.runtimeId} state={state} side="away" runtimeId={player.runtimeId} />)}
@@ -693,7 +836,7 @@ export default function V8CalibrationLab() {
                   <DeployedChip key={player.runtimeId} state={state} side="home" runtimeId={player.runtimeId} onMove={() => setSelection({ kind: 'move', runtimeId: player.runtimeId })} />
                 ))}
                 {queuedPlayers.map((play) => play.kind === 'player' ? (
-                  <span key={`queued-${play.cardId}`} className="v8-chip v8-chip--transient">{getV8CalibrationPlayer(play.cardId).realName}<b>PLAYER · QUEUED</b></span>
+                  <span key={`queued-${play.cardId}`} className="v8-chip v8-chip--transient"><span className="v8-card__sr">{getV8CalibrationPlayer(play.cardId).realName}</span>{getV8CalibrationPlayer(play.cardId).matchName}<b>PLAYER · QUEUED</b></span>
                 ) : null)}
                 {queuedManager && <span className="v8-chip v8-chip--transient">{MANAGER_NAME}<b>MANAGER · QUEUED</b></span>}
                 {Array.from({ length: Math.max(0, 4 - playerOccupancy) }).map((_, index) => <i key={`home-${zone}-${index}`} />)}
@@ -706,7 +849,7 @@ export default function V8CalibrationLab() {
       {windowPhase ? (
         <section className="v8-commit v8-window" data-testid="v8-window">
           <div>
-            <strong>POST-REVEAL WINDOW</strong>
+            <strong>TACTICAL WINDOW</strong>
             <span>Tacticals generated this period can be played now from your {windowRemainingEnergy} unused Energy. Unplayed cards stay in hand at printed cost.</span>
             <div className="v8-window__choices">
               {windowChoices.map((choice) => (
@@ -730,7 +873,7 @@ export default function V8CalibrationLab() {
       ) : (
         <section className="v8-commit">
           <div>
-            <strong>{pending.length ? `${pending.length} committed` : selection?.kind === 'move' ? 'Choose destination zone' : 'Choose a card, then a zone'}</strong>
+            <strong>{interactionLabel}</strong>
             <span>{currentPriority.first === 'home' ? 'YOU REVEAL FIRST' : 'CPU REVEALS FIRST'} · {currentPriority.reason} · Tacticals use no player slot.</span>
             {pending.filter((play) => play.kind === 'tactical').map((play) => play.kind === 'tactical' ? <span key={play.card.id}>{play.card.name} → {play.zone} · {tacticalLabel(play.card, play.zone)}</span> : null)}
           </div>
@@ -794,41 +937,7 @@ export default function V8CalibrationLab() {
       )}
 
       <section className="v8-hand-wrap">
-        <div className="v8-hand-heading"><strong>HAND</strong><span>{state.teams.home.drawPile.length} XI cards unseen</span></div>
-        {selectedPlayer && selectedPlayerCost !== null && (
-          <div className="v8-card-detail" data-testid="selected-player-detail">
-            <div className="v8-card-detail__identity">
-              <small>{selectedPlayer.realName}</small>
-              <strong>{selectedPlayer.fullCardName}</strong>
-              <span>{selectedPlayer.position} · {selectedPlayerCost} ENERGY · {selectedPlayer.printedAttack} ATT · {selectedPlayer.printedDefence} DEF</span>
-            </div>
-            <div className="v8-card-detail__action">
-              <b>{selectedPlayer.actionName}</b>
-              <span>{selectedPlayer.actionText}</span>
-            </div>
-            <div className="v8-card-detail__zones" aria-label={`Play ${selectedPlayer.realName}`}>
-              {ZONES.map((zone) => {
-                const penalty = outOfPositionPenalty(selectedPlayer, zone);
-                const full = occupiedPlayerSlots(state, 'home', zone, pending) >= 4;
-                return (
-                  <button
-                    type="button"
-                    key={zone}
-                    data-testid={`play-selected-${zone.toLowerCase()}`}
-                    disabled={!selectedPlayerAffordable || full || finished || Boolean(windowPhase)}
-                    onClick={() => queueToZone(zone)}
-                  >
-                    <b>PLAY {zone}</b>
-                    <span>{full ? 'FULL' : penalty === 0 ? 'NATURAL' : `−${penalty} OOP`}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {!selectedPlayerAffordable && (
-              <small className="v8-card-detail__warning">{selectedPlayerCost} ENERGY required · {state.teams.home.energy} available</small>
-            )}
-          </div>
-        )}
+        <div className="v8-hand-heading"><strong>HAND</strong><span>DRAG PLAYER TO PITCH · {state.teams.home.drawPile.length} UNSEEN</span></div>
         <div className="v8-hand">
           {homePlayers.map((card) => (
             <PlayerHandCard
@@ -836,7 +945,14 @@ export default function V8CalibrationLab() {
               card={card}
               selected={selection?.kind === 'player' && selection.cardId === card.id}
               affordable={calibrationPlayCost(card) <= state.teams.home.energy}
-              onClick={() => setSelection({ kind: 'player', cardId: card.id })}
+              onClick={() => {
+                if (suppressPlayerClick.current === card.id) {
+                  suppressPlayerClick.current = null;
+                  return;
+                }
+                setSelection({ kind: 'player', cardId: card.id });
+              }}
+              onPointerDown={(event) => startPlayerDrag(event, card)}
             />
           ))}
           {homeTacticals.map((card) => {
@@ -854,6 +970,23 @@ export default function V8CalibrationLab() {
           )}
         </div>
       </section>
+
+      {playerDrag?.moved && draggedPlayer && (
+        <div
+          className="v8-drag-ghost"
+          data-testid="v8-drag-ghost"
+          style={{ left: playerDrag.x, top: playerDrag.y }}
+          aria-hidden="true"
+        >
+          <span className="v8-card__art"><i>{draggedPlayer.matchName.slice(0, 2).toUpperCase()}</i></span>
+          <span className="v8-card__cost">{calibrationPlayCost(draggedPlayer)}</span>
+          <span className="v8-card__position">{draggedPlayer.position}</span>
+          <strong>{draggedPlayer.matchName}</strong>
+          <small><b>{draggedPlayer.actionName}</b></small>
+          <span className="v8-card__att">{draggedPlayer.printedAttack}<i>ATT</i></span>
+          <span className="v8-card__def">{draggedPlayer.printedDefence}<i>DEF</i></span>
+        </div>
+      )}
 
       {state.events.length > 0 && (
         <section className="v8-log">
