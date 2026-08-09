@@ -1,0 +1,74 @@
+name: Apply V8 placement transform
+
+on:
+  push:
+    branches:
+      - agent/v8-me-ui-pass-01
+    paths:
+      - .github/workflows/v8-placement-hotfix-v5.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v8-me-ui-pass-01
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Apply placement transform
+        run: |
+          python3 .github/v8-placement-hotfix.py
+          git diff --check
+
+      - run: npm ci
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Lint UI changes
+        run: npx eslint src/components/match-v8/V8CalibrationLab.tsx tests/v8-match-lab.spec.ts
+
+      - name: Build static export
+        env:
+          NEXT_PUBLIC_BASE_PATH: ""
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Serve static export
+        run: |
+          python3 -m http.server 3001 --directory out > /tmp/kickoff-clash-http.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3001/lab/match-v8/ > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/kickoff-clash-http.log
+          exit 1
+
+      - name: V8 mobile placement regression
+        run: npx playwright test tests/v8-match-lab.spec.ts --project=chromium
+
+      - name: Commit verified transform
+        run: |
+          rm -f .github/v8-placement-hotfix.patch .github/v8-placement-hotfix.py
+          rm -f .github/workflows/v8-placement-hotfix.yml
+          rm -f .github/workflows/v8-placement-hotfix-v2.yml
+          rm -f .github/workflows/v8-placement-hotfix-v3.yml
+          rm -f .github/workflows/v8-placement-hotfix-v4.yml
+          rm -f .github/workflows/v8-placement-hotfix-v5.yml
+          git config user.name "Neutral Working"
+          git config user.email "13trianglez@gmail.com"
+          git add -A .github src/components/match-v8/V8CalibrationLab.tsx src/components/match-v8/v8lab.css tests/v8-match-lab.spec.ts
+          git commit -m "Make V8 player placement explicit"
+          git push origin HEAD:agent/v8-me-ui-pass-01
