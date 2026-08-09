@@ -11,7 +11,7 @@ export type V8ExpansionBatch05Primitive = V8ExpansionPrimitive
   | 'late_losing_reveal_payoff'
   | 'global_defender_aura'
   | 'deterministic_action_rng'
-  | 'mid_chance_cross_relocation'
+  | 'mid_reveal_free_cross'
   | 'set_piece_choice_generation';
 
 export interface V8ExpansionBatch05CardContract {
@@ -31,8 +31,9 @@ export interface V8ExpansionBatch05CardContract {
 
 /**
  * Batch 05 is deliberately source-first. Every selected card has authoritative reconciliation
- * ATT/DEF/Cost available. Runtime promotion happens only after the primitive and focused
- * interaction coverage exist; six contracts are now implemented across Slices A/B.
+ * ATT/DEF/Cost available. All eight contracts now have focused runtime coverage; Nakamura's
+ * consequence is V8-specific mechanic design because the tracker provides the identity but no
+ * source effect.
  */
 export const V8_EXPANSION_BATCH_05: readonly V8ExpansionBatch05CardContract[] = [
   {
@@ -126,12 +127,12 @@ export const V8_EXPANSION_BATCH_05: readonly V8ExpansionBatch05CardContract[] = 
     position: 'CM',
     naturalZones: ['MID'],
     actionName: 'HOLLYWOOD BALL',
-    actionText: 'Your first Chance played in MID each period becomes a Cross in ATT before it resolves.',
-    timing: 'triggered',
-    auditDecision: 'mechanic_design',
-    primitives: ['mid_chance_cross_relocation'],
-    implementationState: 'primitive_required',
-    auditNote: 'Name is excellent, but the direct V8 translation collides with Pirlo’s DIAGONAL SWITCH. Keep the identity; redesign the consequence before implementation.',
+    actionText: 'On Reveal: If played in MID, add a Cross to your hand. It costs 0 this period.',
+    timing: 'on_reveal',
+    auditDecision: 'keep_translate',
+    primitives: ['mid_reveal_free_cross'],
+    implementationState: 'runtime_ready',
+    auditNote: 'The first transform/relocate proposal collided with Pirlo DIAGONAL SWITCH. The accepted design creates a new Cross instead, making Scholes a tempo-efficient long distributor without copying Pirlo’s Chance transformation.',
   },
   {
     id: 'shunsuke-nakamura',
@@ -140,12 +141,12 @@ export const V8_EXPANSION_BATCH_05: readonly V8ExpansionBatch05CardContract[] = 
     position: 'AM / CM',
     naturalZones: ['MID'],
     actionName: 'DEAD BALL ARTIST',
-    actionText: 'On Reveal: Add a Long Shot and a Corner to your hand. The first of those you play this period costs 1 less.',
+    actionText: 'On Reveal: Add a Long Shot and a Corner to your hand. The first of those you play this period has +2 ATT.',
     timing: 'on_reveal',
     auditDecision: 'mechanic_design',
     primitives: ['set_piece_choice_generation'],
-    implementationState: 'primitive_required',
-    auditNote: 'Tracker has the strong source identity but no effect. This proposal makes his set-piece versatility distinct from Charlton’s Long Shot creation and Ramos’s Corner payoff; balance is intentionally not evaluated yet.',
+    implementationState: 'runtime_ready',
+    auditNote: 'The tracker provides the strong source identity but no effect. The accepted V8-specific consequence expresses dead-ball versatility as a Long Shot / Corner choice with one shared first-play ATT bonus; it is not claimed as source-authored card text.',
   },
 ] as const;
 
