@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/v8-ui-pass-02.yml
       - .github/v8-ui-pass-02.py
+      - .github/v8-ui-pass-02-fix.py
 
 permissions:
   contents: write
@@ -28,6 +29,7 @@ jobs:
       - name: Apply visual rebuild
         run: |
           python3 .github/v8-ui-pass-02.py
+          python3 .github/v8-ui-pass-02-fix.py
           git diff --check
 
       - run: npm ci
@@ -83,6 +85,7 @@ jobs:
         shell: bash
         run: |
           git rm .github/v8-ui-pass-02.py
+          git rm .github/v8-ui-pass-02-fix.py
           git rm .github/workflows/v8-ui-pass-02.yml
           git config user.name "Neutral Working"
           git config user.email "13trianglez@gmail.com"
