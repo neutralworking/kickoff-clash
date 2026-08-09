@@ -47,8 +47,8 @@ function tactical(state: V8CalibrationState, side: 'home' | 'away', type: V8Tact
 }
 
 describe('high-priority calibration interactions', () => {
-  it('contains exactly the requested 30 players and seven Tactical definitions', () => {
-    expect(Object.keys(V8_TACTICAL_DEFINITIONS)).toHaveLength(7);
+  it('contains exactly the requested 30 players and eight Tactical definitions', () => {
+    expect(Object.keys(V8_TACTICAL_DEFINITIONS)).toHaveLength(8);
     const ids = [
       'wambach', 'hegerberg', 'di-maria', 'cafu', 'beckham', 'dzajic', 'morgan', 'shevchenko', 'valderrama', 'litmanen',
       'charlton', 'lloyd', 'eriksen', 'ramos', 'duff', 'garrincha', 'okocha', 'neymar', 'ronaldo', 'panenka',
