@@ -59,6 +59,30 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
+  test('expands a selected player and queues them by tapping the pitch', async ({ page }) => {
+    await page.goto('/lab/match-v8');
+    await page.getByTestId('home-squad-select').selectOption('control_defence');
+
+    const sinclair = page.locator('.v8-card').filter({ hasText: 'Christine Sinclair' });
+    await expect(sinclair.locator('.v8-card__cost')).toHaveText('2');
+    await sinclair.click();
+    await expect(sinclair).toHaveClass(/is-selected/);
+    await expect(sinclair.locator('small')).toContainText('ARRIVE UNMARKED');
+    await expect(sinclair.locator('small')).toContainText('On Reveal');
+
+    const selectedTextSize = await sinclair.locator('small').evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+    expect(selectedTextSize).toBeGreaterThan(0);
+
+    const attackZone = page.locator('.v8-zone').nth(2);
+    await expect(attackZone.locator('.v8-zone__heading span')).toHaveText('NATURAL');
+    await attackZone.click();
+
+    await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
+    await expect(attackZone.locator('.v8-chip--transient')).toContainText('Christine Sinclair');
+    await expect(sinclair).toHaveCount(0);
+    await expectMobileFit(page);
+  });
+
   test('uses calibrated player costs and releases the Manager slot after reveal', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
