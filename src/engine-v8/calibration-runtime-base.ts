@@ -651,7 +651,8 @@ function snapshotChanceSpecialistsMutable(
   zone: V8Zone,
 ): { bonus: number; uncancellable: boolean; labels: string[] } {
   let bonus = 0;
-  let uncancellable = !card.cancellable;
+  const protectionLocked = card.metadata.protectionLocked === true;
+  let uncancellable = !card.cancellable && !protectionLocked;
   const labels: string[] = [];
 
   if (card.type === 'cross') {
@@ -665,20 +666,20 @@ function snapshotChanceSpecialistsMutable(
       if (getCounter(state, key) > 0) continue;
       bumpCounter(state, key);
       bonus += 4;
-      uncancellable = true;
-      labels.push('FRONT-POST DART +4 · uncancellable');
+      if (!protectionLocked) uncancellable = true;
+      labels.push(protectionLocked ? 'FRONT-POST DART +4' : 'FRONT-POST DART +4 · uncancellable');
     }
   }
 
   if (card.type === 'through_ball') {
     for (const morgan of activeLocalSpecialists(state, side, zone, 'morgan_curved_run')) {
-      uncancellable = true;
+      if (!protectionLocked) uncancellable = true;
       const key = counterKey('morgan-first-through-ball', morgan.runtimeId, zone);
       if (getCounter(state, key) === 0) {
         bumpCounter(state, key);
         bonus += 1;
-        labels.push('CURVED RUN +1 · uncancellable');
-      } else labels.push('CURVED RUN · uncancellable');
+        labels.push(protectionLocked ? 'CURVED RUN +1' : 'CURVED RUN +1 · uncancellable');
+      } else labels.push(protectionLocked ? 'CURVED RUN' : 'CURVED RUN · uncancellable');
     }
     for (const shev of activeLocalSpecialists(state, side, zone, 'shevchenko_runs_in_behind')) {
       const key = counterKey('shevchenko-first-through-ball', shev.runtimeId, zone);
@@ -707,8 +708,8 @@ function snapshotChanceSpecialistsMutable(
   if (card.type === 'penalty') {
     for (const panenka of activeLocalSpecialists(state, side, zone, 'panenka_chipped_penalty')) {
       bonus += 3;
-      uncancellable = true;
-      labels.push(`${calibrationPlayerCard(panenka).actionName} +3 · uncancellable`);
+      if (!protectionLocked) uncancellable = true;
+      labels.push(protectionLocked ? `${calibrationPlayerCard(panenka).actionName} +3` : `${calibrationPlayerCard(panenka).actionName} +3 · uncancellable`);
     }
   }
   return { bonus, uncancellable, labels };
