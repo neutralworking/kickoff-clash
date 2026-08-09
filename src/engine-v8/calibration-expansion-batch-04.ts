@@ -38,7 +38,7 @@ export const V8_EXPANSION_BATCH_04: readonly V8ExpansionBatch04CardContract[] = 
     timing: 'triggered',
     auditDecision: 'mechanic_design',
     primitives: ['high_value_chance_cancellation'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'john-terry',
@@ -51,7 +51,7 @@ export const V8_EXPANSION_BATCH_04: readonly V8ExpansionBatch04CardContract[] = 
     timing: 'triggered',
     auditDecision: 'rename_repair',
     primitives: ['repeat_chance_interception_with_self_cost'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'bryan-robson',
@@ -103,7 +103,7 @@ export const V8_EXPANSION_BATCH_04: readonly V8ExpansionBatch04CardContract[] = 
     timing: 'triggered',
     auditDecision: 'keep_translate',
     primitives: ['cross_trigger_self_buff'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'ali-daei',
@@ -116,7 +116,7 @@ export const V8_EXPANSION_BATCH_04: readonly V8ExpansionBatch04CardContract[] = 
     timing: 'triggered',
     auditDecision: 'keep_translate',
     primitives: ['cross_attack_suppression_immunity'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
   {
     id: 'ellen-white',
@@ -129,7 +129,7 @@ export const V8_EXPANSION_BATCH_04: readonly V8ExpansionBatch04CardContract[] = 
     timing: 'triggered',
     auditDecision: 'keep_translate',
     primitives: ['once_match_chance_transform'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
 ] as const;
 
