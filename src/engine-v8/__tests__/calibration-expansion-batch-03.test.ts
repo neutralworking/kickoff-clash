@@ -47,7 +47,7 @@ describe('V8 Action expansion Batch 03 contracts', () => {
       .filter((card) => card.implementationState === 'primitive_required')
       .map((card) => card.id);
 
-    expect(runtimeReady).toEqual(['cannavaro', 'maradona', 'bergkamp']);
-    expect(primitiveRequired).toEqual(['yashin', 'cavani', 'lucy-bronze', 'alexia-putellas', 'pirlo']);
+    expect(runtimeReady).toEqual(['cannavaro', 'maradona', 'yashin', 'cavani', 'lucy-bronze', 'bergkamp']);
+    expect(primitiveRequired).toEqual(['alexia-putellas', 'pirlo']);
   });
 });
