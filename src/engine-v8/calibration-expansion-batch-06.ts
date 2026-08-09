@@ -33,7 +33,7 @@ export interface V8ExpansionBatch06CardContract {
 /**
  * Batch 06 continues the source-first expansion. Tracker action identity is authoritative; KC
  * reconciliation supplies ATT / DEF / Cost only. Generic database Action names do not overwrite
- * the tracker design. Slice A promotes only cards whose V8 primitive already exists and is covered.
+ * the tracker design. Runtime promotion requires a real V8 primitive plus focused coverage.
  */
 export const V8_EXPANSION_BATCH_06: readonly V8ExpansionBatch06CardContract[] = [
   {
@@ -89,8 +89,8 @@ export const V8_EXPANSION_BATCH_06: readonly V8ExpansionBatch06CardContract[] = 
     timing: 'ongoing',
     auditDecision: 'keep_translate',
     primitives: ['targeted_defender_action_evasion'],
-    implementationState: 'primitive_required',
-    auditNote: 'The identity is excellent, but unlike LA CROQUETA this must classify the targeting source as a defender and then apply a self-buff. That deserves one shared target-interception primitive rather than post-hoc modifier reversal.',
+    implementationState: 'runtime_ready',
+    auditNote: 'Uses the shared defender-target interception layer also used by BERBA SPIN. It classifies the Action source as a defender, ignores the first qualifying target each period, and applies the +2 ATT as Hansen’s own period modifier rather than reversing the defender effect afterward.',
   },
   {
     id: 'jari-litmanen',
