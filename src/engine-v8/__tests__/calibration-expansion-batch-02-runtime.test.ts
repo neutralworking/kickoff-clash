@@ -18,16 +18,16 @@ import {
 } from '../index';
 
 describe('V8 expansion Batch 02 runtime primitives', () => {
-  it('STEP IN dynamically binds −3 ATT to the strongest opposing midfielder in MID', () => {
+  it('STEP IN dynamically binds −3 ATT to the strongest reducible opposing midfielder in MID', () => {
     let state = createV8CalibrationState();
     state = revealCalibrationPlayer(state, 'home', 'tymoshchuk', 'MID');
-    state = revealCalibrationPlayer(state, 'away', 'seedorf', 'MID');
-    const seedorfId = calibrationRuntimeId('away', 'seedorf');
-    expect(currentCalibrationAttack(state, seedorfId)).toBe(getV8CalibrationPlayer('seedorf').printedAttack - 3);
+    state = revealCalibrationPlayer(state, 'away', 'aitana-bonmati', 'MID');
+    const aitanaId = calibrationRuntimeId('away', 'aitana-bonmati');
+    expect(currentCalibrationAttack(state, aitanaId)).toBe(getV8CalibrationPlayer('aitana-bonmati').printedAttack - 3);
 
     state = revealCalibrationPlayer(state, 'away', 'di-stefano', 'MID');
     const diStefanoId = calibrationRuntimeId('away', 'di-stefano');
-    expect(currentCalibrationAttack(state, seedorfId)).toBe(getV8CalibrationPlayer('seedorf').printedAttack);
+    expect(currentCalibrationAttack(state, aitanaId)).toBe(getV8CalibrationPlayer('aitana-bonmati').printedAttack);
     expect(currentCalibrationAttack(state, diStefanoId)).toBe(getV8CalibrationPlayer('di-stefano').printedAttack - 2);
   });
 
@@ -63,9 +63,11 @@ describe('V8 expansion Batch 02 runtime primitives', () => {
     const mooreId = calibrationRuntimeId('home', 'bobby-moore');
     const dempseyId = calibrationRuntimeId('away', 'dempsey');
 
-    expect(currentCalibrationAttack(state, dempseyId)).toBe(getV8CalibrationPlayer('dempsey').printedAttack - 5);
-    state = revealCalibrationPlayer(state, 'away', 'ronaldo', 'ATT');
+    // CHEEKY CHIP is +5 this period, then SHOW HIM OUTSIDE removes 5 from that live total.
     expect(currentCalibrationAttack(state, dempseyId)).toBe(getV8CalibrationPlayer('dempsey').printedAttack);
+    state = revealCalibrationPlayer(state, 'away', 'ronaldo', 'ATT');
+    // Ashley retargets; removing her −5 is not a new positive ATT modifier and must not trigger Moore.
+    expect(currentCalibrationAttack(state, dempseyId)).toBe(getV8CalibrationPlayer('dempsey').printedAttack + 5);
     expect(currentCalibrationDefence(state, mooreId)).toBe(getV8CalibrationPlayer('bobby-moore').printedDefence);
   });
 
