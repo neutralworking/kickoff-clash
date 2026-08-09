@@ -1,4 +1,4 @@
-export * from './calibration-expansion-batch-05-runtime';
+export * from './calibration-expansion-batch-06-runtime';
 export * from './calibration-expansion-batch-05-cards';
 
 import * as decay from './calibration-decay';
@@ -10,7 +10,7 @@ import {
 import { getV8CalibrationPlayer } from './calibration-cards';
 import { refreshV8Batch05OngoingEffects } from './calibration-expansion-batch-05-ongoing';
 import { applyCalibrationAttackGainReactions } from './calibration-expansion-reactions';
-import * as runtime from './calibration-expansion-batch-05-runtime';
+import * as runtime from './calibration-expansion-batch-06-runtime';
 import type { V8Zone } from './core';
 
 export interface V8CalibrationMatchScore {
