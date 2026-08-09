@@ -49,16 +49,11 @@ function zoneCount(state: V8CalibrationState, side: V8CalibrationSide): number {
 }
 
 describe('V8 larger-roster mixed expansion integration', () => {
-  it('has 34 runtime-ready cards, two stats blockers and four explicit primitive/design blockers', () => {
-    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(34);
+  it('has 36 runtime-ready cards, two stats blockers and only two deliberate design blockers', () => {
+    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(36);
     expect([...V8_EXPANSION_STATS_BLOCKED_IDS].sort()).toEqual(['kante', 'ozil']);
     expect(V8_EXPANSION_BLOCKED_IDS).toEqual(V8_EXPANSION_STATS_BLOCKED_IDS);
-    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].sort()).toEqual([
-      'ole-gunnar-solskjaer',
-      'paul-scholes',
-      'ronaldinho',
-      'shunsuke-nakamura',
-    ]);
+    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].sort()).toEqual(['paul-scholes', 'shunsuke-nakamura']);
 
     const covered = new Set(
       V8_EXPANSION_INTEGRATION_SQUAD_KEYS
@@ -107,7 +102,6 @@ describe('V8 larger-roster mixed expansion integration', () => {
     const banksId = calibrationRuntimeId('away', 'gordon-banks');
     const cavaniId = calibrationRuntimeId('home', 'cavani');
 
-    // Keep this integration focused on the later Banks layer rather than Puyol consuming the same Chance.
     state.matchCounters[`puyol-body-on-the-line:${puyolId}`] = 1;
     state = moveCalibrationPlayer(state, 'home', 'chris-waddle', 'ATT');
 
