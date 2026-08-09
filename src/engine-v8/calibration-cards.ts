@@ -197,6 +197,18 @@ const V8_EXPANSION_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionText: 'Ongoing: While this is in MID and you have a friendly WF in ATT, this and your highest-ATT friendly WF in ATT have +2 ATT.',
   }),
   expansionCard({
+    id: 'alexia-putellas', realName: 'Alexia Putellas', matchName: 'Portellas', fullCardName: 'Alexia Portellas', trackerRow: 15, sourceCardId: 'KC-062',
+    position: 'CM / AM', naturalZones: ['MID', 'ATT'], cost: 5, costSource: 'tracker', attack: 6, defence: 4,
+    actionKey: 'alexia_through_the_gap', actionName: 'THROUGH THE GAP', timing: 'triggered',
+    actionText: 'The first non-Through-Ball Chance played here each period becomes a Through Ball before it resolves.',
+  }),
+  expansionCard({
+    id: 'pirlo', realName: 'Andrea Pirlo', matchName: 'Pirola', fullCardName: 'Andrea Pirola', trackerRow: 19, sourceCardId: 'KC-021',
+    position: 'CM / DM', naturalZones: ['DEF', 'MID'], cost: 5, costSource: 'tracker', attack: 4, defence: 6,
+    actionKey: 'pirlo_diagonal_switch', actionName: 'DIAGONAL SWITCH', timing: 'triggered',
+    actionText: 'Your first Chance played in MID each period resolves in ATT instead; if it was not a Cross, it becomes a Cross before it resolves.',
+  }),
+  expansionCard({
     id: 'bergkamp', realName: 'Dennis Bergkamp', matchName: 'Bandcamp', fullCardName: 'Dennis Bandcamp', trackerRow: 61, sourceCardId: 'KC-049',
     position: 'CF / AM', naturalZones: ['MID', 'ATT'], cost: 3, costSource: 'kc_reconciliation', attack: 10, defence: 1,
     actionKey: 'bergkamp_first_touch', actionName: 'FIRST TOUCH', timing: 'triggered',
