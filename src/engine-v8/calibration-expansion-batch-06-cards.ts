@@ -91,6 +91,12 @@ export const V8_BATCH_06_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionKey: 'delap_hurler', actionName: 'HURLER', timing: 'triggered',
     actionText: 'End of Period (P1–P3): Add a Long Throw to your hand.',
   }),
+  batch06Card({
+    id: 'arjen-robben', realName: 'Arjen Robben', matchName: 'Robbeo', fullCardName: 'Arjen Robbeo', trackerRow: 27,
+    position: 'WF', naturalZones: ['ATT'], cost: 4, attack: 10, defence: 1,
+    actionKey: 'robben_cut_inside', actionName: 'CUT INSIDE', timing: 'ongoing',
+    actionText: 'Ongoing: Your first Cross played in ATT each period becomes a Long Shot before it resolves.',
+  }),
 ] as const;
 
 /** Compatibility alias for the original Batch 06 Slice A registration cohort. */
