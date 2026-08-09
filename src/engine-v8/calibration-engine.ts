@@ -2,6 +2,11 @@ export * from './calibration-expansion-batch-05-runtime';
 export * from './calibration-expansion-batch-05-cards';
 
 import * as decay from './calibration-decay';
+import {
+  calibrationScoreRelation,
+  rollCalibrationAction,
+  storeCalibrationMatchScore,
+} from './calibration-action-context';
 import { getV8CalibrationPlayer } from './calibration-cards';
 import { refreshV8Batch05OngoingEffects } from './calibration-expansion-batch-05-ongoing';
 import { applyCalibrationAttackGainReactions } from './calibration-expansion-reactions';
@@ -27,28 +32,66 @@ function applyBatch05RevealEffects(
   cardId: string,
   zone: V8Zone,
 ): runtime.V8CalibrationState {
-  if (cardId !== 'roberto-carlos' || zone !== 'MID') return state;
   const runtimeId = runtime.calibrationRuntimeId(side, cardId);
   if (!runtime.isCalibrationActionEnabled(state, runtimeId)) return state;
 
-  let next = state;
-  const generated = runtime.addCalibrationTacticalToHand(next, side, 'long_shot', {
-    attModifier: 3,
-    generatedBy: cardId,
-  });
-  next = generated.state;
-  generated.card.metadata.availableFromPeriod = next.period + 1;
-  next.events.push({
-    type: 'tactical_generated',
-    period: next.period,
-    text: `${getV8CalibrationPlayer(cardId).realName} · THUNDERBOLT generates ${generated.card.name} (+3 ATT).`,
-  });
-  next = runtime.applyCalibrationModifier(next, runtimeId, {
-    defence: -3,
-    lifetime: 'period',
-    source: 'THUNDERBOLT',
-  });
-  return next;
+  if (cardId === 'roberto-carlos' && zone === 'MID') {
+    let next = state;
+    const generated = runtime.addCalibrationTacticalToHand(next, side, 'long_shot', {
+      attModifier: 3,
+      generatedBy: cardId,
+    });
+    next = generated.state;
+    generated.card.metadata.availableFromPeriod = next.period + 1;
+    next.events.push({
+      type: 'tactical_generated',
+      period: next.period,
+      text: `${getV8CalibrationPlayer(cardId).realName} · THUNDERBOLT generates ${generated.card.name} (+3 ATT).`,
+    });
+    next = runtime.applyCalibrationModifier(next, runtimeId, {
+      defence: -3,
+      lifetime: 'period',
+      source: 'THUNDERBOLT',
+    });
+    return next;
+  }
+
+  if (cardId === 'ole-gunnar-solskjaer'
+    && state.period >= 3
+    && calibrationScoreRelation(state, side) === 'losing') {
+    let next = runtime.applyCalibrationModifier(state, runtimeId, {
+      attack: 4,
+      lifetime: 'period',
+      source: 'SUPERSUB',
+    });
+    const generated = runtime.addCalibrationTacticalToHand(next, side, 'through_ball', { generatedBy: cardId });
+    next = generated.state;
+    generated.card.metadata.availableFromPeriod = next.period + 1;
+    next.events.push({
+      type: 'tactical_generated',
+      period: next.period,
+      text: `${getV8CalibrationPlayer(cardId).realName} · SUPERSUB generates ${generated.card.name}.`,
+    });
+    return next;
+  }
+
+  if (cardId === 'ronaldinho') {
+    const rolled = rollCalibrationAction(state, `${side}:${runtimeId}:showboat`);
+    const attack = rolled.roll < 0.5 ? 6 : -2;
+    let next = runtime.applyCalibrationModifier(rolled.state, runtimeId, {
+      attack,
+      lifetime: 'period',
+      source: 'SHOWBOAT',
+    });
+    next.events.push({
+      type: 'action_triggered',
+      period: next.period,
+      text: `${getV8CalibrationPlayer(cardId).realName} · SHOWBOAT ${attack > 0 ? 'comes off' : 'breaks down'}: ${attack > 0 ? '+' : ''}${attack} ATT this period.`,
+    });
+    return next;
+  }
+
+  return state;
 }
 
 export function revealCalibrationPlayerWithDecay(
@@ -95,14 +138,16 @@ function applyCaptainMarvelAtPeriodEnd(
 }
 
 /**
- * Period end accepts the actual banked match score as optional coordinator context. Existing
- * one-argument callers remain unchanged; CAPTAIN MARVEL only evaluates when a real score is given.
+ * Period end accepts the actual banked match score as optional coordinator context. The score is
+ * persisted into match context for later reveal-time Actions such as SUPERSUB; one-argument legacy
+ * callers remain valid but cannot activate score-dependent reveal effects honestly.
  */
 export function endV8CalibrationPeriodWithDecay(
   state: runtime.V8CalibrationState,
   score?: V8CalibrationMatchScore,
 ): ReturnType<typeof decay.endV8CalibrationPeriod> {
-  const prepared = applyCaptainMarvelAtPeriodEnd(state, score);
+  const withScore = score ? storeCalibrationMatchScore(state, score) : state;
+  const prepared = applyCaptainMarvelAtPeriodEnd(withScore, score);
   return refreshV8Batch05OngoingEffects(decay.endV8CalibrationPeriod(prepared));
 }
 
