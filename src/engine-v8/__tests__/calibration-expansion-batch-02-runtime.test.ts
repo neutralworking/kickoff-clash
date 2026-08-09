@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   addCalibrationTacticalToHand,
+  calibrationContributionRules,
+  calibrationEffectiveStats,
   calibrationRuntimeId,
+  calibrationZoneTotals,
   createV8CalibrationState,
   currentCalibrationAttack,
   currentCalibrationDefence,
@@ -141,5 +144,49 @@ describe('V8 expansion Batch 02 runtime primitives', () => {
 
     state = endV8CalibrationPeriod(state);
     expect(currentCalibrationAttack(state, abediId)).toBe(getV8CalibrationPlayer('abedi-pele').printedAttack + 4);
+  });
+
+  it('TOTAL FOOTBALL removes OOP penalties at contribution time without changing raw stats', () => {
+    let state = createV8CalibrationState();
+    state = seedCalibrationPlayer(state, 'home', 'davids', 'ATT');
+    state = seedCalibrationPlayer(state, 'home', 'bobby-moore', 'MID');
+    state = seedCalibrationPlayer(state, 'home', 'dempsey', 'DEF');
+
+    const davidsId = calibrationRuntimeId('home', 'davids');
+    const mooreId = calibrationRuntimeId('home', 'bobby-moore');
+    const dempseyId = calibrationRuntimeId('home', 'dempsey');
+
+    expect(calibrationEffectiveStats(state, state.players[davidsId]!).penalty).toBe(2);
+    expect(calibrationEffectiveStats(state, state.players[mooreId]!).penalty).toBe(2);
+    expect(calibrationEffectiveStats(state, state.players[dempseyId]!).penalty).toBe(2);
+
+    state = seedCalibrationPlayer(state, 'home', 'cruyff', 'ATT');
+    expect(calibrationContributionRules(state, 'home').ignoreOutOfPositionPenalty).toBe(true);
+
+    expect(calibrationEffectiveStats(state, state.players[davidsId]!)).toEqual({ attack: 4, defence: 6, penalty: 0 });
+    expect(calibrationEffectiveStats(state, state.players[mooreId]!)).toEqual({ attack: 1, defence: 10, penalty: 0 });
+    expect(calibrationEffectiveStats(state, state.players[dempseyId]!)).toEqual({ attack: 10, defence: 1, penalty: 0 });
+
+    expect(currentCalibrationAttack(state, davidsId)).toBe(4);
+    expect(currentCalibrationDefence(state, mooreId)).toBe(10);
+    expect(state.players[davidsId]?.modifiers.some((modifier) => modifier.source === 'TOTAL FOOTBALL')).toBe(false);
+  });
+
+  it('TOTAL FOOTBALL immediately switches off when Cruyff is suppressed', () => {
+    let state = createV8CalibrationState();
+    state = seedCalibrationPlayer(state, 'home', 'davids', 'ATT');
+    state = revealCalibrationPlayer(state, 'home', 'cruyff', 'MID');
+    const cruyffId = calibrationRuntimeId('home', 'cruyff');
+    const davidsId = calibrationRuntimeId('home', 'davids');
+
+    expect(calibrationEffectiveStats(state, state.players[davidsId]!).penalty).toBe(0);
+    expect(calibrationZoneTotals(state, 'home', 'ATT').attack).toBe(4);
+
+    state = revealCalibrationPlayer(state, 'away', 'gentile', 'MID');
+    expect(state.suppressedActions[cruyffId]).toBe(calibrationRuntimeId('away', 'gentile'));
+    expect(calibrationContributionRules(state, 'home').ignoreOutOfPositionPenalty).toBe(false);
+    expect(calibrationEffectiveStats(state, state.players[davidsId]!).penalty).toBe(2);
+    expect(calibrationZoneTotals(state, 'home', 'ATT').attack).toBe(2);
+    expect(currentCalibrationAttack(state, davidsId)).toBe(4);
   });
 });
