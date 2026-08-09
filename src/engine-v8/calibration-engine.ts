@@ -1,9 +1,9 @@
-export * from './calibration-expansion-runtime';
+export * from './calibration-expansion-chance-reactions';
 
 import * as decay from './calibration-decay';
 import { refreshCalibrationExpansionOngoingEffects } from './calibration-expansion-ongoing';
 import { applyCalibrationAttackGainReactions } from './calibration-expansion-reactions';
-import * as runtime from './calibration-expansion-runtime';
+import * as runtime from './calibration-expansion-chance-reactions';
 import type { V8Zone } from './core';
 
 function withExpansionReactions(
