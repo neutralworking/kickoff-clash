@@ -179,6 +179,24 @@ const V8_EXPANSION_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionText: 'Moveable once per match. When this moves from MID to ATT, gain +4 ATT this period and your first Chance in ATT this period cannot be cancelled.', moveable: true,
   }),
   expansionCard({
+    id: 'yashin', realName: 'Lev Yashin', matchName: 'Yachon', fullCardName: 'Lev Yachon', trackerRow: 160, sourceCardId: 'KC-055',
+    position: 'GK', naturalZones: ['DEF'], cost: 4, costSource: 'kc_reconciliation', attack: 0, defence: 11,
+    actionKey: 'yashin_black_spider', actionName: 'BLACK SPIDER', timing: 'triggered',
+    actionText: 'The first opposing Chance played in ATT each period has −2 ATT, to a minimum of 0.',
+  }),
+  expansionCard({
+    id: 'cavani', realName: 'Edinson Cavani', matchName: 'Cabana', fullCardName: 'Edinson Cabana', trackerRow: 74,
+    position: 'CF', naturalZones: ['ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 11, defence: 1,
+    actionKey: 'cavani_get_across_him', actionName: 'GET ACROSS HIM', timing: 'triggered',
+    actionText: 'The first time each period a Cross played here would be cancelled, prevent that cancellation.',
+  }),
+  expansionCard({
+    id: 'lucy-bronze', realName: 'Lucy Bronze', matchName: 'Brass', fullCardName: 'Lucy Brass', trackerRow: 164, sourceCardId: 'KC-017',
+    position: 'RB / RWB', naturalZones: ['DEF', 'MID'], cost: 3, costSource: 'kc_reconciliation', attack: 4, defence: 6,
+    actionKey: 'bronze_overlap', actionName: 'OVERLAP', timing: 'ongoing',
+    actionText: 'Ongoing: While this is in MID and you have a friendly WF in ATT, this and your highest-ATT friendly WF in ATT have +2 ATT.',
+  }),
+  expansionCard({
     id: 'bergkamp', realName: 'Dennis Bergkamp', matchName: 'Bandcamp', fullCardName: 'Dennis Bandcamp', trackerRow: 61, sourceCardId: 'KC-049',
     position: 'CF / AM', naturalZones: ['MID', 'ATT'], cost: 3, costSource: 'kc_reconciliation', attack: 10, defence: 1,
     actionKey: 'bergkamp_first_touch', actionName: 'FIRST TOUCH', timing: 'triggered',
