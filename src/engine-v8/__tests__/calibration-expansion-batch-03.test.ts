@@ -39,7 +39,15 @@ describe('V8 Action expansion Batch 03 contracts', () => {
     expect(getV8ExpansionBatch03Card('pirlo').primitives).toEqual(['generated_tactical_transformation']);
   });
 
-  it('keeps all eight primitive-required until their focused runtime behavior is proven', () => {
-    expect(V8_EXPANSION_BATCH_03.every((card) => card.implementationState === 'primitive_required')).toBe(true);
+  it('promotes only cards with focused runtime proof', () => {
+    const runtimeReady = V8_EXPANSION_BATCH_03
+      .filter((card) => card.implementationState === 'runtime_ready')
+      .map((card) => card.id);
+    const primitiveRequired = V8_EXPANSION_BATCH_03
+      .filter((card) => card.implementationState === 'primitive_required')
+      .map((card) => card.id);
+
+    expect(runtimeReady).toEqual(['cannavaro', 'maradona', 'bergkamp']);
+    expect(primitiveRequired).toEqual(['yashin', 'cavani', 'lucy-bronze', 'alexia-putellas', 'pirlo']);
   });
 });
