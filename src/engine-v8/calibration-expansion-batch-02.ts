@@ -100,7 +100,7 @@ export const V8_EXPANSION_BATCH_02: readonly V8ExpansionCardContract[] = [
     actionText: 'Ongoing: Your players ignore out-of-position penalties while this Action is active.',
     timing: 'ongoing',
     primitives: ['oop_override'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
 ] as const;
 
