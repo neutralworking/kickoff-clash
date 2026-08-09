@@ -2,13 +2,22 @@ export * from './calibration-expansion-runtime';
 
 import * as decay from './calibration-decay';
 import { refreshCalibrationExpansionOngoingEffects } from './calibration-expansion-ongoing';
+import { applyCalibrationAttackGainReactions } from './calibration-expansion-reactions';
 import * as runtime from './calibration-expansion-runtime';
 import type { V8Zone } from './core';
+
+function withExpansionReactions(
+  before: runtime.V8CalibrationState,
+  after: runtime.V8CalibrationState,
+): runtime.V8CalibrationState {
+  const refreshed = refreshCalibrationExpansionOngoingEffects(after);
+  return applyCalibrationAttackGainReactions(before, refreshed);
+}
 
 export function revealCalibrationPlayerWithDecay(
   ...args: Parameters<typeof decay.revealCalibrationPlayer>
 ): ReturnType<typeof decay.revealCalibrationPlayer> {
-  return refreshCalibrationExpansionOngoingEffects(decay.revealCalibrationPlayer(...args));
+  return withExpansionReactions(args[0], decay.revealCalibrationPlayer(...args));
 }
 
 export function endV8CalibrationPeriodWithDecay(
@@ -20,13 +29,13 @@ export function endV8CalibrationPeriodWithDecay(
 export function moveCalibrationPlayer(
   ...args: Parameters<typeof runtime.moveCalibrationPlayer>
 ): ReturnType<typeof runtime.moveCalibrationPlayer> {
-  return refreshCalibrationExpansionOngoingEffects(runtime.moveCalibrationPlayer(...args));
+  return withExpansionReactions(args[0], runtime.moveCalibrationPlayer(...args));
 }
 
 export function refreshCalibrationScoreState(
   ...args: Parameters<typeof runtime.refreshCalibrationScoreState>
 ): ReturnType<typeof runtime.refreshCalibrationScoreState> {
-  return refreshCalibrationExpansionOngoingEffects(runtime.refreshCalibrationScoreState(...args));
+  return withExpansionReactions(args[0], runtime.refreshCalibrationScoreState(...args));
 }
 
 export function playCalibrationTacticalWithTiming(
