@@ -47,7 +47,23 @@ describe('V8 Action expansion Batch 04 audit contracts', () => {
     expect(terry.actionName).not.toContain('CAPTAIN');
   });
 
-  it('keeps all Batch 04 contracts primitive-required until runtime proof exists', () => {
-    expect(V8_EXPANSION_BATCH_04.every((card) => card.implementationState === 'primitive_required')).toBe(true);
+  it('marks only the proven Tactical-pipeline slice runtime-ready', () => {
+    const ready = V8_EXPANSION_BATCH_04
+      .filter((card) => card.implementationState === 'runtime_ready')
+      .map((card) => card.id)
+      .sort();
+    expect(ready).toEqual([
+      'alexandra-popp',
+      'ali-daei',
+      'ellen-white',
+      'gordon-banks',
+      'john-terry',
+    ]);
+
+    const remaining = V8_EXPANSION_BATCH_04
+      .filter((card) => card.implementationState === 'primitive_required')
+      .map((card) => card.id)
+      .sort();
+    expect(remaining).toEqual(['alan-shearer', 'bryan-robson', 'chris-waddle']);
   });
 });
