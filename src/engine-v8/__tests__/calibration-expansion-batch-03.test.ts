@@ -31,7 +31,7 @@ describe('V8 Action expansion Batch 03 contracts', () => {
     expect(getV8ExpansionBatch03Card('bergkamp').actionName).toBe('FIRST TOUCH');
   });
 
-  it('uses the current reusable primitive vocabulary before runtime wiring', () => {
+  it('uses the current reusable primitive vocabulary', () => {
     expect(getV8ExpansionBatch03Card('cannavaro').primitives).toEqual(['zone_advantage_modifier']);
     expect(getV8ExpansionBatch03Card('maradona').primitives).toEqual(['move_once', 'move_chance_protection']);
     expect(getV8ExpansionBatch03Card('cavani').primitives).toEqual(['chance_cancellation_interception']);
@@ -39,7 +39,7 @@ describe('V8 Action expansion Batch 03 contracts', () => {
     expect(getV8ExpansionBatch03Card('pirlo').primitives).toEqual(['generated_tactical_transformation']);
   });
 
-  it('promotes only cards with focused runtime proof', () => {
+  it('is complete only after all eight cards have focused runtime proof', () => {
     const runtimeReady = V8_EXPANSION_BATCH_03
       .filter((card) => card.implementationState === 'runtime_ready')
       .map((card) => card.id);
@@ -47,7 +47,16 @@ describe('V8 Action expansion Batch 03 contracts', () => {
       .filter((card) => card.implementationState === 'primitive_required')
       .map((card) => card.id);
 
-    expect(runtimeReady).toEqual(['cannavaro', 'maradona', 'yashin', 'cavani', 'lucy-bronze', 'bergkamp']);
-    expect(primitiveRequired).toEqual(['alexia-putellas', 'pirlo']);
+    expect(runtimeReady).toEqual([
+      'cannavaro',
+      'maradona',
+      'yashin',
+      'cavani',
+      'lucy-bronze',
+      'alexia-putellas',
+      'pirlo',
+      'bergkamp',
+    ]);
+    expect(primitiveRequired).toEqual([]);
   });
 });
