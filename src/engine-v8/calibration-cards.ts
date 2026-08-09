@@ -80,7 +80,7 @@ function expansionCard(args: {
   };
 }
 
-/** First playable slice from the 40-card expansion audit. */
+/** Playable cards from the expansion audits. */
 const V8_EXPANSION_PLAYERS: readonly V8CalibrationPlayerCard[] = [
   expansionCard({
     id: 'abedi-pele', realName: 'Abedi Pelé', matchName: 'Pelo', fullCardName: 'Abedi Pelo', trackerRow: 6,
@@ -123,6 +123,30 @@ const V8_EXPANSION_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     position: 'CF / SS', naturalZones: ['ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 11, defence: 1,
     actionKey: 'berbatov_berba_spin', actionName: 'BERBA SPIN', timing: 'triggered',
     actionText: 'The first opposing defender Action each period that targets this is ignored; then move this to an adjacent zone.',
+  }),
+  expansionCard({
+    id: 'tymoshchuk', realName: 'Anatoliy Tymoshchuk', matchName: 'Timoshik', fullCardName: 'Anatoliy Timoshik', trackerRow: 18,
+    position: 'DM / CM', naturalZones: ['DEF', 'MID'], cost: 2, costSource: 'tracker', attack: 4, defence: 7,
+    actionKey: 'tymoshchuk_step_in', actionName: 'STEP IN', timing: 'ongoing',
+    actionText: 'Ongoing: While played in MID, the highest-ATT opposing midfielder here has −3 ATT.',
+  }),
+  expansionCard({
+    id: 'nesta', realName: 'Alessandro Nesta', matchName: 'Nestor', fullCardName: 'Alessandro Nestor', trackerRow: 12,
+    position: 'CB', naturalZones: ['DEF'], cost: 4, costSource: 'tracker', attack: 1, defence: 10,
+    actionKey: 'nesta_timed_slide', actionName: 'TIMED SLIDE', timing: 'triggered',
+    actionText: 'Cancel the first opposing Through Ball here each period.',
+  }),
+  expansionCard({
+    id: 'brian-laudrup', realName: 'Brian Laudrup', matchName: 'Lauda', fullCardName: 'Brian Lauda', trackerRow: 35,
+    position: 'WF / AM', naturalZones: ['MID', 'ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 10, defence: 1,
+    actionKey: 'laudrup_gliding_run', actionName: 'GLIDING RUN', timing: 'triggered',
+    actionText: 'Moveable once per period to an adjacent zone. Your first Chance in the destination this period cannot be cancelled.', moveable: true,
+  }),
+  expansionCard({
+    id: 'davids', realName: 'Edgar Davids', matchName: 'Danvers', fullCardName: 'Edgar Danvers', trackerRow: 72,
+    position: 'CM / DM', naturalZones: ['DEF', 'MID'], cost: 3, costSource: 'kc_reconciliation', attack: 4, defence: 6,
+    actionKey: 'davids_pitbull', actionName: 'PITBULL', timing: 'triggered',
+    actionText: 'The first time each period an opposing midfielder moves out of this zone, follow them and give them −2 ATT this period.', moveable: true,
   }),
 ] as const;
 
