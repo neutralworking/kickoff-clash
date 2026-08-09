@@ -19,9 +19,10 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
     expect(getV8ExpansionBatch06Card('christian-eriksen').actionName).toBe('WHIPPED DELIVERY');
     expect(getV8ExpansionBatch06Card('caroline-graham-hansen').actionName).toBe('ONE ON ONE');
     expect(getV8ExpansionBatch06Card('jari-litmanen').actionName).toBe('KILLER PASS');
+    expect(getV8ExpansionBatch06Card('keira-walsh').actionName).toBe('BEAT THE PRESS');
   });
 
-  it('promotes the five cards with implemented V8 primitives and keeps three design problems explicit', () => {
+  it('promotes six cards and keeps only Robben and Delap as deliberate design problems', () => {
     const ready = V8_EXPANSION_BATCH_06
       .filter((card) => card.implementationState === 'runtime_ready')
       .map((card) => card.id)
@@ -37,23 +38,21 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
       'caroline-graham-hansen',
       'christian-eriksen',
       'jari-litmanen',
+      'keira-walsh',
     ]);
     expect(pending).toEqual([
       'arjen-robben',
-      'keira-walsh',
       'rory-delap',
     ]);
   });
 
-  it('refuses to fake obsolete or missing mechanics for Robben, Delap and Walsh', () => {
+  it('refuses to fake obsolete or missing mechanics for Robben and Delap', () => {
     const robben = getV8ExpansionBatch06Card('arjen-robben');
     const delap = getV8ExpansionBatch06Card('rory-delap');
-    const walsh = getV8ExpansionBatch06Card('keira-walsh');
 
     expect(robben.auditDecision).toBe('mechanic_design');
     expect(robben.auditNote).toContain('wide-versus-centre geometry');
     expect(delap.auditNote).toContain('not automatically a Cross or Corner');
-    expect(walsh.auditNote).toContain('Do not inherit');
   });
 
   it('implements Graham Hansen through shared defender-target interception rather than post-hoc repair', () => {
@@ -64,5 +63,14 @@ describe('V8 Action expansion Batch 06 source-first audit', () => {
     expect(hansen.auditNote).toContain('shared defender-target interception');
     expect(hansen.actionText).toContain('ignored');
     expect(hansen.actionText).toContain('+2 ATT');
+  });
+
+  it('makes Walsh press resistance progression rather than another immunity Action', () => {
+    const walsh = getV8ExpansionBatch06Card('keira-walsh');
+    expect(walsh.auditDecision).toBe('keep_translate');
+    expect(walsh.implementationState).toBe('runtime_ready');
+    expect(walsh.actionText).toContain('Trigger Press');
+    expect(walsh.actionText).toContain('Through Ball');
+    expect(walsh.auditNote).toContain('not immunity');
   });
 });
