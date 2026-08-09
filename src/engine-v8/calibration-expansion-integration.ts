@@ -2,9 +2,10 @@ import { V8_EXPANSION_BATCH_01 } from './calibration-expansion-batch-01';
 import { V8_EXPANSION_BATCH_02 } from './calibration-expansion-batch-02';
 import { V8_EXPANSION_BATCH_03 } from './calibration-expansion-batch-03';
 import { V8_EXPANSION_BATCH_04 } from './calibration-expansion-batch-04';
+import { V8_EXPANSION_BATCH_05 } from './calibration-expansion-batch-05';
 import type { V8Zone } from './core';
 
-export type V8ExpansionIntegrationSquadKey = 'mix_alpha' | 'mix_beta' | 'mix_gamma';
+export type V8ExpansionIntegrationSquadKey = 'mix_alpha' | 'mix_beta' | 'mix_gamma' | 'mix_delta';
 
 export interface V8ExpansionIntegrationPlacement {
   cardId: string;
@@ -22,24 +23,29 @@ const ALL_EXPANSION_CONTRACTS = [
   ...V8_EXPANSION_BATCH_02,
   ...V8_EXPANSION_BATCH_03,
   ...V8_EXPANSION_BATCH_04,
+  ...V8_EXPANSION_BATCH_05,
 ] as const;
 
-/**
- * Larger-roster integration cohort. Only contracts with authoritative playable values enter this
- * set; stats_required cards remain explicitly blocked rather than receiving calibration guesses.
- */
+/** Larger-roster integration cohort, split by why a card is not yet playable. */
 export const V8_EXPANSION_RUNTIME_READY_IDS = ALL_EXPANSION_CONTRACTS
   .filter((card) => card.implementationState === 'runtime_ready')
   .map((card) => card.id) as readonly string[];
 
-export const V8_EXPANSION_BLOCKED_IDS = ALL_EXPANSION_CONTRACTS
-  .filter((card) => card.implementationState !== 'runtime_ready')
+export const V8_EXPANSION_STATS_BLOCKED_IDS = ALL_EXPANSION_CONTRACTS
+  .filter((card) => card.implementationState === 'stats_required')
   .map((card) => card.id) as readonly string[];
 
+export const V8_EXPANSION_PRIMITIVE_REQUIRED_IDS = ALL_EXPANSION_CONTRACTS
+  .filter((card) => card.implementationState === 'primitive_required')
+  .map((card) => card.id) as readonly string[];
+
+/** Backwards-compatible alias: "blocked" still means missing authoritative stats, not design work. */
+export const V8_EXPANSION_BLOCKED_IDS = V8_EXPANSION_STATS_BLOCKED_IDS;
+
 /**
- * Three mixed football XIs for integration only. They are deliberately not added to the six
+ * Four mixed football XIs for integration only. They are deliberately not added to the six
  * reference balance squads: these fixtures test coexistence / ordering, not archetype win rate.
- * Across the three lists every runtime-ready expansion card appears at least once.
+ * Across the four lists every runtime-ready expansion card appears at least once.
  */
 export const V8_EXPANSION_INTEGRATION_SQUADS: Readonly<Record<V8ExpansionIntegrationSquadKey, V8ExpansionIntegrationSquad>> = {
   mix_alpha: {
@@ -91,6 +97,23 @@ export const V8_EXPANSION_INTEGRATION_SQUADS: Readonly<Record<V8ExpansionIntegra
       { cardId: 'berbatov', zone: 'ATT' },
       { cardId: 'dempsey', zone: 'ATT' },
       { cardId: 'alexandra-popp', zone: 'ATT' },
+    ],
+  },
+  mix_delta: {
+    key: 'mix_delta',
+    label: 'Expansion Mix Delta',
+    placements: [
+      { cardId: 'peter-shilton', zone: 'DEF' },
+      { cardId: 'paul-mcgrath', zone: 'DEF' },
+      { cardId: 'tony-adams', zone: 'DEF' },
+      { cardId: 'roberto-carlos', zone: 'DEF' },
+      { cardId: 'aitana-bonmati', zone: 'MID' },
+      { cardId: 'davids', zone: 'MID' },
+      { cardId: 'pirlo', zone: 'MID' },
+      { cardId: 'bryan-robson', zone: 'MID' },
+      { cardId: 'alan-shearer', zone: 'ATT' },
+      { cardId: 'ellen-white', zone: 'ATT' },
+      { cardId: 'ali-daei', zone: 'ATT' },
     ],
   },
 } as const;
