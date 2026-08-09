@@ -19,7 +19,9 @@ import {
   V8_EXPANSION_BLOCKED_IDS,
   V8_EXPANSION_INTEGRATION_SQUAD_KEYS,
   V8_EXPANSION_INTEGRATION_SQUADS,
+  V8_EXPANSION_PRIMITIVE_REQUIRED_IDS,
   V8_EXPANSION_RUNTIME_READY_IDS,
+  V8_EXPANSION_STATS_BLOCKED_IDS,
   type V8ExpansionIntegrationSquadKey,
 } from '../calibration-expansion-integration';
 
@@ -47,19 +49,28 @@ function zoneCount(state: V8CalibrationState, side: V8CalibrationSide): number {
 }
 
 describe('V8 larger-roster mixed expansion integration', () => {
-  it('has 30 authoritative runtime-ready cards and keeps only Kanté / Özil blocked on stats', () => {
-    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(30);
-    expect([...V8_EXPANSION_BLOCKED_IDS].sort()).toEqual(['kante', 'ozil']);
+  it('has 34 runtime-ready cards, two stats blockers and four explicit primitive/design blockers', () => {
+    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(34);
+    expect([...V8_EXPANSION_STATS_BLOCKED_IDS].sort()).toEqual(['kante', 'ozil']);
+    expect(V8_EXPANSION_BLOCKED_IDS).toEqual(V8_EXPANSION_STATS_BLOCKED_IDS);
+    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].sort()).toEqual([
+      'ole-gunnar-solskjaer',
+      'paul-scholes',
+      'ronaldinho',
+      'shunsuke-nakamura',
+    ]);
 
     const covered = new Set(
       V8_EXPANSION_INTEGRATION_SQUAD_KEYS
         .flatMap((key) => V8_EXPANSION_INTEGRATION_SQUADS[key].placements.map((placement) => placement.cardId)),
     );
     expect([...V8_EXPANSION_RUNTIME_READY_IDS].every((cardId) => covered.has(cardId))).toBe(true);
-    expect([...V8_EXPANSION_BLOCKED_IDS].some((cardId) => covered.has(cardId))).toBe(false);
+    expect([...V8_EXPANSION_STATS_BLOCKED_IDS].some((cardId) => covered.has(cardId))).toBe(false);
+    expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].some((cardId) => covered.has(cardId))).toBe(false);
   });
 
-  it('builds three coherent 11-player integration XIs without changing the six balance squads', () => {
+  it('builds four coherent 11-player integration XIs without changing the six balance squads', () => {
+    expect(V8_EXPANSION_INTEGRATION_SQUAD_KEYS).toHaveLength(4);
     for (const key of V8_EXPANSION_INTEGRATION_SQUAD_KEYS) {
       const squad = V8_EXPANSION_INTEGRATION_SQUADS[key];
       expect(squad.placements).toHaveLength(11);
@@ -73,15 +84,20 @@ describe('V8 larger-roster mixed expansion integration', () => {
     }
   });
 
-  it('deploys two full mixed XIs through the real high-level reveal / ongoing-effect path', () => {
-    const state = deployMixedMatch('mix_alpha', 'mix_beta');
-    expect(zoneCount(state, 'home')).toBe(11);
-    expect(zoneCount(state, 'away')).toBe(11);
+  it('deploys full mixed XIs through the real high-level reveal / ongoing-effect path', () => {
+    for (const [homeKey, awayKey] of [
+      ['mix_alpha', 'mix_beta'],
+      ['mix_delta', 'mix_gamma'],
+    ] as const) {
+      const state = deployMixedMatch(homeKey, awayKey);
+      expect(zoneCount(state, 'home')).toBe(11);
+      expect(zoneCount(state, 'away')).toBe(11);
 
-    const home = calibrationTeamTotals(state, 'home');
-    const away = calibrationTeamTotals(state, 'away');
-    for (const value of [home.attack, home.defence, away.attack, away.defence]) {
-      expect(Number.isFinite(value)).toBe(true);
+      const home = calibrationTeamTotals(state, 'home');
+      const away = calibrationTeamTotals(state, 'away');
+      for (const value of [home.attack, home.defence, away.attack, away.defence]) {
+        expect(Number.isFinite(value)).toBe(true);
+      }
     }
   });
 
