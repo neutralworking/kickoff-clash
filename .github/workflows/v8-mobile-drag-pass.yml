@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/v8-mobile-drag-pass.yml
       - .github/v8-mobile-drag-pass.py
+      - .github/v8-mobile-drag-fix.py
 
 permissions:
   contents: write
@@ -28,6 +29,7 @@ jobs:
       - name: Apply mobile drag transform
         run: |
           python3 .github/v8-mobile-drag-pass.py
+          python3 .github/v8-mobile-drag-fix.py
           git diff --check
 
       - run: npm ci
@@ -65,6 +67,7 @@ jobs:
         shell: bash
         run: |
           git rm .github/v8-mobile-drag-pass.py
+          git rm .github/v8-mobile-drag-fix.py
           git rm .github/workflows/v8-mobile-drag-pass.yml
           if [ -f .github/workflows/deploy-me-ui-preview.yml ]; then
             git rm .github/workflows/deploy-me-ui-preview.yml
