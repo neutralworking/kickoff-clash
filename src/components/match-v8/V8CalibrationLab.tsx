@@ -292,8 +292,16 @@ function DeployedChip({ state, side, runtimeId, onMove }: { state: V8Calibration
   const attack = currentCalibrationAttack(state, runtimeId);
   const defence = currentCalibrationDefence(state, runtimeId);
   const suppressed = !isCalibrationActionEnabled(state, runtimeId);
-  const moveable = side === 'home' && (card.actionKey === 'cafu_pendolino' || card.actionKey === 'beckenbauer_der_kaiser');
-  const moved = Boolean(state.periodCounters[`move:${runtimeId}`]);
+  const moveable = side === 'home' && card.statuses?.includes('moveable') === true;
+  const moved = card.id === 'chris-waddle'
+    ? Boolean(state.periodCounters[`waddle-drop-the-shoulder-move:${runtimeId}`])
+    : card.id === 'brian-laudrup'
+      ? Boolean(state.periodCounters[`laudrup-gliding-run:${runtimeId}`])
+      : card.id === 'maradona'
+        ? Boolean(state.matchCounters[`maradona-slalom-run:${runtimeId}`])
+        : card.id === 'abedi-pele'
+          ? Boolean(state.matchCounters[`abedi-jinking-run:${runtimeId}`])
+          : Boolean(state.periodCounters[`move:${runtimeId}`]);
   const canMove = moveable && !moved && Boolean(onMove);
   return (
     <span
@@ -338,7 +346,7 @@ function TelemetryTeamPeriod({ label, telemetry }: { label: string; telemetry: V
     <div className="v8-telemetry__team">
       <b>{label}</b>
       <span>{telemetry.goals} G · {telemetry.attack} ATT · {telemetry.defence} DEF · margin {signed(telemetry.attackingMargin)}</span>
-      <span>Tactical ATT {telemetry.tacticalAttack} · Action Δ {signed(telemetry.actionAttackDelta)} ATT / {signed(telemetry.actionDefenceDelta)} DEF</span>
+      <span>Tactical ATT {telemetry.tacticalAttack} · Action Δ {signed(telemetry.actionAttackDelta)} ATT / {signed(telemetry.actionDefenceDelta)} DEF · Rule Δ {signed(telemetry.contributionRuleAttackDelta)} ATT / {signed(telemetry.contributionRuleDefenceDelta)} DEF</span>
       <span>{telemetry.playersDeployed} players · {telemetry.tacticalsPlayed} Tacticals · {telemetry.unusedEnergy} Energy unused · {telemetry.cancelledChances} cancelled</span>
       {telemetry.majorChains.map((chain) => <small key={chain}>{chain}</small>)}
     </div>
@@ -554,7 +562,7 @@ export default function V8CalibrationLab() {
     }]);
 
     const wasFinal = resolved.period === 4;
-    let ended = endV8CalibrationPeriod(resolved);
+    let ended = endV8CalibrationPeriod(resolved, { home: nextHomeScore, away: nextAwayScore });
     if (!wasFinal) ended = withCalibrationEnergy(ended);
     if (wasFinal) {
       setMatchTelemetry(buildV8CalibrationMatchTelemetry({
