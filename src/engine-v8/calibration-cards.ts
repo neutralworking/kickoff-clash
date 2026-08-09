@@ -131,6 +131,18 @@ const V8_EXPANSION_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionText: 'Ongoing: While played in MID, the highest-ATT opposing midfielder here has −3 ATT.',
   }),
   expansionCard({
+    id: 'bobby-moore', realName: 'Bobby Moore', matchName: 'Meer', fullCardName: 'Bobby Meer', trackerRow: 33, sourceCardId: 'KC-014',
+    position: 'CB', naturalZones: ['DEF'], cost: 4, costSource: 'tracker', attack: 1, defence: 10,
+    actionKey: 'moore_read_the_run', actionName: 'READ THE RUN', timing: 'triggered',
+    actionText: 'The first time each period an opposing central attacker here gains ATT, gain the same DEF this period.',
+  }),
+  expansionCard({
+    id: 'andy-robertson', realName: 'Andy Robertson', matchName: 'Robsten', fullCardName: 'Andy Robsten', trackerRow: 23,
+    position: 'FB / WB', naturalZones: ['DEF', 'MID'], cost: 2, costSource: 'tracker', attack: 4, defence: 6,
+    actionKey: 'robertson_recovery_run', actionName: 'RECOVERY RUN', timing: 'triggered',
+    actionText: 'The first time each period an opposing wide attacker here gains ATT, gain the same DEF this period.',
+  }),
+  expansionCard({
     id: 'nesta', realName: 'Alessandro Nesta', matchName: 'Nestor', fullCardName: 'Alessandro Nestor', trackerRow: 12,
     position: 'CB', naturalZones: ['DEF'], cost: 4, costSource: 'tracker', attack: 1, defence: 10,
     actionKey: 'nesta_timed_slide', actionName: 'TIMED SLIDE', timing: 'triggered',
