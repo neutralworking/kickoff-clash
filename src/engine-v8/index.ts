@@ -10,6 +10,7 @@ export * from './calibration-matchup-matrix';
 export * from './calibration-deck-validation';
 export * from './calibration-compact-core';
 export * from './calibration-expansion-batch-01';
+export * from './calibration-presence';
 
 // The playable V8 lab opts into the action-decay and generated-Tactical timing extensions while
 // direct calibration-engine imports retain the original calibration baseline for isolated tests.
