@@ -48,7 +48,7 @@ function batch06Card(args: {
  * Batch 06 runtime cards. ATT / DEF / Cost come from the KC reconciliation view; tracker names and
  * Action identity remain authoritative when the older database Action text differs.
  */
-export const V8_BATCH_06_SLICE_A_PLAYERS: readonly V8CalibrationPlayerCard[] = [
+export const V8_BATCH_06_PLAYERS: readonly V8CalibrationPlayerCard[] = [
   batch06Card({
     id: 'carli-lloyd', realName: 'Carli Lloyd', matchName: 'Loud', fullCardName: 'Carli Loud', trackerRow: 40,
     position: 'CM / AM', naturalZones: ['MID', 'ATT'], cost: 3, attack: 6, defence: 4,
@@ -85,10 +85,19 @@ export const V8_BATCH_06_SLICE_A_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionKey: 'walsh_beat_the_press', actionName: 'BEAT THE PRESS', timing: 'ongoing',
     actionText: 'Ongoing: The first opposing Trigger Press each period adds a Through Ball to your hand with +2 ATT.',
   }),
+  batch06Card({
+    id: 'rory-delap', realName: 'Rory Delap', matchName: 'Duloop', fullCardName: 'Ronnie Duloop', trackerRow: 234,
+    position: 'CM / WM', naturalZones: ['MID'], cost: 3, attack: 5, defence: 5,
+    actionKey: 'delap_hurler', actionName: 'HURLER', timing: 'triggered',
+    actionText: 'End of Period (P1–P3): Add a Long Throw to your hand.',
+  }),
 ] as const;
 
+/** Compatibility alias for the original Batch 06 Slice A registration cohort. */
+export const V8_BATCH_06_SLICE_A_PLAYERS = V8_BATCH_06_PLAYERS.slice(0, 5);
+
 const mutablePlayers = V8_CALIBRATION_PLAYERS as V8CalibrationPlayerCard[];
-for (const player of V8_BATCH_06_SLICE_A_PLAYERS) {
+for (const player of V8_BATCH_06_PLAYERS) {
   if (V8_CALIBRATION_PLAYER_BY_ID.has(player.id)) continue;
   mutablePlayers.push(player);
   V8_CALIBRATION_PLAYER_BY_ID.set(player.id, player);
