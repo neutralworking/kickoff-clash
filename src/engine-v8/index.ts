@@ -11,6 +11,7 @@ export * from './calibration-deck-validation';
 export * from './calibration-compact-core';
 export * from './calibration-expansion-batch-01';
 export * from './calibration-expansion-batch-02';
+export * from './calibration-expansion-batch-03';
 export * from './calibration-presence';
 
 // The playable V8 lab opts into action-decay, expansion primitives and generated-Tactical timing
