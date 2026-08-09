@@ -85,6 +85,18 @@ export const V8_BATCH_05_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionKey: 'ronaldinho_showboat', actionName: 'SHOWBOAT', timing: 'on_reveal',
     actionText: 'On Reveal: 50%: +6 ATT this period. Otherwise −2 ATT this period.',
   }),
+  batch05Card({
+    id: 'paul-scholes', realName: 'Paul Scholes', matchName: 'Ssholes', fullCardName: 'Paul Ssholes', trackerRow: 207,
+    position: 'CM', naturalZones: ['MID'], cost: 3, attack: 5, defence: 5,
+    actionKey: 'scholes_hollywood_ball', actionName: 'HOLLYWOOD BALL', timing: 'on_reveal',
+    actionText: 'On Reveal: If played in MID, add a Cross to your hand. It costs 0 this period.',
+  }),
+  batch05Card({
+    id: 'shunsuke-nakamura', realName: 'Shunsuke Nakamura', matchName: 'Nakamuran', fullCardName: 'Shunsuke Nakamuran', trackerRow: 249,
+    position: 'AM / CM', naturalZones: ['MID'], cost: 4, attack: 8, defence: 3,
+    actionKey: 'nakamura_dead_ball_artist', actionName: 'DEAD BALL ARTIST', timing: 'on_reveal',
+    actionText: 'On Reveal: Add a Long Shot and a Corner to your hand. The first of those you play this period has +2 ATT.',
+  }),
 ] as const;
 
 /** Compatibility alias for the original first Batch 05 runtime slice. */
