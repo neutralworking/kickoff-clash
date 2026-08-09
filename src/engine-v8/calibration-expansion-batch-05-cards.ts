@@ -45,10 +45,10 @@ function batch05Card(args: {
 }
 
 /**
- * First Batch 05 runtime slice. Values are read from the existing KC reconciliation view; the
- * Card Design Tracker/source database is not mutated by calibration implementation.
+ * Batch 05 playable cards. Values are read from the existing KC reconciliation view; the Card
+ * Design Tracker/source database is not mutated by calibration implementation.
  */
-export const V8_BATCH_05_SLICE_A_PLAYERS: readonly V8CalibrationPlayerCard[] = [
+export const V8_BATCH_05_PLAYERS: readonly V8CalibrationPlayerCard[] = [
   batch05Card({
     id: 'peter-shilton', realName: 'Peter Shilton', matchName: 'Sheldon', fullCardName: 'Peter Sheldon', trackerRow: 213,
     position: 'GK', naturalZones: ['DEF'], cost: 4, attack: 0, defence: 11,
@@ -73,10 +73,25 @@ export const V8_BATCH_05_SLICE_A_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionKey: 'adams_skipper', actionName: 'SKIPPER', timing: 'ongoing',
     actionText: 'Ongoing: Your other defenders have +2 DEF.',
   }),
+  batch05Card({
+    id: 'ole-gunnar-solskjaer', realName: 'Ole Gunnar Solskjær', matchName: 'Solskjæo', fullCardName: 'Ole Gunnar Solskjæo', trackerRow: 196,
+    position: 'CF', naturalZones: ['ATT'], cost: 4, attack: 11, defence: 1,
+    actionKey: 'solskjaer_supersub', actionName: 'SUPERSUB', timing: 'on_reveal',
+    actionText: 'On Reveal: If played in P3 or P4 while losing, gain +4 ATT this period and add a Through Ball to your hand.',
+  }),
+  batch05Card({
+    id: 'ronaldinho', realName: 'Ronaldinho', matchName: 'Reinaldinho', fullCardName: 'Reinaldinho', trackerRow: 232,
+    position: 'WF / AM', naturalZones: ['MID', 'ATT'], cost: 4, attack: 10, defence: 1,
+    actionKey: 'ronaldinho_showboat', actionName: 'SHOWBOAT', timing: 'on_reveal',
+    actionText: 'On Reveal: 50%: +6 ATT this period. Otherwise −2 ATT this period.',
+  }),
 ] as const;
 
+/** Compatibility alias for the original first Batch 05 runtime slice. */
+export const V8_BATCH_05_SLICE_A_PLAYERS = V8_BATCH_05_PLAYERS.slice(0, 4);
+
 const mutablePlayers = V8_CALIBRATION_PLAYERS as V8CalibrationPlayerCard[];
-for (const player of V8_BATCH_05_SLICE_A_PLAYERS) {
+for (const player of V8_BATCH_05_PLAYERS) {
   if (V8_CALIBRATION_PLAYER_BY_ID.has(player.id)) continue;
   mutablePlayers.push(player);
   V8_CALIBRATION_PLAYER_BY_ID.set(player.id, player);
