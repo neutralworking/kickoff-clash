@@ -168,6 +168,29 @@ function applyCaptainMarvelAtPeriodEnd(
   return next;
 }
 
+function applyHurlerAtPeriodEnd(state: runtime.V8CalibrationState): runtime.V8CalibrationState {
+  if (state.period >= 4) return state;
+  let next = state;
+  const delaps = Object.values(state.players)
+    .filter((player) => player.cardId === 'rory-delap')
+    .sort((a, b) => a.deployedOrder - b.deployedOrder || a.runtimeId.localeCompare(b.runtimeId));
+
+  for (const delap of delaps) {
+    if (!runtime.isCalibrationActionEnabled(next, delap.runtimeId)) continue;
+    const generated = runtime.addCalibrationTacticalToHand(next, delap.side, 'long_throw', {
+      generatedBy: 'rory-delap',
+    });
+    next = generated.state;
+    generated.card.metadata.availableFromPeriod = next.period + 1;
+    next.events.push({
+      type: 'tactical_generated',
+      period: next.period,
+      text: `${getV8CalibrationPlayer('rory-delap').realName} · HURLER generates ${generated.card.name} for the next period.`,
+    });
+  }
+  return next;
+}
+
 /**
  * Period end accepts the actual banked match score as optional coordinator context. The score is
  * persisted into match context for later reveal-time Actions such as SUPERSUB; one-argument legacy
@@ -178,7 +201,8 @@ export function endV8CalibrationPeriodWithDecay(
   score?: V8CalibrationMatchScore,
 ): ReturnType<typeof decay.endV8CalibrationPeriod> {
   const withScore = score ? storeCalibrationMatchScore(state, score) : state;
-  const prepared = applyCaptainMarvelAtPeriodEnd(withScore, score);
+  const withCaptainMarvel = applyCaptainMarvelAtPeriodEnd(withScore, score);
+  const prepared = applyHurlerAtPeriodEnd(withCaptainMarvel);
   return refreshV8Batch05OngoingEffects(decay.endV8CalibrationPeriod(prepared));
 }
 
