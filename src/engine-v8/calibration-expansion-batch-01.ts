@@ -14,7 +14,7 @@ export type V8ExpansionPrimitive =
 export type V8ExpansionImplementationState =
   | 'runtime_ready'
   | 'primitive_required'
-  | 'semantics_required';
+  | 'stats_required';
 
 export interface V8ExpansionCardContract {
   id: string;
@@ -116,10 +116,10 @@ export const V8_EXPANSION_BATCH_01: readonly V8ExpansionCardContract[] = [
     position: 'DM / CM',
     naturalZones: ['DEF', 'MID'],
     actionName: 'EVERYWHERE',
-    actionText: 'Ongoing: This counts as present in all three zones.',
+    actionText: 'Ongoing: This counts as present in all three zones. Its ATT and DEF still contribute only where it is played.',
     timing: 'ongoing',
     primitives: ['multi_zone_presence'],
-    implementationState: 'semantics_required',
+    implementationState: 'stats_required',
   },
   {
     id: 'berbatov',
@@ -131,7 +131,7 @@ export const V8_EXPANSION_BATCH_01: readonly V8ExpansionCardContract[] = [
     actionText: 'The first opposing defender Action each period that targets this is ignored; then move this to an adjacent zone.',
     timing: 'triggered',
     primitives: ['action_target_interception', 'reactive_move'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
   },
 ] as const;
 
