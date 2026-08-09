@@ -49,13 +49,12 @@ function zoneCount(state: V8CalibrationState, side: V8CalibrationSide): number {
 }
 
 describe('V8 larger-roster mixed expansion integration', () => {
-  it('has 42 runtime-ready cards, two source-stat blockers and four explicit Batch 06 primitive/design blockers', () => {
-    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(42);
+  it('has 43 runtime-ready cards, two source-stat blockers and three explicit Batch 06 design blockers', () => {
+    expect(V8_EXPANSION_RUNTIME_READY_IDS).toHaveLength(43);
     expect([...V8_EXPANSION_STATS_BLOCKED_IDS].sort()).toEqual(['kante', 'ozil']);
     expect(V8_EXPANSION_BLOCKED_IDS).toEqual(V8_EXPANSION_STATS_BLOCKED_IDS);
     expect([...V8_EXPANSION_PRIMITIVE_REQUIRED_IDS].sort()).toEqual([
       'arjen-robben',
-      'caroline-graham-hansen',
       'keira-walsh',
       'rory-delap',
     ]);
