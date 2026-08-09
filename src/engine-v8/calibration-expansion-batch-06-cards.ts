@@ -68,6 +68,12 @@ export const V8_BATCH_06_SLICE_A_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     actionText: 'On Reveal: Add a Corner to your hand. Give it +1 ATT for each CB you have in ATT.',
   }),
   batch06Card({
+    id: 'caroline-graham-hansen', realName: 'Caroline Graham Hansen', matchName: 'Gram Hyland', fullCardName: 'Caroline Gram Hyland', trackerRow: 42,
+    position: 'WF / AM', naturalZones: ['MID', 'ATT'], cost: 4, attack: 10, defence: 1,
+    actionKey: 'hansen_one_on_one', actionName: 'ONE ON ONE', timing: 'ongoing',
+    actionText: 'The first opposing defender Action each period that targets this player is ignored; gain +2 ATT this period.',
+  }),
+  batch06Card({
     id: 'jari-litmanen', realName: 'Jari Litmanen', matchName: 'Latinen', fullCardName: 'Jari Latinen', trackerRow: 135,
     position: 'AM / SS', naturalZones: ['MID', 'ATT'], cost: 4, attack: 9, defence: 2,
     actionKey: 'litmanen_killer_pass', actionName: 'KILLER PASS', timing: 'triggered',
