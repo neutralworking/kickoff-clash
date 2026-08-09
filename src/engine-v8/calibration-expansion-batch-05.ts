@@ -32,7 +32,7 @@ export interface V8ExpansionBatch05CardContract {
 /**
  * Batch 05 is deliberately source-first. Every selected card has authoritative reconciliation
  * ATT/DEF/Cost available. Runtime promotion happens only after the primitive and focused
- * interaction coverage exist; the first four clean contracts are now implemented in Slice A.
+ * interaction coverage exist; six contracts are now implemented across Slices A/B.
  */
 export const V8_EXPANSION_BATCH_05: readonly V8ExpansionBatch05CardContract[] = [
   {
@@ -88,8 +88,8 @@ export const V8_EXPANSION_BATCH_05: readonly V8ExpansionBatch05CardContract[] = 
     timing: 'on_reveal',
     auditDecision: 'keep_translate',
     primitives: ['late_losing_reveal_payoff'],
-    implementationState: 'primitive_required',
-    auditNote: 'Late deployment is the V8 equivalent of the source Subbed On trigger. Score context must be supplied by the match coordinator rather than inferred from board strength.',
+    implementationState: 'runtime_ready',
+    auditNote: 'Late deployment is the V8 equivalent of the source Subbed On trigger. Banked match score is persisted at period end and read at reveal, so this never infers losing state from board strength.',
   },
   {
     id: 'tony-adams',
@@ -116,8 +116,8 @@ export const V8_EXPANSION_BATCH_05: readonly V8ExpansionBatch05CardContract[] = 
     timing: 'on_reveal',
     auditDecision: 'keep_translate',
     primitives: ['deterministic_action_rng'],
-    implementationState: 'primitive_required',
-    auditNote: 'The football identity and risk/reward are good, but runtime RNG must be deterministic/seeded before this can enter calibration or replayable tests.',
+    implementationState: 'runtime_ready',
+    auditNote: 'Uses namespaced deterministic Action RNG stored in match context. Replays are stable and unrelated future random Actions cannot perturb SHOWBOAT’s sequence.',
   },
   {
     id: 'paul-scholes',
