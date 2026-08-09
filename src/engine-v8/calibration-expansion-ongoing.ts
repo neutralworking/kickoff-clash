@@ -12,6 +12,7 @@ import {
 import type { V8Zone } from './core';
 
 const ASHLEY_SOURCE_PREFIX = 'SHOW HIM OUTSIDE:';
+const TYMOSHCHUK_SOURCE_PREFIX = 'STEP IN:';
 const BERBATOV_COUNTER_PREFIX = 'berba-spin:';
 
 function clone<T>(value: T): T {
@@ -27,6 +28,11 @@ function isAttacker(player: V8CalibrationRuntimePlayer): boolean {
   return card.position !== 'GK' && card.naturalZones.includes('ATT');
 }
 
+function isMidfielder(player: V8CalibrationRuntimePlayer): boolean {
+  const card = getV8CalibrationPlayer(player.cardId);
+  return card.position !== 'GK' && card.naturalZones.includes('MID');
+}
+
 function isDefender(player: V8CalibrationRuntimePlayer): boolean {
   const card = getV8CalibrationPlayer(player.cardId);
   return card.position !== 'GK' && card.naturalZones.includes('DEF');
@@ -34,7 +40,10 @@ function isDefender(player: V8CalibrationRuntimePlayer): boolean {
 
 function clearDynamicOngoingModifiers(state: V8CalibrationState): void {
   for (const player of Object.values(state.players)) {
-    player.modifiers = player.modifiers.filter((modifier) => !modifier.source?.startsWith(ASHLEY_SOURCE_PREFIX));
+    player.modifiers = player.modifiers.filter((modifier) =>
+      !modifier.source?.startsWith(ASHLEY_SOURCE_PREFIX)
+      && !modifier.source?.startsWith(TYMOSHCHUK_SOURCE_PREFIX)
+    );
   }
 }
 
@@ -104,9 +113,20 @@ function interceptDefenderSuppression(state: V8CalibrationState): V8CalibrationS
   return next;
 }
 
+function highestAttack(
+  state: V8CalibrationState,
+  candidates: readonly V8CalibrationRuntimePlayer[],
+): V8CalibrationRuntimePlayer | undefined {
+  return [...candidates].sort((a, b) =>
+    currentCalibrationAttack(state, b.runtimeId) - currentCalibrationAttack(state, a.runtimeId)
+    || a.deployedOrder - b.deployedOrder
+    || a.runtimeId.localeCompare(b.runtimeId)
+  )[0];
+}
+
 /**
  * Rebuilds dynamic bound ongoing effects from the current board rather than allowing their
- * modifiers to stack. The function is safe to call after any reveal, movement or period cleanup.
+ * modifiers to stack. Safe after reveals, movement, score refreshes and period cleanup.
  */
 export function refreshCalibrationExpansionOngoingEffects(state: V8CalibrationState): V8CalibrationState {
   let next = clone(state);
@@ -118,24 +138,17 @@ export function refreshCalibrationExpansionOngoingEffects(state: V8CalibrationSt
 
   for (const ashley of ashleys) {
     const opposingZone = opposingDepthZone(ashley.zone);
-    const candidates = calibrationPlayersInZone(next, otherSide(ashley.side), opposingZone)
-      .filter(isAttacker)
-      .sort((a, b) =>
-        currentCalibrationAttack(next, b.runtimeId) - currentCalibrationAttack(next, a.runtimeId)
-        || a.deployedOrder - b.deployedOrder
-        || a.runtimeId.localeCompare(b.runtimeId)
-      );
-
-    let target = candidates[0];
+    let target = highestAttack(
+      next,
+      calibrationPlayersInZone(next, otherSide(ashley.side), opposingZone).filter(isAttacker),
+    );
     if (!target) continue;
+
     if (tryBerbatovInterception(next, ashley, target)) {
-      target = calibrationPlayersInZone(next, otherSide(ashley.side), opposingZone)
-        .filter(isAttacker)
-        .sort((a, b) =>
-          currentCalibrationAttack(next, b.runtimeId) - currentCalibrationAttack(next, a.runtimeId)
-          || a.deployedOrder - b.deployedOrder
-          || a.runtimeId.localeCompare(b.runtimeId)
-        )[0];
+      target = highestAttack(
+        next,
+        calibrationPlayersInZone(next, otherSide(ashley.side), opposingZone).filter(isAttacker),
+      );
     }
     if (!target) continue;
 
@@ -144,6 +157,25 @@ export function refreshCalibrationExpansionOngoingEffects(state: V8CalibrationSt
       lifetime: 'match',
       source: `${ASHLEY_SOURCE_PREFIX}${ashley.runtimeId}`,
       sourceRuntimeId: ashley.runtimeId,
+    });
+  }
+
+  const tymoshchuks = Object.values(next.players)
+    .filter((player) => player.cardId === 'tymoshchuk' && player.zone === 'MID' && isCalibrationActionEnabled(next, player.runtimeId))
+    .sort((a, b) => a.deployedOrder - b.deployedOrder || a.runtimeId.localeCompare(b.runtimeId));
+
+  for (const tymoshchuk of tymoshchuks) {
+    const target = highestAttack(
+      next,
+      calibrationPlayersInZone(next, otherSide(tymoshchuk.side), 'MID').filter(isMidfielder),
+    );
+    if (!target) continue;
+
+    next = applyCalibrationModifier(next, target.runtimeId, {
+      attack: -3,
+      lifetime: 'match',
+      source: `${TYMOSHCHUK_SOURCE_PREFIX}${tymoshchuk.runtimeId}`,
+      sourceRuntimeId: tymoshchuk.runtimeId,
     });
   }
 
