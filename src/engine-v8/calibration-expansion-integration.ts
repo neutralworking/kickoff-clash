@@ -133,7 +133,7 @@ export const V8_EXPANSION_INTEGRATION_SQUADS: Readonly<Record<V8ExpansionIntegra
       { cardId: 'paul-scholes', zone: 'MID' },
       { cardId: 'caroline-graham-hansen', zone: 'ATT' },
       { cardId: 'ronaldinho', zone: 'ATT' },
-      { cardId: 'alan-shearer', zone: 'ATT' },
+      { cardId: 'arjen-robben', zone: 'ATT' },
     ],
   },
 } as const;
