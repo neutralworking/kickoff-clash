@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/v8-shared-drag-pass.yml
       - .github/v8-shared-drag-pass.py
+      - .github/v8-shared-drag-test-fix.py
 
 permissions:
   contents: write
@@ -28,6 +29,7 @@ jobs:
       - name: Apply shared drag transform
         run: |
           python3 .github/v8-shared-drag-pass.py
+          python3 .github/v8-shared-drag-test-fix.py
           git diff --check
 
       - run: npm ci
@@ -65,6 +67,7 @@ jobs:
         shell: bash
         run: |
           git rm .github/v8-shared-drag-pass.py
+          git rm .github/v8-shared-drag-test-fix.py
           git rm .github/workflows/v8-shared-drag-pass.yml
           git config user.name "Neutral Working"
           git config user.email "13trianglez@gmail.com"
