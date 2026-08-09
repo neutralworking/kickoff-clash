@@ -6,7 +6,7 @@ import { V8_EXPANSION_BATCH_05 } from './calibration-expansion-batch-05';
 import { V8_EXPANSION_BATCH_06 } from './calibration-expansion-batch-06';
 import type { V8Zone } from './core';
 
-export type V8ExpansionIntegrationSquadKey = 'mix_alpha' | 'mix_beta' | 'mix_gamma' | 'mix_delta';
+export type V8ExpansionIntegrationSquadKey = 'mix_alpha' | 'mix_beta' | 'mix_gamma' | 'mix_delta' | 'mix_epsilon';
 
 export interface V8ExpansionIntegrationPlacement {
   cardId: string;
@@ -45,9 +45,10 @@ export const V8_EXPANSION_PRIMITIVE_REQUIRED_IDS = ALL_EXPANSION_CONTRACTS
 export const V8_EXPANSION_BLOCKED_IDS = V8_EXPANSION_STATS_BLOCKED_IDS;
 
 /**
- * Four mixed football XIs for integration only. They are deliberately not added to the six
- * reference balance squads: these fixtures test coexistence / ordering, not archetype win rate.
- * Across the four lists every runtime-ready expansion card appears at least once.
+ * Mixed football XIs for integration only. They are deliberately not added to the six reference
+ * balance squads: these fixtures test coexistence / ordering, not archetype win rate. As the
+ * runtime-ready cohort grows, new XIs are added rather than overfilling zones or removing useful
+ * movement space from established interaction fixtures.
  */
 export const V8_EXPANSION_INTEGRATION_SQUADS: Readonly<Record<V8ExpansionIntegrationSquadKey, V8ExpansionIntegrationSquad>> = {
   mix_alpha: {
@@ -116,6 +117,23 @@ export const V8_EXPANSION_INTEGRATION_SQUADS: Readonly<Record<V8ExpansionIntegra
       { cardId: 'christian-eriksen', zone: 'ATT' },
       { cardId: 'ole-gunnar-solskjaer', zone: 'ATT' },
       { cardId: 'jari-litmanen', zone: 'ATT' },
+    ],
+  },
+  mix_epsilon: {
+    key: 'mix_epsilon',
+    label: 'Expansion Mix Epsilon',
+    placements: [
+      { cardId: 'gordon-banks', zone: 'DEF' },
+      { cardId: 'ashley-cole', zone: 'DEF' },
+      { cardId: 'paul-mcgrath', zone: 'DEF' },
+      { cardId: 'tony-adams', zone: 'DEF' },
+      { cardId: 'keira-walsh', zone: 'MID' },
+      { cardId: 'carli-lloyd', zone: 'MID' },
+      { cardId: 'carlos-valderrama', zone: 'MID' },
+      { cardId: 'paul-scholes', zone: 'MID' },
+      { cardId: 'caroline-graham-hansen', zone: 'ATT' },
+      { cardId: 'ronaldinho', zone: 'ATT' },
+      { cardId: 'alan-shearer', zone: 'ATT' },
     ],
   },
 } as const;
