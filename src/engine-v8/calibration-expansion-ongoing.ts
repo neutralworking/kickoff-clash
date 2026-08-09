@@ -15,6 +15,7 @@ import type { V8Zone } from './core';
 const ASHLEY_SOURCE_PREFIX = 'SHOW HIM OUTSIDE:';
 const TYMOSHCHUK_SOURCE_PREFIX = 'STEP IN:';
 const CANNAVARO_SOURCE_PREFIX = 'READS IT EARLY:';
+const BRONZE_SOURCE_PREFIX = 'OVERLAP:';
 const BERBATOV_COUNTER_PREFIX = 'berba-spin:';
 
 function clone<T>(value: T): T {
@@ -25,6 +26,10 @@ function otherSide(side: 'home' | 'away'): 'home' | 'away' {
   return side === 'home' ? 'away' : 'home';
 }
 
+function positionCodes(position: string): Set<string> {
+  return new Set(position.toUpperCase().split(/[^A-Z]+/).filter(Boolean));
+}
+
 function isAttacker(player: V8CalibrationRuntimePlayer): boolean {
   const card = getV8CalibrationPlayer(player.cardId);
   return card.position !== 'GK' && card.naturalZones.includes('ATT');
@@ -33,6 +38,11 @@ function isAttacker(player: V8CalibrationRuntimePlayer): boolean {
 function isMidfielder(player: V8CalibrationRuntimePlayer): boolean {
   const card = getV8CalibrationPlayer(player.cardId);
   return card.position !== 'GK' && card.naturalZones.includes('MID');
+}
+
+function isWideForward(player: V8CalibrationRuntimePlayer): boolean {
+  const codes = positionCodes(getV8CalibrationPlayer(player.cardId).position);
+  return codes.has('WF') || codes.has('LW') || codes.has('RW');
 }
 
 function isDefender(player: V8CalibrationRuntimePlayer): boolean {
@@ -46,6 +56,7 @@ function clearDynamicOngoingModifiers(state: V8CalibrationState): void {
       !modifier.source?.startsWith(ASHLEY_SOURCE_PREFIX)
       && !modifier.source?.startsWith(TYMOSHCHUK_SOURCE_PREFIX)
       && !modifier.source?.startsWith(CANNAVARO_SOURCE_PREFIX)
+      && !modifier.source?.startsWith(BRONZE_SOURCE_PREFIX)
     );
   }
 }
@@ -132,8 +143,8 @@ function highestAttack(
 
 /**
  * Rebuilds dynamic ongoing effects from the current board rather than allowing their modifiers to
- * stack. The rebuild starts from a state with these dynamic modifiers removed, so READS IT EARLY's
- * comparison is always evaluated "without this effect" as its card text requires.
+ * stack. The rebuild starts from a state with these dynamic modifiers removed, so conditional
+ * comparisons and dynamic targets always use the board without their own previous binding.
  */
 export function refreshCalibrationExpansionOngoingEffects(state: V8CalibrationState): V8CalibrationState {
   let next = clone(state);
@@ -199,6 +210,29 @@ export function refreshCalibrationExpansionOngoingEffects(state: V8CalibrationSt
       defence: 4,
       lifetime: 'match',
       source: `${CANNAVARO_SOURCE_PREFIX}${cannavaro.runtimeId}`,
+    });
+  }
+
+  const bronzes = Object.values(next.players)
+    .filter((player) => player.cardId === 'lucy-bronze' && player.zone === 'MID' && isCalibrationActionEnabled(next, player.runtimeId))
+    .sort((a, b) => a.deployedOrder - b.deployedOrder || a.runtimeId.localeCompare(b.runtimeId));
+
+  for (const bronze of bronzes) {
+    const target = highestAttack(
+      next,
+      calibrationPlayersInZone(next, bronze.side, 'ATT').filter(isWideForward),
+    );
+    if (!target) continue;
+
+    next = applyCalibrationModifier(next, bronze.runtimeId, {
+      attack: 2,
+      lifetime: 'match',
+      source: `${BRONZE_SOURCE_PREFIX}${bronze.runtimeId}`,
+    });
+    next = applyCalibrationModifier(next, target.runtimeId, {
+      attack: 2,
+      lifetime: 'match',
+      source: `${BRONZE_SOURCE_PREFIX}${bronze.runtimeId}`,
     });
   }
 
