@@ -45,7 +45,7 @@ function batch06Card(args: {
 }
 
 /**
- * Batch 06 Slice A cards. ATT / DEF / Cost come from the KC reconciliation view; tracker names and
+ * Batch 06 runtime cards. ATT / DEF / Cost come from the KC reconciliation view; tracker names and
  * Action identity remain authoritative when the older database Action text differs.
  */
 export const V8_BATCH_06_SLICE_A_PLAYERS: readonly V8CalibrationPlayerCard[] = [
@@ -78,6 +78,12 @@ export const V8_BATCH_06_SLICE_A_PLAYERS: readonly V8CalibrationPlayerCard[] = [
     position: 'AM / SS', naturalZones: ['MID', 'ATT'], cost: 4, attack: 9, defence: 2,
     actionKey: 'litmanen_killer_pass', actionName: 'KILLER PASS', timing: 'triggered',
     actionText: 'End of Period: If you won MID, add a Through Ball to your hand. Give it +1 ATT.',
+  }),
+  batch06Card({
+    id: 'keira-walsh', realName: 'Keira Walsh', matchName: 'Walsh', fullCardName: 'Keira Walsh', trackerRow: 151,
+    position: 'DM / CM', naturalZones: ['DEF', 'MID'], cost: 3, attack: 4, defence: 7,
+    actionKey: 'walsh_beat_the_press', actionName: 'BEAT THE PRESS', timing: 'ongoing',
+    actionText: 'Ongoing: The first opposing Trigger Press each period adds a Through Ball to your hand with +2 ATT.',
   }),
 ] as const;
 
