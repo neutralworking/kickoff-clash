@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   addCalibrationTacticalToHand,
+  calibrationCardCountsAsPresentInZone,
+  calibrationPresenceZonesForCard,
   calibrationRuntimeId,
   createV8CalibrationState,
   currentCalibrationAttack,
@@ -125,6 +127,19 @@ describe('V8 expansion Batch 01 runtime primitives', () => {
     expect(state.players[berbatovId]?.zone).toBe('MID');
     expect(state.suppressedActions[berbatovId]).toBeUndefined();
     expect(state.events.some((event) => event.type === 'action_ignored' && event.text.includes('BERBA SPIN ignores MAN MARKER'))).toBe(true);
+  });
+
+  it('EVERYWHERE is rules-layer presence in all three zones, not physical relocation', () => {
+    expect(calibrationPresenceZonesForCard('kante', 'MID')).toEqual(['DEF', 'MID', 'ATT']);
+    expect(calibrationCardCountsAsPresentInZone('kante', 'MID', 'DEF')).toBe(true);
+    expect(calibrationCardCountsAsPresentInZone('kante', 'MID', 'MID')).toBe(true);
+    expect(calibrationCardCountsAsPresentInZone('kante', 'MID', 'ATT')).toBe(true);
+  });
+
+  it('EVERYWHERE collapses to physical-zone presence when the Action is disabled', () => {
+    expect(calibrationPresenceZonesForCard('kante', 'MID', false)).toEqual(['MID']);
+    expect(calibrationCardCountsAsPresentInZone('kante', 'MID', 'ATT', false)).toBe(false);
+    expect(calibrationPresenceZonesForCard('seedorf', 'MID')).toEqual(['MID']);
   });
 
   it('BODY ON THE LINE cancels the first otherwise-resolving Chance, then costs Puyol 3 DEF', () => {
