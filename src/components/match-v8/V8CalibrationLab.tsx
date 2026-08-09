@@ -262,9 +262,9 @@ function tacticalLabel(card: V8TacticalCardInstance, zone: V8Zone | null = null)
   return `${base} ATT${mods.length ? ` · ${mods.join(' · ')}` : ''}`;
 }
 
-function PlayerHandCard({ card, selected, onClick }: { card: V8CalibrationPlayerCard; selected: boolean; onClick: () => void }) {
+function PlayerHandCard({ card, selected, affordable, onClick }: { card: V8CalibrationPlayerCard; selected: boolean; affordable: boolean; onClick: () => void }) {
   return (
-    <button className={`v8-card${selected ? ' is-selected' : ''}`} onClick={onClick}>
+    <button className={`v8-card${selected ? ' is-selected' : ''}${affordable ? '' : ' is-unaffordable'}`} onClick={onClick}>
       <span className="v8-card__cost">{calibrationPlayCost(card)}</span>
       <span className="v8-card__position">{card.position}</span>
       <strong>{card.realName}</strong>
@@ -622,6 +622,8 @@ export default function V8CalibrationLab() {
   };
 
   const selectedPlayer = selection?.kind === 'player' ? getV8CalibrationPlayer(selection.cardId) : null;
+  const selectedPlayerCost = selectedPlayer ? calibrationPlayCost(selectedPlayer) : null;
+  const selectedPlayerAffordable = selectedPlayerCost !== null && selectedPlayerCost <= state.teams.home.energy;
   const selectedTactical = selection?.kind === 'tactical' ? homeTacticals.find((card) => card.id === selection.cardId) ?? null : null;
 
   return (
@@ -793,9 +795,49 @@ export default function V8CalibrationLab() {
 
       <section className="v8-hand-wrap">
         <div className="v8-hand-heading"><strong>HAND</strong><span>{state.teams.home.drawPile.length} XI cards unseen</span></div>
+        {selectedPlayer && selectedPlayerCost !== null && (
+          <div className="v8-card-detail" data-testid="selected-player-detail">
+            <div className="v8-card-detail__identity">
+              <small>{selectedPlayer.realName}</small>
+              <strong>{selectedPlayer.fullCardName}</strong>
+              <span>{selectedPlayer.position} · {selectedPlayerCost} ENERGY · {selectedPlayer.printedAttack} ATT · {selectedPlayer.printedDefence} DEF</span>
+            </div>
+            <div className="v8-card-detail__action">
+              <b>{selectedPlayer.actionName}</b>
+              <span>{selectedPlayer.actionText}</span>
+            </div>
+            <div className="v8-card-detail__zones" aria-label={`Play ${selectedPlayer.realName}`}>
+              {ZONES.map((zone) => {
+                const penalty = outOfPositionPenalty(selectedPlayer, zone);
+                const full = occupiedPlayerSlots(state, 'home', zone, pending) >= 4;
+                return (
+                  <button
+                    type="button"
+                    key={zone}
+                    data-testid={`play-selected-${zone.toLowerCase()}`}
+                    disabled={!selectedPlayerAffordable || full || finished || Boolean(windowPhase)}
+                    onClick={() => queueToZone(zone)}
+                  >
+                    <b>PLAY {zone}</b>
+                    <span>{full ? 'FULL' : penalty === 0 ? 'NATURAL' : `−${penalty} OOP`}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {!selectedPlayerAffordable && (
+              <small className="v8-card-detail__warning">{selectedPlayerCost} ENERGY required · {state.teams.home.energy} available</small>
+            )}
+          </div>
+        )}
         <div className="v8-hand">
           {homePlayers.map((card) => (
-            <PlayerHandCard key={card.id} card={card} selected={selection?.kind === 'player' && selection.cardId === card.id} onClick={() => setSelection({ kind: 'player', cardId: card.id })} />
+            <PlayerHandCard
+              key={card.id}
+              card={card}
+              selected={selection?.kind === 'player' && selection.cardId === card.id}
+              affordable={calibrationPlayCost(card) <= state.teams.home.energy}
+              onClick={() => setSelection({ kind: 'player', cardId: card.id })}
+            />
           ))}
           {homeTacticals.map((card) => {
             const eligible = tacticalDefinition(card.type).eligibleZones;

@@ -59,27 +59,43 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
-  test('expands a selected player and queues them by tapping the pitch', async ({ page }) => {
+  test('places a default-hand player through explicit zone controls', async ({ page }) => {
     await page.goto('/lab/match-v8');
-    await page.getByTestId('home-squad-select').selectOption('control_defence');
 
-    const sinclair = page.locator('.v8-card').filter({ hasText: 'Christine Sinclair' });
-    await expect(sinclair.locator('.v8-card__cost')).toHaveText('2');
-    await sinclair.click();
-    await expect(sinclair).toHaveClass(/is-selected/);
-    await expect(sinclair.locator('small')).toContainText('ARRIVE UNMARKED');
-    await expect(sinclair.locator('small')).toContainText('On Reveal');
+    const bremner = page.locator('.v8-card').filter({ hasText: 'Billy Bremner' });
+    await expect(bremner).toHaveCount(1);
+    await expect(bremner.locator('.v8-card__cost')).toHaveText('1');
+    await bremner.click();
 
-    const selectedTextSize = await sinclair.locator('small').evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
-    expect(selectedTextSize).toBeGreaterThan(0);
+    const detail = page.getByTestId('selected-player-detail');
+    await expect(detail).toBeVisible();
+    await expect(detail).toContainText('CRUNCHING TACKLE');
+    await expect(detail).toContainText('On Reveal');
 
-    const attackZone = page.locator('.v8-zone').nth(2);
-    await expect(attackZone.locator('.v8-zone__heading span')).toHaveText('NATURAL');
-    await attackZone.click();
+    const playMid = page.getByTestId('play-selected-mid');
+    await expect(playMid).toBeEnabled();
+    await expect(playMid).toContainText('NATURAL');
+    await playMid.click();
 
+    const midfieldZone = page.locator('.v8-zone').nth(1);
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
-    await expect(attackZone.locator('.v8-chip--transient')).toContainText('Christine Sinclair');
-    await expect(sinclair).toHaveCount(0);
+    await expect(page.getByText('1 ENERGY', { exact: true })).toBeVisible();
+    await expect(midfieldZone.locator('.v8-chip--transient')).toContainText('Billy Bremner');
+    await expect(bremner).toHaveCount(0);
+    await expectMobileFit(page);
+  });
+
+  test('explains unaffordable players instead of silently rejecting placement', async ({ page }) => {
+    await page.goto('/lab/match-v8');
+
+    const iniesta = page.locator('.v8-card').filter({ hasText: 'Andrés Iniesta' });
+    await expect(iniesta.locator('.v8-card__cost')).toHaveText('4');
+    await iniesta.click();
+
+    const detail = page.getByTestId('selected-player-detail');
+    await expect(detail).toContainText('4 ENERGY required · 2 available');
+    await expect(page.getByTestId('play-selected-mid')).toBeDisabled();
+    await expect(page.getByText('2 ENERGY', { exact: true })).toBeVisible();
     await expectMobileFit(page);
   });
 
