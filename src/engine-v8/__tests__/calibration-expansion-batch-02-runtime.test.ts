@@ -177,6 +177,39 @@ describe('V8 expansion Batch 02 runtime primitives', () => {
     expect(state.players[davidsId]?.modifiers.some((modifier) => modifier.source === 'TOTAL FOOTBALL')).toBe(false);
   });
 
+  it('TOTAL FOOTBALL contribution recovery does not masquerade as an ATT gain for READ THE RUN', () => {
+    let state = createV8CalibrationState();
+    state = seedCalibrationPlayer(state, 'home', 'bobby-moore', 'DEF');
+    state = seedCalibrationPlayer(state, 'away', 'davids', 'ATT');
+
+    const mooreId = calibrationRuntimeId('home', 'bobby-moore');
+    const davidsId = calibrationRuntimeId('away', 'davids');
+    expect(calibrationEffectiveStats(state, state.players[davidsId]!).attack).toBe(2);
+
+    state = revealCalibrationPlayer(state, 'away', 'cruyff', 'MID');
+
+    expect(calibrationEffectiveStats(state, state.players[davidsId]!).attack).toBe(4);
+    expect(currentCalibrationAttack(state, davidsId)).toBe(4);
+    expect(currentCalibrationDefence(state, mooreId)).toBe(getV8CalibrationPlayer('bobby-moore').printedDefence);
+  });
+
+  it('TOTAL FOOTBALL leaves SHOW HIM OUTSIDE bound to real ATT while restoring OOP contribution', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'home', 'ashley-cole', 'MID');
+    state = revealCalibrationPlayer(state, 'away', 'ronaldo', 'MID');
+
+    const ronaldoId = calibrationRuntimeId('away', 'ronaldo');
+    const rawAfterAshley = getV8CalibrationPlayer('ronaldo').printedAttack - 5;
+    expect(currentCalibrationAttack(state, ronaldoId)).toBe(rawAfterAshley);
+    expect(calibrationEffectiveStats(state, state.players[ronaldoId]!).attack).toBe(rawAfterAshley - 2);
+
+    state = revealCalibrationPlayer(state, 'away', 'cruyff', 'ATT');
+
+    expect(currentCalibrationAttack(state, ronaldoId)).toBe(rawAfterAshley);
+    expect(calibrationEffectiveStats(state, state.players[ronaldoId]!).attack).toBe(rawAfterAshley);
+    expect(state.players[ronaldoId]?.modifiers.some((modifier) => modifier.source?.startsWith('SHOW HIM OUTSIDE:'))).toBe(true);
+  });
+
   it('TOTAL FOOTBALL immediately switches off when Cruyff is suppressed', () => {
     let state = createV8CalibrationState();
     state = seedCalibrationPlayer(state, 'home', 'davids', 'ATT');
