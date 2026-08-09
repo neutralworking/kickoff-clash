@@ -17,6 +17,7 @@ const TYMOSHCHUK_SOURCE_PREFIX = 'STEP IN:';
 const CANNAVARO_SOURCE_PREFIX = 'READS IT EARLY:';
 const BRONZE_SOURCE_PREFIX = 'OVERLAP:';
 const BERBATOV_COUNTER_PREFIX = 'berba-spin:';
+const HANSEN_COUNTER_PREFIX = 'hansen-one-on-one:';
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -70,40 +71,83 @@ function berbatovDestination(state: V8CalibrationState, player: V8CalibrationRun
   return candidates.find((zone) => calibrationPlayersInZone(state, player.side, zone).length < 4);
 }
 
-/**
- * Shared post-target interception hook for defender Actions. BERBA SPIN consumes once per period,
- * ignores the targeting Action, then moves Berbatov one adjacent zone if there is room.
- */
-function tryBerbatovInterception(
+type DefenderTargetInterception = 'none' | 'ignored' | 'moved';
+
+function activeTargetActionCanFire(
   state: V8CalibrationState,
   source: V8CalibrationRuntimePlayer,
   target: V8CalibrationRuntimePlayer,
 ): boolean {
-  if (target.cardId !== 'berbatov' || source.side === target.side || !isDefender(source)) return false;
-  // A suppression Action has to be allowed to reach BERBA SPIN before that same suppression disables it.
-  // A different, already-active suppressor still prevents BERBA SPIN from firing.
   const activeSuppressor = state.suppressedActions[target.runtimeId];
-  if (activeSuppressor !== undefined && activeSuppressor !== source.runtimeId) return false;
-  const key = `${BERBATOV_COUNTER_PREFIX}${target.runtimeId}`;
-  if ((state.periodCounters[key] ?? 0) > 0) return false;
+  return activeSuppressor === undefined || activeSuppressor === source.runtimeId;
+}
 
-  state.periodCounters[key] = 1;
-  state.events.push({
-    type: 'action_ignored',
-    period: state.period,
-    text: `${getV8CalibrationPlayer(target.cardId).realName} · BERBA SPIN ignores ${getV8CalibrationPlayer(source.cardId).actionName}.`,
-  });
+/**
+ * Shared post-target interception hook for defender Actions.
+ *
+ * - BERBA SPIN consumes once per period, ignores the targeting Action, then moves Berbatov.
+ * - ONE ON ONE consumes once per period, ignores the targeting defender Action, then gives Hansen
+ *   +2 ATT for the period. The self-buff is not attributed to the opposing source Action.
+ */
+function tryDefenderTargetInterception(
+  state: V8CalibrationState,
+  source: V8CalibrationRuntimePlayer,
+  target: V8CalibrationRuntimePlayer,
+): DefenderTargetInterception {
+  if (source.side === target.side || !isDefender(source)) return 'none';
 
-  const destination = berbatovDestination(state, target);
-  if (!destination) return true;
-  const from = target.zone;
-  target.zone = destination;
-  state.events.push({
-    type: 'player_moved',
-    period: state.period,
-    text: `${getV8CalibrationPlayer(target.cardId).realName} spins away ${from} → ${destination}.`,
-  });
-  return true;
+  if (target.cardId === 'berbatov') {
+    if (!activeTargetActionCanFire(state, source, target)) return 'none';
+    const key = `${BERBATOV_COUNTER_PREFIX}${target.runtimeId}`;
+    if ((state.periodCounters[key] ?? 0) > 0) return 'none';
+
+    state.periodCounters[key] = 1;
+    state.events.push({
+      type: 'action_ignored',
+      period: state.period,
+      text: `${getV8CalibrationPlayer(target.cardId).realName} · BERBA SPIN ignores ${getV8CalibrationPlayer(source.cardId).actionName}.`,
+    });
+
+    const destination = berbatovDestination(state, target);
+    if (!destination) return 'ignored';
+    const from = target.zone;
+    target.zone = destination;
+    state.events.push({
+      type: 'player_moved',
+      period: state.period,
+      text: `${getV8CalibrationPlayer(target.cardId).realName} spins away ${from} → ${destination}.`,
+    });
+    return 'moved';
+  }
+
+  if (target.cardId === 'caroline-graham-hansen') {
+    if (!activeTargetActionCanFire(state, source, target)) return 'none';
+    const key = `${HANSEN_COUNTER_PREFIX}${target.runtimeId}`;
+    if ((state.periodCounters[key] ?? 0) > 0) return 'none';
+
+    state.periodCounters[key] = 1;
+    state.events.push({
+      type: 'action_ignored',
+      period: state.period,
+      text: `${getV8CalibrationPlayer(target.cardId).realName} · ONE ON ONE ignores ${getV8CalibrationPlayer(source.cardId).actionName}.`,
+    });
+    target.modifiers.push({
+      id: `ONE ON ONE-${state.period}-${state.nextModifierId}`,
+      attack: 2,
+      defence: 0,
+      lifetime: 'period',
+      source: 'ONE ON ONE',
+    });
+    state.nextModifierId += 1;
+    state.events.push({
+      type: 'modifier_changed',
+      period: state.period,
+      text: `${getV8CalibrationPlayer(target.cardId).realName}: +2 ATT, +0 DEF (period).`,
+    });
+    return 'ignored';
+  }
+
+  return 'none';
 }
 
 function removeSuppressionEvent(state: V8CalibrationState, source: V8CalibrationRuntimePlayer, target: V8CalibrationRuntimePlayer): void {
@@ -122,10 +166,14 @@ function interceptDefenderSuppression(state: V8CalibrationState): V8CalibrationS
     const target = next.players[targetId];
     const source = next.players[sourceId];
     if (!target || !source) continue;
-    if (!tryBerbatovInterception(next, source, target)) continue;
+    const interception = tryDefenderTargetInterception(next, source, target);
+    if (interception === 'none') continue;
     delete next.suppressedActions[targetId];
     removeSuppressionEvent(next, source, target);
-    next = refreshCalibrationSuppression(next);
+    // BERBA SPIN changes board geometry, so suppression must retarget. Hansen stays in place: an
+    // immediate refresh would simply let the same defender Action target her again after consuming
+    // the once-per-period interception, which would violate the ignored-Action contract.
+    if (interception === 'moved') next = refreshCalibrationSuppression(next);
   }
   return next;
 }
@@ -162,7 +210,9 @@ export function refreshCalibrationExpansionOngoingEffects(state: V8CalibrationSt
     );
     if (!target) continue;
 
-    if (tryBerbatovInterception(next, ashley, target)) {
+    const interception = tryDefenderTargetInterception(next, ashley, target);
+    if (interception === 'ignored') continue;
+    if (interception === 'moved') {
       target = highestAttack(
         next,
         calibrationPlayersInZone(next, otherSide(ashley.side), opposingZone).filter(isAttacker),
@@ -188,6 +238,7 @@ export function refreshCalibrationExpansionOngoingEffects(state: V8CalibrationSt
       calibrationPlayersInZone(next, otherSide(tymoshchuk.side), 'MID').filter(isMidfielder),
     );
     if (!target) continue;
+    if (tryDefenderTargetInterception(next, tymoshchuk, target) !== 'none') continue;
 
     next = applyCalibrationModifier(next, target.runtimeId, {
       attack: -3,
