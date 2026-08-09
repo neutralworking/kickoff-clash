@@ -12,6 +12,7 @@ on:
       - .github/v8-ui-pass-02-polish-test.py
       - .github/v8-ui-pass-02-final-fix.py
       - .github/v8-ui-pass-02-zone-hit.py
+      - .github/v8-ui-pass-02-drag-test.py
 
 permissions:
   contents: write
@@ -40,6 +41,7 @@ jobs:
           python3 .github/v8-ui-pass-02-polish-test.py
           python3 .github/v8-ui-pass-02-final-fix.py
           python3 .github/v8-ui-pass-02-zone-hit.py
+          python3 .github/v8-ui-pass-02-drag-test.py
           git diff --check
 
       - run: npm ci
@@ -103,6 +105,7 @@ jobs:
           git rm .github/v8-ui-pass-02-polish-test.py
           git rm .github/v8-ui-pass-02-final-fix.py
           git rm .github/v8-ui-pass-02-zone-hit.py
+          git rm .github/v8-ui-pass-02-drag-test.py
           git rm .github/workflows/v8-ui-pass-02.yml
           git config user.name "Neutral Working"
           git config user.email "13trianglez@gmail.com"
