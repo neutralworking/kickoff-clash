@@ -31,8 +31,8 @@ export interface V8ExpansionBatch05CardContract {
 
 /**
  * Batch 05 is deliberately source-first. Every selected card has authoritative reconciliation
- * ATT/DEF/Cost available, but no card is promoted to runtime-ready until its V8 primitive exists
- * and mixed-XI interaction coverage has been added.
+ * ATT/DEF/Cost available. Runtime promotion happens only after the primitive and focused
+ * interaction coverage exist; the first four clean contracts are now implemented in Slice A.
  */
 export const V8_EXPANSION_BATCH_05: readonly V8ExpansionBatch05CardContract[] = [
   {
@@ -46,7 +46,7 @@ export const V8_EXPANSION_BATCH_05: readonly V8ExpansionBatch05CardContract[] = 
     timing: 'ongoing',
     auditDecision: 'keep_translate',
     primitives: ['typed_chance_attack_suppression'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
     auditNote: 'Replaces the old non-football RECORD CAP direction with a visible goalkeeping action. The source Through Ball threshold becomes typed Chance ATT suppression rather than a dice threshold.',
   },
   {
@@ -60,7 +60,7 @@ export const V8_EXPANSION_BATCH_05: readonly V8ExpansionBatch05CardContract[] = 
     timing: 'ongoing',
     auditDecision: 'keep_translate',
     primitives: ['typed_chance_attack_suppression'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
     auditNote: 'The old Cross conversion-floor wording maps cleanly onto the same typed suppression primitive as Shilton while remaining football-readable and source-appropriate.',
   },
   {
@@ -74,7 +74,7 @@ export const V8_EXPANSION_BATCH_05: readonly V8ExpansionBatch05CardContract[] = 
     timing: 'on_reveal',
     auditDecision: 'keep_translate',
     primitives: ['mid_reveal_long_shot_tradeoff'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
     auditNote: 'Keeps the iconic shot and the source card’s attack/defence trade-off without relying on obsolete wide-slot geometry.',
   },
   {
@@ -102,7 +102,7 @@ export const V8_EXPANSION_BATCH_05: readonly V8ExpansionBatch05CardContract[] = 
     timing: 'ongoing',
     auditDecision: 'keep_translate',
     primitives: ['global_defender_aura'],
-    implementationState: 'primitive_required',
+    implementationState: 'runtime_ready',
     auditNote: 'The source effect already describes an on-pitch captain organising the back line; V8 only needs defender classification and non-self aura refresh.',
   },
   {
