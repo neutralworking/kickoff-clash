@@ -11,6 +11,8 @@ const VIDIC_SOURCE_PREFIX = 'PARTNERSHIP:VIDIC:';
 const FERDINAND_SOURCE_PREFIX = 'PARTNERSHIP:FERDINAND:';
 const CAMPBELL_SOURCE_PREFIX = 'MARSHAL:';
 const ZLATAN_SOURCE_PREFIX = 'ALPHA:';
+const MARSHAL_ZONE_PREFIX = 'batch07:marshal-zone:';
+const ZONES = ['DEF', 'MID', 'ATT'] as const;
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -41,6 +43,17 @@ function clearBatch07DynamicModifiers(state: V8CalibrationState): void {
   }
 }
 
+function clearMarshalZoneContribution(state: V8CalibrationState): void {
+  for (const side of ['home', 'away'] as const) {
+    for (const zone of ZONES) {
+      const key = `${MARSHAL_ZONE_PREFIX}${side}:${zone}`;
+      const previous = state.periodCounters[key] ?? 0;
+      if (previous !== 0) state.zoneDefenceBonus[side][zone] -= previous;
+      delete state.periodCounters[key];
+    }
+  }
+}
+
 function deployedFriendly(state: V8CalibrationState, side: 'home' | 'away', cardId: string): boolean {
   return Object.values(state.players).some((player) => player.side === side && player.cardId === cardId);
 }
@@ -49,11 +62,12 @@ function deployedFriendly(state: V8CalibrationState, side: 'home' | 'away', card
  * Rebuild Batch 07 real-stat auras from current board state. Older ongoing effects are rebuilt both
  * before and after these modifiers: first to remove stale older bindings, then again so dynamic
  * targeters/comparisons such as Ashley Cole and Cannavaro read the final Batch 07 real stats.
- * Campbell's +3 zone DEF is intentionally not a modifier; calibrationZoneTotals owns that rule.
+ * MARSHAL's +3 is tracked separately in zoneDefenceBonus, so Campbell's current DEF stays real.
  */
 export function refreshV8Batch07OngoingEffects(state: V8CalibrationState): V8CalibrationState {
   let next = clone(state);
   clearBatch07DynamicModifiers(next);
+  clearMarshalZoneContribution(next);
   next = refreshV8Batch05OngoingEffects(next);
 
   const vidics = Object.values(next.players)
@@ -84,6 +98,10 @@ export function refreshV8Batch07OngoingEffects(state: V8CalibrationState): V8Cal
     .filter((player) => player.cardId === 'sol-campbell' && isCalibrationActionEnabled(next, player.runtimeId))
     .sort((a, b) => a.deployedOrder - b.deployedOrder || a.runtimeId.localeCompare(b.runtimeId));
   for (const campbell of campbells) {
+    next.zoneDefenceBonus[campbell.side][campbell.zone] += 3;
+    next.periodCounters[`${MARSHAL_ZONE_PREFIX}${campbell.side}:${campbell.zone}`] =
+      (next.periodCounters[`${MARSHAL_ZONE_PREFIX}${campbell.side}:${campbell.zone}`] ?? 0) + 3;
+
     const widePlayers = Object.values(next.players)
       .filter((player) => player.side === campbell.side && player.runtimeId !== campbell.runtimeId && isWidePlayer(player))
       .sort((a, b) => a.deployedOrder - b.deployedOrder || a.runtimeId.localeCompare(b.runtimeId));
