@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/v8-gamefeel-pass-03.yml
       - .github/v8-gamefeel-pass-03.py
+      - .github/v8-gamefeel-pass-03-fix.py
 
 permissions:
   contents: write
@@ -28,6 +29,7 @@ jobs:
       - name: Apply game-feel pass
         run: |
           python3 .github/v8-gamefeel-pass-03.py
+          python3 .github/v8-gamefeel-pass-03-fix.py
           git diff --check
 
       - run: npm ci
@@ -89,6 +91,7 @@ jobs:
         shell: bash
         run: |
           git rm .github/v8-gamefeel-pass-03.py
+          git rm .github/v8-gamefeel-pass-03-fix.py
           git rm .github/workflows/v8-gamefeel-pass-03.yml
           git config user.name "Neutral Working"
           git config user.email "13trianglez@gmail.com"
