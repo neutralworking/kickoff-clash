@@ -36,12 +36,12 @@ import type { HandState } from '../lib/hand';
 import { INCREMENT_MINUTES } from '../lib/hand';
 import type { JokerCard } from '../lib/jokers';
 import { rehydrateJokers, payoutMult, refreshDiscount } from '../lib/jokers';
-import { ripStarterPacks, ripCardPack, type PackTier } from '../lib/packs';
+import { ripStarterPackChoices, ripCardPack, type PackTier } from '../lib/packs';
 import { getTacticById } from '../lib/tactics';
 import { calculateAttendance, matchReward, JOKER_COST, SCOUT_PACK_COST, ELITE_PACK_COST } from '../lib/economy';
 import { findConnections } from '../lib/chemistry';
 import { accrueMatch } from '../lib/chem';
-import type { PackContents } from '../lib/packs';
+import type { PackContents, StarterPackChoices } from '../lib/packs';
 import type { TeamSelection, TeamIntent } from '../lib/run';
 import TitleScreen from './TitleScreen';
 import type { MatchVerdict } from '../lib/match-v5';
@@ -168,11 +168,11 @@ export default function GameShell() {
   const [durabilityResult, setDurabilityResult] = useState<DurabilityResult | null>(null);
   const [lastMatchResult, setLastMatchResult] = useState<MatchResult | null>(null);
   const [lastPOTM, setLastPOTM] = useState<{ card: Card; goals: number; assists: number; rating: number } | null>(null);
+  const [pendingPackChoices, setPendingPackChoices] = useState<StarterPackChoices | null>(null);
   const [pendingContents, setPendingContents] = useState<PackContents | null>(null);
   const [pendingSeed, setPendingSeed] = useState<number>(0);
-  // Manager + tactic chosen during the pack reveal; carried into TeamSelect.
+  // Manager chosen during the pack reveal; carried into TeamSelect.
   const [pickedManagerId, setPickedManagerId] = useState<string | null>(null);
-  const [pickedTacticId, setPickedTacticId] = useState<string | null>(null);
 
   // Check for existing run on mount without reading localStorage during render.
   useEffect(() => {
@@ -192,19 +192,21 @@ export default function GameShell() {
   // Phase handlers
   // =========================================================================
 
-  // --- Title: rip the three starter packs, reveal them, then select ---
+  // --- Title: choose one manager pack, then one player pack. ---
   const handleNewRun = useCallback(() => {
     clearRun();
     setRunState(null);
     const seed = Date.now();
-    setPendingContents(ripStarterPacks(seed));
+    setPendingPackChoices(ripStarterPackChoices(seed));
+    setPendingContents(null);
+    setPickedManagerId(null);
     setPendingSeed(seed);
     setPhase('packOpen');
   }, []);
 
-  const handlePacksOpened = useCallback((managerId: string | null, tacticId: string | null) => {
-    setPickedManagerId(managerId);
-    setPickedTacticId(tacticId);
+  const handlePacksOpened = useCallback((contents: PackContents) => {
+    setPendingContents(contents);
+    setPickedManagerId(contents.managers[0]?.id ?? null);
     setPhase('teamSelect');
   }, []);
 
@@ -220,6 +222,7 @@ export default function GameShell() {
   const handleTeamConfirm = useCallback((selection: TeamSelection) => {
     const run = createRun(selection, pendingSeed);
     setRunState(run);
+    setPendingPackChoices(null);
     setPendingContents(null);
     setPhase('match');
     saveRun(run);
@@ -593,8 +596,8 @@ export default function GameShell() {
         );
 
       case 'packOpen':
-        return pendingContents ? (
-          <PackReveal contents={pendingContents} onContinue={handlePacksOpened} />
+        return pendingPackChoices ? (
+          <PackReveal choices={pendingPackChoices} onContinue={handlePacksOpened} />
         ) : null;
 
       case 'teamSelect': {
@@ -603,15 +606,11 @@ export default function GameShell() {
         // handleTeamConfirm → createRun expects (unchanged).
         if (!pendingContents || !nextOpponentBuild) return null;
         const contents = pendingContents;
-        // The player picked ONE manager and ONE tactic in the pack reveal — the
-        // rest are discarded (owner rule). Only the picked manager is offered to
-        // the draft, and only the picked tactic carries into the run.
+        // Only the selected manager and selected 18-player pack cross into the
+        // draft. Tactics are deliberately absent from the V1 opening.
         const chosenManagers = pickedManagerId
           ? contents.managers.filter((m) => m.id === pickedManagerId)
           : contents.managers;
-        const chosenTactics = pickedTacticId
-          ? contents.tactics.filter((t) => t.id === pickedTacticId)
-          : contents.tactics;
         return (
           <SquadScreen
             mode="draft"
@@ -633,7 +632,7 @@ export default function GameShell() {
                 startingXI: out.startingXI,
                 benchIds: out.benchIds,
                 manager: chosenManagers.find((m) => m.id === out.managerId) ?? null,
-                tactics: chosenTactics,
+                tactics: [],
                 formationId: out.formationId,
                 intent: out.intent,
               })

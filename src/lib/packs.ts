@@ -1,9 +1,8 @@
 /**
  * Kickoff Clash — Pack contents
  *
- * The live flow is the three-pack starter rip (`ripStarterPacks`): a player pack,
- * a manager pack, and a tactical pack, each a seeded-random draw. `PackContents`
- * is the shared shape (players / tactics / formations / managers).
+ * The live flow begins with two seeded choice-of-three offers: one manager pack,
+ * then one player pack. `PackContents` remains the handoff into team selection.
  */
 
 import type { Card } from './scoring';
@@ -27,6 +26,12 @@ export interface PackContents {
   managers: JokerCard[];
 }
 
+export interface StarterPackChoices {
+  managers: JokerCard[];
+  playerPacks: Card[][];
+  formations: Formation[];
+}
+
 // ---------------------------------------------------------------------------
 // Seeded shuffle helper
 // ---------------------------------------------------------------------------
@@ -46,14 +51,16 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 }
 
 // ---------------------------------------------------------------------------
-// Starter rip (current flow): three fixed packs opened at New Season.
+// Starter rip.
 //   - Player pack:  18 players — 11 starters + a seven-player V7 bench
-//   - Manager pack: 2 managers (pick 1; the other is discarded)
-//   - Tactical pack: 3 tactics (pick 1 to carry into the run)
-// All formations are made available so the manager can pick a shape.
+//   - Manager offer: 3 sealed packs, each containing one distinct manager
+//   - Player offer: 3 sealed packs, each containing a complete legal squad
+// Tactics are absent from the V1 opening. All formations remain in the legacy
+// PackContents handoff while manager-owned formation pools are migrated.
 // ---------------------------------------------------------------------------
 
-export const RIP_COUNTS = { players: 18, managers: 2, tactics: 3 } as const;
+export const RIP_COUNTS = { players: 18, managers: 3, tactics: 3 } as const;
+export const STARTER_CHOICE_COUNT = 3;
 // The starter rip is deliberately SCRAPPY: Common-heavy with only a few Rare anchors and
 // NO Epic/Legendary. A full-pool rip starts the player ~maxed, so the shop's
 // Epics/Legendaries remain the upgrade chase. Tuned on scripts/starter-probe.ts.
@@ -111,7 +118,7 @@ export function ripCardPack(tier: PackTier, seed: number): Card[] {
   return out;
 }
 
-export function ripStarterPacks(seed: number): PackContents {
+function ripStarterPlayers(seed: number): Card[] {
   const scrappy = (c: Card) => c.rarity === 'Common' || c.rarity === 'Rare';
   // Guarantee a keeper: a legal XI needs a GK. Reserve one Common/Rare GK, then
   // fill the rest normally (more GKs can still surface for bench cover).
@@ -119,12 +126,34 @@ export function ripStarterPacks(seed: number): PackContents {
   const rares = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Rare' && !gk.includes(c)), seed + 11).slice(0, RIP_RARES);
   const need = RIP_COUNTS.players - rares.length - gk.length;
   const commons = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Common' && !gk.includes(c)), seed).slice(0, need);
-  const players = seededShuffle([...gk, ...commons, ...rares], seed + 7);
-  const tactics = seededShuffle(ALL_TACTICS, seed + 100).slice(0, RIP_COUNTS.tactics);
-  const managers = seededShuffle(ALL_JOKERS, seed + 300).slice(0, RIP_COUNTS.managers);
+  return seededShuffle([...gk, ...commons, ...rares], seed + 7);
+}
+
+function starterFormations(): Formation[] {
   // Lead with 4-3-3, then the rest — every formation is selectable.
   const base433 = ALL_FORMATIONS.find((f) => f.id === '4-3-3');
   const rest = ALL_FORMATIONS.filter((f) => f.id !== '4-3-3');
-  const formations = base433 ? [base433, ...rest] : [...ALL_FORMATIONS];
+  return base433 ? [base433, ...rest] : [...ALL_FORMATIONS];
+}
+
+/** Deterministic blind offers for the V1 opening. The three player packs are
+ * generated independently; only the chosen squad crosses into team selection. */
+export function ripStarterPackChoices(seed: number): StarterPackChoices {
+  return {
+    managers: seededShuffle(ALL_JOKERS, seed + 300).slice(0, STARTER_CHOICE_COUNT),
+    playerPacks: Array.from({ length: STARTER_CHOICE_COUNT }, (_, index) =>
+      ripStarterPlayers(seed + index * 4099),
+    ),
+    formations: starterFormations(),
+  };
+}
+
+/** Compatibility helper for engine fixtures and older callers that need one
+ * already-combined starter rip rather than the live choice flow. */
+export function ripStarterPacks(seed: number): PackContents {
+  const players = ripStarterPlayers(seed);
+  const tactics = seededShuffle(ALL_TACTICS, seed + 100).slice(0, RIP_COUNTS.tactics);
+  const managers = seededShuffle(ALL_JOKERS, seed + 300).slice(0, RIP_COUNTS.managers);
+  const formations = starterFormations();
   return { players, tactics, formations, managers };
 }
