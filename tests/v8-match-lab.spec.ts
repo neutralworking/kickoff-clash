@@ -82,6 +82,25 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
+  test('stages reveal, consequence and score directly on the pitch', async ({ page }) => {
+    await page.goto('/lab/match-v8');
+
+    const bremner = page.getByTestId('player-card-bremner');
+    const midfieldZone = page.locator('.v8-zone').nth(1);
+    await bremner.click();
+    await midfieldZone.click();
+    await page.getByRole('button', { name: 'END PERIOD' }).click();
+
+    const moment = page.getByTestId('v8-resolution');
+    await expect(moment).toBeVisible();
+    await expect(moment).toContainText(/REVEAL FIRST/);
+    await expect(moment).toContainText(/ATT/);
+    await expect(moment).toContainText(/FULL \+7 ATT MARGINS CONVERT/);
+    await expect(midfieldZone.locator('.v8-chip').filter({ hasText: 'Billy Bremner' })).toHaveClass(/is-fresh/);
+    await expect(page.locator('.v8-recap')).not.toHaveAttribute('open', '');
+    await expectMobileFit(page);
+  });
+
   test('selects coherent calibration squads and exposes their compressed Cost profiles', async ({ page }) => {
     await page.goto('/lab/match-v8');
     await openLabTools(page);

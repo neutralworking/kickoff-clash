@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   buildV8CalibrationMatchTelemetry,
   calibrationHandPlayers,
@@ -96,6 +96,29 @@ type PeriodRecap = {
   highlights: string[];
 };
 
+type RevealOrder = { first: V8CalibrationSide; reason: string };
+
+type ResolutionMoment = {
+  id: number;
+  period: number;
+  label: string;
+  reveal: RevealOrder;
+  actionLine: string | null;
+  tacticalLine: string | null;
+  homeGoals: number;
+  awayGoals: number;
+  homeAttack: number;
+  awayDefence: number;
+  awayAttack: number;
+  homeDefence: number;
+  nextHomeScore: number;
+  nextAwayScore: number;
+  nextLabel: string;
+  nextEnergy: number | null;
+  revealedPlayerIds: string[];
+  final: boolean;
+};
+
 /**
  * The Generated-Tactical Window pause: reveals have resolved, scoring has not run yet, and the
  * human side holds at least one affordable this-period-generated Tactical. CPU window plays were
@@ -106,6 +129,7 @@ type WindowPhase = {
   allPending: PendingPlay[];
   cpuPlays: V8CalibrationWindowPlay[];
   cpuManagerAvailable: boolean;
+  reveal: RevealOrder;
   queued: Array<{ cardId: string; name: string; zone: V8Zone; cost: number }>;
 };
 
@@ -146,7 +170,7 @@ function occupiedPlayerSlots(state: V8CalibrationState, side: V8CalibrationSide,
   return calibrationPlayersInZone(state, side, zone).length + queuedPlayers;
 }
 
-function priority(state: V8CalibrationState, homeScore: number, awayScore: number, seed: number): { first: V8CalibrationSide; reason: string } {
+function priority(state: V8CalibrationState, homeScore: number, awayScore: number, seed: number): RevealOrder {
   if (homeScore !== awayScore) return { first: homeScore > awayScore ? 'home' : 'away', reason: 'score lead' };
   const home = calibrationTeamTotals(state, 'home');
   const away = calibrationTeamTotals(state, 'away');
@@ -318,6 +342,7 @@ function TacticalHandCard({
   cost,
   selected,
   affordable,
+  fresh,
   onClick,
   onPointerDown,
 }: {
@@ -325,6 +350,7 @@ function TacticalHandCard({
   cost: number;
   selected: boolean;
   affordable: boolean;
+  fresh: boolean;
   onClick: () => void;
   onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
@@ -332,7 +358,7 @@ function TacticalHandCard({
     <button
       type="button"
       data-testid={`tactical-card-${card.id}`}
-      className={`v8-card v8-card--chance${selected ? ' is-selected' : ''}${affordable ? '' : ' is-unaffordable'}`}
+      className={`v8-card v8-card--chance${selected ? ' is-selected' : ''}${fresh ? ' is-fresh' : ''}${affordable ? '' : ' is-unaffordable'}`}
       aria-pressed={selected}
       onClick={onClick}
       onPointerDown={onPointerDown}
@@ -346,7 +372,7 @@ function TacticalHandCard({
   );
 }
 
-function DeployedChip({ state, side, runtimeId, onMove }: { state: V8CalibrationState; side: V8CalibrationSide; runtimeId: string; onMove?: () => void }) {
+function DeployedChip({ state, side, runtimeId, fresh = false, onMove }: { state: V8CalibrationState; side: V8CalibrationSide; runtimeId: string; fresh?: boolean; onMove?: () => void }) {
   const player = state.players[runtimeId]!;
   const card = calibrationPlayerCard(player);
   const portrait = portraitSrc({ id: card.sourceCardId ?? card.id, name: card.realName, position: card.position });
@@ -366,7 +392,7 @@ function DeployedChip({ state, side, runtimeId, onMove }: { state: V8Calibration
   const canMove = moveable && !moved && Boolean(onMove);
   return (
     <span
-      className={`v8-chip${side === 'away' ? ' v8-chip--away' : ''}${suppressed ? ' is-suppressed' : ''}`}
+      className={`v8-chip${side === 'away' ? ' v8-chip--away' : ''}${fresh ? ' is-fresh' : ''}${suppressed ? ' is-suppressed' : ''}`}
       role={canMove ? 'button' : undefined}
       tabIndex={canMove ? 0 : undefined}
       onClick={(event) => {
@@ -435,8 +461,10 @@ export default function V8CalibrationLab() {
   const [finished, setFinished] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [handDrag, setHandDrag] = useState<HandDragState | null>(null);
+  const [resolutionMoment, setResolutionMoment] = useState<ResolutionMoment | null>(null);
   const handDragRef = useRef<HandDragState | null>(null);
   const suppressHandClick = useRef<string | null>(null);
+  const resolutionSequence = useRef(0);
 
   const homePlayers = calibrationHandPlayers(state, 'home');
   const homeTacticals = calibrationHandTacticals(state, 'home');
@@ -447,6 +475,12 @@ export default function V8CalibrationLab() {
   const awayCostProfile = useMemo(() => calibrationSquadCostProfile(awaySquad), [awaySquad]);
   const latestRecap = recaps.at(-1);
   const latestTelemetry = telemetryPeriods.at(-1);
+
+  useEffect(() => {
+    if (!resolutionMoment) return;
+    const timeout = window.setTimeout(() => setResolutionMoment(null), 2800);
+    return () => window.clearTimeout(timeout);
+  }, [resolutionMoment]);
 
   const reset = (nextHomeSquad = homeSquad, nextAwaySquad = awaySquad, nextSeed = seed + 31) => {
     setHomeSquad(nextHomeSquad);
@@ -464,6 +498,7 @@ export default function V8CalibrationLab() {
     setTelemetryPeriods([]);
     setMatchTelemetry(null);
     setFinished(false);
+    setResolutionMoment(null);
   };
 
   const rememberUndo = () => {
@@ -723,10 +758,10 @@ export default function V8CalibrationLab() {
       setPending([]);
       setUndoStack([]);
       setSelection(null);
-      setWindowPhase({ resolved, allPending, cpuPlays: cpuWindowPlays, cpuManagerAvailable: cpu.managerAvailable, queued: [] });
+      setWindowPhase({ resolved, allPending, cpuPlays: cpuWindowPlays, cpuManagerAvailable: cpu.managerAvailable, reveal, queued: [] });
       return;
     }
-    finishPeriod(resolved, allPending, cpuWindowPlays, [], cpu.managerAvailable);
+    finishPeriod(resolved, allPending, cpuWindowPlays, [], cpu.managerAvailable, reveal);
   };
 
   const finishPeriod = (
@@ -735,11 +770,26 @@ export default function V8CalibrationLab() {
     cpuPlays: V8CalibrationWindowPlay[],
     humanPlays: V8CalibrationWindowPlay[],
     cpuManagerAvailable: boolean,
+    reveal: RevealOrder,
   ) => {
     const window = resolveGeneratedTacticalWindow(postReveal, [...humanPlays, ...cpuPlays]);
     const resolved = window.state;
     const period = resolved.period;
     const periodLabel = PERIOD_LABELS[period - 1];
+    const actionLine = [...resolved.events].reverse().find((event) => (
+      event.period === period
+      && event.type === 'action_triggered'
+      && !event.text.includes(' REVEAL:')
+    ))?.text ?? null;
+    const lastWindowTactical = window.plays.at(-1);
+    const lastCommittedTactical = [...allPending].reverse().find((play) => play.kind === 'tactical');
+    const tacticalLine = lastWindowTactical
+      ? `${lastWindowTactical.card.name} → ${lastWindowTactical.zone}`
+      : lastCommittedTactical?.kind === 'tactical'
+        ? `${lastCommittedTactical.card.name} → ${lastCommittedTactical.zone}`
+        : null;
+    const revealedPlayerIds = allPending.flatMap((play) => play.kind === 'player' ? [play.cardId] : []);
+    const wasFinal = resolved.period === 4;
     const telemetryPlays = [
       ...allPending,
       ...window.plays.map((play) => ({ kind: 'tactical' as const, side: play.side, card: play.card, window: true, cost: play.cost })),
@@ -780,7 +830,27 @@ export default function V8CalibrationLab() {
       highlights: recapHighlights(resolved, period),
     }]);
 
-    const wasFinal = resolved.period === 4;
+    setResolutionMoment({
+      id: resolutionSequence.current += 1,
+      period,
+      label: periodLabel,
+      reveal,
+      actionLine,
+      tacticalLine,
+      homeGoals: scoredHome,
+      awayGoals: scoredAway,
+      homeAttack: home.attack,
+      awayDefence: away.defence,
+      awayAttack: away.attack,
+      homeDefence: home.defence,
+      nextHomeScore,
+      nextAwayScore,
+      nextLabel: wasFinal ? 'FULL TIME' : PERIOD_LABELS[period] ?? 'NEXT PERIOD',
+      nextEnergy: wasFinal ? null : calibrationEnergyForPeriod(period + 1),
+      revealedPlayerIds,
+      final: wasFinal,
+    });
+
     let ended = endV8CalibrationPeriod(resolved, { home: nextHomeScore, away: nextAwayScore });
     if (!wasFinal) ended = withCalibrationEnergy(ended);
     if (wasFinal) {
@@ -837,6 +907,7 @@ export default function V8CalibrationLab() {
       windowPhase.cpuPlays,
       windowPhase.queued.map((play) => ({ side: 'home' as const, cardId: play.cardId, zone: play.zone })),
       windowPhase.cpuManagerAvailable,
+      windowPhase.reveal,
     );
   };
 
@@ -873,14 +944,14 @@ export default function V8CalibrationLab() {
                   : 'DRAG A CARD TO THE PITCH';
 
   return (
-    <main className={`v8-shell${handDrag ? ' is-dragging' : ''}${debugOpen ? ' is-debug-open' : ''}`}>
+    <main className={`v8-shell${handDrag ? ' is-dragging' : ''}${debugOpen ? ' is-debug-open' : ''}${resolutionMoment ? ' is-resolving' : ''}${resolutionMoment?.homeGoals ? ' has-home-goal' : ''}${resolutionMoment?.awayGoals ? ' has-away-goal' : ''}`}>
       <header className="v8-scorebar">
-        <div><small>YOU</small><strong>{homeScore}</strong></div>
+        <div className={resolutionMoment?.homeGoals ? 'is-scoring' : ''}><small>YOU</small><strong key={`home-${resolutionMoment?.id ?? 0}-${homeScore}`}>{homeScore}</strong></div>
         <section>
-          <b>{finished ? 'FULL TIME' : PERIOD_LABELS[state.period - 1]}</b>
+          <b key={`period-${state.period}-${finished}`}>{finished ? 'FULL TIME' : PERIOD_LABELS[state.period - 1]}</b>
           <span>{finished ? 'MATCH COMPLETE' : `${state.teams.home.energy} ENERGY`}</span>
         </section>
-        <div><small>CPU</small><strong>{awayScore}</strong></div>
+        <div className={resolutionMoment?.awayGoals ? 'is-scoring' : ''}><small>CPU</small><strong key={`away-${resolutionMoment?.id ?? 0}-${awayScore}`}>{awayScore}</strong></div>
       </header>
 
       <div className="v8-condition" hidden={!debugOpen}>
@@ -915,7 +986,7 @@ export default function V8CalibrationLab() {
         <span>CPU <b>{totalsAway.defence}</b> DEF</span>
       </section>
 
-      <section className="v8-pitch" aria-label="DEF MID ATT board"><div className="v8-pitch__stadium" aria-hidden="true"><i /><i /><i /></div>
+      <section className={`v8-pitch${resolutionMoment ? ' is-resolving' : ''}`} aria-label="DEF MID ATT board"><div className="v8-pitch__stadium" aria-hidden="true"><i /><i /><i /></div>
         {ZONES.map((zone) => {
           const homeZone = calibrationPlayersInZone(state, 'home', zone);
           const awayZone = calibrationPlayersInZone(state, 'away', zone);
@@ -950,12 +1021,12 @@ export default function V8CalibrationLab() {
             >
               <div className="v8-zone__heading"><strong>{zone}</strong><span>{guide}</span></div>
               <div className="v8-zone__side v8-zone__side--away">
-                {awayZone.map((player) => <DeployedChip key={player.runtimeId} state={state} side="away" runtimeId={player.runtimeId} />)}
+                {awayZone.map((player) => <DeployedChip key={player.runtimeId} state={state} side="away" runtimeId={player.runtimeId} fresh={resolutionMoment?.revealedPlayerIds.includes(player.cardId) === true} />)}
                 {Array.from({ length: Math.max(0, 4 - awayZone.length) }).map((_, index) => <i key={`away-${zone}-${index}`} />)}
               </div>
               <div className="v8-zone__side">
                 {homeZone.map((player) => (
-                  <DeployedChip key={player.runtimeId} state={state} side="home" runtimeId={player.runtimeId} onMove={() => setSelection({ kind: 'move', runtimeId: player.runtimeId })} />
+                  <DeployedChip key={player.runtimeId} state={state} side="home" runtimeId={player.runtimeId} fresh={resolutionMoment?.revealedPlayerIds.includes(player.cardId) === true} onMove={() => setSelection({ kind: 'move', runtimeId: player.runtimeId })} />
                 ))}
                 {queuedPlayers.map((play) => play.kind === 'player' ? (
                   <span key={`queued-${play.cardId}`} className="v8-chip v8-chip--transient"><span className="v8-card__sr">{getV8CalibrationPlayer(play.cardId).realName}</span>{getV8CalibrationPlayer(play.cardId).matchName}<b>PLAYER · QUEUED</b></span>
@@ -966,6 +1037,39 @@ export default function V8CalibrationLab() {
             </button>
           );
         })}
+        {resolutionMoment && (
+          <aside className="v8-resolution" data-testid="v8-resolution" key={resolutionMoment.id} aria-live="polite">
+            <div className="v8-resolution__beat v8-resolution__beat--reveal">
+              <small>{resolutionMoment.label}</small>
+              <strong>{resolutionMoment.reveal.first === 'home' ? 'YOU' : 'CPU'} REVEAL FIRST</strong>
+              <span>{resolutionMoment.reveal.reason}</span>
+            </div>
+            <div className="v8-resolution__beat v8-resolution__beat--action">
+              <small>{resolutionMoment.tacticalLine ? 'TACTICAL' : resolutionMoment.actionLine ? 'ACTION' : 'BOARD'}</small>
+              <strong>{resolutionMoment.tacticalLine ?? resolutionMoment.actionLine ?? 'BOARD RESOLVED'}</strong>
+              <span>{resolutionMoment.tacticalLine ? 'PLAY RESOLVED' : resolutionMoment.actionLine ? 'ACTION FIRED' : 'POSITIONS LOCKED'}</span>
+            </div>
+            <div className="v8-resolution__beat v8-resolution__beat--score">
+              <div className="v8-resolution__matchups">
+                <span>YOU <b>{resolutionMoment.homeAttack}</b> ATT <i>vs</i> {resolutionMoment.awayDefence} DEF</span>
+                <span>CPU <b>{resolutionMoment.awayAttack}</b> ATT <i>vs</i> {resolutionMoment.homeDefence} DEF</span>
+              </div>
+              <strong>{resolutionMoment.homeGoals + resolutionMoment.awayGoals === 0
+                ? 'NO GOALS'
+                : resolutionMoment.homeGoals > 0 && resolutionMoment.awayGoals > 0
+                  ? `${resolutionMoment.homeGoals + resolutionMoment.awayGoals} GOALS`
+                  : resolutionMoment.homeGoals > 0
+                    ? `+${resolutionMoment.homeGoals} ${resolutionMoment.homeGoals === 1 ? 'GOAL' : 'GOALS'} · YOU`
+                    : `+${resolutionMoment.awayGoals} ${resolutionMoment.awayGoals === 1 ? 'GOAL' : 'GOALS'} · CPU`}</strong>
+              <span>FULL +7 ATT MARGINS CONVERT</span>
+            </div>
+            <div className="v8-resolution__beat v8-resolution__beat--next">
+              <small>{resolutionMoment.final ? 'FULL TIME' : 'NEXT PERIOD'}</small>
+              <strong>{resolutionMoment.nextHomeScore}–{resolutionMoment.nextAwayScore}</strong>
+              <span>{resolutionMoment.nextLabel}{resolutionMoment.nextEnergy !== null ? ` · ${resolutionMoment.nextEnergy} ENERGY` : ''}</span>
+            </div>
+          </aside>
+        )}
       </section>
 
       {windowPhase ? (
@@ -1005,7 +1109,7 @@ export default function V8CalibrationLab() {
       )}
 
       {latestRecap && (
-        <details className="v8-recap" open>
+        <details className="v8-recap">
           <summary>
             <small>{latestRecap.label}</small>
             <strong>PERIOD RECAP</strong>
@@ -1091,6 +1195,7 @@ export default function V8CalibrationLab() {
                 cost={minimumCost}
                 selected={selection?.kind === 'tactical' && selection.cardId === card.id}
                 affordable={affordable}
+                fresh={Boolean(windowPhase && windowEligible)}
                 onClick={() => {
                   if (consumeSuppressedClick('tactical', card.id)) return;
                   setSelection({ kind: 'tactical', cardId: card.id });
