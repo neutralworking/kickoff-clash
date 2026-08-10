@@ -260,16 +260,6 @@
   box-shadow: 0 4px 14px rgba(0,0,0,.18);
 }
 
-.v8-window {
-  grid-template-columns: 1fr auto;
-  border-color: rgba(232,243,236,.3);
-  background: linear-gradient(145deg, rgba(63,80,111,.28), rgba(255,255,255,.045));
-}
-.v8-window__choices { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
-.v8-window__choices button { padding: 6px 8px; border-radius: 8px; background: rgba(232,243,236,.12); }
-.v8-window > div > span + span { opacity: 1; }
-.v8-window__remove { margin-left: 6px; padding: 1px 5px; font-size: 8px; border-radius: 6px; background: rgba(255,120,120,.2); }
-
 .v8-hand-wrap {
   margin-top: 0;
   padding-top: 1px;
@@ -578,7 +568,6 @@
   .v8-commit { grid-template-columns: 1fr auto; min-height: 54px; margin: 4px 0; padding: 6px; }
   .v8-commit > div { max-height: 35px; overflow: hidden; }
   .v8-commit .v8-primary { grid-column: 1 / -1; width: 100%; padding-block: 7px; }
-  .v8-window > div { max-height: none; }
   .v8-card { flex-basis: 104px; height: 132px; }
   .v8-card.is-selected { flex-basis: 184px; height: 172px; }
   .v8-card--manager { flex-basis: 112px; }
@@ -1340,40 +1329,6 @@
 }
 .v8-commit button:disabled { filter: grayscale(1); opacity: .35; }
 
-/* Tactical window is the exception: it is a real decision state. */
-.v8-window {
-  grid-template-columns: minmax(0, 1fr) 108px;
-  min-height: 62px;
-  margin-top: 4px;
-  padding: 5px;
-  border: 1px solid rgba(95, 196, 255, .22);
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(30, 58, 78, .86), rgba(14, 17, 24, .96));
-  box-shadow: 0 9px 22px rgba(0,0,0,.28);
-}
-.v8-window > div { padding-left: 2px; }
-.v8-window strong { color: #8bdcff; font-size: 8px; }
-.v8-window > div > span { display: none; }
-.v8-window__choices {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 4px;
-  margin-top: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.v8-window__choices::-webkit-scrollbar { display: none; }
-.v8-window__choices button {
-  flex: 0 0 auto;
-  min-height: 27px;
-  padding: 4px 6px;
-  border-color: rgba(105, 203, 255, .24);
-  background: rgba(84, 187, 239, .08);
-  color: #daf3ff;
-  font-size: 6px;
-}
-.v8-window__remove { display: none; }
-
 /* --- hand: overlapping collectible cards --------------------------------- */
 .v8-hand-wrap {
   position: relative;
@@ -1940,14 +1895,6 @@
 }
 .v8-chip--away.is-fresh::after { border-color: rgba(111, 210, 255, .66); }
 
-.v8-card--chance.is-fresh {
-  animation: v8-tactical-arrive .78s cubic-bezier(.16,.86,.22,1.16) both;
-  box-shadow: 0 0 0 1px rgba(115, 218, 255, .32), 0 0 24px rgba(74, 198, 255, .24), 0 10px 22px rgba(0,0,0,.62);
-}
-.v8-window {
-  animation: v8-window-arrive .36s cubic-bezier(.16,.86,.25,1.08) both;
-}
-
 .v8-scorebar > div.is-scoring strong {
   animation: v8-score-pop .72s cubic-bezier(.16,.9,.22,1.2) both;
 }
@@ -2096,15 +2043,6 @@
   35% { opacity: .9; }
   100% { opacity: 0; transform: scale(1.32); }
 }
-@keyframes v8-tactical-arrive {
-  0% { transform: translateY(38px) rotate(5deg) scale(.78); opacity: 0; }
-  65% { transform: translateY(-7px) rotate(-1deg) scale(1.045); opacity: 1; }
-  100% { transform: none; opacity: 1; }
-}
-@keyframes v8-window-arrive {
-  0% { transform: translateY(8px) scale(.985); opacity: 0; }
-  100% { transform: none; opacity: 1; }
-}
 @keyframes v8-score-pop {
   0% { transform: scale(.72); color: #fff; }
   45% { transform: scale(1.34); color: #ffd86e; text-shadow: 0 0 20px rgba(255,190,55,.55); }
@@ -2153,8 +2091,6 @@
   .v8-chip--transient,
   .v8-chip.is-fresh,
   .v8-chip.is-fresh::after,
-  .v8-card--chance.is-fresh,
-  .v8-window,
   .v8-scorebar > div.is-scoring strong,
   .v8-scorebar section b,
   .v8-pitch.is-resolving::before,

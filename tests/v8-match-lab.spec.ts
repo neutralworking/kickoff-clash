@@ -178,7 +178,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
-  test('generates a literal Cross, keeps it slotless, explains the score and records period telemetry', async ({ page }) => {
+  test('generates a literal Cross, holds it slotless with no same-period window, and explains the score with period telemetry', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
     // P1 passes so P2 can afford Di María at her accepted printed 3-Energy calibration Cost.
@@ -194,14 +194,9 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(page.getByText('1 ENERGY', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'END PERIOD' }).click();
 
-    const window = page.getByTestId('v8-window');
-    await expect(window).toContainText('TACTICAL WINDOW');
-    const crossChoice = window.locator('.v8-window__choices button').filter({ hasText: 'Cross → MID' });
-    await expect(crossChoice).toBeVisible();
-    await crossChoice.click();
-    await expect(midfieldZone.locator('.v8-zone__heading span')).toHaveText('1/4');
-    await page.getByRole('button', { name: 'RESOLVE WINDOW' }).click();
-
+    // A Tactical generated this period is never playable this period: no window pause exists.
+    // END PERIOD goes straight from reveal to scoring in one click, same as any other period.
+    await expect(page.getByTestId('v8-window')).toHaveCount(0);
     await expect(page.getByText('HT–66', { exact: true })).toBeVisible();
     await expect(page.getByText('6 ENERGY', { exact: true })).toBeVisible();
     const recap = page.locator('.v8-recap');
@@ -209,7 +204,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(recap).toContainText('PERIOD RECAP');
     await expect(recap).toContainText(/YOU: \d+ ATT vs \d+ DEF → \d+ goals/);
     await expect(recap).toContainText(/CPU: \d+ ATT vs \d+ DEF → \d+ goals/);
-    await expect(recap).toContainText('Post-reveal: Cross (1, RABONA) → MID.');
+    await expect(recap).toContainText('Ángel Di María generates Cross.');
 
     await openLabTools(page);
     const telemetry = page.getByTestId('v8-telemetry');
@@ -218,47 +213,24 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(page.getByTestId('telemetry-period-2')).toBeVisible();
     await expect(page.getByTestId('telemetry-period-2')).toContainText('Tactical ATT');
     await expect(page.getByTestId('telemetry-period-2')).toContainText('Energy unused');
-    await expect(midfieldZone.locator('.v8-zone__heading span')).toHaveText('1/4');
-    await expectMobileFit(page);
-  });
 
-  test('opens the post-reveal window for a Tactical generated this period and recaps it as its own step', async ({ page }) => {
-    await page.goto('/lab/match-v8');
-
-    // P1 passes so P2 can afford Di María (3) and still retain 1 Energy for the Cross window.
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
-    await expect(page.getByText('4 ENERGY', { exact: true })).toBeVisible();
-
-    await page.locator('.v8-card').filter({ hasText: 'Ángel Di María' }).click();
-    await page.locator('.v8-zone').nth(1).click();
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
-
-    const window = page.getByTestId('v8-window');
-    await expect(window).toContainText('TACTICAL WINDOW');
-    await expectMobileFit(page);
-
+    // Generated in P2, so it's now sitting in hand at the start of P3: fully playable, not
+    // dimmed, no separate "unlock" step — the following period's ordinary commitment IS the
+    // subsequent turn the card was always meant to wait for.
     const crossCard = page.locator('.v8-card--chance').filter({ hasText: 'Cross' });
     await expect(crossCard).toBeVisible();
-    await dragCardToZone(page, crossCard, page.locator('.v8-zone').nth(2), 9);
-    await expect(window).toContainText('Post-reveal: Cross (1) → ATT');
-    await page.getByRole('button', { name: 'RESOLVE WINDOW' }).click();
-
-    await expect(page.locator('.v8-recap')).toContainText('Post-reveal: Cross (1, RABONA) → ATT.');
-    await expect(page.locator('.v8-card--chance').filter({ hasText: 'Cross' })).toHaveCount(0);
+    await expect(crossCard).not.toHaveClass(/is-unaffordable/);
     await expectMobileFit(page);
   });
 
-  test('drags a held Tactical from the hand during normal commitment', async ({ page }) => {
+  test('plays a held Tactical from the hand once the following period’s commitment phase opens', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
     await page.getByRole('button', { name: 'END PERIOD' }).click();
     await page.locator('.v8-card').filter({ hasText: 'Ángel Di María' }).click();
     await page.locator('.v8-zone').nth(1).click();
     await page.getByRole('button', { name: 'END PERIOD' }).click();
-
-    const window = page.getByTestId('v8-window');
-    await expect(window).toContainText('TACTICAL WINDOW');
-    await page.getByRole('button', { name: 'SKIP WINDOW' }).click();
+    await expect(page.getByTestId('v8-window')).toHaveCount(0);
     await expect(page.getByText('HT–66', { exact: true })).toBeVisible();
 
     const crossCard = page.locator('.v8-card--chance').filter({ hasText: 'Cross' });

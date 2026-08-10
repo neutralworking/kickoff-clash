@@ -18,7 +18,6 @@ import {
   previewCalibrationTacticalCost,
   removeCalibrationPlayerFromHand,
   resolveCommittedCalibrationTactical,
-  resolveGeneratedTacticalWindow,
   tacticalDefinition,
   windowEligibleCalibrationTacticals,
   type V8CalibrationSide,
@@ -599,17 +598,10 @@ export function simulateV8CalibrationMatch(args: {
     let resolved = resolveSequence(away.state, plays.filter((play) => play.side === first));
     resolved = resolveSequence(resolved, plays.filter((play) => play.side !== first));
 
-    const windowPlays = [
-      ...planV8CalibrationWindow(resolved, 'home', homeSquad),
-      ...planV8CalibrationWindow(resolved, 'away', awaySquad),
-    ];
-    const window = resolveGeneratedTacticalWindow(resolved, windowPlays);
-    resolved = window.state;
-
-    const telemetryPlays = [
-      ...plays,
-      ...window.plays.map((play) => ({ kind: 'tactical' as const, side: play.side, card: play.card, window: true, cost: play.cost })),
-    ];
+    // A Tactical generated this period is never playable this period: it becomes selectable in
+    // planV8CalibrationSide's own commitment loop (isCalibrationTacticalAvailable gates on
+    // availableFromPeriod) starting next period. No same-period window.
+    const telemetryPlays = plays;
 
     const homeTotals = calibrationTeamTotals(resolved, 'home');
     const awayTotals = calibrationTeamTotals(resolved, 'away');

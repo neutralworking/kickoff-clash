@@ -1,57 +1,57 @@
 V8 scoring sensitivity · identical resolved boards / reveal order
 Non-mirror matchups only. This is a re-score experiment, not a gameplay-rule change.
 
-repeat_5 | avg 17.954 | median 17 | p90 30 | >=18 48% | >=20 43% | draw 9% | avg margin 3.208
-repeat_6 | avg 14.346 | median 14 | p90 24 | >=18 36% | >=20 28% | draw 12% | avg margin 2.681
-repeat_7 | avg 11.793 | median 11 | p90 20 | >=18 21% | >=20 13% | draw 13% | avg margin 2.293
-repeat_8 | avg 9.936 | median 9 | p90 18 | >=18 10% | >=20 5% | draw 15% | avg margin 2.026
-repeat_5_cap3 | avg 12.907 | median 14 | p90 19 | >=18 18% | >=20 5% | draw 17% | avg margin 1.834
-new_thresholds_5 | avg 8.92 | median 9 | p90 15 | >=18 3% | >=20 1% | draw 22% | avg margin 1.409
+repeat_5 | avg 15.56 | median 15 | p90 25 | >=18 43% | >=20 35% | draw 12% | avg margin 2.879
+repeat_6 | avg 12.36 | median 12 | p90 20 | >=18 26% | >=20 13% | draw 12% | avg margin 2.444
+repeat_7 | avg 10.118 | median 10 | p90 17 | >=18 6% | >=20 1% | draw 16% | avg margin 2.016
+repeat_8 | avg 8.548 | median 8 | p90 14 | >=18 0% | >=20 0% | draw 16% | avg margin 1.883
+repeat_5_cap3 | avg 12.481 | median 13 | p90 18 | >=18 13% | >=20 4% | draw 18% | avg margin 1.942
+new_thresholds_5 | avg 11.524 | median 11 | p90 18 | >=18 14% | >=20 4% | draw 17% | avg margin 2.039
 
 repeat_5
-  cross: W 56% · 13.197-11.984
-  through_ball: W 55% · 10.744-9.766
-  dribbling_penalty: W 33% · 9.441-10.809
-  control_defence: W 42% · 4.894-5.05
-  long_shot_set_piece: W 26% · 5.413-7.272
-  balanced_midrange: W 59% · 10.175-8.981
+  cross: W 50% · 9.122-8.628
+  through_ball: W 33% · 8.809-9.7
+  dribbling_penalty: W 58% · 9.953-8.775
+  control_defence: W 44% · 4.388-4.388
+  long_shot_set_piece: W 29% · 5.269-6.628
+  balanced_midrange: W 51% · 9.141-8.563
 
 repeat_6
-  cross: W 56% · 10.659-9.525
-  through_ball: W 52% · 8.556-7.859
-  dribbling_penalty: W 29% · 7.488-8.684
-  control_defence: W 43% · 3.794-3.947
-  long_shot_set_piece: W 25% · 4.391-5.859
-  balanced_midrange: W 61% · 8.15-7.163
+  cross: W 49% · 7.141-6.953
+  through_ball: W 35% · 7.128-7.738
+  dribbling_penalty: W 55% · 7.922-6.997
+  control_defence: W 43% · 3.369-3.444
+  long_shot_set_piece: W 30% · 4.141-5.175
+  balanced_midrange: W 54% · 7.381-6.775
 
 repeat_7
-  cross: W 55% · 8.856-7.85
-  through_ball: W 52% · 7.084-6.5
-  dribbling_penalty: W 35% · 6.247-7.141
-  control_defence: W 40% · 3.05-3.131
-  long_shot_set_piece: W 23% · 3.466-4.809
-  balanced_midrange: W 55% · 6.675-5.947
+  cross: W 49% · 5.944-5.622
+  through_ball: W 31% · 5.838-6.478
+  dribbling_penalty: W 54% · 6.531-5.706
+  control_defence: W 43% · 2.741-2.7
+  long_shot_set_piece: W 25% · 3.325-4.297
+  balanced_midrange: W 50% · 5.975-5.55
 
 repeat_8
-  cross: W 55% · 7.463-6.719
-  through_ball: W 51% · 6.044-5.497
-  dribbling_penalty: W 29% · 5.222-6.103
-  control_defence: W 41% · 2.528-2.563
-  long_shot_set_piece: W 24% · 2.806-3.928
-  balanced_midrange: W 55% · 5.747-5
+  cross: W 48% · 5.028-4.813
+  through_ball: W 32% · 4.963-5.581
+  dribbling_penalty: W 54% · 5.572-4.825
+  control_defence: W 42% · 2.241-2.178
+  long_shot_set_piece: W 27% · 2.719-3.534
+  balanced_midrange: W 50% · 5.122-4.713
 
 repeat_5_cap3
-  cross: W 46% · 8.053-7.894
-  through_ball: W 43% · 7.059-6.631
-  dribbling_penalty: W 40% · 7.159-7.247
-  control_defence: W 43% · 4.578-4.434
-  long_shot_set_piece: W 27% · 4.638-5.838
-  balanced_midrange: W 48% · 7.234-6.678
+  cross: W 44% · 7.159-6.722
+  through_ball: W 20% · 6.553-7.238
+  dribbling_penalty: W 57% · 7.666-6.838
+  control_defence: W 44% · 4.178-4.031
+  long_shot_set_piece: W 30% · 4.666-5.788
+  balanced_midrange: W 50% · 7.222-6.828
 
 new_thresholds_5
-  cross: W 46% · 6.284-6.066
-  through_ball: W 52% · 5.556-4.909
-  dribbling_penalty: W 21% · 4.441-5.056
-  control_defence: W 40% · 2.556-2.716
-  long_shot_set_piece: W 23% · 2.991-3.778
-  balanced_midrange: W 54% · 4.931-4.234
+  cross: W 45% · 6.625-6.369
+  through_ball: W 33% · 6.513-7.053
+  dribbling_penalty: W 54% · 7.219-6.488
+  control_defence: W 43% · 3.413-3.45
+  long_shot_set_piece: W 28% · 4.059-4.838
+  balanced_midrange: W 48% · 6.744-6.375

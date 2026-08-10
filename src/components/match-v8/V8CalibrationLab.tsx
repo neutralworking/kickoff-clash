@@ -18,17 +18,15 @@ import {
   getV8CalibrationSquad,
   goalsFromAttackDefence,
   isCalibrationActionEnabled,
+  isCalibrationTacticalAvailable,
   moveCalibrationPlayer,
   outOfPositionPenalty,
-  planV8CalibrationWindow,
   previewCalibrationTacticalCost,
   removeCalibrationPlayerFromHand,
   resolveCommittedCalibrationTactical,
-  resolveGeneratedTacticalWindow,
   revealCalibrationPlayer,
   spendCalibrationTacticalFromHand,
   tacticalDefinition,
-  windowEligibleCalibrationTacticals,
   V8_CALIBRATION_SQUAD_KEYS,
   type V8CalibrationMatchTelemetry,
   type V8CalibrationPeriodTelemetry,
@@ -36,7 +34,6 @@ import {
   type V8CalibrationSide,
   type V8CalibrationSquadKey,
   type V8CalibrationState,
-  type V8CalibrationWindowPlay,
   type V8TacticalCardInstance,
   type V8Zone,
 } from '@/engine-v8';
@@ -117,20 +114,6 @@ type ResolutionMoment = {
   nextEnergy: number | null;
   revealedPlayerIds: string[];
   final: boolean;
-};
-
-/**
- * The Generated-Tactical Window pause: reveals have resolved, scoring has not run yet, and the
- * human side holds at least one affordable this-period-generated Tactical. CPU window plays were
- * already chosen from the same post-reveal state, so both sides' choices are blind.
- */
-type WindowPhase = {
-  resolved: V8CalibrationState;
-  allPending: PendingPlay[];
-  cpuPlays: V8CalibrationWindowPlay[];
-  cpuManagerAvailable: boolean;
-  reveal: RevealOrder;
-  queued: Array<{ cardId: string; name: string; zone: V8Zone; cost: number }>;
 };
 
 function seededShuffle<T>(items: readonly T[], seed: number): T[] {
@@ -342,7 +325,6 @@ function TacticalHandCard({
   cost,
   selected,
   affordable,
-  fresh,
   onClick,
   onPointerDown,
 }: {
@@ -350,7 +332,6 @@ function TacticalHandCard({
   cost: number;
   selected: boolean;
   affordable: boolean;
-  fresh: boolean;
   onClick: () => void;
   onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
@@ -358,7 +339,7 @@ function TacticalHandCard({
     <button
       type="button"
       data-testid={`tactical-card-${card.id}`}
-      className={`v8-card v8-card--chance${selected ? ' is-selected' : ''}${fresh ? ' is-fresh' : ''}${affordable ? '' : ' is-unaffordable'}`}
+      className={`v8-card v8-card--chance${selected ? ' is-selected' : ''}${affordable ? '' : ' is-unaffordable'}`}
       aria-pressed={selected}
       onClick={onClick}
       onPointerDown={onPointerDown}
@@ -417,13 +398,11 @@ function DeployedChip({ state, side, runtimeId, fresh = false, onMove }: { state
 }
 
 function recapHighlights(state: V8CalibrationState, period: number): string[] {
-  const useful = new Set(['player_moved', 'action_ignored', 'action_suppressed', 'modifier_changed', 'tactical_generated', 'tactical_modified', 'window_tactical_played', 'chance_resolved', 'chance_cancelled']);
-  // Window plays are their own labelled recap step ("Post-reveal: …"), never folded into
-  // commitment-phase lines, so always keep them alongside the trailing highlights.
-  const events = state.events.filter((event) => event.period === period && useful.has(event.type));
-  const windowLines = events.filter((event) => event.type === 'window_tactical_played').map((event) => event.text);
-  const rest = events.filter((event) => event.type !== 'window_tactical_played').map((event) => event.text);
-  return [...rest.slice(-Math.max(0, 6 - windowLines.length)), ...windowLines];
+  const useful = new Set(['player_moved', 'action_ignored', 'action_suppressed', 'modifier_changed', 'tactical_generated', 'tactical_modified', 'chance_resolved', 'chance_cancelled']);
+  return state.events
+    .filter((event) => event.period === period && useful.has(event.type))
+    .map((event) => event.text)
+    .slice(-6);
 }
 
 function signed(value: number): string {
@@ -454,7 +433,6 @@ export default function V8CalibrationLab() {
   const [homeManagerAvailable, setHomeManagerAvailable] = useState(true);
   const [awayManagerAvailable, setAwayManagerAvailable] = useState(true);
   const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([]);
-  const [windowPhase, setWindowPhase] = useState<WindowPhase | null>(null);
   const [recaps, setRecaps] = useState<PeriodRecap[]>([]);
   const [telemetryPeriods, setTelemetryPeriods] = useState<V8CalibrationPeriodTelemetry[]>([]);
   const [matchTelemetry, setMatchTelemetry] = useState<V8CalibrationMatchTelemetry | null>(null);
@@ -506,7 +484,7 @@ export default function V8CalibrationLab() {
   };
 
   const queuePlayerToZone = (cardId: string, zone: V8Zone): boolean => {
-    if (finished || windowPhase) return false;
+    if (finished) return false;
     const card = getV8CalibrationPlayer(cardId);
     const cost = calibrationPlayCost(card);
     if (occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return false;
@@ -524,7 +502,7 @@ export default function V8CalibrationLab() {
   };
 
   const queueManagerToZone = (zone: V8Zone): boolean => {
-    if (finished || windowPhase || !homeManagerAvailable || state.teams.home.energy < MANAGER_COST) return false;
+    if (finished || !homeManagerAvailable || state.teams.home.energy < MANAGER_COST) return false;
     if (occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return false;
     rememberUndo();
     setState({
@@ -540,23 +518,8 @@ export default function V8CalibrationLab() {
   const queueTacticalToZone = (cardId: string, zone: V8Zone): boolean => {
     if (finished) return false;
 
-    if (windowPhase) {
-      if (windowPhase.queued.some((play) => play.cardId === cardId)) return false;
-      const tactical = windowEligibleCalibrationTacticals(windowPhase.resolved, 'home').find((card) => card.id === cardId);
-      if (!tactical || !tacticalDefinition(tactical.type).eligibleZones.includes(zone)) return false;
-      const remainingEnergy = windowPhase.resolved.teams.home.energy - windowPhase.queued.reduce((sum, play) => sum + play.cost, 0);
-      const cost = previewCalibrationTacticalCost(windowPhase.resolved, 'home', tactical, zone);
-      if (cost > remainingEnergy) return false;
-      setWindowPhase((phase) => (phase ? {
-        ...phase,
-        queued: [...phase.queued, { cardId: tactical.id, name: tactical.name, zone, cost }],
-      } : phase));
-      setSelection(null);
-      return true;
-    }
-
     const tactical = homeTacticals.find((card) => card.id === cardId);
-    if (!tactical || !tacticalDefinition(tactical.type).eligibleZones.includes(zone)) return false;
+    if (!tactical || !isCalibrationTacticalAvailable(state, tactical) || !tacticalDefinition(tactical.type).eligibleZones.includes(zone)) return false;
     const cost = previewCalibrationTacticalCost(state, 'home', tactical, zone);
     if (cost > state.teams.home.energy) return false;
     rememberUndo();
@@ -575,7 +538,6 @@ export default function V8CalibrationLab() {
     if (!selection || finished) return;
 
     if (selection.kind === 'move') {
-      if (windowPhase) return;
       const player = state.players[selection.runtimeId];
       if (!player) return;
       try {
@@ -621,25 +583,19 @@ export default function V8CalibrationLab() {
 
   const isHandDragZoneLegal = (drag: Pick<HandDragState, 'kind' | 'cardId'>, zone: V8Zone): boolean => {
     if (drag.kind === 'player') {
-      if (windowPhase || occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return false;
+      if (occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return false;
       return calibrationPlayCost(getV8CalibrationPlayer(drag.cardId)) <= state.teams.home.energy;
     }
 
     if (drag.kind === 'manager') {
-      return !windowPhase
-        && homeManagerAvailable
+      return homeManagerAvailable
         && state.teams.home.energy >= MANAGER_COST
         && occupiedPlayerSlots(state, 'home', zone, pending) < 4;
     }
 
-    const sourceState = windowPhase?.resolved ?? state;
-    const tactical = calibrationHandTacticals(sourceState, 'home').find((card) => card.id === drag.cardId);
-    if (!tactical || !tacticalDefinition(tactical.type).eligibleZones.includes(zone)) return false;
-    if (windowPhase?.queued.some((play) => play.cardId === drag.cardId)) return false;
-    const remainingEnergy = windowPhase
-      ? windowPhase.resolved.teams.home.energy - windowPhase.queued.reduce((sum, play) => sum + play.cost, 0)
-      : state.teams.home.energy;
-    return previewCalibrationTacticalCost(sourceState, 'home', tactical, zone) <= remainingEnergy;
+    const tactical = calibrationHandTacticals(state, 'home').find((card) => card.id === drag.cardId);
+    if (!tactical || !isCalibrationTacticalAvailable(state, tactical) || !tacticalDefinition(tactical.type).eligibleZones.includes(zone)) return false;
+    return previewCalibrationTacticalCost(state, 'home', tactical, zone) <= state.teams.home.energy;
   };
 
   const startHandDrag = (
@@ -729,7 +685,7 @@ export default function V8CalibrationLab() {
   };
 
   const endPeriod = () => {
-    if (finished || windowPhase) return;
+    if (finished) return;
     const cpu = planCpu(state, awayManagerAvailable);
     const allPending = [...pending, ...cpu.pending];
     const reveal = priority(cpu.state, homeScore, awayScore, seed + state.period * 101);
@@ -745,35 +701,15 @@ export default function V8CalibrationLab() {
       text: `${periodLabel} REVEAL: ${reveal.first === 'home' ? 'YOU' : 'CPU'} first · ${reveal.reason}.`,
     });
 
-    // The Generated-Tactical Window: CPU choices are made blind from the post-reveal state.
-    // Pause for the human only when they actually hold an affordable this-period Tactical;
-    // otherwise the window resolves silently and the period scores in one click as before.
-    const cpuWindowPlays = planV8CalibrationWindow(resolved, 'away');
-    const humanCanPlay = windowEligibleCalibrationTacticals(resolved, 'home').some((card) => (
-      tacticalDefinition(card.type).eligibleZones
-        .some((zone) => previewCalibrationTacticalCost(resolved, 'home', card, zone) <= resolved.teams.home.energy)
-    ));
-    if (humanCanPlay) {
-      setState(resolved);
-      setPending([]);
-      setUndoStack([]);
-      setSelection(null);
-      setWindowPhase({ resolved, allPending, cpuPlays: cpuWindowPlays, cpuManagerAvailable: cpu.managerAvailable, reveal, queued: [] });
-      return;
-    }
-    finishPeriod(resolved, allPending, cpuWindowPlays, [], cpu.managerAvailable, reveal);
+    finishPeriod(resolved, allPending, cpu.managerAvailable, reveal);
   };
 
   const finishPeriod = (
-    postReveal: V8CalibrationState,
+    resolved: V8CalibrationState,
     allPending: PendingPlay[],
-    cpuPlays: V8CalibrationWindowPlay[],
-    humanPlays: V8CalibrationWindowPlay[],
     cpuManagerAvailable: boolean,
     reveal: RevealOrder,
   ) => {
-    const window = resolveGeneratedTacticalWindow(postReveal, [...humanPlays, ...cpuPlays]);
-    const resolved = window.state;
     const period = resolved.period;
     const periodLabel = PERIOD_LABELS[period - 1];
     const actionLine = [...resolved.events].reverse().find((event) => (
@@ -781,19 +717,13 @@ export default function V8CalibrationLab() {
       && event.type === 'action_triggered'
       && !event.text.includes(' REVEAL:')
     ))?.text ?? null;
-    const lastWindowTactical = window.plays.at(-1);
     const lastCommittedTactical = [...allPending].reverse().find((play) => play.kind === 'tactical');
-    const tacticalLine = lastWindowTactical
-      ? `${lastWindowTactical.card.name} → ${lastWindowTactical.zone}`
-      : lastCommittedTactical?.kind === 'tactical'
-        ? `${lastCommittedTactical.card.name} → ${lastCommittedTactical.zone}`
-        : null;
+    const tacticalLine = lastCommittedTactical?.kind === 'tactical'
+      ? `${lastCommittedTactical.card.name} → ${lastCommittedTactical.zone}`
+      : null;
     const revealedPlayerIds = allPending.flatMap((play) => play.kind === 'player' ? [play.cardId] : []);
     const wasFinal = resolved.period === 4;
-    const telemetryPlays = [
-      ...allPending,
-      ...window.plays.map((play) => ({ kind: 'tactical' as const, side: play.side, card: play.card, window: true, cost: play.cost })),
-    ];
+    const telemetryPlays = allPending;
 
     const home = calibrationTeamTotals(resolved, 'home');
     const away = calibrationTeamTotals(resolved, 'away');
@@ -870,53 +800,15 @@ export default function V8CalibrationLab() {
     setPending([]);
     setUndoStack([]);
     setSelection(null);
-    setWindowPhase(null);
     if (wasFinal) setFinished(true);
-  };
-
-  const windowRemainingEnergy = windowPhase
-    ? windowPhase.resolved.teams.home.energy - windowPhase.queued.reduce((sum, play) => sum + play.cost, 0)
-    : 0;
-
-  const windowChoices = useMemo(() => {
-    if (!windowPhase) return [];
-    const queuedIds = new Set(windowPhase.queued.map((play) => play.cardId));
-    return windowEligibleCalibrationTacticals(windowPhase.resolved, 'home')
-      .filter((card) => !queuedIds.has(card.id))
-      .flatMap((card) => tacticalDefinition(card.type).eligibleZones.map((zone) => ({
-        card,
-        zone,
-        cost: previewCalibrationTacticalCost(windowPhase.resolved, 'home', card, zone),
-      })))
-      .filter((choice) => choice.cost <= windowRemainingEnergy);
-  }, [windowPhase, windowRemainingEnergy]);
-
-  const queueWindowPlay = (cardId: string, name: string, zone: V8Zone, cost: number) => {
-    setWindowPhase((phase) => (phase ? { ...phase, queued: [...phase.queued, { cardId, name, zone, cost }] } : phase));
-  };
-
-  const unqueueWindowPlay = (index: number) => {
-    setWindowPhase((phase) => (phase ? { ...phase, queued: phase.queued.filter((_, itemIndex) => itemIndex !== index) } : phase));
-  };
-
-  const resolveWindow = () => {
-    if (!windowPhase) return;
-    finishPeriod(
-      windowPhase.resolved,
-      windowPhase.allPending,
-      windowPhase.cpuPlays,
-      windowPhase.queued.map((play) => ({ side: 'home' as const, cardId: play.cardId, zone: play.zone })),
-      windowPhase.cpuManagerAvailable,
-      windowPhase.reveal,
-    );
   };
 
   const selectedPlayer = selection?.kind === 'player' ? getV8CalibrationPlayer(selection.cardId) : null;
   const selectedPlayerCost = selectedPlayer ? calibrationPlayCost(selectedPlayer) : null;
   const selectedPlayerUnaffordable = selectedPlayerCost !== null && selectedPlayerCost > state.teams.home.energy;
-  const selectedTactical = selection?.kind === 'tactical' ? calibrationHandTacticals(windowPhase?.resolved ?? state, 'home').find((card) => card.id === selection.cardId) ?? null : null;
+  const selectedTactical = selection?.kind === 'tactical' ? calibrationHandTacticals(state, 'home').find((card) => card.id === selection.cardId) ?? null : null;
   const draggedPlayer = handDrag?.kind === 'player' ? getV8CalibrationPlayer(handDrag.cardId) : null;
-  const draggedTactical = handDrag?.kind === 'tactical' ? calibrationHandTacticals(windowPhase?.resolved ?? state, 'home').find((card) => card.id === handDrag.cardId) ?? null : null;
+  const draggedTactical = handDrag?.kind === 'tactical' ? calibrationHandTacticals(state, 'home').find((card) => card.id === handDrag.cardId) ?? null : null;
   const draggedPlayerPortrait = draggedPlayer ? portraitSrc({ id: draggedPlayer.sourceCardId ?? draggedPlayer.id, name: draggedPlayer.realName, position: draggedPlayer.position }) : null;
   const managerPortrait = managerPortraitSrc('control');
   const interactionLabel = handDrag?.moved
@@ -939,9 +831,7 @@ export default function V8CalibrationLab() {
               ? `DRAG ${selectedTactical.name.toUpperCase()} TO A HIGHLIGHTED ZONE`
               : selectedPlayer
                 ? `DRAG ${selectedPlayer.matchName} TO A ZONE`
-                : windowPhase
-                  ? 'DRAG A TACTICAL TO THE PITCH'
-                  : 'DRAG A CARD TO THE PITCH';
+                : 'DRAG A CARD TO THE PITCH';
 
   return (
     <main className={`v8-shell${handDrag ? ' is-dragging' : ''}${debugOpen ? ' is-debug-open' : ''}${resolutionMoment ? ' is-resolving' : ''}${resolutionMoment?.homeGoals ? ' has-home-goal' : ''}${resolutionMoment?.awayGoals ? ' has-away-goal' : ''}`}>
@@ -1000,13 +890,15 @@ export default function V8CalibrationLab() {
             guide = selectedPlayerUnaffordable ? 'NO ENERGY' : penalty === 0 ? 'NATURAL' : `−${penalty} OOP`;
           }
           if (selectedTactical) {
-            const sourceState = windowPhase?.resolved ?? state;
-            const remainingEnergy = windowPhase
-              ? windowPhase.resolved.teams.home.energy - windowPhase.queued.reduce((sum, play) => sum + play.cost, 0)
-              : state.teams.home.energy;
             const eligible = tacticalDefinition(selectedTactical.type).eligibleZones.includes(zone);
-            const tacticalCost = eligible ? previewCalibrationTacticalCost(sourceState, 'home', selectedTactical, zone) : Number.POSITIVE_INFINITY;
-            guide = !eligible ? 'NO' : tacticalCost > remainingEnergy ? 'NO ENERGY' : `TACTICAL · ${tacticalLabel(selectedTactical, zone)}`;
+            const tacticalCost = eligible ? previewCalibrationTacticalCost(state, 'home', selectedTactical, zone) : Number.POSITIVE_INFINITY;
+            guide = !eligible
+              ? 'NO'
+              : !isCalibrationTacticalAvailable(state, selectedTactical)
+                ? 'NEXT PERIOD'
+                : tacticalCost > state.teams.home.energy
+                  ? 'NO ENERGY'
+                  : `TACTICAL · ${tacticalLabel(selectedTactical, zone)}`;
           }
           if (selection?.kind === 'manager') guide = playerOccupancy >= 4 ? 'FULL' : state.teams.home.energy < MANAGER_COST ? 'NO ENERGY' : 'MANAGER';
           if (selection?.kind === 'move') guide = 'MOVE';
@@ -1072,41 +964,15 @@ export default function V8CalibrationLab() {
         )}
       </section>
 
-      {windowPhase ? (
-        <section className="v8-commit v8-window" data-testid="v8-window">
-          <div>
-            <strong>TACTICAL WINDOW</strong>
-            <span>Tacticals generated this period can be played now from your {windowRemainingEnergy} unused Energy. Unplayed cards stay in hand at printed cost.</span>
-            <div className="v8-window__choices">
-              {windowChoices.map((choice) => (
-                <button
-                  key={`${choice.card.id}-${choice.zone}`}
-                  onClick={() => queueWindowPlay(choice.card.id, choice.card.name, choice.zone, choice.cost)}
-                >
-                  {choice.card.name} → {choice.zone} · {choice.cost}E
-                </button>
-              ))}
-            </div>
-            {windowPhase.queued.map((play, index) => (
-              <span key={`${play.cardId}-${index}`}>
-                Post-reveal: {play.name} ({play.cost}) → {play.zone}
-                <button className="v8-window__remove" onClick={() => unqueueWindowPlay(index)} aria-label={`Remove ${play.name}`}>✕</button>
-              </span>
-            ))}
-          </div>
-          <button className="v8-primary" onClick={resolveWindow}>{windowPhase.queued.length ? 'RESOLVE WINDOW' : 'SKIP WINDOW'}</button>
-        </section>
-      ) : (
-        <section className="v8-commit">
-          <div>
-            <strong>{interactionLabel}</strong>
-            <span>{currentPriority.first === 'home' ? 'YOU REVEAL FIRST' : 'CPU REVEALS FIRST'} · {currentPriority.reason} · Tacticals use no player slot.</span>
-            {pending.filter((play) => play.kind === 'tactical').map((play) => play.kind === 'tactical' ? <span key={play.card.id}>{play.card.name} → {play.zone} · {tacticalLabel(play.card, play.zone)}</span> : null)}
-          </div>
-          <button onClick={undo} disabled={!undoStack.length}>UNDO</button>
-          <button className="v8-primary" onClick={endPeriod} disabled={finished}>END PERIOD</button>
-        </section>
-      )}
+      <section className="v8-commit">
+        <div>
+          <strong>{interactionLabel}</strong>
+          <span>{currentPriority.first === 'home' ? 'YOU REVEAL FIRST' : 'CPU REVEALS FIRST'} · {currentPriority.reason} · Tacticals use no player slot.</span>
+          {pending.filter((play) => play.kind === 'tactical').map((play) => play.kind === 'tactical' ? <span key={play.card.id}>{play.card.name} → {play.zone} · {tacticalLabel(play.card, play.zone)}</span> : null)}
+        </div>
+        <button onClick={undo} disabled={!undoStack.length}>UNDO</button>
+        <button className="v8-primary" onClick={endPeriod} disabled={finished}>END PERIOD</button>
+      </section>
 
       {latestRecap && (
         <details className="v8-recap">
@@ -1163,14 +1029,14 @@ export default function V8CalibrationLab() {
       )}
 
       <section className="v8-hand-wrap">
-        <div className="v8-hand-heading"><strong>HAND</strong><span>{windowPhase ? 'DRAG TACTICAL TO PITCH' : 'DRAG CARD TO PITCH'} · {state.teams.home.drawPile.length} UNSEEN</span></div>
+        <div className="v8-hand-heading"><strong>HAND</strong><span>DRAG CARD TO PITCH · {state.teams.home.drawPile.length} UNSEEN</span></div>
         <div className="v8-hand">
           {homePlayers.map((card) => (
             <PlayerHandCard
               key={card.id}
               card={card}
               selected={selection?.kind === 'player' && selection.cardId === card.id}
-              affordable={!windowPhase && calibrationPlayCost(card) <= state.teams.home.energy}
+              affordable={calibrationPlayCost(card) <= state.teams.home.energy}
               onClick={() => {
                 if (consumeSuppressedClick('player', card.id)) return;
                 setSelection({ kind: 'player', cardId: card.id });
@@ -1179,15 +1045,10 @@ export default function V8CalibrationLab() {
             />
           ))}
           {homeTacticals.map((card) => {
-            const sourceState = windowPhase?.resolved ?? state;
             const eligible = tacticalDefinition(card.type).eligibleZones;
-            const costs = eligible.map((zone) => previewCalibrationTacticalCost(sourceState, 'home', card, zone));
+            const costs = eligible.map((zone) => previewCalibrationTacticalCost(state, 'home', card, zone));
             const minimumCost = Math.min(...costs);
-            const remainingEnergy = windowPhase
-              ? windowPhase.resolved.teams.home.energy - windowPhase.queued.reduce((sum, play) => sum + play.cost, 0)
-              : state.teams.home.energy;
-            const windowEligible = !windowPhase || windowEligibleCalibrationTacticals(windowPhase.resolved, 'home').some((candidate) => candidate.id === card.id);
-            const affordable = windowEligible && !windowPhase?.queued.some((play) => play.cardId === card.id) && minimumCost <= remainingEnergy;
+            const affordable = isCalibrationTacticalAvailable(state, card) && minimumCost <= state.teams.home.energy;
             return (
               <TacticalHandCard
                 key={card.id}
@@ -1195,7 +1056,6 @@ export default function V8CalibrationLab() {
                 cost={minimumCost}
                 selected={selection?.kind === 'tactical' && selection.cardId === card.id}
                 affordable={affordable}
-                fresh={Boolean(windowPhase && windowEligible)}
                 onClick={() => {
                   if (consumeSuppressedClick('tactical', card.id)) return;
                   setSelection({ kind: 'tactical', cardId: card.id });
@@ -1208,7 +1068,7 @@ export default function V8CalibrationLab() {
             <button
               type="button"
               data-testid="manager-card"
-              className={`v8-card v8-card--manager${selection?.kind === 'manager' ? ' is-selected' : ''}${!windowPhase && state.teams.home.energy >= MANAGER_COST ? '' : ' is-unaffordable'}`}
+              className={`v8-card v8-card--manager${selection?.kind === 'manager' ? ' is-selected' : ''}${state.teams.home.energy >= MANAGER_COST ? '' : ' is-unaffordable'}`}
               aria-pressed={selection?.kind === 'manager'}
               onClick={() => {
                 if (consumeSuppressedClick('manager', 'manager')) return;
@@ -1246,7 +1106,7 @@ export default function V8CalibrationLab() {
           <span className="v8-card__cost">{handDrag.kind === 'player' && draggedPlayer
             ? calibrationPlayCost(draggedPlayer)
             : handDrag.kind === 'tactical' && draggedTactical
-              ? Math.min(...tacticalDefinition(draggedTactical.type).eligibleZones.map((zone) => previewCalibrationTacticalCost(windowPhase?.resolved ?? state, 'home', draggedTactical, zone)))
+              ? Math.min(...tacticalDefinition(draggedTactical.type).eligibleZones.map((zone) => previewCalibrationTacticalCost(state, 'home', draggedTactical, zone)))
               : MANAGER_COST}</span>
           <span className="v8-card__position">{handDrag.kind === 'player' ? draggedPlayer?.position : handDrag.kind === 'tactical' ? 'TACTICAL' : 'MANAGER'}</span>
           <strong>{handDrag.kind === 'player' ? draggedPlayer?.matchName : handDrag.kind === 'tactical' ? draggedTactical?.name : MANAGER_NAME}</strong>
