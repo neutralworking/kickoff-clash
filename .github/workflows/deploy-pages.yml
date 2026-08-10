@@ -4,6 +4,7 @@ name: Deploy to GitHub Pages
 # The live game remains at /kickoff-clash/; previews are nested under /kickoff-clash/preview/
 # so preview publishing never replaces the root app.
 # ME UI preview verified head: 8178d98bd67708f79f1f6e4e0a2ad1960c4f3757
+# Opponent reveal preview verified head: 661fb78fd6890a9e9428e4f13ab3a98ee66f1975
 
 on:
   push:
@@ -84,6 +85,27 @@ jobs:
         run: |
           mkdir -p out/preview/me-ui-pass-01
           cp -R me-ui-preview-src/out/. out/preview/me-ui-pass-01/
+
+      - name: Checkout opponent reveal preview
+        uses: actions/checkout@v4
+        with:
+          ref: agent/v8-opponent-reveal-goals
+          path: opponent-reveal-preview-src
+
+      - name: Install opponent reveal preview dependencies
+        working-directory: opponent-reveal-preview-src
+        run: npm ci
+
+      - name: Build opponent reveal preview static export
+        working-directory: opponent-reveal-preview-src
+        env:
+          NEXT_PUBLIC_BASE_PATH: /kickoff-clash/preview/opponent-reveal-goals
+        run: npm run build
+
+      - name: Nest opponent reveal preview inside live Pages artifact
+        run: |
+          mkdir -p out/preview/opponent-reveal-goals
+          cp -R opponent-reveal-preview-src/out/. out/preview/opponent-reveal-goals/
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
