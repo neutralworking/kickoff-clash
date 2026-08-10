@@ -47,7 +47,7 @@ import './v8lab.css';
 import './v8recap.css';
 
 const ZONES: readonly V8Zone[] = ['DEF', 'MID', 'ATT'];
-const PERIOD_LABELS = ['0–22', '22–HT', 'HT–66', '66–FT'] as const;
+const PERIOD_LABELS = ['PERIOD 1/4', 'PERIOD 2/4', 'PERIOD 3/4', 'PERIOD 4/4'] as const;
 const MANAGER_COST = 3;
 const MANAGER_NAME = 'CONTROL';
 const DEFAULT_HOME_SQUAD: V8CalibrationSquadKey = 'cross';
@@ -481,6 +481,18 @@ function GoalBurst({ side, goals }: { side: 'YOU' | 'CPU'; goals: number }) {
   );
 }
 
+function EnergyMeter({ current, maximum }: { current: number; maximum: number }) {
+  return (
+    <div className="v8-energy" data-testid="v8-energy" aria-label={`${current} of ${maximum} Energy available`}>
+      <small>ENERGY</small>
+      <strong>{current}<i>/{maximum}</i></strong>
+      <span aria-hidden="true">
+        {Array.from({ length: maximum }).map((_, index) => <i key={index} className={index < current ? 'is-filled' : ''} />)}
+      </span>
+    </div>
+  );
+}
+
 export default function V8CalibrationLab() {
   const [homeSquad, setHomeSquad] = useState<V8CalibrationSquadKey>(DEFAULT_HOME_SQUAD);
   const [awaySquad, setAwaySquad] = useState<V8CalibrationSquadKey>(DEFAULT_AWAY_SQUAD);
@@ -502,6 +514,7 @@ export default function V8CalibrationLab() {
   const [handDrag, setHandDrag] = useState<HandDragState | null>(null);
   const [resolutionMoment, setResolutionMoment] = useState<ResolutionMoment | null>(null);
   const [revealPhase, setRevealPhase] = useState<RevealPhase | null>(null);
+  const [introVisible, setIntroVisible] = useState(true);
   const handDragRef = useRef<HandDragState | null>(null);
   const suppressHandClick = useRef<string | null>(null);
   const resolutionSequence = useRef(0);
@@ -516,6 +529,14 @@ export default function V8CalibrationLab() {
   const awayCostProfile = useMemo(() => calibrationSquadCostProfile(awaySquad), [awaySquad]);
   const latestRecap = recaps.at(-1);
   const latestTelemetry = telemetryPeriods.at(-1);
+  const periodEnergy = calibrationEnergyForPeriod(state.period);
+
+  useEffect(() => {
+    if (!introVisible) return;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const timeout = window.setTimeout(() => setIntroVisible(false), reducedMotion ? 450 : 1650);
+    return () => window.clearTimeout(timeout);
+  }, [introVisible]);
 
   useEffect(() => {
     if (!resolutionMoment) return;
@@ -541,6 +562,7 @@ export default function V8CalibrationLab() {
     setFinished(false);
     setResolutionMoment(null);
     setRevealPhase(null);
+    setIntroVisible(true);
   };
 
   const rememberUndo = () => {
@@ -652,13 +674,12 @@ export default function V8CalibrationLab() {
     const rect = pitch?.getBoundingClientRect();
     if (!rect || x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return null;
 
-    // Mobile pitch is laid out in football depth: ATT at the opponent end, MID centrally,
-    // DEF nearest the user's goal. Resolve the finger position against those thirds directly
-    // instead of relying on nested slot/label DOM hitboxes.
-    const progress = (y - rect.top) / rect.height;
-    if (progress < 1 / 3) return 'ATT';
+    // The three locations run left to right: DEF, MID, ATT. Resolve against the pitch thirds
+    // directly instead of relying on nested card and label hitboxes.
+    const progress = (x - rect.left) / rect.width;
+    if (progress < 1 / 3) return 'DEF';
     if (progress < 2 / 3) return 'MID';
-    return 'DEF';
+    return 'ATT';
   };
 
   const isHandDragZoneLegal = (drag: Pick<HandDragState, 'kind' | 'cardId'>, zone: V8Zone): boolean => {
@@ -1060,13 +1081,31 @@ export default function V8CalibrationLab() {
 
   return (
     <main className={`v8-shell${handDrag ? ' is-dragging' : ''}${debugOpen ? ' is-debug-open' : ''}${revealPhase ? ' is-revealing' : ''}${resolutionMoment ? ' is-resolving' : ''}${resolutionMoment?.homeGoals ? ' has-home-goal' : ''}${resolutionMoment?.awayGoals ? ' has-away-goal' : ''}`}>
+      {introVisible && (
+        <button className="v8-match-intro" type="button" onClick={() => setIntroVisible(false)} data-testid="v8-match-intro" aria-label="Kickoff Clash match introduction. Tap to skip.">
+          <small>KICKOFF CLASH</small>
+          <span className="v8-match-intro__fixture">
+            <i className="v8-match-intro__team v8-match-intro__team--home"><b>KC</b><strong>YOU</strong><em>HOME</em></i>
+            <b className="v8-match-intro__versus">VS</b>
+            <i className="v8-match-intro__team v8-match-intro__team--away"><b>KC</b><strong>CPU</strong><em>AWAY</em></i>
+          </span>
+          <span className="v8-match-intro__whistle">MATCH 01 · FOUR PERIODS</span>
+        </button>
+      )}
+
       <header className="v8-scorebar">
-        <div className={resolutionMoment?.homeGoals ? 'is-scoring' : ''}><small>YOU</small><strong key={`home-${resolutionMoment?.id ?? 0}-${homeScore}`}>{homeScore}</strong></div>
+        <div className={`v8-scoreteam v8-scoreteam--home${resolutionMoment?.homeGoals ? ' is-scoring' : ''}`}>
+          <small>YOU</small>
+          <span><strong key={`home-${resolutionMoment?.id ?? 0}-${homeScore}`}>{homeScore}</strong><i><b>{totalsHome.attack}</b> ATT <b>{totalsHome.defence}</b> DEF</i></span>
+        </div>
         <section>
           <b key={`period-${state.period}-${finished}`}>{finished ? 'FULL TIME' : PERIOD_LABELS[state.period - 1]}</b>
-          <span>{finished ? 'MATCH COMPLETE' : `${state.teams.home.energy} ENERGY`}</span>
+          <span>{finished ? 'MATCH COMPLETE' : 'MATCH 01'}</span>
         </section>
-        <div className={resolutionMoment?.awayGoals ? 'is-scoring' : ''}><small>CPU</small><strong key={`away-${resolutionMoment?.id ?? 0}-${awayScore}`}>{awayScore}</strong></div>
+        <div className={`v8-scoreteam v8-scoreteam--away${resolutionMoment?.awayGoals ? ' is-scoring' : ''}`}>
+          <small>CPU</small>
+          <span><i><b>{totalsAway.attack}</b> ATT <b>{totalsAway.defence}</b> DEF</i><strong key={`away-${resolutionMoment?.id ?? 0}-${awayScore}`}>{awayScore}</strong></span>
+        </div>
       </header>
 
       <div className="v8-condition" hidden={!debugOpen}>
@@ -1225,7 +1264,8 @@ export default function V8CalibrationLab() {
 
       {windowPhase ? (
         <section className="v8-commit v8-window" data-testid="v8-window">
-          <div>
+          <EnergyMeter current={windowRemainingEnergy} maximum={periodEnergy} />
+          <div className="v8-commit__decision">
             <strong>TACTICAL WINDOW</strong>
             <span>Tacticals generated this period can be played now from your {windowRemainingEnergy} unused Energy. Unplayed cards stay in hand at printed cost.</span>
             <div className="v8-window__choices">
@@ -1249,7 +1289,8 @@ export default function V8CalibrationLab() {
         </section>
       ) : (
         <section className="v8-commit">
-          <div>
+          <EnergyMeter current={state.teams.home.energy} maximum={periodEnergy} />
+          <div className="v8-commit__decision">
             <strong>{revealPhase ? revealPhase.stage === 'commitment' ? 'OPPONENT COMMITTED' : 'REVEALING' : interactionLabel}</strong>
             <span>{currentPriority.first === 'home' ? 'YOU REVEAL FIRST' : 'CPU REVEALS FIRST'} · {currentPriority.reason} · Tacticals use no player slot.</span>
             {pending.filter((play) => play.kind === 'tactical').map((play) => play.kind === 'tactical' ? <span key={play.card.id}>{play.card.name} → {play.zone} · {tacticalLabel(play.card, play.zone)}</span> : null)}

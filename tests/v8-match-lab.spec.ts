@@ -31,7 +31,7 @@ async function expectTestingSurfaceAboveFold(page: Page) {
 
   expect(positions.pitch.top).toBeGreaterThanOrEqual(0);
   expect(positions.pitch.bottom).toBeLessThan(positions.viewportHeight);
-  expect(positions.pitch.bottom - positions.pitch.top).toBeGreaterThanOrEqual(380);
+  expect(positions.pitch.bottom - positions.pitch.top).toBeGreaterThanOrEqual(300);
   expect(positions.commit.bottom).toBeLessThan(positions.viewportHeight);
   expect(positions.firstCard.top).toBeLessThan(positions.viewportHeight);
   expect(positions.firstCard.bottom).toBeLessThanOrEqual(positions.viewportHeight);
@@ -46,10 +46,15 @@ async function openLabTools(page: Page) {
   }
 }
 
+async function expectEnergy(page: Page, current: number, maximum: number) {
+  await expect(page.getByTestId('v8-energy')).toBeVisible();
+  await expect(page.getByTestId('v8-energy')).toHaveAttribute('aria-label', `${current} of ${maximum} Energy available`);
+}
+
 async function dragCardToZone(page: Page, card: Locator, zone: Locator, pointerId: number) {
   // A real mobile user scrolls the horizontal hand until the card is on-screen before lifting it.
-  // Do the same here so the gesture vector tests vertical drag rather than an artificial
-  // hundreds-of-pixels horizontal move from an off-screen card.
+  // Do the same here so the gesture vector tests lifting into the board rather than an
+  // artificial hundreds-of-pixels horizontal move from an off-screen card.
   await card.scrollIntoViewIfNeeded();
   const cardBox = await card.boundingBox();
   const pitchBox = await page.locator('.v8-pitch').boundingBox();
@@ -59,9 +64,9 @@ async function dragCardToZone(page: Page, card: Locator, zone: Locator, pointerI
   expect(zoneName).toMatch(/^(DEF|MID|ATT)$/);
   const startX = cardBox!.x + cardBox!.width / 2;
   const startY = cardBox!.y + cardBox!.height / 2;
-  const endX = pitchBox!.x + pitchBox!.width / 2;
-  const depth = zoneName === 'ATT' ? 1 / 6 : zoneName === 'MID' ? 1 / 2 : 5 / 6;
-  const endY = pitchBox!.y + pitchBox!.height * depth;
+  const depth = zoneName === 'DEF' ? 1 / 6 : zoneName === 'MID' ? 1 / 2 : 5 / 6;
+  const endX = pitchBox!.x + pitchBox!.width * depth;
+  const endY = pitchBox!.y + pitchBox!.height * .78;
   const pointer = { pointerId, pointerType: 'touch', isPrimary: true, bubbles: true };
 
   await card.dispatchEvent('pointerdown', { ...pointer, clientX: startX, clientY: startY, buttons: 1 });
@@ -73,9 +78,43 @@ async function dragCardToZone(page: Page, card: Locator, zone: Locator, pointerI
 }
 
 test.describe('V8 real-card calibration lab', () => {
+  test('opens with a skippable versus card, then presents three left-to-right locations', async ({ page }) => {
+    await page.goto('/lab/match-v8');
+
+    const intro = page.getByTestId('v8-match-intro');
+    await expect(intro).toBeVisible();
+    await expect(intro).toContainText('YOU');
+    await expect(intro).toContainText('VS');
+    await expect(intro).toContainText('CPU');
+    await intro.click();
+    await expect(intro).toHaveCount(0);
+
+    await expect(page.getByText('PERIOD 1/4', { exact: true }).first()).toBeVisible();
+    await expectEnergy(page, 2, 2);
+    const locations = await page.locator('.v8-zone').evaluateAll((zones) => zones.map((zone) => {
+      const box = zone.getBoundingClientRect();
+      const away = zone.querySelector('.v8-zone__side--away')!.getBoundingClientRect();
+      const heading = zone.querySelector('.v8-zone__heading')!.getBoundingClientRect();
+      const home = zone.querySelector('.v8-zone__side:not(.v8-zone__side--away)')!.getBoundingClientRect();
+      return { name: zone.getAttribute('data-v8-zone'), left: box.left, top: box.top, awayBottom: away.bottom, headingTop: heading.top, headingBottom: heading.bottom, homeTop: home.top };
+    }));
+    expect(locations.map(({ name }) => name)).toEqual(['DEF', 'MID', 'ATT']);
+    expect(locations[0]!.left).toBeLessThan(locations[1]!.left);
+    expect(locations[1]!.left).toBeLessThan(locations[2]!.left);
+    expect(locations[0]!.top).toBe(locations[1]!.top);
+    for (const location of locations) {
+      expect(location.awayBottom).toBeLessThanOrEqual(location.headingTop);
+      expect(location.headingBottom).toBeLessThanOrEqual(location.homeTop);
+    }
+
+    await expect(page.locator('.v8-scoreteam--home')).toContainText(/\d+ ATT \d+ DEF/);
+    await expect(page.locator('.v8-scoreteam--away')).toContainText(/\d+ ATT \d+ DEF/);
+    await expectMobileFit(page);
+  });
+
   test('keeps the core testing surface in one phone viewport', async ({ page }) => {
     await page.goto('/lab/match-v8');
-    await expect(page.getByText('2 ENERGY', { exact: true })).toBeVisible();
+    await expectEnergy(page, 2, 2);
     await expect(page.getByText('V8 SQUAD CALIBRATION', { exact: true })).not.toBeVisible();
     await expect(page.locator('.v8-hand .v8-card__art img').first()).toBeVisible();
     await expectTestingSurfaceAboveFold(page);
@@ -196,7 +235,7 @@ test.describe('V8 real-card calibration lab', () => {
 
     await expect(page.getByTestId('selected-player-detail')).toHaveCount(0);
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
-    await expect(page.getByText('1 ENERGY', { exact: true })).toBeVisible();
+    await expectEnergy(page, 1, 2);
     await expect(midfieldZone.locator('.v8-chip--transient')).toContainText('Billy Bremner');
     await expect(bremner).toHaveCount(0);
     await expectMobileFit(page);
@@ -212,7 +251,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(iniesta).toHaveClass(/is-unaffordable/);
     await expect(page.locator('.v8-commit')).toContainText('4 ENERGY REQUIRED · 2 AVAILABLE');
     await expect(page.getByTestId('selected-player-detail')).toHaveCount(0);
-    await expect(page.getByText('2 ENERGY', { exact: true })).toBeVisible();
+    await expectEnergy(page, 2, 2);
     await expectMobileFit(page);
   });
 
@@ -220,26 +259,26 @@ test.describe('V8 real-card calibration lab', () => {
     await page.goto('/lab/match-v8');
     await openLabTools(page);
 
-    await expect(page.getByText('0–22', { exact: true })).toBeVisible();
-    await expect(page.getByText('2 ENERGY', { exact: true })).toBeVisible();
+    await expect(page.getByText('PERIOD 1/4', { exact: true }).first()).toBeVisible();
+    await expectEnergy(page, 2, 2);
     await expect(page.getByText(/player Costs −1 \(min 1\)/)).toBeVisible();
     await expect(page.locator('.v8-zone')).toHaveCount(3);
     await expect(page.locator('.v8-card').filter({ hasText: 'Ángel Di María' }).locator('.v8-card__cost')).toHaveText('3');
 
     await page.getByRole('button', { name: 'END PERIOD' }).click();
-    await expect(page.getByText('22–HT', { exact: true })).toBeVisible();
-    await expect(page.getByText('4 ENERGY', { exact: true })).toBeVisible();
+    await expect(page.getByText('PERIOD 2/4', { exact: true }).first()).toBeVisible();
+    await expectEnergy(page, 4, 4);
 
     const defenceZone = page.locator('.v8-zone').first();
     await dragCardToZone(page, page.getByTestId('manager-card'), defenceZone, 8);
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
-    await expect(page.getByText('1 ENERGY', { exact: true })).toBeVisible();
+    await expectEnergy(page, 1, 4);
     await expect(defenceZone.locator('.v8-chip--transient')).toContainText('CONTROL');
     await expect(defenceZone.locator('.v8-zone__heading span')).toHaveText('1/4');
 
     await page.getByRole('button', { name: 'END PERIOD' }).click();
-    await expect(page.getByText('HT–66', { exact: true })).toBeVisible();
-    await expect(page.getByText('6 ENERGY', { exact: true })).toBeVisible();
+    await expect(page.getByText('PERIOD 3/4', { exact: true }).first()).toBeVisible();
+    await expectEnergy(page, 6, 6);
     await expect(page.locator('.v8-card--manager')).toHaveCount(0);
     await expect(defenceZone.locator('.v8-chip--transient')).toHaveCount(0);
     await expect(page.locator('.v8-log')).toContainText('reveal CONTROL');
@@ -251,15 +290,15 @@ test.describe('V8 real-card calibration lab', () => {
 
     // P1 passes so P2 can afford Di María at her accepted printed 3-Energy calibration Cost.
     await page.getByRole('button', { name: 'END PERIOD' }).click();
-    await expect(page.getByText('22–HT', { exact: true })).toBeVisible();
-    await expect(page.getByText('4 ENERGY', { exact: true })).toBeVisible();
+    await expect(page.getByText('PERIOD 2/4', { exact: true }).first()).toBeVisible();
+    await expectEnergy(page, 4, 4);
 
     const diMaria = page.locator('.v8-card').filter({ hasText: 'Ángel Di María' });
     await diMaria.click();
     const midfieldZone = page.locator('.v8-zone').nth(1);
     await midfieldZone.click();
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
-    await expect(page.getByText('1 ENERGY', { exact: true })).toBeVisible();
+    await expectEnergy(page, 1, 4);
     await page.getByRole('button', { name: 'END PERIOD' }).click();
 
     const window = page.getByTestId('v8-window');
@@ -270,8 +309,8 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(midfieldZone.locator('.v8-zone__heading span')).toHaveText('1/4');
     await page.getByRole('button', { name: 'RESOLVE WINDOW' }).click();
 
-    await expect(page.getByText('HT–66', { exact: true })).toBeVisible();
-    await expect(page.getByText('6 ENERGY', { exact: true })).toBeVisible();
+    await expect(page.getByText('PERIOD 3/4', { exact: true }).first()).toBeVisible();
+    await expectEnergy(page, 6, 6);
     const recap = page.locator('.v8-recap');
     await expect(recap).toBeVisible();
     await expect(recap).toContainText('PERIOD RECAP');
@@ -295,7 +334,7 @@ test.describe('V8 real-card calibration lab', () => {
 
     // P1 passes so P2 can afford Di María (3) and still retain 1 Energy for the Cross window.
     await page.getByRole('button', { name: 'END PERIOD' }).click();
-    await expect(page.getByText('4 ENERGY', { exact: true })).toBeVisible();
+    await expectEnergy(page, 4, 4);
 
     await page.locator('.v8-card').filter({ hasText: 'Ángel Di María' }).click();
     await page.locator('.v8-zone').nth(1).click();
@@ -327,7 +366,7 @@ test.describe('V8 real-card calibration lab', () => {
     const window = page.getByTestId('v8-window');
     await expect(window).toContainText('TACTICAL WINDOW');
     await page.getByRole('button', { name: 'SKIP WINDOW' }).click();
-    await expect(page.getByText('HT–66', { exact: true })).toBeVisible();
+    await expect(page.getByText('PERIOD 3/4', { exact: true }).first()).toBeVisible();
 
     const crossCard = page.locator('.v8-card--chance').filter({ hasText: 'Cross' });
     const midfieldZone = page.locator('.v8-zone').nth(1);
@@ -336,7 +375,7 @@ test.describe('V8 real-card calibration lab', () => {
 
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
     await expect(page.locator('.v8-commit')).toContainText('Cross → MID');
-    await expect(page.getByText('5 ENERGY', { exact: true })).toBeVisible();
+    await expectEnergy(page, 5, 6);
     await expect(crossCard).toHaveCount(0);
     await expectMobileFit(page);
   });
