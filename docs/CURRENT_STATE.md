@@ -52,15 +52,15 @@ The UI/run-flow work is stacked. The latest branch contains the preceding card a
 
 A fresh V1 run should move through:
 
-1. manager pack and manager choice;
-2. grouped player-pack reveal;
+1. a blind choice of three sealed manager packs, followed by one hero manager reveal;
+2. a new blind choice of three sealed player packs, followed by one grouped 18-player reveal;
 3. squad/team selection;
 4. V7 match;
 5. existing post-match, shop, cup and economy flow.
 
 Tactic cards are out of scope for V1. Older tactic-card, tactic-pack and charged-action code remains in the repository as implementation residue. Do not restore it to the starter flow or treat it as the current requirement.
 
-PR #92 currently bridges the old `onContinue(managerId, tacticId)` callback with a deliberate no-tactic sentinel. That is temporary. The next run-state migration should remove the legacy callback shape rather than preserving the sentinel as permanent architecture.
+The starter opening now hands the selected manager and selected 18-player pack into team selection directly. The old `onContinue(managerId, tacticId)` callback and no-tactic sentinel are no longer part of this path.
 
 ## Locked card decisions
 

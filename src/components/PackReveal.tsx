@@ -1,183 +1,129 @@
 'use client';
 
-/**
- * V1 starter opening: manager first, then one grouped player reveal.
- *
- * Tactic cards are intentionally absent. The callback keeps its legacy second
- * argument only while GameShell is migrated; a non-matching sentinel makes the
- * existing adapter carry zero tactics into the run.
- */
-
-import { useMemo, useState } from 'react';
-import type { PackContents } from '../lib/packs';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import type { PackContents, StarterPackChoices } from '../lib/packs';
 import type { Card } from '../lib/scoring';
 import type { JokerCard } from '../lib/jokers';
 import { managerFormationsV1 } from '../lib/manager-v1';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
-import { PIXEL } from './cards/cardTokens';
 import ManagerCard from './manager-cards/ManagerCard';
 import ManagerDossier from './manager-cards/ManagerDossier';
+import styles from './PackReveal.module.css';
 
-const NO_TACTIC_V1_ID = '__v1_no_tactic__';
-const SCREEN_BG = 'radial-gradient(ellipse at 50% 16%, #18301f 0%, #0a0f0b 58%, #060806 100%)';
-const GOLD = '#f5c542';
-const BLUE = '#72b7ff';
+type Stage =
+  | 'manager-choice'
+  | 'manager-opening'
+  | 'manager-reveal'
+  | 'player-choice'
+  | 'player-opening'
+  | 'player-reveal';
 
-type Stage = 'manager' | 'players';
-type Phase = 'sealed' | 'open';
+const PACK_LETTERS = ['A', 'B', 'C'];
 
-const ANIMATION_CSS = `
-@keyframes kcv1PackPulse {
-  0%, 100% { transform: scale(1) rotate(-1.4deg); }
-  50% { transform: scale(1.025) rotate(-1.4deg); }
+function packLine(position: string): number {
+  if (['GK', 'CD', 'CB', 'LB', 'RB', 'LWB', 'RWB', 'WD'].includes(position)) return 0;
+  if (['DM', 'CM', 'AM', 'LM', 'RM', 'WM'].includes(position)) return 1;
+  return 2;
 }
-@keyframes kcv1PackShimmer {
-  0% { background-position: -180% 0; }
-  100% { background-position: 260% 0; }
-}
-@keyframes kcv1Deal {
-  from { opacity: 0; transform: translateY(14px) scale(.95); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .kcv1-pack, .kcv1-pack * { animation: none !important; }
-}
-`;
 
-function SealedPack({
-  label,
-  count,
-  accent,
-  onOpen,
+function orderSquad(players: Card[]): Card[] {
+  return [...players].sort((a, b) => {
+    const line = packLine(a.position) - packLine(b.position);
+    if (line !== 0) return line;
+    return b.power - a.power;
+  });
+}
+
+function PackArt({
+  kind,
+  index,
+  opening = false,
 }: {
-  label: string;
-  count: string;
-  accent: string;
-  onOpen: () => void;
+  kind: 'manager' | 'players';
+  index: number;
+  opening?: boolean;
 }) {
+  const label = kind === 'manager' ? 'MANAGER' : 'SQUAD';
   return (
-    <div className="flex-1 min-h-0 flex flex-col items-center justify-center" style={{ gap: 'clamp(12px, 2.2dvh, 18px)' }}>
-      <button
-        type="button"
-        onClick={onOpen}
-        aria-label={`Open ${label}`}
-        style={{
-          position: 'relative',
-          width: 'clamp(154px, 46vw, 184px)',
-          maxHeight: '40dvh',
-          aspectRatio: '2 / 3',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 9,
-          color: 'var(--cream)',
-          background: 'linear-gradient(155deg, #2b1c10, #100805)',
-          border: `3px solid ${accent}`,
-          borderRadius: 14,
-          boxShadow: `0 10px 24px rgba(0,0,0,.62), 0 0 26px ${accent}55`,
-          cursor: 'pointer',
-          animation: 'kcv1PackPulse 1.8s ease-in-out infinite',
-        }}
-      >
-        <span
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            opacity: .42,
-            background: 'linear-gradient(115deg, transparent 30%, rgba(255,255,255,.65) 48%, transparent 66%)',
-            backgroundSize: '250% 100%',
-            animation: 'kcv1PackShimmer 3.6s linear infinite',
-          }}
-        />
-        <span style={{ position: 'relative', fontFamily: PIXEL, fontSize: 48, lineHeight: .9, transform: 'rotate(-10deg)', textShadow: '3px 3px 0 #000' }}>KC</span>
-        <strong style={{ position: 'relative', fontFamily: PIXEL, fontSize: 10, letterSpacing: '.13em', color: accent }}>{label}</strong>
-        <span style={{ position: 'relative', paddingInline: 8, fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1.35, letterSpacing: '.08em', textAlign: 'center', color: 'var(--cream-soft)' }}>{count}</span>
-      </button>
-      <span style={{ fontFamily: PIXEL, fontSize: 9, letterSpacing: '.18em', color: 'var(--cream)' }}>TAP TO OPEN</span>
+    <div
+      className={`${styles.packArt} ${styles[`packArt${index}`]} ${opening ? styles.packOpening : ''}`}
+      aria-hidden="true"
+    >
+      <span className={styles.packShimmer} />
+      <span className={styles.packLetter}>{PACK_LETTERS[index]}</span>
+      <span className={styles.packMonogram}>KC</span>
+      <strong>{label}</strong>
+      <small>{kind === 'manager' ? 'ONE GAFFER' : '18 PLAYERS'}</small>
+      <span className={styles.packSeal}>KICKOFF CLASH</span>
     </div>
   );
 }
 
-function PickButton({ selected, onClick }: { selected: boolean; onClick: () => void }) {
+function PackChoice({
+  kind,
+  onChoose,
+}: {
+  kind: 'manager' | 'players';
+  onChoose: (index: number) => void;
+}) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="active:scale-95"
-      style={{
-        width: '100%',
-        minHeight: 38,
-        color: selected ? '#160d04' : 'var(--cream)',
-        background: selected ? 'linear-gradient(180deg, #ffe49b, #c9922f)' : 'linear-gradient(180deg, #2d2416, #171006)',
-        border: selected ? '2px solid #f0cb70' : '2px solid #070401',
-        borderRadius: 7,
-        boxShadow: '0 3px 0 #070401',
-        fontFamily: PIXEL,
-        fontSize: 7.5,
-        lineHeight: 1.2,
-        cursor: 'pointer',
-      }}
-    >
-      {selected ? 'SELECTED ✓' : 'PICK MANAGER'}
-    </button>
+    <div className={styles.choiceStage} data-testid={`${kind}-pack-choice`}>
+      <div className={styles.packChoices}>
+        {PACK_LETTERS.map((letter, index) => (
+          <button
+            key={letter}
+            type="button"
+            className={styles.packChoice}
+            onClick={() => onChoose(index)}
+            aria-label={`Choose ${kind === 'manager' ? 'manager' : 'player'} pack ${letter}`}
+          >
+            <PackArt kind={kind} index={index} />
+          </button>
+        ))}
+      </div>
+      <p className={styles.pickPrompt}>PICK ONE</p>
+    </div>
   );
 }
 
-function ManagerSelection({
-  managers,
-  pickedId,
-  onPick,
+function OpeningBeat({ kind, index }: { kind: 'manager' | 'players'; index: number }) {
+  return (
+    <div className={styles.openingStage} data-testid={`${kind}-pack-opening`}>
+      <span className={styles.openingBurst} aria-hidden="true" />
+      <PackArt kind={kind} index={index} opening />
+    </div>
+  );
+}
+
+function PlayerReveal({
+  players,
   onInspect,
 }: {
-  managers: JokerCard[];
-  pickedId: string | null;
-  onPick: (id: string) => void;
-  onInspect: (manager: JokerCard) => void;
+  players: Card[];
+  onInspect: (card: Card) => void;
 }) {
+  const ordered = useMemo(() => orderSquad(players), [players]);
+
   return (
-    <div
-      className="flex-1 min-h-0 flex items-center overflow-hidden"
-      style={{ padding: '4px 0 8px' }}
-    >
-      <div
-        className="flex w-full overflow-x-auto"
-        style={{
-          gap: 12,
-          padding: '0 clamp(30px, 12vw, 50px) 8px',
-          scrollSnapType: 'x mandatory',
-          scrollPaddingInline: '12vw',
-          overscrollBehaviorX: 'contain',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-        }}
-      >
-        {managers.map((manager, index) => {
-          const selected = pickedId === manager.id;
+    <div className={styles.rosterViewport} data-testid="chosen-player-pack">
+      <div className={styles.rosterGrid}>
+        {ordered.map((card, index) => {
+          const timing = { '--reveal-delay': `${120 + index * 54}ms` } as CSSProperties;
           return (
-            <article
-              key={manager.id}
-              className="flex flex-col"
-              style={{
-                minWidth: 0,
-                flex: '0 0 clamp(230px, 68vw, 270px)',
-                gap: 6,
-                opacity: pickedId && !selected ? .54 : 1,
-                animation: `kcv1Deal 280ms ease-out ${index * 70}ms both`,
-                scrollSnapAlign: 'center',
-              }}
-            >
-              <ManagerCard
-                manager={manager}
-                formations={managerFormationsV1(manager)}
-                selected={selected}
-                onClick={() => onInspect(manager)}
-              />
-              <PickButton selected={selected} onClick={() => onPick(manager.id)} />
-            </article>
+            <div key={card.id} className={styles.playerSlot} style={timing} data-testid="starter-player-card">
+              <div className={styles.playerBack} aria-hidden="true">
+                <span>KC</span>
+              </div>
+              <div className={styles.playerFront}>
+                <GameCard
+                  model={{ variant: 'player', card }}
+                  size="grid"
+                  onClick={() => onInspect(card)}
+                  ariaLabel={`Inspect ${card.name}`}
+                />
+              </div>
+            </div>
           );
         })}
       </div>
@@ -185,130 +131,113 @@ function ManagerSelection({
   );
 }
 
-function PlayerReveal({ players, onInspect }: { players: Card[]; onInspect: (card: Card) => void }) {
-  return (
-    <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: '4px 0 8px', overscrollBehavior: 'contain' }}>
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5, alignItems: 'start' }}>
-        {players.map((card, index) => (
-          <div key={card.id} style={{ minWidth: 0, animation: `kcv1Deal 260ms ease-out ${index * 45}ms both` }}>
-            <GameCard model={{ variant: 'player', card }} size="grid" onClick={() => onInspect(card)} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 interface PackRevealProps {
-  contents: PackContents;
-  onContinue: (managerId: string | null, tacticId: string | null) => void;
+  choices: StarterPackChoices;
+  onContinue: (contents: PackContents) => void;
 }
 
-export default function PackReveal({ contents, onContinue }: PackRevealProps) {
-  const [stage, setStage] = useState<Stage>('manager');
-  const [phase, setPhase] = useState<Phase>('sealed');
-  const [pickedManagerId, setPickedManagerId] = useState<string | null>(null);
+export default function PackReveal({ choices, onContinue }: PackRevealProps) {
+  const [stage, setStage] = useState<Stage>('manager-choice');
+  const [managerIndex, setManagerIndex] = useState<number | null>(null);
+  const [playerPackIndex, setPlayerPackIndex] = useState<number | null>(null);
   const [playerModal, setPlayerModal] = useState<GameCardModel | null>(null);
   const [managerModal, setManagerModal] = useState<JokerCard | null>(null);
 
-  const sortedPlayers = useMemo(
-    () => [...contents.players].sort((a, b) => b.power - a.power),
-    [contents.players],
-  );
-  const accent = stage === 'manager' ? BLUE : GOLD;
-  const title = stage === 'manager' ? 'PICK YOUR MANAGER' : 'YOUR PLAYER PACK';
-  const info = stage === 'manager'
-    ? 'Your manager sets your formations, starting-XI cost and run action.'
-    : 'All players reveal together. Tap any card to inspect it.';
-  const gated = stage === 'manager' && pickedManagerId === null;
+  useEffect(() => {
+    if (stage !== 'manager-opening' && stage !== 'player-opening') return;
+    const nextStage = stage === 'manager-opening' ? 'manager-reveal' : 'player-reveal';
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const timer = window.setTimeout(() => setStage(nextStage), reducedMotion ? 20 : 620);
+    return () => window.clearTimeout(timer);
+  }, [stage]);
 
-  function continueFlow() {
-    if (stage === 'manager') {
-      if (!pickedManagerId) return;
-      setStage('players');
-      setPhase('sealed');
-      return;
-    }
-    onContinue(pickedManagerId, NO_TACTIC_V1_ID);
+  const selectedManager = managerIndex === null ? null : choices.managers[managerIndex] ?? null;
+  const selectedPlayers = playerPackIndex === null ? null : choices.playerPacks[playerPackIndex] ?? null;
+  const isManagerStage = stage.startsWith('manager');
+
+  function chooseManager(index: number) {
+    setManagerIndex(index);
+    setStage('manager-opening');
   }
 
-  return (
-    <div
-      className="kcv1-pack flex flex-col overflow-hidden relative"
-      style={{
-        height: '100dvh',
-        color: 'var(--cream)',
-        background: SCREEN_BG,
-        paddingTop: 'max(env(safe-area-inset-top), 10px)',
-        paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
-      }}
-    >
-      <style>{ANIMATION_CSS}</style>
+  function choosePlayers(index: number) {
+    setPlayerPackIndex(index);
+    setStage('player-opening');
+  }
 
-      <header className="shrink-0 px-3" style={{ textAlign: 'center' }}>
-        <div className="flex items-center justify-center" style={{ gap: 6, marginBottom: 6 }}>
-          {(['manager', 'players'] as Stage[]).map((key) => (
-            <span
-              key={key}
-              style={{
-                width: key === stage ? 24 : 7,
-                height: 7,
-                borderRadius: 99,
-                background: key === stage ? accent : 'rgba(244,236,216,.2)',
-                boxShadow: key === stage ? `0 0 10px ${accent}88` : undefined,
-                transition: 'width 160ms ease',
-              }}
-            />
-          ))}
+  function finishOpening() {
+    if (!selectedManager || !selectedPlayers) return;
+    onContinue({
+      players: selectedPlayers,
+      managers: [selectedManager],
+      tactics: [],
+      formations: choices.formations,
+    });
+  }
+
+  const title = stage === 'manager-choice'
+    ? 'CHOOSE A MANAGER PACK'
+    : stage === 'manager-reveal'
+      ? 'YOUR GAFFER'
+      : stage === 'player-choice'
+        ? 'CHOOSE YOUR SQUAD'
+        : stage === 'player-reveal'
+          ? 'THE SQUAD'
+          : 'OPENING…';
+
+  const subtitle = stage === 'manager-choice'
+    ? 'One pack. One gaffer. No take-backs.'
+    : stage === 'manager-reveal'
+      ? 'The run starts with this manager.'
+      : stage === 'player-choice'
+        ? 'Eighteen players are waiting in each pack.'
+        : stage === 'player-reveal'
+          ? '11 starters · 7 on the bench'
+          : 'Hold your nerve.';
+
+  return (
+    <div className={`${styles.screen} ${isManagerStage ? styles.managerScreen : styles.playerScreen}`}>
+      <header className={styles.header}>
+        <div className={styles.progress} aria-label={`Opening step ${isManagerStage ? 1 : 2} of 2`}>
+          <span className={isManagerStage ? styles.progressActive : styles.progressDone} />
+          <span className={!isManagerStage ? styles.progressActive : ''} />
         </div>
-        <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: '.13em', color: 'var(--dust)' }}>PACK {stage === 'manager' ? '1' : '2'} / 2</span>
-        <h1 style={{ margin: '5px 0 0', color: accent, fontFamily: 'var(--font-heavy, sans-serif)', fontSize: 'clamp(20px, 5.8vw, 23px)', lineHeight: 1 }}>{title}</h1>
-        <p style={{ margin: '6px auto 0', maxWidth: 340, color: 'var(--cream-soft)', fontSize: 10.5, lineHeight: 1.3 }}>{info}</p>
+        <span className={styles.eyebrow}>PACK {isManagerStage ? '1' : '2'} / 2</span>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
       </header>
 
-      <main className="flex-1 min-h-0 flex flex-col px-3" style={{ marginTop: 7 }}>
-        {phase === 'sealed' ? (
-          <SealedPack
-            label={stage === 'manager' ? 'MANAGER PACK' : 'PLAYER PACK'}
-            count={stage === 'manager' ? `${contents.managers.length} MANAGERS · PICK 1` : `${contents.players.length} PLAYERS`}
-            accent={accent}
-            onOpen={() => setPhase('open')}
-          />
-        ) : stage === 'manager' ? (
-          <ManagerSelection
-            managers={contents.managers}
-            pickedId={pickedManagerId}
-            onPick={setPickedManagerId}
-            onInspect={setManagerModal}
-          />
-        ) : (
-          <PlayerReveal players={sortedPlayers} onInspect={(card) => setPlayerModal({ variant: 'player', card })} />
+      <main className={styles.main}>
+        {stage === 'manager-choice' && <PackChoice kind="manager" onChoose={chooseManager} />}
+        {stage === 'manager-opening' && managerIndex !== null && <OpeningBeat kind="manager" index={managerIndex} />}
+        {stage === 'manager-reveal' && selectedManager && (
+          <div className={styles.managerReveal} data-testid="chosen-manager-reveal">
+            <span className={styles.revealHalo} aria-hidden="true" />
+            <div className={styles.managerCardReveal}>
+              <ManagerCard
+                manager={selectedManager}
+                formations={managerFormationsV1(selectedManager)}
+                size="hero"
+                onClick={() => setManagerModal(selectedManager)}
+              />
+            </div>
+          </div>
+        )}
+        {stage === 'player-choice' && <PackChoice kind="players" onChoose={choosePlayers} />}
+        {stage === 'player-opening' && playerPackIndex !== null && <OpeningBeat kind="players" index={playerPackIndex} />}
+        {stage === 'player-reveal' && selectedPlayers && (
+          <PlayerReveal players={selectedPlayers} onInspect={(card) => setPlayerModal({ variant: 'player', card })} />
         )}
       </main>
 
-      {phase === 'open' && (
-        <footer className="shrink-0 px-3 pt-1.5">
+      {(stage === 'manager-reveal' || stage === 'player-reveal') && (
+        <footer className={styles.footer}>
           <button
             type="button"
-            onClick={continueFlow}
-            disabled={gated}
-            className="active:scale-95"
-            style={{
-              width: '100%',
-              height: 44,
-              color: gated ? 'var(--dust)' : '#160d04',
-              background: gated ? 'rgba(255,255,255,.06)' : `linear-gradient(180deg, ${accent}, color-mix(in srgb, ${accent} 72%, #6b4300))`,
-              border: gated ? '1px solid var(--border)' : '2px solid #080501',
-              borderRadius: 8,
-              boxShadow: gated ? 'none' : '0 3px 0 #080501',
-              fontFamily: PIXEL,
-              fontSize: 10,
-              cursor: gated ? 'default' : 'pointer',
-            }}
+            className={styles.continueButton}
+            onClick={() => stage === 'manager-reveal' ? setStage('player-choice') : finishOpening()}
           >
-            {stage === 'manager'
-              ? gated ? 'PICK A MANAGER' : 'OPEN PLAYER PACK →'
-              : 'PICK YOUR TEAM →'}
+            {stage === 'manager-reveal' ? 'CHOOSE PLAYER PACK' : 'BUILD YOUR XI'}
           </button>
         </footer>
       )}
