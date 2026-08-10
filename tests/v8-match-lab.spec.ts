@@ -137,6 +137,38 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
+  test('turns real full +7 margins into chained goal payoff without inventing a scorer', async ({ page }) => {
+    await page.goto('/lab/match-v8');
+
+    let foundGoal = false;
+    for (let period = 1; period <= 4; period += 1) {
+      await page.getByRole('button', { name: 'END PERIOD' }).click();
+      const payoff = page.getByTestId('v8-score-payoff');
+      await expect(payoff).toBeVisible();
+      const totalGoals = Number(await payoff.getAttribute('data-goals'));
+      if (totalGoals > 0) {
+        const goalPayoff = page.getByTestId('v8-goal-payoff');
+        await expect(goalPayoff).toContainText('GOAL');
+        await expect(goalPayoff).not.toContainText(/Bremner|Ramos|Jostle|scorer/i);
+
+        const converted = page.locator('.v8-goal-contest.is-converted');
+        expect(await converted.count()).toBeGreaterThan(0);
+        for (let index = 0; index < await converted.count(); index += 1) {
+          const contest = converted.nth(index);
+          const margin = Number(await contest.getAttribute('data-margin'));
+          const goals = Number(await contest.getAttribute('data-goals'));
+          expect(margin).toBeGreaterThanOrEqual(goals * 7);
+        }
+        expect(await page.locator('.v8-goal-burst > span').count()).toBeGreaterThanOrEqual(1);
+        await expectMobileFit(page);
+        foundGoal = true;
+        break;
+      }
+      await expect(payoff).toBeHidden();
+    }
+    expect(foundGoal).toBe(true);
+  });
+
   test('selects coherent calibration squads and exposes their compressed Cost profiles', async ({ page }) => {
     await page.goto('/lab/match-v8');
     await openLabTools(page);
