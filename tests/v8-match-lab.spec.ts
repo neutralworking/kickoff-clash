@@ -101,6 +101,74 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
+  test('shows zone-correct hidden CPU commitments before revealing in real priority order', async ({ page }) => {
+    await page.goto('/lab/match-v8');
+
+    const commitStrip = page.locator('.v8-commit');
+    const expectedFirst = (await commitStrip.textContent())?.includes('CPU REVEALS FIRST') ? 'CPU' : 'YOU';
+    await page.getByRole('button', { name: 'END PERIOD' }).click();
+
+    const locked = page.getByTestId('v8-opponent-commitment');
+    await expect(locked).toBeVisible();
+    await expect(locked).toContainText('OPPONENT LOCKED IN');
+    const cardBacks = page.getByTestId('v8-opponent-card-back');
+    expect(await cardBacks.count()).toBeGreaterThan(0);
+    await expect(cardBacks.first()).toHaveText('KC');
+    await expect(cardBacks.first()).not.toHaveAttribute('data-card-id');
+
+    const hiddenGroups = page.locator('.v8-opponent-commitments');
+    expect(await hiddenGroups.count()).toBeGreaterThan(0);
+    for (let index = 0; index < await hiddenGroups.count(); index += 1) {
+      const group = hiddenGroups.nth(index);
+      const zone = await group.getAttribute('data-zone');
+      expect(zone).toMatch(/^(DEF|MID|ATT)$/);
+      await expect(group).toBeVisible();
+      await expect(group.locator('xpath=ancestor::*[@data-v8-zone][1]')).toHaveAttribute('data-v8-zone', zone!);
+    }
+
+    const firstReveal = page.getByTestId('v8-reveal-stage');
+    await expect(firstReveal).toContainText('REVEAL 1/2');
+    await expect(firstReveal).toContainText(expectedFirst);
+    await expect(page.getByTestId('v8-opponent-card-back')).toHaveCount(expectedFirst === 'CPU' ? 0 : await cardBacks.count());
+
+    await expect(page.getByTestId('v8-resolution')).toBeVisible();
+    await expect(page.getByTestId('v8-opponent-card-back')).toHaveCount(0);
+    expect(await page.locator('.v8-chip--away').count()).toBeGreaterThan(0);
+    await expectMobileFit(page);
+  });
+
+  test('turns real full +7 margins into chained goal payoff without inventing a scorer', async ({ page }) => {
+    await page.goto('/lab/match-v8');
+
+    let foundGoal = false;
+    for (let period = 1; period <= 4; period += 1) {
+      await page.getByRole('button', { name: 'END PERIOD' }).click();
+      const payoff = page.getByTestId('v8-score-payoff');
+      await expect(payoff).toBeVisible();
+      const totalGoals = Number(await payoff.getAttribute('data-goals'));
+      if (totalGoals > 0) {
+        const goalPayoff = page.getByTestId('v8-goal-payoff');
+        await expect(goalPayoff).toContainText('GOAL');
+        await expect(goalPayoff).not.toContainText(/Bremner|Ramos|Jostle|scorer/i);
+
+        const converted = page.locator('.v8-goal-contest.is-converted');
+        expect(await converted.count()).toBeGreaterThan(0);
+        for (let index = 0; index < await converted.count(); index += 1) {
+          const contest = converted.nth(index);
+          const margin = Number(await contest.getAttribute('data-margin'));
+          const goals = Number(await contest.getAttribute('data-goals'));
+          expect(margin).toBeGreaterThanOrEqual(goals * 7);
+        }
+        expect(await page.locator('.v8-goal-burst > span').count()).toBeGreaterThanOrEqual(1);
+        await expectMobileFit(page);
+        foundGoal = true;
+        break;
+      }
+      await expect(payoff).toBeHidden();
+    }
+    expect(foundGoal).toBe(true);
+  });
+
   test('selects coherent calibration squads and exposes their compressed Cost profiles', async ({ page }) => {
     await page.goto('/lab/match-v8');
     await openLabTools(page);

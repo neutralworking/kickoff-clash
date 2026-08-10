@@ -1913,6 +1913,119 @@
 /* authoritative and unchanged.                                               */
 /* ========================================================================== */
 
+/* Opponent commitment is staged on the existing pitch: only zone and count
+   are visible until that side's real priority reveal. */
+.v8-zone__side--away { position: relative; }
+.v8-opponent-commitments {
+  position: absolute;
+  z-index: 12;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 8px;
+  pointer-events: none;
+}
+.v8-opponent-card-back {
+  position: relative;
+  width: 25px;
+  height: 38px;
+  margin-left: -8px;
+  overflow: hidden;
+  border: 1px solid rgba(132, 219, 255, .72);
+  border-radius: 5px;
+  background:
+    linear-gradient(135deg, transparent 43%, rgba(124, 218, 255, .18) 44% 56%, transparent 57%),
+    repeating-linear-gradient(45deg, rgba(255,255,255,.035) 0 3px, transparent 3px 6px),
+    linear-gradient(155deg, #203955, #111827 68%, #080d16);
+  box-shadow: 0 5px 11px rgba(0,0,0,.55), inset 0 0 0 2px rgba(4,9,17,.72), 0 0 13px rgba(69, 187, 243, .14);
+  transform: translateY(-2px) rotate(-3deg);
+  animation: v8-opponent-lock .42s cubic-bezier(.18,.9,.25,1.12) both;
+}
+.v8-opponent-card-back:nth-child(2n) { transform: translateY(1px) rotate(2deg); animation-delay: 45ms; }
+.v8-opponent-card-back:nth-child(3n) { transform: translateY(-1px) rotate(-1deg); animation-delay: 90ms; }
+.v8-opponent-card-back i {
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(149, 225, 255, .2);
+  border-radius: 50%;
+}
+.v8-opponent-card-back b {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  color: rgba(184, 235, 255, .62);
+  font-size: 6px;
+  letter-spacing: -.04em;
+  transform: translate(-50%,-50%);
+}
+.v8-opponent-commitments__more {
+  z-index: 2;
+  margin-left: -5px;
+  padding: 2px 4px;
+  border-radius: 99px;
+  background: #0a111c;
+  color: #a9e6ff;
+  font-size: 6px;
+}
+
+.v8-reveal-stage {
+  position: absolute;
+  z-index: 38;
+  left: 50%;
+  top: 50%;
+  min-width: 178px;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 9px 14px;
+  border: 1px solid rgba(120, 213, 255, .23);
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(9,19,29,.9), rgba(5,8,13,.93));
+  box-shadow: 0 14px 38px rgba(0,0,0,.54), 0 0 36px rgba(78, 188, 239, .09);
+  text-align: center;
+  transform: translate(-50%,-50%);
+  pointer-events: none;
+  backdrop-filter: blur(7px);
+  animation: v8-reveal-banner .46s cubic-bezier(.18,.88,.24,1.08) both;
+}
+.v8-reveal-stage--first,
+.v8-reveal-stage--second {
+  border-color: rgba(255, 211, 107, .32);
+  background: linear-gradient(180deg, rgba(36,27,13,.9), rgba(7,9,13,.93));
+  box-shadow: 0 14px 38px rgba(0,0,0,.54), 0 0 38px rgba(255, 184, 51, .09);
+}
+.v8-reveal-stage small {
+  color: rgba(172, 229, 255, .68);
+  font-size: 5.5px;
+  font-weight: 1000;
+  letter-spacing: .17em;
+}
+.v8-reveal-stage--first small,
+.v8-reveal-stage--second small { color: rgba(255, 218, 128, .72); }
+.v8-reveal-stage strong {
+  color: #effaff;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: -.025em;
+  text-shadow: 0 2px 8px #000;
+}
+.v8-reveal-stage span {
+  color: rgba(235,242,247,.5);
+  font-size: 5.5px;
+  font-weight: 900;
+  letter-spacing: .1em;
+}
+.v8-shell.is-revealing .v8-hand-wrap,
+.v8-shell.is-revealing .v8-commit {
+  filter: saturate(.72) brightness(.82);
+  pointer-events: none;
+}
+.v8-pitch.is-revealing {
+  border-color: rgba(118, 210, 251, .28);
+  box-shadow: inset 0 0 40px rgba(0,0,0,.26), 0 0 34px rgba(63, 183, 236, .07);
+}
+
 /* Lifting a card now leaves its hand slot behind instead of showing two full cards. */
 .v8-shell.is-dragging .v8-card.is-selected {
   opacity: .16;
@@ -1949,7 +2062,7 @@
 }
 
 .v8-scorebar > div.is-scoring strong {
-  animation: v8-score-pop .72s cubic-bezier(.16,.9,.22,1.2) both;
+  animation: v8-score-pop .72s cubic-bezier(.16,.9,.22,1.2) 1.42s both;
 }
 .v8-scorebar section b {
   animation: v8-period-tick .42s ease-out both;
@@ -1991,6 +2104,21 @@
   transform: translate(-50%,-50%) scale(.72);
   opacity: 0;
   animation: v8-resolution-ring 2.8s ease-out both;
+}
+.v8-goal-flash {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 48%, rgba(255, 203, 85, .42), rgba(255, 151, 34, .09) 35%, transparent 67%);
+  opacity: 0;
+  animation: v8-goal-flash 2.8s ease-out both;
+}
+.v8-goal-flash.is-away {
+  background: radial-gradient(circle at 50% 48%, rgba(97, 207, 255, .4), rgba(44, 139, 255, .08) 35%, transparent 67%);
+}
+.v8-goal-flash.is-both {
+  background: radial-gradient(circle at 50% 48%, rgba(255, 214, 107, .34), rgba(94, 193, 255, .16) 38%, transparent 68%);
 }
 .v8-resolution__beat {
   position: absolute;
@@ -2060,18 +2188,118 @@
   grid-template-columns: 1fr 1fr;
   gap: 5px;
 }
-.v8-resolution__matchups span {
-  display: block;
+.v8-goal-contest {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
   padding: 5px 4px;
   border: 1px solid rgba(255,255,255,.07);
   border-radius: 7px;
   background: rgba(255,255,255,.025);
+}
+.v8-goal-contest.is-converted {
+  border-color: rgba(255, 211, 101, .28);
+  background: rgba(255, 186, 51, .055);
+}
+.v8-goal-contest span {
   color: rgba(243,245,248,.66);
   font-size: 5.6px;
   letter-spacing: .02em;
 }
-.v8-resolution__matchups b { color: #fff; font-size: 9px; }
-.v8-resolution__matchups i { color: rgba(255,255,255,.3); font-style: normal; }
+.v8-goal-contest span b { color: #fff; font-size: 7px; }
+.v8-goal-contest span i { color: rgba(255,255,255,.3); font-style: normal; }
+.v8-goal-contest > small {
+  color: rgba(238,241,246,.4);
+  font-size: 4.7px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.v8-goal-contest.is-converted > small { color: rgba(255, 218, 126, .7); }
+.v8-goal-meter {
+  position: relative;
+  height: 7px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 99px;
+  background: rgba(0,0,0,.3);
+}
+.v8-goal-meter::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  inset-block: 0;
+  border-right: 1px solid rgba(255,255,255,.3);
+}
+.v8-goal-meter > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #e69a2c, #ffe08a);
+  box-shadow: 0 0 10px rgba(255, 188, 54, .36);
+  transform-origin: left;
+  animation: v8-goal-meter-fill .58s 1.25s ease-out both;
+}
+.v8-goal-contest:not(.is-converted) .v8-goal-meter > i {
+  background: linear-gradient(90deg, rgba(168,174,183,.5), rgba(222,226,231,.62));
+  box-shadow: none;
+}
+.v8-goal-meter > b {
+  position: absolute;
+  z-index: 2;
+  right: 6px;
+  top: 50%;
+  color: rgba(255,255,255,.62);
+  font-size: 4.5px;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+.v8-goal-payoff {
+  min-height: 33px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.v8-goal-burst {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.v8-goal-burst > span {
+  min-width: 39px;
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  padding: 4px 7px 3px;
+  border: 1px solid rgba(255, 214, 105, .46);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(255,192,57,.2), rgba(95,54,9,.38));
+  box-shadow: 0 0 20px rgba(255, 178, 42, .14), inset 0 1px rgba(255,255,255,.12);
+  opacity: 0;
+  animation: v8-goal-punch .48s cubic-bezier(.15,.9,.2,1.24) both;
+}
+.v8-goal-burst--cpu > span {
+  border-color: rgba(106, 211, 255, .42);
+  background: linear-gradient(180deg, rgba(74,185,244,.2), rgba(13,57,91,.38));
+  box-shadow: 0 0 20px rgba(69, 192, 255, .14), inset 0 1px rgba(255,255,255,.1);
+}
+.v8-goal-burst small {
+  color: rgba(255,239,193,.64);
+  font-size: 4.5px;
+  font-weight: 1000;
+  letter-spacing: .12em;
+}
+.v8-goal-burst--cpu small { color: rgba(184,232,255,.66); }
+.v8-goal-burst b {
+  color: #fff3c7;
+  font-size: 14px;
+  line-height: .95;
+  letter-spacing: -.045em;
+  text-shadow: 0 2px 9px #000, 0 0 12px rgba(255, 188, 53, .36);
+}
+.v8-goal-burst--cpu b { color: #d7f4ff; text-shadow: 0 2px 9px #000, 0 0 12px rgba(74, 193, 255, .34); }
+.v8-no-goals { opacity: .56; }
 .v8-resolution__beat--next strong { font-size: 35px; letter-spacing: -.08em; }
 
 .v8-shell.has-home-goal .v8-resolution__beat--score {
@@ -2085,6 +2313,15 @@
   0% { transform: translateY(10px) scale(.86); opacity: .15; }
   70% { transform: translateY(-2px) scale(1.035); opacity: 1; }
   100% { transform: none; opacity: 1; }
+}
+@keyframes v8-opponent-lock {
+  0% { opacity: 0; transform: translateY(-12px) rotateY(72deg) scale(.78); }
+  72% { opacity: 1; transform: translateY(2px) rotateY(-5deg) scale(1.05); }
+  100% { opacity: 1; }
+}
+@keyframes v8-reveal-banner {
+  0% { opacity: 0; transform: translate(-50%,-43%) scale(.9); }
+  100% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
 }
 @keyframes v8-chip-reveal {
   0% { transform: perspective(220px) rotateY(78deg) scale(.78); filter: brightness(1.8); opacity: .1; }
@@ -2109,6 +2346,21 @@
   0% { transform: scale(.72); color: #fff; }
   45% { transform: scale(1.34); color: #ffd86e; text-shadow: 0 0 20px rgba(255,190,55,.55); }
   100% { transform: none; color: inherit; }
+}
+@keyframes v8-goal-meter-fill {
+  0% { transform: scaleX(0); filter: brightness(.8); }
+  78% { transform: scaleX(1.04); filter: brightness(1.3); }
+  100% { transform: scaleX(1); filter: none; }
+}
+@keyframes v8-goal-punch {
+  0% { opacity: 0; transform: scale(1.8) rotate(-3deg); filter: brightness(2); }
+  60% { opacity: 1; transform: scale(.92) rotate(1deg); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+@keyframes v8-goal-flash {
+  0%,45%,100% { opacity: 0; }
+  52% { opacity: .9; }
+  64% { opacity: .18; }
 }
 @keyframes v8-period-tick {
   0% { opacity: .2; transform: translateY(3px); }
@@ -2150,12 +2402,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .v8-opponent-card-back,
+  .v8-reveal-stage,
   .v8-chip--transient,
   .v8-chip.is-fresh,
   .v8-chip.is-fresh::after,
   .v8-card--chance.is-fresh,
   .v8-window,
   .v8-scorebar > div.is-scoring strong,
+  .v8-goal-flash,
+  .v8-goal-meter > i,
+  .v8-goal-burst > span,
   .v8-scorebar section b,
   .v8-pitch.is-resolving::before,
   .v8-resolution::before,
