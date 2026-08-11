@@ -40,6 +40,38 @@ test.describe('390 × 844 opening', () => {
     await expect(page.getByText(/name your squad/i).first()).toBeVisible();
   });
 
+  test('keeps the manager limit and player-card hierarchy legible', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /new season/i }).click();
+    await page.getByRole('button', { name: /choose manager pack/i }).nth(1).click();
+
+    const xiLimit = page.getByTestId('manager-xi-limit');
+    await expect(xiLimit).toBeVisible();
+    await expect(xiLimit).toContainText('XI LIMIT');
+
+    await page.getByRole('button', { name: /choose player pack/i }).click();
+    await page.getByRole('button', { name: /choose player pack/i }).nth(2).click();
+
+    const firstCard = page.getByTestId('starter-player-card').first();
+    const hierarchy = await firstCard.evaluate((element) => {
+      const cost = element.querySelector<HTMLElement>('[data-card-cost]');
+      const position = element.querySelector<HTMLElement>('[data-card-position]');
+      const stat = element.querySelector<HTMLElement>('[data-card-stat] span');
+      if (!cost || !position || !stat) throw new Error('Card hierarchy markers are missing');
+      return {
+        costDiameter: cost.getBoundingClientRect().width,
+        statDiameter: stat.parentElement?.getBoundingClientRect().width ?? 0,
+        costFont: Number.parseFloat(getComputedStyle(cost).fontSize),
+        statFont: Number.parseFloat(getComputedStyle(stat).fontSize),
+        positionFont: Number.parseFloat(getComputedStyle(position).fontSize),
+      };
+    });
+
+    expect(hierarchy.costDiameter).toBeLessThan(hierarchy.statDiameter);
+    expect(hierarchy.costFont).toBeLessThan(hierarchy.statFont);
+    expect(hierarchy.positionFont).toBeGreaterThanOrEqual(8);
+  });
+
   test('swipes between two complete 3×3 reveal pages', async ({ page }) => {
     await page.goto('/');
     await openChosenSquad(page);

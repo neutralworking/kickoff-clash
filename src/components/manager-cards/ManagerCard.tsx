@@ -81,16 +81,19 @@ function cardContents(
           </div>
         </div>
 
+        <span
+          className={styles.xiCostBadge}
+          data-testid="manager-xi-limit"
+          aria-label={`Starting XI cost limit ${maxStartingXiCost}`}
+        >
+          <small>XI LIMIT</small>
+          <strong>{maxStartingXiCost}</strong>
+        </span>
+
         <div className={styles.identityPlate}>
           <strong className={styles.name}>{manager.name.toUpperCase()}</strong>
           <span className={styles.actionLabel}>{actionName.toUpperCase()}</span>
           <p className={styles.actionText}>{actionText}</p>
-          <div className={styles.cardFooter}>
-            <span className={styles.xiCostBadge}>
-              <small>START XI</small>
-              <strong>{maxStartingXiCost}</strong>
-            </span>
-          </div>
         </div>
 
         <div className={styles.raritySeam} style={{ '--manager-edge': tier.edge } as CSSProperties} />
