@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { PackContents, StarterPackChoices } from '../lib/packs';
 import type { Card } from '../lib/scoring';
 import type { JokerCard } from '../lib/jokers';
@@ -104,28 +104,73 @@ function PlayerReveal({
   onInspect: (card: Card) => void;
 }) {
   const ordered = useMemo(() => orderSquad(players), [players]);
+  const pages = useMemo(() => [ordered.slice(0, 9), ordered.slice(9, 18)], [ordered]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const viewportRef = useRef<HTMLDivElement>(null);
+
+  function showPage(index: number) {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.scrollTo({ left: viewport.clientWidth * index, behavior: 'smooth' });
+    setPageIndex(index);
+  }
 
   return (
-    <div className={styles.rosterViewport} data-testid="chosen-player-pack">
-      <div className={styles.rosterGrid}>
-        {ordered.map((card, index) => {
-          const timing = { '--reveal-delay': `${120 + index * 54}ms` } as CSSProperties;
-          return (
-            <div key={card.id} className={styles.playerSlot} style={timing} data-testid="starter-player-card">
-              <div className={styles.playerBack} aria-hidden="true">
-                <span>KC</span>
+    <div className={styles.rosterReveal} data-testid="chosen-player-pack">
+      <div
+        ref={viewportRef}
+        className={styles.rosterViewport}
+        data-testid="starter-player-pages"
+        onScroll={(event) => {
+          const width = event.currentTarget.clientWidth;
+          if (width > 0) setPageIndex(Math.round(event.currentTarget.scrollLeft / width));
+        }}
+      >
+        <div className={styles.rosterPages}>
+          {pages.map((page, pageNumber) => (
+            <section
+              key={pageNumber}
+              className={styles.rosterPage}
+              aria-label={`Squad page ${pageNumber + 1} of ${pages.length}`}
+              data-testid="starter-player-page"
+            >
+              <div className={styles.rosterGrid}>
+                {page.map((card, index) => {
+                  const revealIndex = pageNumber * 9 + index;
+                  const timing = { '--reveal-delay': `${120 + revealIndex * 54}ms` } as CSSProperties;
+                  return (
+                    <div key={card.id} className={styles.playerSlot} style={timing} data-testid="starter-player-card">
+                      <div className={styles.playerBack} aria-hidden="true">
+                        <span>KC</span>
+                      </div>
+                      <div className={styles.playerFront}>
+                        <GameCard
+                          model={{ variant: 'player', card }}
+                          size="grid"
+                          onClick={() => onInspect(card)}
+                          ariaLabel={`Inspect ${card.name}`}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <div className={styles.playerFront}>
-                <GameCard
-                  model={{ variant: 'player', card }}
-                  size="grid"
-                  onClick={() => onInspect(card)}
-                  ariaLabel={`Inspect ${card.name}`}
-                />
-              </div>
-            </div>
-          );
-        })}
+            </section>
+          ))}
+        </div>
+      </div>
+      <div className={styles.rosterPager} aria-label="Squad reveal pages">
+        {pages.map((_, index) => (
+          <button
+            key={index}
+            type="button"
+            className={index === pageIndex ? styles.rosterPageActive : ''}
+            onClick={() => showPage(index)}
+            aria-label={`Show squad page ${index + 1}`}
+            aria-current={index === pageIndex ? 'page' : undefined}
+          />
+        ))}
+        <span>SWIPE</span>
       </div>
     </div>
   );
@@ -192,7 +237,7 @@ export default function PackReveal({ choices, onContinue }: PackRevealProps) {
       : stage === 'player-choice'
         ? 'Eighteen players are waiting in each pack.'
         : stage === 'player-reveal'
-          ? '11 starters · 7 on the bench'
+          ? '18 players · choose 11 before kick-off'
           : 'Hold your nerve.';
 
   return (

@@ -602,6 +602,8 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
   const tier = handoffTier(card.rarity);
   const cost = v6.cost;
   const act = actionLabel(v6.actions[0]);
+  const actionName = card.v8PlayerId && card.abilityName ? card.abilityName : act.short;
+  const actionText = card.v8PlayerId && card.abilityText ? card.abilityText : act.full;
   const src = portraitSrc(card);
   const [imgOk, setImgOk] = useState(true);
 
@@ -729,7 +731,7 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
         </div>
         {!full && (
           <div style={{ fontFamily: BODY_FONT, fontSize: 7.5, fontWeight: 700, color: ACTION_BONUS_GOLD, marginTop: 2, letterSpacing: '0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {act.short}
+            {actionName}
           </div>
         )}
       </div>
@@ -742,7 +744,7 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
             <span style={{ fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: ACTION_BONUS_GOLD }}>
               Action:{' '}
             </span>
-            {act.full}
+            {actionText}
           </p>
         </div>
       )}
