@@ -1,5 +1,13 @@
 # V8 generated Tactical timing — resolved 2026-08-08
 
+> **SUPERSEDED (2026-08-08) by `2026-08-08-v8-generated-tactical-window.md`.** The
+> "banked for the next commitment window" rule below is no longer the behaviour: a
+> Tactical generated during a period is now playable in that same period's post-reveal
+> Generated-Tactical Window, in every period including P4. What survives unchanged:
+> movement-generated Tacticals remain immediately playable during commitment,
+> end-of-period generation still lands in the next period, and P4 end-of-period
+> generation still fizzles at FT. Kept for history.
+
 ## Contract
 
 V8 keeps **one commitment window per period**.

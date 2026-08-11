@@ -1,0 +1,86 @@
+import { describe, expect, it } from 'vitest';
+import {
+  V8_EXPANSION_BATCH_06,
+  getV8ExpansionBatch06Card,
+} from '../calibration-expansion-batch-06';
+
+describe('V8 Action expansion Batch 06 source-first audit', () => {
+  it('contains eight unique tracker-grounded contracts across multiple roles', () => {
+    expect(V8_EXPANSION_BATCH_06).toHaveLength(8);
+    expect(new Set(V8_EXPANSION_BATCH_06.map((card) => card.id)).size).toBe(8);
+    expect(V8_EXPANSION_BATCH_06.some((card) => card.naturalZones.includes('DEF'))).toBe(true);
+    expect(V8_EXPANSION_BATCH_06.some((card) => card.naturalZones.includes('MID'))).toBe(true);
+    expect(V8_EXPANSION_BATCH_06.some((card) => card.naturalZones.includes('ATT'))).toBe(true);
+  });
+
+  it('keeps tracker Action identity instead of older generic reconciliation Action names', () => {
+    expect(getV8ExpansionBatch06Card('carli-lloyd').actionName).toBe('HALFWAY HIT');
+    expect(getV8ExpansionBatch06Card('carlos-valderrama').actionName).toBe('PAUSE AND SLIP');
+    expect(getV8ExpansionBatch06Card('christian-eriksen').actionName).toBe('WHIPPED DELIVERY');
+    expect(getV8ExpansionBatch06Card('caroline-graham-hansen').actionName).toBe('ONE ON ONE');
+    expect(getV8ExpansionBatch06Card('jari-litmanen').actionName).toBe('KILLER PASS');
+    expect(getV8ExpansionBatch06Card('keira-walsh').actionName).toBe('BEAT THE PRESS');
+    expect(getV8ExpansionBatch06Card('rory-delap').actionName).toBe('HURLER');
+    expect(getV8ExpansionBatch06Card('arjen-robben').actionName).toBe('CUT INSIDE');
+  });
+
+  it('promotes all eight Batch 06 cards after implementing their V8 primitives', () => {
+    const ready = V8_EXPANSION_BATCH_06
+      .filter((card) => card.implementationState === 'runtime_ready')
+      .map((card) => card.id)
+      .sort();
+    const pending = V8_EXPANSION_BATCH_06
+      .filter((card) => card.implementationState === 'primitive_required')
+      .map((card) => card.id)
+      .sort();
+
+    expect(ready).toEqual([
+      'arjen-robben',
+      'carli-lloyd',
+      'carlos-valderrama',
+      'caroline-graham-hansen',
+      'christian-eriksen',
+      'jari-litmanen',
+      'keira-walsh',
+      'rory-delap',
+    ]);
+    expect(pending).toEqual([]);
+  });
+
+  it('translates Robben wide-to-centre identity into a Cross-to-Long-Shot pivot without adding power', () => {
+    const robben = getV8ExpansionBatch06Card('arjen-robben');
+    expect(robben.auditDecision).toBe('keep_translate');
+    expect(robben.implementationState).toBe('runtime_ready');
+    expect(robben.actionText).toContain('Cross');
+    expect(robben.actionText).toContain('Long Shot');
+    expect(robben.auditNote).toContain('no ATT bonus');
+    expect(robben.auditNote).toContain('original paid Cost');
+  });
+
+  it('implements Graham Hansen through shared defender-target interception rather than post-hoc repair', () => {
+    const hansen = getV8ExpansionBatch06Card('caroline-graham-hansen');
+    expect(hansen.auditDecision).toBe('keep_translate');
+    expect(hansen.primitives).toContain('targeted_defender_action_evasion');
+    expect(hansen.implementationState).toBe('runtime_ready');
+    expect(hansen.auditNote).toContain('shared defender-target interception');
+    expect(hansen.actionText).toContain('ignored');
+    expect(hansen.actionText).toContain('+2 ATT');
+  });
+
+  it('makes Walsh press resistance progression rather than another immunity Action', () => {
+    const walsh = getV8ExpansionBatch06Card('keira-walsh');
+    expect(walsh.auditDecision).toBe('keep_translate');
+    expect(walsh.implementationState).toBe('runtime_ready');
+    expect(walsh.actionText).toContain('Trigger Press');
+    expect(walsh.actionText).toContain('Through Ball');
+    expect(walsh.auditNote).toContain('not immunity');
+  });
+
+  it('makes Delap a typed Long Throw creator rather than a disguised Cross or Corner card', () => {
+    const delap = getV8ExpansionBatch06Card('rory-delap');
+    expect(delap.auditDecision).toBe('keep_translate');
+    expect(delap.implementationState).toBe('runtime_ready');
+    expect(delap.actionText).toContain('Long Throw');
+    expect(delap.auditNote).toContain('explicit typed Chance');
+  });
+});

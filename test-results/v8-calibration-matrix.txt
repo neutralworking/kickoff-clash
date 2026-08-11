@@ -1,0 +1,34 @@
+V8 calibration matrix · 1152 matches · 32 seeds per ordered matchup
+
+SQUAD SUMMARY (self-matches excluded)
+cross | W 49% | D 13% | GF 5.944 | GA 5.622 | GD +0.322 | unused E 2.406 | deployed 7.516 | Tactical share 4% | cancelled 0.231 | window 0 plays / 0 E / 0 ATT
+through_ball | W 31% | D 18% | GF 5.838 | GA 6.478 | GD -0.641 | unused E 1.272 | deployed 7.025 | Tactical share 4% | cancelled 0.256 | window 0 plays / 0 E / 0 ATT
+dribbling_penalty | W 54% | D 14% | GF 6.531 | GA 5.706 | GD +0.825 | unused E 2.769 | deployed 8.044 | Tactical share 1% | cancelled 0 | window 0 plays / 0 E / 0 ATT
+control_defence | W 43% | D 17% | GF 2.741 | GA 2.7 | GD +0.041 | unused E 3.047 | deployed 7.578 | Tactical share 2% | cancelled 0.238 | window 0 plays / 0 E / 0 ATT
+long_shot_set_piece | W 25% | D 18% | GF 3.325 | GA 4.297 | GD -0.972 | unused E 1.844 | deployed 7.578 | Tactical share 6% | cancelled 0.038 | window 0 plays / 0 E / 0 ATT
+balanced_midrange | W 50% | D 17% | GF 5.975 | GA 5.55 | GD +0.425 | unused E 1.609 | deployed 7.844 | Tactical share 2% | cancelled 0.072 | window 0 plays / 0 E / 0 ATT
+
+PAIRINGS (both home/away orientations combined)
+cross vs through_ball: 55 / 17 / 28 · goals 8.203-6.844 · GD(A) +1.359
+cross vs dribbling_penalty: 45 / 5 / 50 · goals 7.063-7.609 · GD(A) -0.547
+cross vs control_defence: 44 / 13 / 44 · goals 3.094-3.125 · GD(A) -0.031
+cross vs long_shot_set_piece: 58 / 17 / 25 · goals 4.563-3.688 · GD(A) +0.875
+cross vs balanced_midrange: 42 / 16 / 42 · goals 6.797-6.844 · GD(A) -0.047
+through_ball vs dribbling_penalty: 22 / 17 / 61 · goals 7.25-8.313 · GD(A) -1.062
+through_ball vs control_defence: 33 / 13 / 55 · goals 2.781-3.422 · GD(A) -0.641
+through_ball vs long_shot_set_piece: 47 / 25 / 28 · goals 5.078-4.672 · GD(A) +0.406
+through_ball vs balanced_midrange: 23 / 17 / 59 · goals 7.234-7.781 · GD(A) -0.547
+dribbling_penalty vs control_defence: 44 / 17 / 39 · goals 3.391-3.25 · GD(A) +0.141
+dribbling_penalty vs long_shot_set_piece: 72 / 6 / 22 · goals 5.719-3.719 · GD(A) +2
+dribbling_penalty vs balanced_midrange: 45 / 25 / 30 · goals 7.625-7.25 · GD(A) +0.375
+control_defence vs long_shot_set_piece: 42 / 28 / 30 · goals 1.219-1.141 · GD(A) +0.078
+control_defence vs balanced_midrange: 34 / 14 / 52 · goals 2.688-3.094 · GD(A) -0.406
+long_shot_set_piece vs balanced_midrange: 20 / 13 / 67 · goals 3.406-4.906 · GD(A) -1.5
+
+TOP CHAINS
+cross: 89× BEND IT → Cross = +7 ATT ; 65× BEND IT → Cross = +4 ATT ; 51× RABONA → Cross = +2 ATT ; 42× BEND IT → Cross → CANCELLED ; 32× RABONA → Cross → CANCELLED
+through_ball: 80× PAUSE AND SLIP → Through Ball → CANCELLED ; 68× KILLER PASS → Through Ball = +3 ATT ; 63× PAUSE AND SLIP → Through Ball = +4 ATT ; 59× PAUSE AND SLIP → Through Ball → CURVED RUN +1 = +5 ATT ; 29× KILLER PASS → Through Ball → CURVED RUN = +3 ATT
+dribbling_penalty: 30× RAINBOW FLICK → Penalty → CHIPPED PENALTY +3 = +8 ATT ; 2× RAINBOW FLICK → Penalty = +5 ATT
+control_defence: 175× PENDOLINO → Cross = +2 ATT ; 54× PENDOLINO → Cross → CANCELLED
+long_shot_set_piece: 155× THUNDERBALL → Long Shot → HALFWAY HIT +4 = +8 ATT ; 22× WHIPPED DELIVERY → Corner = +4 ATT ; 19× WHIPPED DELIVERY → Corner → 93RD MINUTE +5 = +9 ATT ; 12× WHIPPED DELIVERY → Corner → CANCELLED ; 10× THUNDERBALL → Long Shot = +4 ATT
+balanced_midrange: 62× BEND IT → Cross = +4 ATT ; 23× BEND IT → Cross → CANCELLED

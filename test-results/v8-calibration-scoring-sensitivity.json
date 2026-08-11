@@ -1,0 +1,404 @@
+[
+  {
+    "policy": "repeat_5",
+    "matches": 960,
+    "averageTotalGoals": 15.56,
+    "medianTotalGoals": 15,
+    "p90TotalGoals": 25,
+    "shareAtLeast18": 0.428,
+    "shareAtLeast20": 0.35,
+    "drawRate": 0.121,
+    "averageMargin": 2.879,
+    "squads": {
+      "cross": {
+        "wins": 159,
+        "draws": 33,
+        "losses": 128,
+        "winRate": 0.497,
+        "drawRate": 0.103,
+        "goalsFor": 9.122,
+        "goalsAgainst": 8.628
+      },
+      "through_ball": {
+        "wins": 104,
+        "draws": 41,
+        "losses": 175,
+        "winRate": 0.325,
+        "drawRate": 0.128,
+        "goalsFor": 8.809,
+        "goalsAgainst": 9.7
+      },
+      "dribbling_penalty": {
+        "wins": 186,
+        "draws": 34,
+        "losses": 100,
+        "winRate": 0.581,
+        "drawRate": 0.106,
+        "goalsFor": 9.953,
+        "goalsAgainst": 8.775
+      },
+      "control_defence": {
+        "wins": 140,
+        "draws": 46,
+        "losses": 134,
+        "winRate": 0.438,
+        "drawRate": 0.144,
+        "goalsFor": 4.388,
+        "goalsAgainst": 4.388
+      },
+      "long_shot_set_piece": {
+        "wins": 92,
+        "draws": 37,
+        "losses": 191,
+        "winRate": 0.288,
+        "drawRate": 0.116,
+        "goalsFor": 5.269,
+        "goalsAgainst": 6.628
+      },
+      "balanced_midrange": {
+        "wins": 163,
+        "draws": 41,
+        "losses": 116,
+        "winRate": 0.509,
+        "drawRate": 0.128,
+        "goalsFor": 9.141,
+        "goalsAgainst": 8.563
+      }
+    }
+  },
+  {
+    "policy": "repeat_6",
+    "matches": 960,
+    "averageTotalGoals": 12.36,
+    "medianTotalGoals": 12,
+    "p90TotalGoals": 20,
+    "shareAtLeast18": 0.259,
+    "shareAtLeast20": 0.126,
+    "drawRate": 0.116,
+    "averageMargin": 2.444,
+    "squads": {
+      "cross": {
+        "wins": 156,
+        "draws": 28,
+        "losses": 136,
+        "winRate": 0.488,
+        "drawRate": 0.088,
+        "goalsFor": 7.141,
+        "goalsAgainst": 6.953
+      },
+      "through_ball": {
+        "wins": 111,
+        "draws": 38,
+        "losses": 171,
+        "winRate": 0.347,
+        "drawRate": 0.119,
+        "goalsFor": 7.128,
+        "goalsAgainst": 7.738
+      },
+      "dribbling_penalty": {
+        "wins": 175,
+        "draws": 39,
+        "losses": 106,
+        "winRate": 0.547,
+        "drawRate": 0.122,
+        "goalsFor": 7.922,
+        "goalsAgainst": 6.997
+      },
+      "control_defence": {
+        "wins": 137,
+        "draws": 45,
+        "losses": 138,
+        "winRate": 0.428,
+        "drawRate": 0.141,
+        "goalsFor": 3.369,
+        "goalsAgainst": 3.444
+      },
+      "long_shot_set_piece": {
+        "wins": 97,
+        "draws": 36,
+        "losses": 187,
+        "winRate": 0.303,
+        "drawRate": 0.113,
+        "goalsFor": 4.141,
+        "goalsAgainst": 5.175
+      },
+      "balanced_midrange": {
+        "wins": 173,
+        "draws": 36,
+        "losses": 111,
+        "winRate": 0.541,
+        "drawRate": 0.113,
+        "goalsFor": 7.381,
+        "goalsAgainst": 6.775
+      }
+    }
+  },
+  {
+    "policy": "repeat_7",
+    "matches": 960,
+    "averageTotalGoals": 10.118,
+    "medianTotalGoals": 10,
+    "p90TotalGoals": 17,
+    "shareAtLeast18": 0.063,
+    "shareAtLeast20": 0.013,
+    "drawRate": 0.161,
+    "averageMargin": 2.016,
+    "squads": {
+      "cross": {
+        "wins": 156,
+        "draws": 43,
+        "losses": 121,
+        "winRate": 0.488,
+        "drawRate": 0.134,
+        "goalsFor": 5.944,
+        "goalsAgainst": 5.622
+      },
+      "through_ball": {
+        "wins": 98,
+        "draws": 57,
+        "losses": 165,
+        "winRate": 0.306,
+        "drawRate": 0.178,
+        "goalsFor": 5.838,
+        "goalsAgainst": 6.478
+      },
+      "dribbling_penalty": {
+        "wins": 174,
+        "draws": 45,
+        "losses": 101,
+        "winRate": 0.544,
+        "drawRate": 0.141,
+        "goalsFor": 6.531,
+        "goalsAgainst": 5.706
+      },
+      "control_defence": {
+        "wins": 137,
+        "draws": 54,
+        "losses": 129,
+        "winRate": 0.428,
+        "drawRate": 0.169,
+        "goalsFor": 2.741,
+        "goalsAgainst": 2.7
+      },
+      "long_shot_set_piece": {
+        "wins": 80,
+        "draws": 57,
+        "losses": 183,
+        "winRate": 0.25,
+        "drawRate": 0.178,
+        "goalsFor": 3.325,
+        "goalsAgainst": 4.297
+      },
+      "balanced_midrange": {
+        "wins": 160,
+        "draws": 54,
+        "losses": 106,
+        "winRate": 0.5,
+        "drawRate": 0.169,
+        "goalsFor": 5.975,
+        "goalsAgainst": 5.55
+      }
+    }
+  },
+  {
+    "policy": "repeat_8",
+    "matches": 960,
+    "averageTotalGoals": 8.548,
+    "medianTotalGoals": 8,
+    "p90TotalGoals": 14,
+    "shareAtLeast18": 0.002,
+    "shareAtLeast20": 0,
+    "drawRate": 0.159,
+    "averageMargin": 1.883,
+    "squads": {
+      "cross": {
+        "wins": 155,
+        "draws": 38,
+        "losses": 127,
+        "winRate": 0.484,
+        "drawRate": 0.119,
+        "goalsFor": 5.028,
+        "goalsAgainst": 4.813
+      },
+      "through_ball": {
+        "wins": 102,
+        "draws": 47,
+        "losses": 171,
+        "winRate": 0.319,
+        "drawRate": 0.147,
+        "goalsFor": 4.963,
+        "goalsAgainst": 5.581
+      },
+      "dribbling_penalty": {
+        "wins": 172,
+        "draws": 54,
+        "losses": 94,
+        "winRate": 0.538,
+        "drawRate": 0.169,
+        "goalsFor": 5.572,
+        "goalsAgainst": 4.825
+      },
+      "control_defence": {
+        "wins": 133,
+        "draws": 60,
+        "losses": 127,
+        "winRate": 0.416,
+        "drawRate": 0.188,
+        "goalsFor": 2.241,
+        "goalsAgainst": 2.178
+      },
+      "long_shot_set_piece": {
+        "wins": 85,
+        "draws": 59,
+        "losses": 176,
+        "winRate": 0.266,
+        "drawRate": 0.184,
+        "goalsFor": 2.719,
+        "goalsAgainst": 3.534
+      },
+      "balanced_midrange": {
+        "wins": 160,
+        "draws": 48,
+        "losses": 112,
+        "winRate": 0.5,
+        "drawRate": 0.15,
+        "goalsFor": 5.122,
+        "goalsAgainst": 4.713
+      }
+    }
+  },
+  {
+    "policy": "repeat_5_cap3",
+    "matches": 960,
+    "averageTotalGoals": 12.481,
+    "medianTotalGoals": 13,
+    "p90TotalGoals": 18,
+    "shareAtLeast18": 0.134,
+    "shareAtLeast20": 0.042,
+    "drawRate": 0.184,
+    "averageMargin": 1.942,
+    "squads": {
+      "cross": {
+        "wins": 141,
+        "draws": 69,
+        "losses": 110,
+        "winRate": 0.441,
+        "drawRate": 0.216,
+        "goalsFor": 7.159,
+        "goalsAgainst": 6.722
+      },
+      "through_ball": {
+        "wins": 64,
+        "draws": 84,
+        "losses": 172,
+        "winRate": 0.2,
+        "drawRate": 0.263,
+        "goalsFor": 6.553,
+        "goalsAgainst": 7.238
+      },
+      "dribbling_penalty": {
+        "wins": 181,
+        "draws": 44,
+        "losses": 95,
+        "winRate": 0.566,
+        "drawRate": 0.138,
+        "goalsFor": 7.666,
+        "goalsAgainst": 6.838
+      },
+      "control_defence": {
+        "wins": 142,
+        "draws": 46,
+        "losses": 132,
+        "winRate": 0.444,
+        "drawRate": 0.144,
+        "goalsFor": 4.178,
+        "goalsAgainst": 4.031
+      },
+      "long_shot_set_piece": {
+        "wins": 96,
+        "draws": 51,
+        "losses": 173,
+        "winRate": 0.3,
+        "drawRate": 0.159,
+        "goalsFor": 4.666,
+        "goalsAgainst": 5.788
+      },
+      "balanced_midrange": {
+        "wins": 159,
+        "draws": 60,
+        "losses": 101,
+        "winRate": 0.497,
+        "drawRate": 0.188,
+        "goalsFor": 7.222,
+        "goalsAgainst": 6.828
+      }
+    }
+  },
+  {
+    "policy": "new_thresholds_5",
+    "matches": 960,
+    "averageTotalGoals": 11.524,
+    "medianTotalGoals": 11,
+    "p90TotalGoals": 18,
+    "shareAtLeast18": 0.143,
+    "shareAtLeast20": 0.04,
+    "drawRate": 0.165,
+    "averageMargin": 2.039,
+    "squads": {
+      "cross": {
+        "wins": 145,
+        "draws": 51,
+        "losses": 124,
+        "winRate": 0.453,
+        "drawRate": 0.159,
+        "goalsFor": 6.625,
+        "goalsAgainst": 6.369
+      },
+      "through_ball": {
+        "wins": 104,
+        "draws": 52,
+        "losses": 164,
+        "winRate": 0.325,
+        "drawRate": 0.163,
+        "goalsFor": 6.513,
+        "goalsAgainst": 7.053
+      },
+      "dribbling_penalty": {
+        "wins": 172,
+        "draws": 46,
+        "losses": 102,
+        "winRate": 0.538,
+        "drawRate": 0.144,
+        "goalsFor": 7.219,
+        "goalsAgainst": 6.488
+      },
+      "control_defence": {
+        "wins": 136,
+        "draws": 51,
+        "losses": 133,
+        "winRate": 0.425,
+        "drawRate": 0.159,
+        "goalsFor": 3.413,
+        "goalsAgainst": 3.45
+      },
+      "long_shot_set_piece": {
+        "wins": 91,
+        "draws": 63,
+        "losses": 166,
+        "winRate": 0.284,
+        "drawRate": 0.197,
+        "goalsFor": 4.059,
+        "goalsAgainst": 4.838
+      },
+      "balanced_midrange": {
+        "wins": 154,
+        "draws": 53,
+        "losses": 113,
+        "winRate": 0.481,
+        "drawRate": 0.166,
+        "goalsFor": 6.744,
+        "goalsAgainst": 6.375
+      }
+    }
+  }
+]

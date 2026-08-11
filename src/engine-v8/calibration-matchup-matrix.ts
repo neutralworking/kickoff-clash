@@ -6,7 +6,7 @@ import {
   revealCalibrationPlayer,
   spendCalibrationTacticalFromHand,
 } from './calibration-decay';
-import { getV8CalibrationPlayer, type V8CalibrationPlayerCard } from './calibration-cards';
+import { type V8CalibrationPlayerCard } from './calibration-cards';
 import {
   calibrationHandPlayers,
   calibrationHandTacticals,
@@ -19,8 +19,10 @@ import {
   removeCalibrationPlayerFromHand,
   resolveCommittedCalibrationTactical,
   tacticalDefinition,
+  windowEligibleCalibrationTacticals,
   type V8CalibrationSide,
   type V8CalibrationState,
+  type V8CalibrationWindowPlay,
 } from './calibration-runtime';
 import {
   V8_CALIBRATION_SQUAD_KEYS,
@@ -89,6 +91,10 @@ export interface V8CalibrationSquadSummary {
   averageTacticalsPlayed: number;
   averageCancelledChances: number;
   tacticalAttackShare: number;
+  averageWindowTacticalsPlayed: number;
+  averageWindowEnergySpent: number;
+  averageWindowTacticalAtt: number;
+  averageWindowCancellations: number;
   topChains: Array<{ chain: string; count: number }>;
 }
 
@@ -249,6 +255,19 @@ function priorityPlayersForState(
     return runnerEstablished
       ? ['valderrama', 'litmanen', 'morgan', 'shevchenko', 'park']
       : ['morgan', 'shevchenko', 'valderrama', 'litmanen', 'park'];
+  }
+  if (squad === 'dribbling_penalty') {
+    const hand = calibrationHandPlayers(state, side);
+    const neymar = hand.find((card) => card.id === 'neymar');
+    const reducer = hand.find((card) => card.id === 'duff') ?? hand.find((card) => card.id === 'garrincha');
+    if (neymar && reducer && calibrationPlayCost(neymar) + calibrationPlayCost(reducer) <= state.teams[side].energy) {
+      const panenka = hand.find((card) => card.id === 'panenka');
+      const tripleFits = panenka
+        && calibrationPlayCost(neymar) + calibrationPlayCost(reducer) + calibrationPlayCost(panenka) <= state.teams[side].energy;
+      return tripleFits
+        ? ['panenka', reducer.id, 'neymar', 'garrincha', 'duff']
+        : [reducer.id, 'neymar', 'panenka', 'garrincha', 'duff'];
+    }
   }
   if (squad === 'long_shot_set_piece') {
     return state.period >= 3
@@ -495,6 +514,47 @@ function resolveSequence(state: V8CalibrationState, plays: readonly V8Calibratio
   return next;
 }
 
+/**
+ * Generated-Tactical Window calibration policy settled from the A/B pass:
+ * free THREE LUNGS is cleared now; Offside Trap is held without a current Through Ball;
+ * ordinary Chances cash immediately; a P3 Corner may wait for the P4 Ramos spike.
+ */
+export function planV8CalibrationWindow(
+  state: V8CalibrationState,
+  side: V8CalibrationSide,
+  squad: V8CalibrationSquadKey = 'balanced_midrange',
+): V8CalibrationWindowPlay[] {
+  const plays: V8CalibrationWindowPlay[] = [];
+  let budget = state.teams[side].energy;
+  const otherSide: V8CalibrationSide = side === 'home' ? 'away' : 'home';
+  const hasRamosInAtt = calibrationPlayersInZone(state, side, 'ATT').some((player) => player.cardId === 'ramos');
+  const opponentWindowThroughBall = windowEligibleCalibrationTacticals(state, otherSide)
+    .some((card) => card.type === 'through_ball');
+
+  for (const card of windowEligibleCalibrationTacticals(state, side)) {
+    let shouldPlay = true;
+
+    if (card.type === 'corner'
+      && squad === 'long_shot_set_piece'
+      && state.period === 3
+      && hasRamosInAtt) {
+      shouldPlay = false;
+    }
+
+    if (card.type === 'offside_trap') shouldPlay = opponentWindowThroughBall;
+    if (!shouldPlay) continue;
+
+    const legal = tacticalDefinition(card.type).eligibleZones
+      .map((zone) => ({ zone, cost: previewCalibrationTacticalCost(state, side, card, zone) }))
+      .filter(({ cost }) => cost <= budget)
+      .sort((a, b) => a.cost - b.cost)[0];
+    if (!legal) continue;
+    budget -= legal.cost;
+    plays.push({ side, cardId: card.id, zone: legal.zone });
+  }
+  return plays;
+}
+
 function priority(
   state: V8CalibrationState,
   homeScore: number,
@@ -538,6 +598,11 @@ export function simulateV8CalibrationMatch(args: {
     let resolved = resolveSequence(away.state, plays.filter((play) => play.side === first));
     resolved = resolveSequence(resolved, plays.filter((play) => play.side !== first));
 
+    // A Tactical generated this period is never playable this period: it becomes selectable in
+    // planV8CalibrationSide's own commitment loop (isCalibrationTacticalAvailable gates on
+    // availableFromPeriod) starting next period. No same-period window.
+    const telemetryPlays = plays;
+
     const homeTotals = calibrationTeamTotals(resolved, 'home');
     const awayTotals = calibrationTeamTotals(resolved, 'away');
     const homeGoals = goalsFromAttackDefence(homeTotals.attack, awayTotals.defence);
@@ -553,7 +618,7 @@ export function simulateV8CalibrationMatch(args: {
       homeDefence: homeTotals.defence,
       awayAttack: awayTotals.attack,
       awayDefence: awayTotals.defence,
-      plays,
+      plays: telemetryPlays,
     }));
 
     const wasFinal = resolved.period === 4;
@@ -637,6 +702,10 @@ function squadSummary(
   let cancelledChances = 0;
   let tacticalAttack = 0;
   let totalAttack = 0;
+  let windowTacticalsPlayed = 0;
+  let windowEnergySpent = 0;
+  let windowTacticalAtt = 0;
+  let windowCancellations = 0;
   const chains = new Map<string, number>();
 
   const relevant = matches.filter((match) => match.homeSquad !== match.awaySquad && (match.homeSquad === squad || match.awaySquad === squad));
@@ -656,6 +725,10 @@ function squadSummary(
     tacticalsPlayed += team.tacticalsPlayed;
     cancelledChances += team.cancelledChances;
     tacticalAttack += team.tacticalAttackGenerated;
+    windowTacticalsPlayed += team.windowTacticalsPlayed;
+    windowEnergySpent += team.windowEnergySpent;
+    windowTacticalAtt += team.windowTacticalAtt;
+    windowCancellations += team.windowCancellations;
     totalAttack += match.telemetry.periods.reduce((sum, period) => sum + period[side].attack, 0);
     for (const chain of team.majorChains) chains.set(chain, (chains.get(chain) ?? 0) + 1);
   }
@@ -677,6 +750,10 @@ function squadSummary(
     averageTacticalsPlayed: rounded(tacticalsPlayed / count),
     averageCancelledChances: rounded(cancelledChances / count),
     tacticalAttackShare: totalAttack > 0 ? rounded(tacticalAttack / totalAttack) : 0,
+    averageWindowTacticalsPlayed: rounded(windowTacticalsPlayed / count),
+    averageWindowEnergySpent: rounded(windowEnergySpent / count),
+    averageWindowTacticalAtt: rounded(windowTacticalAtt / count),
+    averageWindowCancellations: rounded(windowCancellations / count),
     topChains: [...chains.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 5)
@@ -733,6 +810,7 @@ export function formatV8CalibrationMatrixReport(report: V8CalibrationMatrixRepor
       `deployed ${squad.averagePlayersDeployed}`,
       `Tactical share ${Math.round(squad.tacticalAttackShare * 100)}%`,
       `cancelled ${squad.averageCancelledChances}`,
+      `window ${squad.averageWindowTacticalsPlayed} plays / ${squad.averageWindowEnergySpent} E / ${squad.averageWindowTacticalAtt} ATT`,
     ].join(' | '));
   const pairingLines = report.pairings
     .map((pair) => `${pair.squadA} vs ${pair.squadB}: ${Math.round(pair.squadAWinRate * 100)} / ${Math.round(pair.drawRate * 100)} / ${Math.round(pair.squadBWinRate * 100)} · goals ${pair.averageGoalsA}-${pair.averageGoalsB} · GD(A) ${pair.averageGoalDifferenceA >= 0 ? '+' : ''}${pair.averageGoalDifferenceA}`);

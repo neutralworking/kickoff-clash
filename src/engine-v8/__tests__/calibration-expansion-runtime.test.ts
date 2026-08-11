@@ -1,0 +1,180 @@
+import { describe, expect, it } from 'vitest';
+import {
+  addCalibrationTacticalToHand,
+  calibrationCardCountsAsPresentInZone,
+  calibrationPresenceZonesForCard,
+  calibrationRuntimeId,
+  createV8CalibrationState,
+  currentCalibrationAttack,
+  currentCalibrationDefence,
+  endV8CalibrationPeriod,
+  getV8CalibrationPlayer,
+  moveCalibrationPlayer,
+  playCalibrationTactical,
+  previewCalibrationPlayerCost,
+  refreshCalibrationScoreState,
+  removeCalibrationPlayerFromHand,
+  revealCalibrationPlayer,
+  seedCalibrationPlayer,
+} from '../index';
+
+describe('V8 expansion Batch 01 runtime primitives', () => {
+  it('JINKING RUN moves once per match and rewards MID → ATT', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'home', 'abedi-pele', 'MID');
+    const runtimeId = calibrationRuntimeId('home', 'abedi-pele');
+
+    expect(currentCalibrationAttack(state, runtimeId)).toBe(9);
+    state = moveCalibrationPlayer(state, 'home', 'abedi-pele', 'ATT');
+    expect(currentCalibrationAttack(state, runtimeId)).toBe(13);
+    expect(state.players[runtimeId]?.zone).toBe('ATT');
+    expect(() => moveCalibrationPlayer(state, 'home', 'abedi-pele', 'MID')).toThrow('already moved this match');
+  });
+
+  it('ESCAPE THE PRESS discounts only the first MID-capable player next period', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'home', 'aitana-bonmati', 'MID');
+    state.teams.home.hand.push({ kind: 'player', cardId: 'seedorf' });
+    state.teams.home.hand.push({ kind: 'player', cardId: 'beckham' });
+    state = endV8CalibrationPeriod(state);
+
+    expect(state.period).toBe(2);
+    expect(previewCalibrationPlayerCost(state, 'home', 'seedorf')).toBe(getV8CalibrationPlayer('seedorf').cost - 1);
+    const energyBefore = state.teams.home.energy;
+    state = removeCalibrationPlayerFromHand(state, 'home', 'seedorf');
+    expect(state.teams.home.energy).toBe(energyBefore - (getV8CalibrationPlayer('seedorf').cost - 1));
+    expect(previewCalibrationPlayerCost(state, 'home', 'beckham')).toBe(getV8CalibrationPlayer('beckham').cost);
+  });
+
+  it('ESCAPE THE PRESS expires if its next-period discount is not used', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'home', 'aitana-bonmati', 'MID');
+    state = endV8CalibrationPeriod(state);
+    state = endV8CalibrationPeriod(state);
+
+    expect(state.period).toBe(3);
+    expect(previewCalibrationPlayerCost(state, 'home', 'seedorf')).toBe(getV8CalibrationPlayer('seedorf').cost);
+  });
+
+  it('CHEEKY CHIP reads the live zone confrontation rather than match score', () => {
+    let state = createV8CalibrationState();
+    state = seedCalibrationPlayer(state, 'away', 'schmeichel', 'DEF');
+    state = seedCalibrationPlayer(state, 'away', 'ramos', 'DEF');
+    state = revealCalibrationPlayer(state, 'home', 'dempsey', 'ATT');
+
+    const runtimeId = calibrationRuntimeId('home', 'dempsey');
+    expect(getV8CalibrationPlayer('dempsey').actionName).toBe('CHEEKY CHIP');
+    expect(currentCalibrationAttack(state, runtimeId)).toBe(15);
+  });
+
+  it('END-TO-END RUN replaces its live score-state modifier instead of stacking it', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'home', 'di-stefano', 'ATT');
+    const runtimeId = calibrationRuntimeId('home', 'di-stefano');
+
+    expect(currentCalibrationAttack(state, runtimeId)).toBe(11);
+    expect(currentCalibrationDefence(state, runtimeId)).toBe(2);
+
+    state = refreshCalibrationScoreState(state, { home: 0, away: 1 });
+    expect(currentCalibrationAttack(state, runtimeId)).toBe(13);
+    expect(currentCalibrationDefence(state, runtimeId)).toBe(1);
+
+    state = refreshCalibrationScoreState(state, { home: 2, away: 1 });
+    expect(currentCalibrationAttack(state, runtimeId)).toBe(10);
+    expect(currentCalibrationDefence(state, runtimeId)).toBe(4);
+    expect(state.players[runtimeId]?.modifiers.filter((modifier) => modifier.source === 'END-TO-END RUN')).toHaveLength(1);
+  });
+
+  it('SHOW HIM OUTSIDE retargets to the highest-ATT opposing attacker as the board changes', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'home', 'ashley-cole', 'DEF');
+    state = revealCalibrationPlayer(state, 'away', 'dempsey', 'ATT');
+
+    const dempseyId = calibrationRuntimeId('away', 'dempsey');
+    expect(currentCalibrationAttack(state, dempseyId)).toBe(5);
+
+    state = revealCalibrationPlayer(state, 'away', 'ronaldo', 'ATT');
+    const ronaldoId = calibrationRuntimeId('away', 'ronaldo');
+    expect(currentCalibrationAttack(state, dempseyId)).toBe(10);
+    expect(currentCalibrationAttack(state, ronaldoId)).toBe(getV8CalibrationPlayer('ronaldo').printedAttack - 5);
+
+    state = endV8CalibrationPeriod(state);
+    expect(currentCalibrationAttack(state, dempseyId)).toBe(10);
+    expect(currentCalibrationAttack(state, ronaldoId)).toBe(getV8CalibrationPlayer('ronaldo').printedAttack - 5);
+  });
+
+  it('BERBA SPIN ignores SHOW HIM OUTSIDE, moves away, and only triggers once per period', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'away', 'berbatov', 'ATT');
+    const berbatovId = calibrationRuntimeId('away', 'berbatov');
+
+    state = revealCalibrationPlayer(state, 'home', 'ashley-cole', 'DEF');
+    expect(state.players[berbatovId]?.zone).toBe('MID');
+    expect(currentCalibrationAttack(state, berbatovId)).toBe(getV8CalibrationPlayer('berbatov').printedAttack);
+    expect(state.events.some((event) => event.type === 'action_ignored' && event.text.includes('BERBA SPIN ignores SHOW HIM OUTSIDE'))).toBe(true);
+
+    state = revealCalibrationPlayer(state, 'home', 'gentile', 'MID');
+    expect(state.players[berbatovId]?.zone).toBe('MID');
+    expect(state.suppressedActions[berbatovId]).toBe(calibrationRuntimeId('home', 'gentile'));
+  });
+
+  it('BERBA SPIN can intercept MAN MARKER as the first defender Action of the period', () => {
+    let state = createV8CalibrationState();
+    state = revealCalibrationPlayer(state, 'away', 'berbatov', 'ATT');
+    const berbatovId = calibrationRuntimeId('away', 'berbatov');
+
+    state = revealCalibrationPlayer(state, 'home', 'gentile', 'DEF');
+    expect(state.players[berbatovId]?.zone).toBe('MID');
+    expect(state.suppressedActions[berbatovId]).toBeUndefined();
+    expect(state.events.some((event) => event.type === 'action_ignored' && event.text.includes('BERBA SPIN ignores MAN MARKER'))).toBe(true);
+  });
+
+  it('EVERYWHERE is rules-layer presence in all three zones, not physical relocation', () => {
+    expect(calibrationPresenceZonesForCard('kante', 'MID')).toEqual(['DEF', 'MID', 'ATT']);
+    expect(calibrationCardCountsAsPresentInZone('kante', 'MID', 'DEF')).toBe(true);
+    expect(calibrationCardCountsAsPresentInZone('kante', 'MID', 'MID')).toBe(true);
+    expect(calibrationCardCountsAsPresentInZone('kante', 'MID', 'ATT')).toBe(true);
+  });
+
+  it('EVERYWHERE collapses to physical-zone presence when the Action is disabled', () => {
+    expect(calibrationPresenceZonesForCard('kante', 'MID', false)).toEqual(['MID']);
+    expect(calibrationCardCountsAsPresentInZone('kante', 'MID', 'ATT', false)).toBe(false);
+    expect(calibrationPresenceZonesForCard('seedorf', 'MID')).toEqual(['MID']);
+  });
+
+  it('BODY ON THE LINE cancels the first otherwise-resolving Chance, then costs Puyol 3 DEF', () => {
+    let state = createV8CalibrationState({ awayEnergy: 20 });
+    state = seedCalibrationPlayer(state, 'home', 'puyol', 'DEF');
+    const first = addCalibrationTacticalToHand(state, 'away', 'cross');
+    state = first.state;
+    state = playCalibrationTactical(state, 'away', first.card.id, 'ATT');
+
+    const puyolId = calibrationRuntimeId('home', 'puyol');
+    const firstResolution = state.tacticalResolutions.find((resolution) => resolution.cardId === first.card.id);
+    expect(firstResolution?.cancelled).toBe(true);
+    expect(firstResolution?.attack).toBe(0);
+    expect(currentCalibrationDefence(state, puyolId)).toBe(6);
+
+    const second = addCalibrationTacticalToHand(state, 'away', 'cross');
+    state = second.state;
+    state = playCalibrationTactical(state, 'away', second.card.id, 'ATT');
+    const secondResolution = state.tacticalResolutions.find((resolution) => resolution.cardId === second.card.id);
+    expect(secondResolution?.cancelled).toBe(false);
+    expect(secondResolution?.attack).toBeGreaterThan(0);
+    expect(currentCalibrationDefence(state, puyolId)).toBe(6);
+  });
+
+  it('BODY ON THE LINE does not fire into an uncancellable Chance', () => {
+    let state = createV8CalibrationState({ awayEnergy: 20 });
+    state = seedCalibrationPlayer(state, 'home', 'puyol', 'DEF');
+    const penalty = addCalibrationTacticalToHand(state, 'away', 'penalty', { cancellable: false });
+    state = penalty.state;
+    state = playCalibrationTactical(state, 'away', penalty.card.id, 'ATT');
+
+    const puyolId = calibrationRuntimeId('home', 'puyol');
+    const resolution = state.tacticalResolutions.find((item) => item.cardId === penalty.card.id);
+    expect(resolution?.cancelled).toBe(false);
+    expect(currentCalibrationDefence(state, puyolId)).toBe(9);
+    expect(state.matchCounters[`puyol-body-on-the-line:${puyolId}`] ?? 0).toBe(0);
+  });
+});

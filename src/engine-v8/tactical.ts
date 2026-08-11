@@ -1,6 +1,6 @@
 import { type V8Zone } from './core';
 
-export type V8CalibrationChanceType = 'cross' | 'through_ball' | 'long_shot' | 'corner' | 'penalty';
+export type V8CalibrationChanceType = 'cross' | 'through_ball' | 'long_shot' | 'corner' | 'penalty' | 'long_throw';
 export type V8UtilityTacticalType = 'offside_trap' | 'trigger_press';
 export type V8TacticalType = V8CalibrationChanceType | V8UtilityTacticalType;
 
@@ -21,6 +21,13 @@ export interface V8GeneratedTacticalMetadata {
   freeThroughPeriod?: number;
   /** Franco Baresi: successful cancellation from this exact trap rewards its source zone. */
   baresiPlayerId?: string;
+  /**
+   * The period this instance entered hand. Window eligibility is the equality
+   * `enteredHandPeriod === state.period` (the Generated-Tactical Window contract).
+   */
+  enteredHandPeriod?: number;
+  /** First period whose COMMITMENT phase may play a held generated card (set by the timing layer). */
+  availableFromPeriod?: number;
   /** Open metadata bag for future generated-card riders without inventing new card types. */
   [key: string]: string | number | boolean | undefined;
 }
@@ -43,7 +50,7 @@ export interface V8TacticalCardInstance {
  * eligibleZones remains the legality list, but its order is also the calibration CPU's
  * deterministic tie-break when two legal zones cost the same. Keep the preferred specialist
  * lane first: Cross / Through Ball finishers live in ATT, while Long Shot specialists live in MID.
- * This changes only CPU placement preference, not Tactical legality or balance values.
+ * Long Throw is an ATT-only set-piece Chance: distinct identity without a bespoke scoring rule.
  */
 export const V8_TACTICAL_DEFINITIONS: Record<V8TacticalType, V8TacticalDefinition> = {
   cross: {
@@ -68,10 +75,10 @@ export const V8_TACTICAL_DEFINITIONS: Record<V8TacticalType, V8TacticalDefinitio
     type: 'long_shot',
     name: 'Long Shot',
     baseCost: 1,
-    baseAtt: 1,
+    baseAtt: 2,
     eligibleZones: ['MID', 'DEF', 'ATT'],
     isChance: true,
-    text: '+1 ATT this period.',
+    text: '+2 ATT this period.',
   },
   corner: {
     type: 'corner',
@@ -90,6 +97,15 @@ export const V8_TACTICAL_DEFINITIONS: Record<V8TacticalType, V8TacticalDefinitio
     eligibleZones: ['ATT'],
     isChance: true,
     text: '+5 ATT this period.',
+  },
+  long_throw: {
+    type: 'long_throw',
+    name: 'Long Throw',
+    baseCost: 1,
+    baseAtt: 2,
+    eligibleZones: ['ATT'],
+    isChance: true,
+    text: '+2 ATT this period.',
   },
   offside_trap: {
     type: 'offside_trap',
@@ -117,6 +133,7 @@ export const V8_CHANCE_TYPES = new Set<V8TacticalType>([
   'long_shot',
   'corner',
   'penalty',
+  'long_throw',
 ]);
 
 export function isV8ChanceType(type: V8TacticalType): type is V8CalibrationChanceType {

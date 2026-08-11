@@ -1,59 +1,41 @@
-import { type V8ActionDefinition, type V8PlayerCard, type V8Zone } from './core';
+export * from './calibration-cards-base';
 
-export type V8CalibrationActionKey =
-  | 'wambach_diving_header'
-  | 'hegerberg_front_post_dart'
-  | 'di_maria_rabona'
-  | 'cafu_pendolino'
-  | 'beckham_bend_it'
-  | 'dzajic_left_foot_whip'
-  | 'morgan_curved_run'
-  | 'shevchenko_runs_in_behind'
-  | 'valderrama_pause_and_slip'
-  | 'litmanen_killer_pass'
-  | 'charlton_thunderball'
-  | 'lloyd_halfway_hit'
-  | 'eriksen_whipped_delivery'
-  | 'ramos_93rd_minute'
-  | 'duff_knock_and_run'
-  | 'garrincha_joy_of_the_people'
-  | 'okocha_stepover'
-  | 'neymar_rainbow_flick'
-  | 'ronaldo_flip_flap'
-  | 'panenka_chipped_penalty'
-  | 'iniesta_la_croqueta'
-  | 'bremner_crunching_tackle'
-  | 'seedorf_ride_the_tackle'
-  | 'makelele_water_carrier'
-  | 'gentile_man_marker'
-  | 'baresi_step_up'
-  | 'park_three_lungs'
-  | 'schmeichel_starfish'
-  | 'sinclair_arrive_unmarked'
-  | 'beckenbauer_der_kaiser';
+import {
+  V8_CALIBRATION_PLAYERS as BASE_CALIBRATION_PLAYERS,
+  type V8CalibrationPlayerCard,
+} from './calibration-cards-base';
 
-export type V8CalibrationValueSource = 'tracker' | 'kc_reconciliation' | 'calibration_fallback';
+export const NEYMAR_RAINBOW_FLICK_TEXT = 'On Reveal: If an opposing defender is here, add a Penalty to your hand.';
+export const GARRINCHA_JOY_OF_THE_PEOPLE_TEXT = 'On Reveal: Give the highest-DEF opposing defender here −2 DEF. If you reduce them, gain +2 ATT this period. If they were already reduced, gain +4 instead.';
+export const OKOCHA_STEPOVER_TEXT = 'On Reveal: Give the lowest-DEF opposing defender here −2 DEF and gain +2 ATT this period. If they were already reduced, add a Penalty to your hand.';
+export const RONALDO_FLIP_FLAP_TEXT = 'On Reveal: Give the highest-DEF opposing defender here −3 DEF this period.';
+export const MAKELELE_ACTION_NAME = 'THE MAKÉLÉLÉ ROLE';
 
-export interface V8CalibrationPlayerCard extends V8PlayerCard {
-  realName: string;
-  matchName: string;
-  fullCardName: string;
-  trackerRow: number;
-  sourceCardId?: string;
-  actionKey: V8CalibrationActionKey;
-  actionName: string;
-  actionText: string;
-  statSource: V8CalibrationValueSource;
-  costSource: V8CalibrationValueSource;
-  usesCalibrationStatFallback: boolean;
-  usesCalibrationCostFallback: boolean;
+function withV8CalibrationOverrides(player: V8CalibrationPlayerCard): V8CalibrationPlayerCard {
+  let actionText: string | undefined;
+  let actionName: string | undefined;
+  if (player.id === 'neymar') actionText = NEYMAR_RAINBOW_FLICK_TEXT;
+  if (player.id === 'garrincha') actionText = GARRINCHA_JOY_OF_THE_PEOPLE_TEXT;
+  if (player.id === 'okocha') actionText = OKOCHA_STEPOVER_TEXT;
+  if (player.id === 'ronaldo') actionText = RONALDO_FLIP_FLAP_TEXT;
+  if (player.id === 'makelele') actionName = MAKELELE_ACTION_NAME;
+  if (!actionText && !actionName) return player;
+
+  const resolvedActionText = actionText ?? player.actionText;
+  const resolvedActionName = actionName ?? player.actionName;
+  return {
+    ...player,
+    actionName: resolvedActionName,
+    actionText: resolvedActionText,
+    actions: (player.actions ?? []).map((action) => (
+      action.id === player.actionKey
+        ? { ...action, name: resolvedActionName, text: resolvedActionText }
+        : action
+    )),
+  };
 }
 
-function action(id: string, name: string, timing: V8ActionDefinition['timing'], text: string): V8ActionDefinition {
-  return { id, name, timing, text };
-}
-
-function card(args: {
+function expansionCard(args: {
   id: string;
   realName: string;
   matchName: string;
@@ -61,19 +43,18 @@ function card(args: {
   trackerRow: number;
   sourceCardId?: string;
   position: string;
-  naturalZones: readonly V8Zone[];
+  naturalZones: V8CalibrationPlayerCard['naturalZones'];
   cost: number;
-  costSource: V8CalibrationValueSource;
+  costSource: V8CalibrationPlayerCard['costSource'];
   attack: number;
   defence: number;
-  statSource?: V8CalibrationValueSource;
-  actionKey: V8CalibrationActionKey;
+  actionKey: string;
   actionName: string;
-  timing: V8ActionDefinition['timing'];
+  timing: NonNullable<V8CalibrationPlayerCard['actions']>[number]['timing'];
   actionText: string;
   moveable?: boolean;
 }): V8CalibrationPlayerCard {
-  const statSource = args.statSource ?? 'kc_reconciliation';
+  const actionKey = args.actionKey as V8CalibrationPlayerCard['actionKey'];
   return {
     id: args.id,
     realName: args.realName,
@@ -87,77 +68,164 @@ function card(args: {
     cost: args.cost,
     printedAttack: args.attack,
     printedDefence: args.defence,
-    actionKey: args.actionKey,
+    actionKey,
     actionName: args.actionName,
     actionText: args.actionText,
-    actions: [action(args.actionKey, args.actionName, args.timing, args.actionText)],
+    actions: [{ id: args.actionKey, name: args.actionName, timing: args.timing, text: args.actionText }],
     statuses: args.moveable ? ['moveable'] : undefined,
-    statSource,
+    statSource: 'kc_reconciliation',
     costSource: args.costSource,
-    usesCalibrationStatFallback: statSource === 'calibration_fallback',
-    usesCalibrationCostFallback: args.costSource === 'calibration_fallback',
+    usesCalibrationStatFallback: false,
+    usesCalibrationCostFallback: false,
   };
 }
 
+/** Playable cards from the expansion audits. */
+const V8_EXPANSION_PLAYERS: readonly V8CalibrationPlayerCard[] = [
+  expansionCard({
+    id: 'abedi-pele', realName: 'Abedi Pelé', matchName: 'Pelo', fullCardName: 'Abedi Pelo', trackerRow: 6,
+    position: 'AM / WF', naturalZones: ['MID', 'ATT'], cost: 3, costSource: 'tracker', attack: 9, defence: 2,
+    actionKey: 'abedi_jinking_run', actionName: 'JINKING RUN', timing: 'triggered',
+    actionText: 'Moveable once per match. When this moves from MID to ATT, it gains +4 ATT.', moveable: true,
+  }),
+  expansionCard({
+    id: 'aitana-bonmati', realName: 'Aitana Bonmatí', matchName: 'Buenmarti', fullCardName: 'Aitana Buenmarti', trackerRow: 9, sourceCardId: 'KC-065',
+    position: 'CM / AM', naturalZones: ['MID', 'ATT'], cost: 6, costSource: 'tracker', attack: 6, defence: 4,
+    actionKey: 'aitana_escape_the_press', actionName: 'ESCAPE THE PRESS', timing: 'on_reveal',
+    actionText: 'On Reveal: Your first MID player next period costs 1 less.',
+  }),
+  expansionCard({
+    id: 'di-stefano', realName: 'Alfredo Di Stéfano', matchName: 'De Stefani', fullCardName: 'Alfredo De Stefani', trackerRow: 16,
+    position: 'CF / AM', naturalZones: ['MID', 'ATT'], cost: 6, costSource: 'tracker', attack: 10, defence: 1,
+    actionKey: 'di_stefano_end_to_end_run', actionName: 'END-TO-END RUN', timing: 'ongoing',
+    actionText: 'Ongoing: While losing, +3 ATT. While winning, +3 DEF. While level, +1 ATT and +1 DEF.',
+  }),
+  expansionCard({
+    id: 'ashley-cole', realName: 'Ashley Cole', matchName: 'Colley', fullCardName: 'Anslie Colley', trackerRow: 28, sourceCardId: 'KC-002',
+    position: 'LB / LWB', naturalZones: ['DEF', 'MID'], cost: 3, costSource: 'tracker', attack: 3, defence: 7,
+    actionKey: 'ashley_cole_show_him_outside', actionName: 'SHOW HIM OUTSIDE', timing: 'ongoing',
+    actionText: 'Ongoing: The highest-ATT opposing attacker here has −5 ATT.',
+  }),
+  expansionCard({
+    id: 'puyol', realName: 'Carles Puyol', matchName: 'Poya', fullCardName: 'Carles Poya', trackerRow: 39, sourceCardId: 'KC-038',
+    position: 'CB / RB', naturalZones: ['DEF'], cost: 3, costSource: 'kc_reconciliation', attack: 2, defence: 9,
+    actionKey: 'puyol_body_on_the_line', actionName: 'BODY ON THE LINE', timing: 'triggered',
+    actionText: 'The first time this match an opposing Chance would resolve here, cancel it; then this loses 3 DEF.',
+  }),
+  expansionCard({
+    id: 'dempsey', realName: 'Clint Dempsey', matchName: 'Dampsy', fullCardName: 'Clint Dampsy', trackerRow: 51,
+    position: 'SS / AM', naturalZones: ['MID', 'ATT'], cost: 3, costSource: 'kc_reconciliation', attack: 10, defence: 1,
+    actionKey: 'dempsey_cheeky_chip', actionName: 'CHEEKY CHIP', timing: 'on_reveal',
+    actionText: 'On Reveal: If you are losing here, gain +5 ATT this period.',
+  }),
+  expansionCard({
+    id: 'berbatov', realName: 'Dimitar Berbatov', matchName: 'Bagadov', fullCardName: 'Dimitar Bagadov', trackerRow: 66,
+    position: 'CF / SS', naturalZones: ['ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 11, defence: 1,
+    actionKey: 'berbatov_berba_spin', actionName: 'BERBA SPIN', timing: 'triggered',
+    actionText: 'The first opposing defender Action each period that targets this is ignored; then move this to an adjacent zone.',
+  }),
+  expansionCard({
+    id: 'tymoshchuk', realName: 'Anatoliy Tymoshchuk', matchName: 'Timoshik', fullCardName: 'Anatoliy Timoshik', trackerRow: 18,
+    position: 'DM / CM', naturalZones: ['DEF', 'MID'], cost: 2, costSource: 'tracker', attack: 4, defence: 7,
+    actionKey: 'tymoshchuk_step_in', actionName: 'STEP IN', timing: 'ongoing',
+    actionText: 'Ongoing: While played in MID, the highest-ATT opposing midfielder here has −3 ATT.',
+  }),
+  expansionCard({
+    id: 'bobby-moore', realName: 'Bobby Moore', matchName: 'Meer', fullCardName: 'Bobby Meer', trackerRow: 33, sourceCardId: 'KC-014',
+    position: 'CB', naturalZones: ['DEF'], cost: 4, costSource: 'tracker', attack: 1, defence: 10,
+    actionKey: 'moore_read_the_run', actionName: 'READ THE RUN', timing: 'triggered',
+    actionText: 'The first time each period an opposing central attacker here gains ATT, gain the same DEF this period.',
+  }),
+  expansionCard({
+    id: 'andy-robertson', realName: 'Andy Robertson', matchName: 'Robsten', fullCardName: 'Andy Robsten', trackerRow: 23,
+    position: 'FB / WB', naturalZones: ['DEF', 'MID'], cost: 2, costSource: 'tracker', attack: 4, defence: 6,
+    actionKey: 'robertson_recovery_run', actionName: 'RECOVERY RUN', timing: 'triggered',
+    actionText: 'The first time each period an opposing wide attacker here gains ATT, gain the same DEF this period.',
+  }),
+  expansionCard({
+    id: 'nesta', realName: 'Alessandro Nesta', matchName: 'Nestor', fullCardName: 'Alessandro Nestor', trackerRow: 12,
+    position: 'CB', naturalZones: ['DEF'], cost: 4, costSource: 'tracker', attack: 1, defence: 10,
+    actionKey: 'nesta_timed_slide', actionName: 'TIMED SLIDE', timing: 'triggered',
+    actionText: 'Cancel the first opposing Through Ball here each period.',
+  }),
+  expansionCard({
+    id: 'brian-laudrup', realName: 'Brian Laudrup', matchName: 'Lauda', fullCardName: 'Brian Lauda', trackerRow: 35,
+    position: 'WF / AM', naturalZones: ['MID', 'ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 10, defence: 1,
+    actionKey: 'laudrup_gliding_run', actionName: 'GLIDING RUN', timing: 'triggered',
+    actionText: 'Moveable once per period to an adjacent zone. Your first Chance in the destination this period cannot be cancelled.', moveable: true,
+  }),
+  expansionCard({
+    id: 'davids', realName: 'Edgar Davids', matchName: 'Danvers', fullCardName: 'Edgar Danvers', trackerRow: 72,
+    position: 'CM / DM', naturalZones: ['DEF', 'MID'], cost: 3, costSource: 'kc_reconciliation', attack: 4, defence: 6,
+    actionKey: 'davids_pitbull', actionName: 'PITBULL', timing: 'triggered',
+    actionText: 'The first time each period an opposing midfielder moves out of this zone, follow them and give them −2 ATT this period.', moveable: true,
+  }),
+  expansionCard({
+    id: 'cruyff', realName: 'Johan Cruyff', matchName: 'Kroyf', fullCardName: 'Johan Kroyf', trackerRow: 140,
+    position: 'CF / AM', naturalZones: ['MID', 'ATT'], cost: 3, costSource: 'kc_reconciliation', attack: 10, defence: 1,
+    actionKey: 'cruyff_total_football', actionName: 'TOTAL FOOTBALL', timing: 'ongoing',
+    actionText: 'Ongoing: Your players ignore out-of-position penalties while this Action is active.',
+  }),
+  expansionCard({
+    id: 'cannavaro', realName: 'Fabio Cannavaro', matchName: 'Camavero', fullCardName: 'Fabio Camavero', trackerRow: 82, sourceCardId: 'KC-040',
+    position: 'CB', naturalZones: ['DEF'], cost: 3, costSource: 'kc_reconciliation', attack: 1, defence: 10,
+    actionKey: 'cannavaro_reads_it_early', actionName: 'READS IT EARLY', timing: 'ongoing',
+    actionText: 'Ongoing: If the opposing ATT facing this zone is greater than your DEF here without this effect, +4 DEF.',
+  }),
+  expansionCard({
+    id: 'maradona', realName: 'Diego Maradona', matchName: 'Maravilla', fullCardName: 'Dario Maravilla', trackerRow: 65, sourceCardId: 'KC-061',
+    position: 'AM / LF', naturalZones: ['MID', 'ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 9, defence: 2,
+    actionKey: 'maradona_slalom_run', actionName: 'SLALOM RUN', timing: 'triggered',
+    actionText: 'Moveable once per match. When this moves from MID to ATT, gain +4 ATT this period and your first Chance in ATT this period cannot be cancelled.', moveable: true,
+  }),
+  expansionCard({
+    id: 'yashin', realName: 'Lev Yashin', matchName: 'Yachon', fullCardName: 'Lev Yachon', trackerRow: 160, sourceCardId: 'KC-055',
+    position: 'GK', naturalZones: ['DEF'], cost: 4, costSource: 'kc_reconciliation', attack: 0, defence: 11,
+    actionKey: 'yashin_black_spider', actionName: 'BLACK SPIDER', timing: 'triggered',
+    actionText: 'The first opposing Chance played in ATT each period has −2 ATT, to a minimum of 0.',
+  }),
+  expansionCard({
+    id: 'cavani', realName: 'Edinson Cavani', matchName: 'Cabana', fullCardName: 'Edinson Cabana', trackerRow: 74,
+    position: 'CF', naturalZones: ['ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 11, defence: 1,
+    actionKey: 'cavani_get_across_him', actionName: 'GET ACROSS HIM', timing: 'triggered',
+    actionText: 'The first time each period a Cross played here would be cancelled, prevent that cancellation.',
+  }),
+  expansionCard({
+    id: 'lucy-bronze', realName: 'Lucy Bronze', matchName: 'Brass', fullCardName: 'Lucy Brass', trackerRow: 164, sourceCardId: 'KC-017',
+    position: 'RB / RWB', naturalZones: ['DEF', 'MID'], cost: 3, costSource: 'kc_reconciliation', attack: 4, defence: 6,
+    actionKey: 'bronze_overlap', actionName: 'OVERLAP', timing: 'ongoing',
+    actionText: 'Ongoing: While this is in MID and you have a friendly WF in ATT, this and your highest-ATT friendly WF in ATT have +2 ATT.',
+  }),
+  expansionCard({
+    id: 'alexia-putellas', realName: 'Alexia Putellas', matchName: 'Portellas', fullCardName: 'Alexia Portellas', trackerRow: 15, sourceCardId: 'KC-062',
+    position: 'CM / AM', naturalZones: ['MID', 'ATT'], cost: 5, costSource: 'tracker', attack: 6, defence: 4,
+    actionKey: 'alexia_through_the_gap', actionName: 'THROUGH THE GAP', timing: 'triggered',
+    actionText: 'The first non-Through-Ball Chance played here each period becomes a Through Ball before it resolves.',
+  }),
+  expansionCard({
+    id: 'pirlo', realName: 'Andrea Pirlo', matchName: 'Pirola', fullCardName: 'Andrea Pirola', trackerRow: 19, sourceCardId: 'KC-021',
+    position: 'CM / DM', naturalZones: ['DEF', 'MID'], cost: 5, costSource: 'tracker', attack: 4, defence: 6,
+    actionKey: 'pirlo_diagonal_switch', actionName: 'DIAGONAL SWITCH', timing: 'triggered',
+    actionText: 'Your first Chance played in MID each period resolves in ATT instead; if it was not a Cross, it becomes a Cross before it resolves.',
+  }),
+  expansionCard({
+    id: 'bergkamp', realName: 'Dennis Bergkamp', matchName: 'Bandcamp', fullCardName: 'Dennis Bandcamp', trackerRow: 61, sourceCardId: 'KC-049',
+    position: 'CF / AM', naturalZones: ['MID', 'ATT'], cost: 3, costSource: 'kc_reconciliation', attack: 10, defence: 1,
+    actionKey: 'bergkamp_first_touch', actionName: 'FIRST TOUCH', timing: 'triggered',
+    actionText: 'Your first Chance each period has +2 ATT.',
+  }),
+] as const;
+
 /**
- * Data policy for this 30-card calibration batch:
- * - Card Design Tracker is authoritative for identity, position, Action text and any populated Cost.
- * - The tracker ATT/DEF cells are blank for these rows as of 2026-08-07, so established values from
- *   kc_player_roster_reconciliation_view are used where a player can be reconciled.
- * - Blank tracker Costs likewise use the established KC reconciliation Cost where available.
- * - Makélélé and Gentile have no reconciled KC value yet and remain explicit calibration fallbacks.
- *
- * This is mechanics calibration, not a global balance rewrite. Nothing here writes back to either source.
+ * Calibration-only card overrides that have passed or are undergoing focused card-quality validation.
+ * Source tracker / reconciliation values remain untouched.
  */
 export const V8_CALIBRATION_PLAYERS: readonly V8CalibrationPlayerCard[] = [
-  card({ id: 'wambach', realName: 'Abby Wambach', matchName: 'Whompish', fullCardName: 'Abby Whompish', trackerRow: 5, sourceCardId: 'KC-068', position: 'CF', naturalZones: ['ATT'], cost: 3, costSource: 'tracker', attack: 11, defence: 1, actionKey: 'wambach_diving_header', actionName: 'DIVING HEADER', timing: 'ongoing', actionText: 'Ongoing: Crosses played here have +3 ATT. If this is ATT, +4 instead.' }),
-  card({ id: 'hegerberg', realName: 'Ada Hegerberg', matchName: 'Headerbag', fullCardName: 'Ada Headerbag', trackerRow: 8, position: 'CF', naturalZones: ['ATT'], cost: 5, costSource: 'tracker', attack: 11, defence: 1, actionKey: 'hegerberg_front_post_dart', actionName: 'FRONT-POST DART', timing: 'triggered', actionText: 'The first Cross you play here each period has +4 ATT and cannot be cancelled.' }),
-  card({ id: 'di-maria', realName: 'Ángel Di María', matchName: 'De Mario', fullCardName: 'Ángel De Mario', trackerRow: 24, position: 'WF / AM', naturalZones: ['MID', 'ATT'], cost: 3, costSource: 'tracker', attack: 10, defence: 1, actionKey: 'di_maria_rabona', actionName: 'RABONA', timing: 'on_reveal', actionText: 'On Reveal: If you have a Cross in your hand, give it +3 ATT. Otherwise, add a Cross to your hand.' }),
-  card({ id: 'cafu', realName: 'Cafu', matchName: 'Caffo', fullCardName: 'Caffo', trackerRow: 37, sourceCardId: 'KC-008', position: 'RB / RWB', naturalZones: ['DEF', 'MID'], cost: 3, costSource: 'kc_reconciliation', attack: 4, defence: 6, actionKey: 'cafu_pendolino', actionName: 'PENDOLINO', timing: 'triggered', actionText: 'Moveable once per period. After this moves to a more attacking zone, add a Cross to your hand.', moveable: true }),
-  card({ id: 'beckham', realName: 'David Beckham', matchName: 'Backman', fullCardName: 'David Backman', trackerRow: 56, sourceCardId: 'KC-056', position: 'RM / CM', naturalZones: ['MID'], cost: 3, costSource: 'kc_reconciliation', attack: 6, defence: 4, actionKey: 'beckham_bend_it', actionName: 'BEND IT', timing: 'on_reveal', actionText: 'On Reveal: Add a Cross to your hand. Give it +2 ATT.' }),
-  card({ id: 'dzajic', realName: 'Dragan Džajić', matchName: 'Dakal', fullCardName: 'Dragan Dakal', trackerRow: 68, position: 'WF', naturalZones: ['ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 10, defence: 1, actionKey: 'dzajic_left_foot_whip', actionName: 'LEFT-FOOT WHIP', timing: 'on_reveal', actionText: 'On Reveal: Add 2 Crosses to your hand.' }),
-
-  card({ id: 'morgan', realName: 'Alex Morgan', matchName: 'Megan', fullCardName: 'Alexa Megan', trackerRow: 13, position: 'CF', naturalZones: ['ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 11, defence: 1, actionKey: 'morgan_curved_run', actionName: 'CURVED RUN', timing: 'ongoing', actionText: 'Ongoing: Through Balls played here cannot be cancelled. The first each period has +1 ATT.' }),
-  card({ id: 'shevchenko', realName: 'Andriy Shevchenko', matchName: 'Slavshinka', fullCardName: 'Andriy Slavshinka', trackerRow: 21, sourceCardId: 'KC-079', position: 'CF', naturalZones: ['ATT'], cost: 4, costSource: 'tracker', attack: 11, defence: 1, actionKey: 'shevchenko_runs_in_behind', actionName: 'RUNS IN BEHIND', timing: 'triggered', actionText: 'The first Through Ball you play here each period has +4 ATT.' }),
-  card({ id: 'valderrama', realName: 'Carlos Valderrama', matchName: 'Walderini', fullCardName: 'Carlos Walderini', trackerRow: 41, position: 'AM', naturalZones: ['MID'], cost: 4, costSource: 'kc_reconciliation', attack: 9, defence: 2, actionKey: 'valderrama_pause_and_slip', actionName: 'PAUSE AND SLIP', timing: 'on_reveal', actionText: 'On Reveal: Add a Through Ball to your hand. If you already have a player in ATT, give it +2 ATT.' }),
-  card({ id: 'litmanen', realName: 'Jari Litmanen', matchName: 'Latinen', fullCardName: 'Jari Latinen', trackerRow: 135, position: 'AM / SS', naturalZones: ['MID', 'ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 9, defence: 2, actionKey: 'litmanen_killer_pass', actionName: 'KILLER PASS', timing: 'end_of_period', actionText: 'End of Period: If you won MID, add a Through Ball to your hand. Give it +1 ATT.' }),
-
-  card({ id: 'charlton', realName: 'Bobby Charlton', matchName: 'Carlton', fullCardName: 'Bobby Carlton', trackerRow: 32, position: 'AM / CM', naturalZones: ['MID'], cost: 4, costSource: 'tracker', attack: 8, defence: 3, actionKey: 'charlton_thunderball', actionName: 'THUNDERBALL', timing: 'on_reveal', actionText: 'On Reveal: Add a Long Shot to your hand. It has +2 ATT if played from MID.' }),
-  card({ id: 'lloyd', realName: 'Carli Lloyd', matchName: 'Loud', fullCardName: 'Carli Loud', trackerRow: 40, position: 'CM / AM', naturalZones: ['MID'], cost: 3, costSource: 'kc_reconciliation', attack: 6, defence: 4, actionKey: 'lloyd_halfway_hit', actionName: 'HALFWAY HIT', timing: 'ongoing', actionText: 'Ongoing: Long Shots played here have +4 ATT. Your first Long Shot here each match costs 0.' }),
-
-  card({ id: 'eriksen', realName: 'Christian Eriksen', matchName: 'Erakson', fullCardName: 'Christian Erakson', trackerRow: 45, position: 'AM / CM', naturalZones: ['MID'], cost: 4, costSource: 'kc_reconciliation', attack: 8, defence: 3, actionKey: 'eriksen_whipped_delivery', actionName: 'WHIPPED DELIVERY', timing: 'on_reveal', actionText: 'On Reveal: Add a Corner to your hand. Give it +1 ATT for each CB you have in ATT.' }),
-  card({ id: 'ramos', realName: 'Sergio Ramos', matchName: 'Remos', fullCardName: 'Sergio Remos', trackerRow: 248, sourceCardId: 'KC-039', position: 'CB / RB', naturalZones: ['DEF'], cost: 3, costSource: 'kc_reconciliation', attack: 2, defence: 9, actionKey: 'ramos_93rd_minute', actionName: '93RD MINUTE', timing: 'ongoing', actionText: 'Ongoing: Corners played here have +3 ATT. In the final period, +5 instead.' }),
-
-  card({ id: 'duff', realName: 'Damien Duff', matchName: 'Doff', fullCardName: 'Damien Doff', trackerRow: 53, position: 'WF / WM', naturalZones: ['MID', 'ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 9, defence: 2, actionKey: 'duff_knock_and_run', actionName: 'KNOCK AND RUN', timing: 'on_reveal', actionText: 'On Reveal: Give the highest-DEF opposing player here −2 DEF and this player +2 ATT until period end.' }),
-  card({ id: 'garrincha', realName: 'Garrincha', matchName: 'Gallinga', fullCardName: 'Gallinga', trackerRow: 98, position: 'WF', naturalZones: ['ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 10, defence: 1, actionKey: 'garrincha_joy_of_the_people', actionName: 'JOY OF THE PEOPLE', timing: 'on_reveal', actionText: 'On Reveal: Give the highest-DEF opposing defender here −2 DEF. If they were already reduced, this gains +4 ATT this period.' }),
-  card({ id: 'okocha', realName: 'Jay-Jay Okocha', matchName: 'Okosha', fullCardName: 'Jay-Jay Okosha', trackerRow: 137, position: 'AM / WF', naturalZones: ['MID', 'ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 9, defence: 2, actionKey: 'okocha_stepover', actionName: 'STEPOVER', timing: 'on_reveal', actionText: 'On Reveal: Give the lowest-DEF opposing defender here −2 DEF. If they were already reduced, add a Penalty to your hand.' }),
-  card({ id: 'neymar', realName: 'Neymar', matchName: 'Nomer', fullCardName: 'Nomer', trackerRow: 192, position: 'WF / AM', naturalZones: ['MID', 'ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 10, defence: 1, actionKey: 'neymar_rainbow_flick', actionName: 'RAINBOW FLICK', timing: 'on_reveal', actionText: 'On Reveal: If an opposing defender here has reduced DEF, add a Penalty to your hand.' }),
-  card({ id: 'ronaldo', realName: 'Ronaldo Nazário', matchName: 'Nazerino', fullCardName: 'Ronaldo Nazerino', trackerRow: 233, sourceCardId: 'KC-062', position: 'CF', naturalZones: ['ATT'], cost: 4, costSource: 'kc_reconciliation', attack: 11, defence: 1, actionKey: 'ronaldo_flip_flap', actionName: 'FLIP FLAP', timing: 'on_reveal', actionText: 'On Reveal: If an opposing defender here is at least 3 DEF below base, add a Penalty to your hand. Give it +2 ATT.' }),
-  card({ id: 'panenka', realName: 'Antonín Panenka', matchName: 'Polevka', fullCardName: 'Antonín Polevka', trackerRow: 26, position: 'AM / CM', naturalZones: ['MID'], cost: 2, costSource: 'tracker', attack: 8, defence: 3, actionKey: 'panenka_chipped_penalty', actionName: 'CHIPPED PENALTY', timing: 'ongoing', actionText: 'Ongoing: Penalties played here have +3 ATT and cannot be cancelled.' }),
-
-  card({ id: 'iniesta', realName: 'Andrés Iniesta', matchName: 'Inostar', fullCardName: 'Andrés Inostar', trackerRow: 20, sourceCardId: 'KC-045', position: 'CM / AM', naturalZones: ['MID'], cost: 5, costSource: 'tracker', attack: 6, defence: 4, actionKey: 'iniesta_la_croqueta', actionName: 'LA CROQUETA', timing: 'triggered', actionText: 'The first time each period an opposing Action targets this player, ignore it.' }),
-  card({ id: 'bremner', realName: 'Billy Bremner', matchName: 'Brahma', fullCardName: 'Billy Brahma', trackerRow: 30, position: 'CM', naturalZones: ['MID'], cost: 1, costSource: 'tracker', attack: 5, defence: 5, actionKey: 'bremner_crunching_tackle', actionName: 'CRUNCHING TACKLE', timing: 'on_reveal', actionText: 'On Reveal: Give the highest-ATT opposing player here −3 ATT until period end.' }),
-  card({ id: 'seedorf', realName: 'Clarence Seedorf', matchName: 'Sandoff', fullCardName: 'Clarence Sandoff', trackerRow: 48, position: 'CM / AM', naturalZones: ['MID'], cost: 3, costSource: 'kc_reconciliation', attack: 6, defence: 4, actionKey: 'seedorf_ride_the_tackle', actionName: 'RIDE THE TACKLE', timing: 'ongoing', actionText: 'Ongoing: This player’s ATT and DEF cannot be reduced.' }),
-  card({ id: 'makelele', realName: 'Claude Makélélé', matchName: 'Makula', fullCardName: 'Claude Makula', trackerRow: 49, sourceCardId: 'KC-051', position: 'DM / CM', naturalZones: ['DEF', 'MID'], cost: 4, costSource: 'calibration_fallback', attack: 3, defence: 6, statSource: 'calibration_fallback', actionKey: 'makelele_water_carrier', actionName: 'WATER-CARRIER', timing: 'ongoing', actionText: 'Ongoing: Your other players here have +2 DEF.' }),
-  card({ id: 'gentile', realName: 'Claudio Gentile', matchName: 'Jostle', fullCardName: 'Claudio Jostle', trackerRow: 50, sourceCardId: 'KC-075', position: 'CB / DM', naturalZones: ['DEF', 'MID'], cost: 3, costSource: 'calibration_fallback', attack: 2, defence: 7, statSource: 'calibration_fallback', actionKey: 'gentile_man_marker', actionName: 'MAN MARKER', timing: 'ongoing', actionText: 'Ongoing: The highest-ATT opposing player here has no Action.' }),
-  card({ id: 'baresi', realName: 'Franco Baresi', matchName: 'Borisi', fullCardName: 'Franco Borisi', trackerRow: 89, sourceCardId: 'KC-081', position: 'SW / CD', naturalZones: ['DEF'], cost: 4, costSource: 'kc_reconciliation', attack: 2, defence: 9, actionKey: 'baresi_step_up', actionName: 'STEP UP', timing: 'on_reveal', actionText: 'On Reveal: Add an Offside Trap to your hand. If it cancels a Through Ball, +2 DEF here this period.' }),
-  card({ id: 'park', realName: 'Park Ji-sung', matchName: 'Jun-Kim', fullCardName: 'Park Jun-Kim', trackerRow: 200, position: 'CM / WM', naturalZones: ['MID'], cost: 3, costSource: 'kc_reconciliation', attack: 5, defence: 5, actionKey: 'park_three_lungs', actionName: 'THREE LUNGS', timing: 'on_reveal', actionText: 'On Reveal: Add a Trigger Press to your hand. It costs 0 this period.' }),
-  card({ id: 'schmeichel', realName: 'Peter Schmeichel', matchName: 'Smikal', fullCardName: 'Peter Smikal', trackerRow: 212, sourceCardId: 'KC-020', position: 'GK', naturalZones: ['DEF'], cost: 4, costSource: 'kc_reconciliation', attack: 0, defence: 11, actionKey: 'schmeichel_starfish', actionName: 'STARFISH', timing: 'ongoing', actionText: 'Ongoing: The first Chance your opponent plays here each period is cancelled.' }),
-
-  card({ id: 'sinclair', realName: 'Christine Sinclair', matchName: 'St Claire', fullCardName: 'Christina St Claire', trackerRow: 47, position: 'CF / AM', naturalZones: ['MID', 'ATT'], cost: 3, costSource: 'kc_reconciliation', attack: 10, defence: 1, actionKey: 'sinclair_arrive_unmarked', actionName: 'ARRIVE UNMARKED', timing: 'on_reveal', actionText: 'On Reveal: If this is your first player here, she gains +4 ATT.' }),
-  card({ id: 'beckenbauer', realName: 'Franz Beckenbauer', matchName: 'Bochelbomb', fullCardName: 'Franz Bochelbomb', trackerRow: 92, sourceCardId: 'KC-013', position: 'CB / DM', naturalZones: ['DEF', 'MID'], cost: 4, costSource: 'kc_reconciliation', attack: 2, defence: 9, actionKey: 'beckenbauer_der_kaiser', actionName: 'DER KAISER', timing: 'triggered', actionText: 'Moveable once per period. After this moves, it gains +2 ATT and +2 DEF until period end.', moveable: true }),
-] as const;
+  ...BASE_CALIBRATION_PLAYERS.map(withV8CalibrationOverrides),
+  ...V8_EXPANSION_PLAYERS,
+];
 
 export const V8_CALIBRATION_PLAYER_BY_ID = new Map(V8_CALIBRATION_PLAYERS.map((player) => [player.id, player]));
-
-export const V8_CALIBRATION_EXCLUDED_REAL_NAMES = [
-  'Abedi Pelé',
-  'Aitana Bonmatí',
-  'Bryan Robson',
-  'Clint Dempsey',
-  'Fabian Barthez',
-  'Ronaldinho',
-] as const;
 
 export function getV8CalibrationPlayer(id: string): V8CalibrationPlayerCard {
   const found = V8_CALIBRATION_PLAYER_BY_ID.get(id);

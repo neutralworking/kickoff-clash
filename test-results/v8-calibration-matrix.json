@@ -1,0 +1,473 @@
+{
+  "seeds": [
+    8082026,
+    8186755,
+    8291484,
+    8396213,
+    8500942,
+    8605671,
+    8710400,
+    8815129,
+    8919858,
+    9024587,
+    9129316,
+    9234045,
+    9338774,
+    9443503,
+    9548232,
+    9652961,
+    9757690,
+    9862419,
+    9967148,
+    10071877,
+    10176606,
+    10281335,
+    10386064,
+    10490793,
+    10595522,
+    10700251,
+    10804980,
+    10909709,
+    11014438,
+    11119167,
+    11223896,
+    11328625
+  ],
+  "matches": 1152,
+  "pairings": [
+    {
+      "squadA": "cross",
+      "squadB": "through_ball",
+      "matches": 64,
+      "squadAWins": 35,
+      "draws": 11,
+      "squadBWins": 18,
+      "squadAWinRate": 0.547,
+      "drawRate": 0.172,
+      "squadBWinRate": 0.281,
+      "averageGoalsA": 8.203,
+      "averageGoalsB": 6.844,
+      "averageGoalDifferenceA": 1.359
+    },
+    {
+      "squadA": "cross",
+      "squadB": "dribbling_penalty",
+      "matches": 64,
+      "squadAWins": 29,
+      "draws": 3,
+      "squadBWins": 32,
+      "squadAWinRate": 0.453,
+      "drawRate": 0.047,
+      "squadBWinRate": 0.5,
+      "averageGoalsA": 7.063,
+      "averageGoalsB": 7.609,
+      "averageGoalDifferenceA": -0.547
+    },
+    {
+      "squadA": "cross",
+      "squadB": "control_defence",
+      "matches": 64,
+      "squadAWins": 28,
+      "draws": 8,
+      "squadBWins": 28,
+      "squadAWinRate": 0.438,
+      "drawRate": 0.125,
+      "squadBWinRate": 0.438,
+      "averageGoalsA": 3.094,
+      "averageGoalsB": 3.125,
+      "averageGoalDifferenceA": -0.031
+    },
+    {
+      "squadA": "cross",
+      "squadB": "long_shot_set_piece",
+      "matches": 64,
+      "squadAWins": 37,
+      "draws": 11,
+      "squadBWins": 16,
+      "squadAWinRate": 0.578,
+      "drawRate": 0.172,
+      "squadBWinRate": 0.25,
+      "averageGoalsA": 4.563,
+      "averageGoalsB": 3.688,
+      "averageGoalDifferenceA": 0.875
+    },
+    {
+      "squadA": "cross",
+      "squadB": "balanced_midrange",
+      "matches": 64,
+      "squadAWins": 27,
+      "draws": 10,
+      "squadBWins": 27,
+      "squadAWinRate": 0.422,
+      "drawRate": 0.156,
+      "squadBWinRate": 0.422,
+      "averageGoalsA": 6.797,
+      "averageGoalsB": 6.844,
+      "averageGoalDifferenceA": -0.047
+    },
+    {
+      "squadA": "through_ball",
+      "squadB": "dribbling_penalty",
+      "matches": 64,
+      "squadAWins": 14,
+      "draws": 11,
+      "squadBWins": 39,
+      "squadAWinRate": 0.219,
+      "drawRate": 0.172,
+      "squadBWinRate": 0.609,
+      "averageGoalsA": 7.25,
+      "averageGoalsB": 8.313,
+      "averageGoalDifferenceA": -1.062
+    },
+    {
+      "squadA": "through_ball",
+      "squadB": "control_defence",
+      "matches": 64,
+      "squadAWins": 21,
+      "draws": 8,
+      "squadBWins": 35,
+      "squadAWinRate": 0.328,
+      "drawRate": 0.125,
+      "squadBWinRate": 0.547,
+      "averageGoalsA": 2.781,
+      "averageGoalsB": 3.422,
+      "averageGoalDifferenceA": -0.641
+    },
+    {
+      "squadA": "through_ball",
+      "squadB": "long_shot_set_piece",
+      "matches": 64,
+      "squadAWins": 30,
+      "draws": 16,
+      "squadBWins": 18,
+      "squadAWinRate": 0.469,
+      "drawRate": 0.25,
+      "squadBWinRate": 0.281,
+      "averageGoalsA": 5.078,
+      "averageGoalsB": 4.672,
+      "averageGoalDifferenceA": 0.406
+    },
+    {
+      "squadA": "through_ball",
+      "squadB": "balanced_midrange",
+      "matches": 64,
+      "squadAWins": 15,
+      "draws": 11,
+      "squadBWins": 38,
+      "squadAWinRate": 0.234,
+      "drawRate": 0.172,
+      "squadBWinRate": 0.594,
+      "averageGoalsA": 7.234,
+      "averageGoalsB": 7.781,
+      "averageGoalDifferenceA": -0.547
+    },
+    {
+      "squadA": "dribbling_penalty",
+      "squadB": "control_defence",
+      "matches": 64,
+      "squadAWins": 28,
+      "draws": 11,
+      "squadBWins": 25,
+      "squadAWinRate": 0.438,
+      "drawRate": 0.172,
+      "squadBWinRate": 0.391,
+      "averageGoalsA": 3.391,
+      "averageGoalsB": 3.25,
+      "averageGoalDifferenceA": 0.141
+    },
+    {
+      "squadA": "dribbling_penalty",
+      "squadB": "long_shot_set_piece",
+      "matches": 64,
+      "squadAWins": 46,
+      "draws": 4,
+      "squadBWins": 14,
+      "squadAWinRate": 0.719,
+      "drawRate": 0.063,
+      "squadBWinRate": 0.219,
+      "averageGoalsA": 5.719,
+      "averageGoalsB": 3.719,
+      "averageGoalDifferenceA": 2
+    },
+    {
+      "squadA": "dribbling_penalty",
+      "squadB": "balanced_midrange",
+      "matches": 64,
+      "squadAWins": 29,
+      "draws": 16,
+      "squadBWins": 19,
+      "squadAWinRate": 0.453,
+      "drawRate": 0.25,
+      "squadBWinRate": 0.297,
+      "averageGoalsA": 7.625,
+      "averageGoalsB": 7.25,
+      "averageGoalDifferenceA": 0.375
+    },
+    {
+      "squadA": "control_defence",
+      "squadB": "long_shot_set_piece",
+      "matches": 64,
+      "squadAWins": 27,
+      "draws": 18,
+      "squadBWins": 19,
+      "squadAWinRate": 0.422,
+      "drawRate": 0.281,
+      "squadBWinRate": 0.297,
+      "averageGoalsA": 1.219,
+      "averageGoalsB": 1.141,
+      "averageGoalDifferenceA": 0.078
+    },
+    {
+      "squadA": "control_defence",
+      "squadB": "balanced_midrange",
+      "matches": 64,
+      "squadAWins": 22,
+      "draws": 9,
+      "squadBWins": 33,
+      "squadAWinRate": 0.344,
+      "drawRate": 0.141,
+      "squadBWinRate": 0.516,
+      "averageGoalsA": 2.688,
+      "averageGoalsB": 3.094,
+      "averageGoalDifferenceA": -0.406
+    },
+    {
+      "squadA": "long_shot_set_piece",
+      "squadB": "balanced_midrange",
+      "matches": 64,
+      "squadAWins": 13,
+      "draws": 8,
+      "squadBWins": 43,
+      "squadAWinRate": 0.203,
+      "drawRate": 0.125,
+      "squadBWinRate": 0.672,
+      "averageGoalsA": 3.406,
+      "averageGoalsB": 4.906,
+      "averageGoalDifferenceA": -1.5
+    }
+  ],
+  "squads": [
+    {
+      "squad": "cross",
+      "matches": 320,
+      "wins": 156,
+      "draws": 43,
+      "losses": 121,
+      "winRate": 0.488,
+      "drawRate": 0.134,
+      "averageGoalsFor": 5.944,
+      "averageGoalsAgainst": 5.622,
+      "averageGoalDifference": 0.322,
+      "averageUnusedEnergy": 2.406,
+      "averagePlayersDeployed": 7.516,
+      "averageTacticalsPlayed": 1.047,
+      "averageCancelledChances": 0.231,
+      "tacticalAttackShare": 0.042,
+      "averageWindowTacticalsPlayed": 0,
+      "averageWindowEnergySpent": 0,
+      "averageWindowTacticalAtt": 0,
+      "averageWindowCancellations": 0,
+      "topChains": [
+        {
+          "chain": "BEND IT → Cross = +7 ATT",
+          "count": 89
+        },
+        {
+          "chain": "BEND IT → Cross = +4 ATT",
+          "count": 65
+        },
+        {
+          "chain": "RABONA → Cross = +2 ATT",
+          "count": 51
+        },
+        {
+          "chain": "BEND IT → Cross → CANCELLED",
+          "count": 42
+        },
+        {
+          "chain": "RABONA → Cross → CANCELLED",
+          "count": 32
+        }
+      ]
+    },
+    {
+      "squad": "through_ball",
+      "matches": 320,
+      "wins": 98,
+      "draws": 57,
+      "losses": 165,
+      "winRate": 0.306,
+      "drawRate": 0.178,
+      "averageGoalsFor": 5.838,
+      "averageGoalsAgainst": 6.478,
+      "averageGoalDifference": -0.641,
+      "averageUnusedEnergy": 1.272,
+      "averagePlayersDeployed": 7.025,
+      "averageTacticalsPlayed": 1.678,
+      "averageCancelledChances": 0.256,
+      "tacticalAttackShare": 0.041,
+      "averageWindowTacticalsPlayed": 0,
+      "averageWindowEnergySpent": 0,
+      "averageWindowTacticalAtt": 0,
+      "averageWindowCancellations": 0,
+      "topChains": [
+        {
+          "chain": "PAUSE AND SLIP → Through Ball → CANCELLED",
+          "count": 80
+        },
+        {
+          "chain": "KILLER PASS → Through Ball = +3 ATT",
+          "count": 68
+        },
+        {
+          "chain": "PAUSE AND SLIP → Through Ball = +4 ATT",
+          "count": 63
+        },
+        {
+          "chain": "PAUSE AND SLIP → Through Ball → CURVED RUN +1 = +5 ATT",
+          "count": 59
+        },
+        {
+          "chain": "KILLER PASS → Through Ball → CURVED RUN = +3 ATT",
+          "count": 29
+        }
+      ]
+    },
+    {
+      "squad": "dribbling_penalty",
+      "matches": 320,
+      "wins": 174,
+      "draws": 45,
+      "losses": 101,
+      "winRate": 0.544,
+      "drawRate": 0.141,
+      "averageGoalsFor": 6.531,
+      "averageGoalsAgainst": 5.706,
+      "averageGoalDifference": 0.825,
+      "averageUnusedEnergy": 2.769,
+      "averagePlayersDeployed": 8.044,
+      "averageTacticalsPlayed": 0.1,
+      "averageCancelledChances": 0,
+      "tacticalAttackShare": 0.007,
+      "averageWindowTacticalsPlayed": 0,
+      "averageWindowEnergySpent": 0,
+      "averageWindowTacticalAtt": 0,
+      "averageWindowCancellations": 0,
+      "topChains": [
+        {
+          "chain": "RAINBOW FLICK → Penalty → CHIPPED PENALTY +3 = +8 ATT",
+          "count": 30
+        },
+        {
+          "chain": "RAINBOW FLICK → Penalty = +5 ATT",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "squad": "control_defence",
+      "matches": 320,
+      "wins": 137,
+      "draws": 54,
+      "losses": 129,
+      "winRate": 0.428,
+      "drawRate": 0.169,
+      "averageGoalsFor": 2.741,
+      "averageGoalsAgainst": 2.7,
+      "averageGoalDifference": 0.041,
+      "averageUnusedEnergy": 3.047,
+      "averagePlayersDeployed": 7.578,
+      "averageTacticalsPlayed": 1.219,
+      "averageCancelledChances": 0.238,
+      "tacticalAttackShare": 0.024,
+      "averageWindowTacticalsPlayed": 0,
+      "averageWindowEnergySpent": 0,
+      "averageWindowTacticalAtt": 0,
+      "averageWindowCancellations": 0,
+      "topChains": [
+        {
+          "chain": "PENDOLINO → Cross = +2 ATT",
+          "count": 175
+        },
+        {
+          "chain": "PENDOLINO → Cross → CANCELLED",
+          "count": 54
+        }
+      ]
+    },
+    {
+      "squad": "long_shot_set_piece",
+      "matches": 320,
+      "wins": 80,
+      "draws": 57,
+      "losses": 183,
+      "winRate": 0.25,
+      "drawRate": 0.178,
+      "averageGoalsFor": 3.325,
+      "averageGoalsAgainst": 4.297,
+      "averageGoalDifference": -0.972,
+      "averageUnusedEnergy": 1.844,
+      "averagePlayersDeployed": 7.578,
+      "averageTacticalsPlayed": 0.844,
+      "averageCancelledChances": 0.038,
+      "tacticalAttackShare": 0.064,
+      "averageWindowTacticalsPlayed": 0,
+      "averageWindowEnergySpent": 0,
+      "averageWindowTacticalAtt": 0,
+      "averageWindowCancellations": 0,
+      "topChains": [
+        {
+          "chain": "THUNDERBALL → Long Shot → HALFWAY HIT +4 = +8 ATT",
+          "count": 155
+        },
+        {
+          "chain": "WHIPPED DELIVERY → Corner = +4 ATT",
+          "count": 22
+        },
+        {
+          "chain": "WHIPPED DELIVERY → Corner → 93RD MINUTE +5 = +9 ATT",
+          "count": 19
+        },
+        {
+          "chain": "WHIPPED DELIVERY → Corner → CANCELLED",
+          "count": 12
+        },
+        {
+          "chain": "THUNDERBALL → Long Shot = +4 ATT",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "squad": "balanced_midrange",
+      "matches": 320,
+      "wins": 160,
+      "draws": 54,
+      "losses": 106,
+      "winRate": 0.5,
+      "drawRate": 0.169,
+      "averageGoalsFor": 5.975,
+      "averageGoalsAgainst": 5.55,
+      "averageGoalDifference": 0.425,
+      "averageUnusedEnergy": 1.609,
+      "averagePlayersDeployed": 7.844,
+      "averageTacticalsPlayed": 0.703,
+      "averageCancelledChances": 0.072,
+      "tacticalAttackShare": 0.017,
+      "averageWindowTacticalsPlayed": 0,
+      "averageWindowEnergySpent": 0,
+      "averageWindowTacticalAtt": 0,
+      "averageWindowCancellations": 0,
+      "topChains": [
+        {
+          "chain": "BEND IT → Cross = +4 ATT",
+          "count": 62
+        },
+        {
+          "chain": "BEND IT → Cross → CANCELLED",
+          "count": 23
+        }
+      ]
+    }
+  ]
+}

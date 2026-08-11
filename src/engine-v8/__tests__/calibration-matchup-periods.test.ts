@@ -21,6 +21,10 @@ type PeriodAggregate = {
   tacticalAttack: number;
   actionAttackDelta: number;
   actionDefenceDelta: number;
+  windowTacticalsPlayed: number;
+  windowEnergySpent: number;
+  windowTacticalAtt: number;
+  windowCancellations: number;
 };
 
 function blank(period: number): PeriodAggregate {
@@ -38,6 +42,10 @@ function blank(period: number): PeriodAggregate {
     tacticalAttack: 0,
     actionAttackDelta: 0,
     actionDefenceDelta: 0,
+    windowTacticalsPlayed: 0,
+    windowEnergySpent: 0,
+    windowTacticalAtt: 0,
+    windowCancellations: 0,
   };
 }
 
@@ -73,6 +81,10 @@ describe('V8 calibration period diagnostics', () => {
               target.tacticalAttack += own.tacticalAttack;
               target.actionAttackDelta += own.actionAttackDelta;
               target.actionDefenceDelta += own.actionDefenceDelta;
+              target.windowTacticalsPlayed += own.windowTacticalsPlayed;
+              target.windowEnergySpent += own.windowEnergySpent;
+              target.windowTacticalAtt += own.windowTacticalAtt;
+              target.windowCancellations += own.windowCancellations;
             }
           }
         }
@@ -98,17 +110,21 @@ describe('V8 calibration period diagnostics', () => {
           tacticalAttack: round(period.tacticalAttack / divisor),
           actionAttackDelta: round(period.actionAttackDelta / divisor),
           actionDefenceDelta: round(period.actionDefenceDelta / divisor),
+          windowTacticalsPlayed: round(period.windowTacticalsPlayed / divisor),
+          windowEnergySpent: round(period.windowEnergySpent / divisor),
+          windowTacticalAtt: round(period.windowTacticalAtt / divisor),
+          windowCancellations: round(period.windowCancellations / divisor),
         };
       }),
     ]));
 
     const lines = V8_CALIBRATION_SQUAD_KEYS.flatMap((squad) => [
       squad,
-      ...report[squad].map((period) => `  P${period.period}: ${period.goalsFor} GF / ${period.goalsAgainst} GA · ${period.attack} ATT / ${period.defence} DEF · margin ${period.attackingMargin} · ${period.playersDeployed} deployed · ${period.unusedEnergy} E unused · ${period.tacticalsPlayed} Tacticals (${period.tacticalAttack} ATT) · Action Δ ${period.actionAttackDelta}/${period.actionDefenceDelta}`),
+      ...report[squad].map((period) => `  P${period.period}: ${period.goalsFor} GF / ${period.goalsAgainst} GA · ${period.attack} ATT / ${period.defence} DEF · margin ${period.attackingMargin} · ${period.playersDeployed} deployed · ${period.unusedEnergy} E unused · ${period.tacticalsPlayed} Tacticals (${period.tacticalAttack} ATT) · window ${period.windowTacticalsPlayed} plays / ${period.windowEnergySpent} E / ${period.windowTacticalAtt} ATT · Action Δ ${period.actionAttackDelta}/${period.actionDefenceDelta}`),
     ]);
 
     mkdirSync('test-results', { recursive: true });
     writeFileSync('test-results/v8-calibration-periods.json', `${JSON.stringify(report, null, 2)}\n`);
     writeFileSync('test-results/v8-calibration-periods.txt', `${lines.join('\n')}\n`);
-  });
+  }, 20_000);
 });
