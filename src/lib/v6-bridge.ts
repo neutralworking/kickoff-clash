@@ -44,6 +44,7 @@ export function actionLabel(a?: V6Action): { short: string; full: string; icon: 
 
 /** V6 cost (1–6) from power — matches the card-face badge. */
 export function v6Cost(card: Card): number {
+  if (card.printedCost != null) return card.printedCost;
   const p = card.power ?? 60;
   if (p < 60) return 1;
   if (p < 68) return 2;
@@ -75,6 +76,9 @@ function shortName(name: string): string {
 
 /** V6 attack/defence: the cost's stat budget, split by the live ATK/DEF lean. */
 export function v6Stats(card: Card, cost: number): { attack: number; defence: number } {
+  if (card.printedAttack != null && card.printedDefence != null) {
+    return { attack: card.printedAttack, defence: card.printedDefence };
+  }
   const live = deriveStats(card);
   const budget = STAT_BUDGET_BY_COST[cost] ?? 7;
   const la = Math.max(0, live.atk);
@@ -123,6 +127,7 @@ export function toV6Card(card: Card): V6Card {
  *  numbers on the card match the numbers in the game. Portrait is added by the UI. */
 export function toDisplayV6Card(card: Card): V6Card {
   const v6 = toV6Card(card);
+  if (card.printedAttack != null && card.printedDefence != null) return v6;
   return { ...v6, attack: Math.max(0, Math.round(v6.attack * LIVE_RUN_BALANCE.attackDamp)) };
 }
 

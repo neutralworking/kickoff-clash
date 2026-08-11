@@ -123,15 +123,6 @@ function adaptStartingXI(cards: readonly Card[], formation: Formation, prefix: s
   });
 }
 
-function adaptBench(cards: readonly Card[], prefix: string, owned = false): V7PlayerCard[] {
-  return cards.map((card, index) => {
-    const wide = card.position === 'WD' || card.position === 'WM' || card.position === 'WF';
-    const sector: Sector | undefined = wide ? (index % 2 === 0 ? 'left' : 'right') : undefined;
-    const id = owned ? `live-${card.id}` : `${prefix}-${card.id}-${index}`;
-    return adaptCard(card, id, sector);
-  });
-}
-
 function managerCard(manager: JokerCard | undefined, id: string, name: string, formationIds: string[]): V7ManagerCard {
   return {
     id,
@@ -157,7 +148,6 @@ function squad(manager: V7ManagerCard, formation: FormationDefinition, xi: reado
  * the match remains on the existing run/economy/cup stack. */
 export function buildLiveV7Fixture(runState: RunState, hand: HandState): V7Fixture {
   if (hand.xi.length !== 11) throw new Error(`V7 requires 11 starters; received ${hand.xi.length}.`);
-  if (hand.bench.length !== 7) throw new Error(`V7 requires seven substitutes; received ${hand.bench.length}.`);
 
   const seed = buildMatchSeed(runState.seed, runState.round, runState.matchInCup);
   const playerFormationSource = getFormation(runState.activeFormation);
@@ -166,13 +156,12 @@ export function buildLiveV7Fixture(runState: RunState, hand: HandState): V7Fixtu
   const opponent = getOpponent(runState.round);
   const power = cupMatchPower(runState.round, runState.matchInCup, cupSize(runState.round));
   const opponentMain = generateOpponentXI(runState.round, opponent.style, seed, power);
-  const opponentBenchSource = generateOpponentXI(runState.round, opponent.style, seed + 7919, power);
   const opponentFormation = adaptLiveFormation(opponentMain.formation);
 
   const playerXI = adaptStartingXI(hand.xi, playerFormationSource, 'live');
-  const playerBench = adaptBench(hand.bench, 'live-bench', true);
   const opponentXI = adaptStartingXI(opponentMain.xi, opponentMain.formation, 'opponent');
-  const opponentBench = adaptBench(opponentBenchSource.xi.slice(0, 7), 'opponent-bench');
+  const playerBench: V7PlayerCard[] = [];
+  const opponentBench: V7PlayerCard[] = [];
 
   const homeManager = managerCard(runState.jokers?.[0], 'live-manager-home', 'Home Manager', [playerFormation.id]);
   const awayManager = managerCard(undefined, 'live-manager-away', opponent.name, [opponentFormation.id]);

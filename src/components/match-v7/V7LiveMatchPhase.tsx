@@ -46,7 +46,7 @@ export default function V7LiveMatchPhase({
       handFromSelection(
         eligible,
         (runState.startingXI ?? []).filter((id) => !suspended.has(id)),
-        (runState.benchIds ?? []).filter((id) => !suspended.has(id)),
+        [],
         formation,
       ) ?? rollXI(eligible, formation, matchSeed)
     );

@@ -14,6 +14,14 @@ import { ALL_FORMATIONS } from './formations';
 import type { JokerCard } from './jokers';
 import { ALL_JOKERS } from './jokers';
 import { ALL_CARDS } from './run';
+import {
+  V8_CALIBRATION_PLAYERS,
+  type V8CalibrationPlayerCard,
+} from '../engine-v8/calibration-cards';
+import { V8_BATCH_04_PLAYERS } from '../engine-v8/calibration-expansion-batch-04-cards';
+import { V8_BATCH_05_PLAYERS } from '../engine-v8/calibration-expansion-batch-05-cards';
+import { V8_BATCH_06_PLAYERS } from '../engine-v8/calibration-expansion-batch-06-cards';
+import { V8_BATCH_07_PLAYERS } from '../engine-v8/calibration-expansion-batch-07-cards';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,7 +60,8 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 
 // ---------------------------------------------------------------------------
 // Starter rip.
-//   - Player pack:  18 players — 11 starters + a seven-player V7 bench
+//   - Player pack: 18 real V8 roster cards — 11 for the match plus seven
+//     alternatives used only to change the XI before kick-off
 //   - Manager offer: 3 sealed packs, each containing one distinct manager
 //   - Player offer: 3 sealed packs, each containing a complete legal squad
 // Tactics are absent from the V1 opening. All formations remain in the legacy
@@ -61,10 +70,93 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 
 export const RIP_COUNTS = { players: 18, managers: 3, tactics: 3 } as const;
 export const STARTER_CHOICE_COUNT = 3;
-// The starter rip is deliberately SCRAPPY: Common-heavy with only a few Rare anchors and
-// NO Epic/Legendary. A full-pool rip starts the player ~maxed, so the shop's
-// Epics/Legendaries remain the upgrade chase. Tuned on scripts/starter-probe.ts.
-const RIP_RARES = 4; // of 18; the remainder are Common
+
+const LEGACY_POSITION: Record<string, Card['position']> = {
+  GK: 'GK',
+  CB: 'CD',
+  CD: 'CD',
+  SW: 'CD',
+  LB: 'WD',
+  RB: 'WD',
+  FB: 'WD',
+  LWB: 'WD',
+  RWB: 'WD',
+  WB: 'WD',
+  DM: 'DM',
+  CM: 'CM',
+  LM: 'WM',
+  RM: 'WM',
+  WM: 'WM',
+  AM: 'AM',
+  LW: 'WF',
+  RW: 'WF',
+  WF: 'WF',
+  LF: 'CF',
+  RF: 'CF',
+  SS: 'CF',
+  CF: 'CF',
+};
+
+const POWER_BY_COST = [0, 56, 64, 72, 80, 86, 92] as const;
+
+function legacyPosition(position: string): Card['position'] {
+  for (const code of position.split('/').map((value) => value.trim())) {
+    if (LEGACY_POSITION[code]) return LEGACY_POSITION[code];
+  }
+  return 'CM';
+}
+
+function legacyArchetype(card: V8CalibrationPlayerCard, position: Card['position']): string {
+  if (position === 'GK') return 'Shotstopper';
+  if (position === 'CD') return card.printedDefence >= 10 ? 'Cover' : 'Commander';
+  if (position === 'WD' || position === 'DM') return 'Powerhouse';
+  if (position === 'CM' || position === 'WM') return card.printedAttack > card.printedDefence ? 'Passer' : 'Engine';
+  if (position === 'AM' || position === 'WF') return 'Creator';
+  return card.actionName.includes('HEADER') ? 'Target' : 'Striker';
+}
+
+function legacyRarity(cost: number): Card['rarity'] {
+  if (cost >= 5) return 'Legendary';
+  if (cost === 4) return 'Epic';
+  if (cost === 3) return 'Rare';
+  return 'Common';
+}
+
+function starterCard(card: V8CalibrationPlayerCard): Card {
+  const position = legacyPosition(card.position);
+  return {
+    id: 100000 + card.trackerRow,
+    name: card.matchName,
+    realName: card.realName,
+    v8PlayerId: card.id,
+    position,
+    archetype: legacyArchetype(card, position),
+    power: POWER_BY_COST[card.cost] ?? 72,
+    rarity: legacyRarity(card.cost),
+    abilityName: card.actionName,
+    abilityText: card.actionText,
+    printedCost: card.cost,
+    printedAttack: card.printedAttack,
+    printedDefence: card.printedDefence,
+    gatePull: 0,
+    durability: 'standard',
+    bio: card.realName,
+    tags: ['V8 roster'],
+  };
+}
+
+/** Later expansion registrations replace duplicated early calibration aliases. */
+const V8_STARTER_SOURCE = [
+  ...V8_CALIBRATION_PLAYERS,
+  ...V8_BATCH_04_PLAYERS,
+  ...V8_BATCH_05_PLAYERS,
+  ...V8_BATCH_06_PLAYERS,
+  ...V8_BATCH_07_PLAYERS,
+];
+
+export const V8_STARTER_PLAYER_POOL: readonly Card[] = [
+  ...new Map(V8_STARTER_SOURCE.map((card) => [card.realName, card])).values(),
+].map(starterCard);
 
 // ---------------------------------------------------------------------------
 // Shop card packs — the SEALED acquisition (economy.ts SCOUT_PACK / ELITE_PACK).
@@ -119,14 +211,35 @@ export function ripCardPack(tier: PackTier, seed: number): Card[] {
 }
 
 function ripStarterPlayers(seed: number): Card[] {
-  const scrappy = (c: Card) => c.rarity === 'Common' || c.rarity === 'Rare';
-  // Guarantee a keeper: a legal XI needs a GK. Reserve one Common/Rare GK, then
-  // fill the rest normally (more GKs can still surface for bench cover).
-  const gk = seededShuffle(ALL_CARDS.filter((c) => c.position === 'GK' && scrappy(c)), seed + 21).slice(0, 1);
-  const rares = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Rare' && !gk.includes(c)), seed + 11).slice(0, RIP_RARES);
-  const need = RIP_COUNTS.players - rares.length - gk.length;
-  const commons = seededShuffle(ALL_CARDS.filter((c) => c.rarity === 'Common' && !gk.includes(c)), seed).slice(0, need);
-  return seededShuffle([...gk, ...commons, ...rares], seed + 7);
+  const picked: Card[] = [];
+  const used = new Set<number>();
+  const take = (positions: readonly string[], count: number, salt: number) => {
+    const candidates = seededShuffle(
+      V8_STARTER_PLAYER_POOL.filter((card) => positions.includes(card.position) && !used.has(card.id)),
+      seed + salt,
+    );
+    for (const card of candidates.slice(0, count)) {
+      picked.push(card);
+      used.add(card.id);
+    }
+  };
+
+  // Two full 3×3 reveal pages with enough positional spread to build a legal XI.
+  take(['GK'], 2, 11);
+  take(['CD', 'WD'], 5, 23);
+  take(['DM', 'CM', 'WM', 'AM'], 6, 37);
+  take(['WF', 'CF'], 5, 53);
+
+  if (picked.length < RIP_COUNTS.players) {
+    for (const card of seededShuffle([...V8_STARTER_PLAYER_POOL], seed + 71)) {
+      if (used.has(card.id)) continue;
+      picked.push(card);
+      used.add(card.id);
+      if (picked.length === RIP_COUNTS.players) break;
+    }
+  }
+
+  return seededShuffle(picked, seed + 97);
 }
 
 function starterFormations(): Formation[] {

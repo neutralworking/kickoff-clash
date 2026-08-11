@@ -48,7 +48,7 @@ export interface RunState {
   playingStyle: string;
   intent: TeamIntent;            // pre-match attacking/balanced/defensive lean
   startingXI: number[];          // 11 cardIds in formation-slot order (xi[i] ↔ slots[i])
-  benchIds: number[];            // up to 5 cardIds available as subs
+  benchIds: number[];            // seven pre-match alternatives; active match receives only the XI
   deck: Card[];
   bench: Card[];
   jokers: JokerCard[];           // active jokers (max 3)
@@ -856,19 +856,19 @@ export function generateStarterActionDeck(seed: number): ActionCard[] {
 
 /** The player's pre-match team selection (from the TeamSelect screen). */
 export interface TeamSelection {
-  players: Card[];        // the 16-card starter rip → the run deck
+  players: Card[];        // the chosen 18-player starter pack → the run deck
   startingXI: number[];   // 11 cardIds in formation-slot order
-  benchIds: number[];     // up to 5 cardIds available as subs
+  benchIds: number[];     // seven pre-match alternatives; not passed into the active match fixture
   manager: JokerCard | null;
-  tactics: TacticCard[];  // the picked tactic(s) — one from the pack of three
+  tactics: TacticCard[];  // empty in the current opening; retained for legacy saves/shops
   formationId: string;    // chosen formation
   intent: TeamIntent;     // attacking / balanced / defensive
 }
 
 /**
  * Initialize a new run from the player's explicit team selection.
- * The full 24-player rip becomes the deck; the chosen XI/bench drive the match
- * (the unselected players are unavailable until the shop).
+ * The full starter rip becomes the deck. The chosen XI enters the match; the
+ * other seven remain available for pre-match lineup changes between fixtures.
  */
 export function createRun(sel: TeamSelection, seed?: number): RunState {
   const runSeed = seed ?? Math.floor(Math.random() * 1000000);

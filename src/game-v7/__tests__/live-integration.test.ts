@@ -8,7 +8,7 @@ import { buildLiveV7Fixture } from '../live';
 import { V7MatchController } from '../controller';
 
 describe('live run → improved V7 match', () => {
-  it('deals and selects an 18-player matchday squad', () => {
+  it('deals an 18-player pre-match pool and selects an XI plus seven alternatives', () => {
     const contents = ripStarterPacks(20260728);
     const formation = getFormation('4-3-3');
     const selected = autoFill(contents.players, formation, emptySelection(formation), 'all');
@@ -36,14 +36,17 @@ describe('live run → improved V7 match', () => {
       intent: 'balanced',
     }, seed);
 
-    const hand = handFromSelection(run.deck, run.startingXI, run.benchIds, formation);
+    // The seven alternatives remain available in pre-match selection, but only
+    // the selected XI crosses into the current match engine.
+    const hand = handFromSelection(run.deck, run.startingXI, [], formation);
     expect(hand).not.toBeNull();
 
     const fixture = buildLiveV7Fixture(run, hand!);
     expect(fixture.home.startingXI).toHaveLength(11);
-    expect(fixture.home.benchIds).toHaveLength(7);
+    expect(run.benchIds).toHaveLength(7);
+    expect(fixture.home.benchIds).toHaveLength(0);
     expect(fixture.away.startingXI).toHaveLength(11);
-    expect(fixture.away.benchIds).toHaveLength(7);
+    expect(fixture.away.benchIds).toHaveLength(0);
     expect(fixture.home.formationId).toBe('live-formation-4-3-3');
     expect(fixture.away.manager.name).toBe(getOpponent(1).name);
     expect(fixture.home.benchIds.every((id) => /^live-\d+$/.test(id))).toBe(true);
@@ -51,14 +54,16 @@ describe('live run → improved V7 match', () => {
     const liveFormation = fixture.formations.find((item) => item.id === fixture.home.formationId);
     expect(liveFormation?.slots.find((slot) => slot.slotKey === 'lcb')?.sector).toBe('left');
     expect(liveFormation?.slots.find((slot) => slot.slotKey === 'rcb')?.sector).toBe('right');
-    expect(liveFormation?.slots.find((slot) => slot.slotKey === 'cm')?.sector).toBe('centre');
+    expect(liveFormation?.slots.find((slot) => slot.slotKey === 'dm')?.sector).toBe('centre');
+    expect(liveFormation?.slots.find((slot) => slot.slotKey === 'lcm')?.sector).toBe('left');
+    expect(liveFormation?.slots.find((slot) => slot.slotKey === 'rcm')?.sector).toBe('right');
 
     const controller = new V7MatchController(fixture);
     const view = controller.getView();
     expect(view.player.active).toHaveLength(11);
-    expect(view.player.bench).toHaveLength(7);
+    expect(view.player.bench).toHaveLength(0);
     expect(view.opponent.active).toHaveLength(11);
-    expect(view.opponent.bench).toHaveLength(7);
+    expect(view.opponent.bench).toHaveLength(0);
 
     controller.resolvePeriod();
     expect(controller.getSnapshots()).toHaveLength(1);

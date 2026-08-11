@@ -23,6 +23,9 @@ async function openChosenSquad(page: Page) {
   await playerPacks.nth(2).click();
   await expect(page.getByTestId('chosen-player-pack')).toBeVisible();
   await expect(page.getByTestId('starter-player-card')).toHaveCount(18);
+  await expect(page.getByTestId('starter-player-page')).toHaveCount(2);
+  await expect(page.getByTestId('starter-player-page').nth(0).getByTestId('starter-player-card')).toHaveCount(9);
+  await expect(page.getByTestId('starter-player-page').nth(1).getByTestId('starter-player-card')).toHaveCount(9);
   await expect(page.getByRole('button', { name: /build your xi/i })).toBeVisible();
 }
 
@@ -35,6 +38,16 @@ test.describe('390 × 844 opening', () => {
 
     await page.getByRole('button', { name: /build your xi/i }).click();
     await expect(page.getByText(/name your squad/i).first()).toBeVisible();
+  });
+
+  test('swipes between two complete 3×3 reveal pages', async ({ page }) => {
+    await page.goto('/');
+    await openChosenSquad(page);
+
+    const viewport = page.getByTestId('starter-player-pages');
+    await viewport.evaluate((element) => element.scrollTo({ left: element.clientWidth, behavior: 'instant' }));
+    await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeGreaterThan(250);
+    await expect(page.getByRole('button', { name: /show squad page 2/i })).toHaveAttribute('aria-current', 'page');
   });
 });
 

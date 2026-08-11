@@ -1,6 +1,6 @@
 # Kickoff Clash — Current State
 
-**Last updated:** 2026-08-03  
+**Last updated:** 2026-08-11
 **Canonical branch for the integrated work in progress:** `agent/manager-production-integration`  
 **Canonical review PR:** [#92 — Start the V1 manager production integration](https://github.com/neutralworking/kickoff-clash/pull/92)
 
@@ -8,7 +8,7 @@ This document is the first read for anyone joining the repository. It describes 
 
 ## Product direction
 
-Kickoff Clash is a mobile-first football card battler and roguelike. The player builds a squad, chooses a manager, selects a starting XI and seven-player bench, and plays matches through a football-themed card-battle presentation.
+Kickoff Clash is a mobile-first football card battler and roguelike. The player builds an 18-player squad, chooses a manager, selects the eleven players who enter the match, and plays through a football-themed card-battle presentation. The other seven players are pre-match alternatives, not in-match substitutes.
 
 The current implementation direction combines:
 
@@ -53,14 +53,17 @@ The UI/run-flow work is stacked. The latest branch contains the preceding card a
 A fresh V1 run should move through:
 
 1. a blind choice of three sealed manager packs, followed by one hero manager reveal;
-2. a new blind choice of three sealed player packs, followed by one grouped 18-player reveal;
-3. squad/team selection;
-4. V7 match;
-5. existing post-match, shop, cup and economy flow.
+2. a new blind choice of three sealed player packs drawn from the implemented V8 historical-player roster;
+3. a grouped 18-player reveal presented as two swipeable, complete 3×3 pages;
+4. squad/team selection;
+5. V7 match;
+6. existing post-match, shop, cup and economy flow.
 
 Tactic cards are out of scope for V1. Older tactic-card, tactic-pack and charged-action code remains in the repository as implementation residue. Do not restore it to the starter flow or treat it as the current requirement.
 
 The starter opening now hands the selected manager and selected 18-player pack into team selection directly. The old `onContinue(managerId, tacticId)` callback and no-tactic sentinel are no longer part of this path.
+
+The 18-player squad is a pre-match selection pool: eleven selected players enter the match, while the other seven remain available for quick XI changes before later fixtures. They are not substitutes and do not cross into the current match fixture. The historical bench-capable engine remains in the repository, but the active run handoff is XI-only.
 
 ## Locked card decisions
 
@@ -214,7 +217,7 @@ Do not make opportunistic UI restyles inside an engine branch, and do not change
 
 - continue rule work in the V7 engine/controller path;
 - keep resolution deterministic and receipt-driven;
-- maintain seven-player benches and the current result handoff;
+- preserve the eleven-player match handoff and keep the seven alternatives in pre-match squad selection only;
 - add or update tests before changing presentation assumptions;
 - document any receipt or adapter contract change in this file or a dated handoff.
 

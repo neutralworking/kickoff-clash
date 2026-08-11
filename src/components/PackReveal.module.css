@@ -274,25 +274,87 @@
   animation: managerReveal 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.rosterViewport {
+.rosterReveal {
   width: 100%;
   min-height: 0;
-  overflow-y: auto;
-  padding: 4px 1px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.rosterViewport {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  touch-action: pan-x;
   overscroll-behavior: contain;
   scrollbar-width: none;
 }
 
 .rosterViewport::-webkit-scrollbar { display: none; }
 
+.rosterPages {
+  width: 200%;
+  height: 100%;
+  display: flex;
+}
+
+.rosterPage {
+  flex: 0 0 50%;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  align-items: center;
+  padding: 4px 1px 9px;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  scrollbar-width: none;
+}
+
+.rosterPage::-webkit-scrollbar { display: none; }
+
 .rosterGrid {
   width: 100%;
-  max-width: 430px;
+  max-width: 360px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
   gap: 5px;
+}
+
+.rosterPager {
+  flex: 0 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #8f8a7e;
+  font-family: var(--font-pixel, monospace);
+  font-size: 6px;
+  letter-spacing: 0.12em;
+}
+
+.rosterPager button {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 1px solid rgba(244, 236, 216, 0.52);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rosterPager .rosterPageActive {
+  width: 19px;
+  border-radius: 999px;
+  border-color: var(--pack-accent);
+  background: var(--pack-accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--pack-accent) 50%, transparent);
 }
 
 .playerSlot {
@@ -334,6 +396,10 @@
   min-width: 0;
   transform-origin: center;
   animation: frontFlip 340ms cubic-bezier(0.16, 1, 0.3, 1) calc(var(--reveal-delay) + 100ms) both;
+}
+
+.playerFront > * {
+  min-height: clamp(126px, 36vw, 142px) !important;
 }
 
 .footer {

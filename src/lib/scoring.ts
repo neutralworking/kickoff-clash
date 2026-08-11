@@ -23,6 +23,9 @@ export type Durability = 'glass' | 'fragile' | 'standard' | 'iron' | 'titanium' 
 export interface Card {
   id: number;
   name: string;
+  /** V8 roster identity. `name` remains the short KC match name used on-card. */
+  realName?: string;
+  v8PlayerId?: string;
   position: string;       // GK/CD/WD/DM/CM/WM/AM/WF/CF
   archetype: string;       // primary (Engine, Creator, etc.)
   secondaryArchetype?: string;
@@ -33,6 +36,10 @@ export interface Card {
   rarity: string;
   abilityName?: string;
   abilityText?: string;
+  /** Authored V8 values. Older collection cards continue through the legacy bridge. */
+  printedCost?: number;
+  printedAttack?: number;
+  printedDefence?: number;
   gatePull: number;        // fans attracted
   durability: Durability;
   phoenixMatchesSurvived?: number;  // tracks for Phoenix promotion

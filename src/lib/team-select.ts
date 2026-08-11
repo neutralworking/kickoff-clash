@@ -11,12 +11,13 @@ import type { Card } from './scoring';
 import type { Formation } from './formations';
 import { positionFitsSlot } from './formations';
 
-// V7 matchday squad: 11 starters + 7 substitutes = 18 players.
+// Pre-match pool: 11 starters + 7 alternatives for changing the XI between games.
+// The active match adapter passes only the chosen 11 into the fixture.
 export const BENCH_SIZE = 7;
 
 export interface XISelection {
   starters: (number | null)[]; // length === formation.slots.length; cardId per slot
-  bench: number[];             // up to BENCH_SIZE cardIds
+  bench: number[];             // up to BENCH_SIZE pre-match alternative cardIds
 }
 
 export function emptySelection(formation: Formation): XISelection {
