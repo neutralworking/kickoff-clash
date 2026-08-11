@@ -612,7 +612,7 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
 
   const cfg = full
     ? { disc: 44, glyph: 24, badgeFs: 9, badgePad: '3px 7px', discR: 50, nameBase: 19, arche: 11, winPad: '8px 8px 0', winRadius: 8 }
-    : { disc: 26, glyph: 15, badgeFs: 6.5, badgePad: '2px 4px', discR: 30, nameBase: 11, arche: 8, winPad: '5px 5px 0', winRadius: 6 };
+    : { disc: 21, glyph: 15, badgeFs: 8, badgePad: '3px 5px', discR: 30, nameBase: 11, arche: 8, winPad: '5px 5px 0', winRadius: 6 };
 
   return (
     <div
@@ -665,6 +665,7 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
 
         {/* COST BADGE (top-left, V6: the first read) */}
         <div
+          data-card-cost
           style={{
             position: 'absolute',
             top: full ? 7 : 4,
@@ -681,7 +682,7 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
             color: '#1d1005',
             fontFamily: HEAVY,
             fontWeight: 900,
-            fontSize: cfg.disc * 0.56,
+            fontSize: cfg.disc * 0.52,
             lineHeight: 1,
             boxShadow: `0 2px 7px rgba(0,0,0,0.6), 0 2px 0 #7f4610`,
           }}
@@ -694,17 +695,21 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
           {positions.map((p) => (
             <span
               key={p}
+              data-card-position
               style={{
                 background: POSITION_COLOR[p] ?? '#71717a',
                 color: posInk(p),
-                fontFamily: BODY_FONT,
-                fontWeight: 800,
+                fontFamily: HEAVY,
+                fontWeight: 900,
                 fontSize: cfg.badgeFs,
                 letterSpacing: '0.03em',
                 padding: cfg.badgePad,
                 borderRadius: 5,
                 lineHeight: 1,
-                boxShadow: '0 1px 4px rgba(0,0,0,0.5)',
+                minWidth: full ? 38 : 28,
+                textAlign: 'center',
+                border: '1px solid rgba(255,255,255,0.46)',
+                boxShadow: '0 2px 0 rgba(0,0,0,0.72), 0 1px 5px rgba(0,0,0,0.58)',
                 whiteSpace: 'nowrap',
               }}
             >
@@ -767,6 +772,7 @@ function StatDisc({ kind, value, side, full, discR, anchor }: { kind: string; va
   const col = side === 'atk' ? '#ef4444' : '#4a9eff';
   return (
     <div
+      data-card-stat={kind}
       style={{
         position: 'absolute',
         [anchor]: full ? 6 : 4,
