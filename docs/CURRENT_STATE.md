@@ -1,8 +1,8 @@
 # Kickoff Clash — Current State
 
 **Last updated:** 2026-08-11
-**Canonical branch for the integrated work in progress:** `agent/manager-production-integration`  
-**Canonical review PR:** [#92 — Start the V1 manager production integration](https://github.com/neutralworking/kickoff-clash/pull/92)
+**Canonical branch for the integrated work in progress:** `agent/v8-starter-roster-swipe`  
+**Canonical review PR:** [#111 — V8 starter roster packs and swipe reveal](https://github.com/neutralworking/kickoff-clash/pull/111)
 
 This document is the first read for anyone joining the repository. It describes the current product direction, the active branch stack, the boundaries between UI and engine work, and the decisions that supersede older design documents.
 
@@ -43,6 +43,10 @@ The UI/run-flow work is stacked. The latest branch contains the preceding card a
 | [#89](https://github.com/neutralworking/kickoff-clash/pull/89) | `agent/player-card-dossier` | Shared player dossier | Draft, unmerged |
 | [#91](https://github.com/neutralworking/kickoff-clash/pull/91) | `agent/manager-card-system` | Manager-card family | Merged into `agent/player-card-dossier`, not into `main` |
 | [#92](https://github.com/neutralworking/kickoff-clash/pull/92) | `agent/manager-production-integration` | Live manager opening, grouped player reveal and iPhone sizing | Active draft, unmerged |
+| [#108](https://github.com/neutralworking/kickoff-clash/pull/108) | `agent/v8-opponent-reveal-goals` | Opponent reveal and goal-payoff choreography | Draft, unmerged |
+| [#109](https://github.com/neutralworking/kickoff-clash/pull/109) | `agent/v8-snap-layout-intro` | Snap-style match layout and match intro | Draft, unmerged |
+| [#110](https://github.com/neutralworking/kickoff-clash/pull/110) | `agent/starter-pack-choice-reveal` | Choice-of-three starter packs and reveal flow | Draft, unmerged |
+| [#111](https://github.com/neutralworking/kickoff-clash/pull/111) | `agent/v8-starter-roster-swipe` | V8 roster packs, two-page squad reveal and XI-only match handoff | Active draft, unmerged |
 
 ### Rejected branch
 
