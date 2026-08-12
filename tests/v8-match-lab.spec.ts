@@ -140,8 +140,12 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
-  test('shows zone-correct hidden CPU commitments before revealing in real priority order', async ({ page }) => {
+  test('reveals committed cards one at a time in the advertised priority order', async ({ page }) => {
     await page.goto('/lab/match-v8');
+
+    const bremner = page.getByTestId('player-card-bremner');
+    await bremner.click();
+    await page.locator('.v8-zone').nth(1).click();
 
     const commitStrip = page.locator('.v8-commit');
     const expectedFirst = (await commitStrip.textContent())?.includes('CPU REVEALS FIRST') ? 'CPU' : 'YOU';
@@ -151,7 +155,8 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(locked).toBeVisible();
     await expect(locked).toContainText('OPPONENT LOCKED IN');
     const cardBacks = page.getByTestId('v8-opponent-card-back');
-    expect(await cardBacks.count()).toBeGreaterThan(0);
+    const initialCardBacks = await cardBacks.count();
+    expect(initialCardBacks).toBeGreaterThan(0);
     await expect(cardBacks.first()).toHaveText('KC');
     await expect(cardBacks.first()).not.toHaveAttribute('data-card-id');
 
@@ -166,9 +171,21 @@ test.describe('V8 real-card calibration lab', () => {
     }
 
     const firstReveal = page.getByTestId('v8-reveal-stage');
-    await expect(firstReveal).toContainText('REVEAL 1/2');
+    await expect(firstReveal).toHaveAttribute('data-reveal-index', '1');
+    const revealTotal = Number(await firstReveal.getAttribute('data-reveal-total'));
+    expect(revealTotal).toBeGreaterThan(1);
     await expect(firstReveal).toContainText(expectedFirst);
-    await expect(page.getByTestId('v8-opponent-card-back')).toHaveCount(expectedFirst === 'CPU' ? 0 : await cardBacks.count());
+    await expect(firstReveal).toContainText(/ATT|DEF|BOARD STATE|generates|resolves/i);
+    const firstZone = await firstReveal.getAttribute('data-reveal-zone');
+    expect(firstZone).toMatch(/^(DEF|MID|ATT)$/);
+    await expect(page.locator(`[data-v8-zone="${firstZone}"]`)).toHaveClass(/is-resolving-zone/);
+    await expect(page.getByTestId('v8-opponent-card-back')).toHaveCount(expectedFirst === 'CPU' ? initialCardBacks - 1 : initialCardBacks);
+
+    const skip = page.getByRole('button', { name: 'Skip reveal sequence' });
+    await expect(skip).toBeVisible();
+    await expect(firstReveal).toHaveAttribute('data-reveal-index', '2');
+    await expect(skip).toBeVisible();
+    await skip.click();
 
     await expect(page.getByTestId('v8-resolution')).toBeVisible();
     await expect(page.getByTestId('v8-opponent-card-back')).toHaveCount(0);
