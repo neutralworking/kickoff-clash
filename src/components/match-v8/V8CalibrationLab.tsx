@@ -156,6 +156,26 @@ type PlacementImpact = {
   actionEffect: string;
 };
 
+export type V8LiveFixture = {
+  homePlayerIds: readonly string[];
+  awayPlayerIds: readonly string[];
+  seed: number;
+  homeLabel?: string;
+  awayLabel?: string;
+  contextLabel?: string;
+};
+
+export type V8LiveMatchResult = {
+  homeScore: number;
+  awayScore: number;
+  state: V8CalibrationState;
+};
+
+type V8CalibrationLabProps = {
+  fixture?: V8LiveFixture;
+  onComplete?: (result: V8LiveMatchResult) => void;
+};
+
 function seededShuffle<T>(items: readonly T[], seed: number): T[] {
   const result = [...items];
   let state = seed >>> 0;
@@ -185,6 +205,13 @@ function createSquadMatch(homeSquad: V8CalibrationSquadKey, awaySquad: V8Calibra
   return withCalibrationEnergy(createV8CalibrationMatch(
     seededShuffle(getV8CalibrationSquad(homeSquad).playerIds, seed),
     seededShuffle(getV8CalibrationSquad(awaySquad).playerIds, seed + 1),
+  ));
+}
+
+function createFixtureMatch(fixture: V8LiveFixture): V8CalibrationState {
+  return withCalibrationEnergy(createV8CalibrationMatch(
+    seededShuffle(fixture.homePlayerIds, fixture.seed),
+    seededShuffle(fixture.awayPlayerIds, fixture.seed + 1),
   ));
 }
 
@@ -697,11 +724,13 @@ function EnergyMeter({ current, maximum }: { current: number; maximum: number })
   );
 }
 
-export default function V8CalibrationLab() {
+export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationLabProps = {}) {
   const [homeSquad, setHomeSquad] = useState<V8CalibrationSquadKey>(DEFAULT_HOME_SQUAD);
   const [awaySquad, setAwaySquad] = useState<V8CalibrationSquadKey>(DEFAULT_AWAY_SQUAD);
-  const [seed, setSeed] = useState(8082026);
-  const [state, setState] = useState<V8CalibrationState>(() => createSquadMatch(DEFAULT_HOME_SQUAD, DEFAULT_AWAY_SQUAD, 8082026));
+  const [seed, setSeed] = useState(fixture?.seed ?? 8082026);
+  const [state, setState] = useState<V8CalibrationState>(() => fixture
+    ? createFixtureMatch(fixture)
+    : createSquadMatch(DEFAULT_HOME_SQUAD, DEFAULT_AWAY_SQUAD, 8082026));
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
   const [pending, setPending] = useState<PendingPlay[]>([]);
@@ -722,6 +751,10 @@ export default function V8CalibrationLab() {
   const suppressHandClick = useRef<string | null>(null);
   const resolutionSequence = useRef(0);
   const revealSequence = useRef(0);
+  const liveMode = Boolean(fixture);
+  const homeLabel = fixture?.homeLabel ?? 'YOU';
+  const awayLabel = fixture?.awayLabel ?? 'CPU';
+  const contextLabel = fixture?.contextLabel ?? 'MATCH 01';
 
   const homePlayers = calibrationHandPlayers(state, 'home');
   const homeTacticals = calibrationHandTacticals(state, 'home');
@@ -751,7 +784,9 @@ export default function V8CalibrationLab() {
     setHomeSquad(nextHomeSquad);
     setAwaySquad(nextAwaySquad);
     setSeed(nextSeed);
-    setState(createSquadMatch(nextHomeSquad, nextAwaySquad, nextSeed));
+    setState(fixture
+      ? createFixtureMatch({ ...fixture, seed: nextSeed })
+      : createSquadMatch(nextHomeSquad, nextAwaySquad, nextSeed));
     setHomeScore(0);
     setAwayScore(0);
     setPending([]);
@@ -1078,7 +1113,7 @@ export default function V8CalibrationLab() {
 
     let ended = endV8CalibrationPeriod(resolved, { home: nextHomeScore, away: nextAwayScore });
     if (!wasFinal) ended = withCalibrationEnergy(ended);
-    if (wasFinal) {
+    if (wasFinal && !fixture) {
       setMatchTelemetry(buildV8CalibrationMatchTelemetry({
         state: ended,
         homeSquad,
@@ -1225,30 +1260,30 @@ export default function V8CalibrationLab() {
                 : 'DRAG A CARD TO THE PITCH';
 
   return (
-    <main className={`v8-shell${handDrag ? ' is-dragging' : ''}${debugOpen ? ' is-debug-open' : ''}${revealPhase ? ' is-revealing' : ''}${resolutionMoment ? ' is-resolving' : ''}${resolutionMoment?.homeGoals ? ' has-home-goal' : ''}${resolutionMoment?.awayGoals ? ' has-away-goal' : ''}`}>
+    <main className={`v8-shell${liveMode ? ' v8-shell--live' : ''}${handDrag ? ' is-dragging' : ''}${debugOpen ? ' is-debug-open' : ''}${revealPhase ? ' is-revealing' : ''}${resolutionMoment ? ' is-resolving' : ''}${resolutionMoment?.homeGoals ? ' has-home-goal' : ''}${resolutionMoment?.awayGoals ? ' has-away-goal' : ''}`}>
       {introVisible && (
         <button className="v8-match-intro" type="button" onClick={() => setIntroVisible(false)} data-testid="v8-match-intro" aria-label="Kickoff Clash match introduction. Tap to skip.">
           <small>KICKOFF CLASH</small>
           <span className="v8-match-intro__fixture">
-            <i className="v8-match-intro__team v8-match-intro__team--home"><b>KC</b><strong>YOU</strong><em>HOME</em></i>
+            <i className="v8-match-intro__team v8-match-intro__team--home"><b>KC</b><strong>{homeLabel}</strong><em>HOME</em></i>
             <b className="v8-match-intro__versus">VS</b>
-            <i className="v8-match-intro__team v8-match-intro__team--away"><b>KC</b><strong>CPU</strong><em>AWAY</em></i>
+            <i className="v8-match-intro__team v8-match-intro__team--away"><b>KC</b><strong>{awayLabel}</strong><em>AWAY</em></i>
           </span>
-          <span className="v8-match-intro__whistle">MATCH 01 · FOUR PERIODS</span>
+          <span className="v8-match-intro__whistle">{contextLabel} · FOUR PERIODS</span>
         </button>
       )}
 
       <header className="v8-scorebar">
         <div className={`v8-scoreteam v8-scoreteam--home${resolutionMoment?.homeGoals ? ' is-scoring' : ''}`}>
-          <small>YOU</small>
+          <small>{homeLabel}</small>
           <span><strong key={`home-${resolutionMoment?.id ?? 0}-${homeScore}`}>{homeScore}</strong></span>
         </div>
         <section>
           <b key={`period-${state.period}-${finished}`}>{finished ? 'FULL TIME' : PERIOD_LABELS[state.period - 1]}</b>
-          <span>{finished ? 'MATCH COMPLETE' : 'MATCH 01'}</span>
+          <span>{finished ? 'MATCH COMPLETE' : contextLabel}</span>
         </section>
         <div className={`v8-scoreteam v8-scoreteam--away${resolutionMoment?.awayGoals ? ' is-scoring' : ''}`}>
-          <small>CPU</small>
+          <small>{awayLabel}</small>
           <span><strong key={`away-${resolutionMoment?.id ?? 0}-${awayScore}`}>{awayScore}</strong></span>
         </div>
       </header>
@@ -1561,14 +1596,16 @@ export default function V8CalibrationLab() {
         </div>
       </section>
 
-      <button
-        type="button"
-        className="v8-debug-toggle"
-        aria-expanded={debugOpen}
-        onClick={() => setDebugOpen((open) => !open)}
-      >
-        {debugOpen ? 'CLOSE LAB TOOLS' : 'OPEN LAB TOOLS'}
-      </button>
+      {!liveMode && (
+        <button
+          type="button"
+          className="v8-debug-toggle"
+          aria-expanded={debugOpen}
+          onClick={() => setDebugOpen((open) => !open)}
+        >
+          {debugOpen ? 'CLOSE LAB TOOLS' : 'OPEN LAB TOOLS'}
+        </button>
+      )}
 
       {handDrag?.moved && (
         <div
@@ -1607,7 +1644,11 @@ export default function V8CalibrationLab() {
           <small>FULL TIME</small>
           <strong>{homeScore}–{awayScore}</strong>
           <b>{homeScore > awayScore ? 'VICTORY' : homeScore < awayScore ? 'DEFEAT' : 'DRAW'}</b>
-          <button onClick={() => reset(homeSquad, awaySquad, seed + 31)}>PLAY AGAIN</button>
+          <button onClick={() => fixture && onComplete
+            ? onComplete({ homeScore, awayScore, state })
+            : reset(homeSquad, awaySquad, seed + 31)}>
+            {fixture && onComplete ? 'CONTINUE' : 'PLAY AGAIN'}
+          </button>
         </div>
       )}
     </main>

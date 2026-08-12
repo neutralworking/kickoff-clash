@@ -47,7 +47,7 @@ import TitleScreen from './TitleScreen';
 import type { MatchVerdict } from '../lib/match-v5';
 import PackReveal from './PackReveal';
 import SquadScreen from './SquadScreen';
-import V6MatchPhase from './match-v6/V6MatchPhase';
+import V8LiveMatchPhase from './match-v8/V8LiveMatchPhase';
 import PostMatch from './PostMatch';
 import ShopPhase from './ShopPhase';
 import EndScreen from './EndScreen';
@@ -693,7 +693,7 @@ export default function GameShell() {
       case 'match': {
         if (!runState) return null;
         return (
-          <V6MatchPhase
+          <V8LiveMatchPhase
             runState={runState}
             onMatchComplete={handleMatchComplete}
           />
