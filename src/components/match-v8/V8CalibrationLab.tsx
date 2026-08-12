@@ -5,8 +5,10 @@ import {
   buildV8CalibrationMatchTelemetry,
   calibrationHandPlayers,
   calibrationHandTacticals,
+  calibrationEffectiveOutOfPositionPenalty,
   calibrationPlayerCard,
   calibrationPlayersInZone,
+  calibrationRuntimeId,
   calibrationSquadCostProfile,
   calibrationTeamTotals,
   captureV8CalibrationPeriodTelemetry,
@@ -139,6 +141,21 @@ type RevealPhase = {
   reveal: RevealOrder;
 };
 
+type PlacementImpact = {
+  zone: V8Zone;
+  attackBefore: number;
+  attackAfter: number;
+  defenceBefore: number;
+  defenceAfter: number;
+  goalsBefore: number;
+  goalsAfter: number;
+  goalsAgainstBefore: number;
+  goalsAgainstAfter: number;
+  rawPenalty: 0 | 2 | 5;
+  effectivePenalty: 0 | 2 | 5;
+  actionEffect: string;
+};
+
 function seededShuffle<T>(items: readonly T[], seed: number): T[] {
   const result = [...items];
   let state = seed >>> 0;
@@ -217,6 +234,107 @@ function resolveSequence(state: V8CalibrationState, plays: readonly PendingPlay[
     }
   }
   return next;
+}
+
+function cleanPlacementEffect(card: V8CalibrationPlayerCard, text: string): string {
+  const withoutIdentity = text
+    .replace(`${card.realName} · ${card.actionName}`, '')
+    .replace(`${card.realName} ·`, '')
+    .replace(/^\s*[:.→-]\s*/, '')
+    .trim();
+  return withoutIdentity || card.actionText;
+}
+
+function previewPlayerPlacement(
+  state: V8CalibrationState,
+  pending: readonly PendingPlay[],
+  card: V8CalibrationPlayerCard,
+  zone: V8Zone,
+): PlacementImpact {
+  const committedHomePlays = pending.filter((play) => play.side === 'home');
+  const before = resolveSequence(state, committedHomePlays);
+  const homeBefore = calibrationTeamTotals(before, 'home');
+  const awayBefore = calibrationTeamTotals(before, 'away');
+  const eventCount = before.events.length;
+  const after = resolveSequence(before, [{
+    kind: 'player',
+    side: 'home',
+    cardId: card.id,
+    zone,
+    cost: calibrationPlayCost(card),
+  }]);
+  const homeAfter = calibrationTeamTotals(after, 'home');
+  const awayAfter = calibrationTeamTotals(after, 'away');
+  const genericAction = `${card.realName} · ${card.actionName}.`;
+  const actionEvent = after.events.slice(eventCount).findLast((event) => (
+    event.type !== 'player_revealed' && event.text !== genericAction
+  ));
+  const runtimePlayer = after.players[calibrationRuntimeId('home', card.id)];
+
+  return {
+    zone,
+    attackBefore: homeBefore.attack,
+    attackAfter: homeAfter.attack,
+    defenceBefore: homeBefore.defence,
+    defenceAfter: homeAfter.defence,
+    goalsBefore: goalsFromAttackDefence(homeBefore.attack, awayBefore.defence),
+    goalsAfter: goalsFromAttackDefence(homeAfter.attack, awayAfter.defence),
+    goalsAgainstBefore: goalsFromAttackDefence(awayBefore.attack, homeBefore.defence),
+    goalsAgainstAfter: goalsFromAttackDefence(awayAfter.attack, homeAfter.defence),
+    rawPenalty: outOfPositionPenalty(card, zone),
+    effectivePenalty: runtimePlayer ? calibrationEffectiveOutOfPositionPenalty(after, runtimePlayer) : outOfPositionPenalty(card, zone),
+    actionEffect: cleanPlacementEffect(card, actionEvent?.text ?? card.actionText),
+  };
+}
+
+function placementThresholdLabel(impact: PlacementImpact): string {
+  const goalDelta = impact.goalsAfter - impact.goalsBefore;
+  const concededDelta = impact.goalsAgainstAfter - impact.goalsAgainstBefore;
+  const changes = [
+    goalDelta ? `${signed(goalDelta)}G` : null,
+    concededDelta ? `${signed(concededDelta)}GA` : null,
+  ].filter(Boolean);
+  return changes.length ? changes.join(' · ') : 'NO GOAL CHANGE';
+}
+
+function placementPenaltyLabel(impact: PlacementImpact): string {
+  if (!impact.rawPenalty) return 'NATURAL';
+  if (!impact.effectivePenalty) return 'OOP IGNORED';
+  return `−${impact.effectivePenalty}/−${impact.effectivePenalty} OOP`;
+}
+
+function compactPlacementLabel(impact: PlacementImpact): string {
+  const attackDelta = impact.attackAfter - impact.attackBefore;
+  const defenceDelta = impact.defenceAfter - impact.defenceBefore;
+  const penalty = impact.rawPenalty
+    ? impact.effectivePenalty ? `OOP−${impact.effectivePenalty}` : 'OOP×0'
+    : 'NAT';
+  const threshold = placementThresholdLabel(impact).replace('NO GOAL CHANGE', 'NO ΔG');
+  return `${signed(attackDelta)}A ${signed(defenceDelta)}D · ${penalty} · ${threshold}`;
+}
+
+function PlacementPreview({ card, impact }: { card: V8CalibrationPlayerCard; impact: PlacementImpact }) {
+  const attackDelta = impact.attackAfter - impact.attackBefore;
+  const defenceDelta = impact.defenceAfter - impact.defenceBefore;
+  return (
+    <div
+      className="v8-placement-preview"
+      data-testid="v8-placement-preview"
+      data-zone={impact.zone}
+      data-goals-before={impact.goalsBefore}
+      data-goals-after={impact.goalsAfter}
+      data-goals-against-before={impact.goalsAgainstBefore}
+      data-goals-against-after={impact.goalsAgainstAfter}
+      title={`${card.actionName}: ${impact.actionEffect}`}
+    >
+      <strong>{card.matchName} → {impact.zone} <i>{placementPenaltyLabel(impact)}</i></strong>
+      <span>
+        ATT {impact.attackBefore}→{impact.attackAfter} <b>{signed(attackDelta)}</b>
+        {' · '}DEF {impact.defenceBefore}→{impact.defenceAfter} <b>{signed(defenceDelta)}</b>
+      </span>
+      <em><b>{card.actionName}</b> · {placementThresholdLabel(impact)} · {impact.goalsBefore}→{impact.goalsAfter}G / {impact.goalsAgainstBefore}→{impact.goalsAgainstAfter}GA · VISIBLE BOARD</em>
+    </div>
+  );
 }
 
 function pendingPlayKey(play: PendingPlay): string {
@@ -1065,6 +1183,25 @@ export default function V8CalibrationLab() {
   const draggedPlayerPortrait = draggedPlayer ? portraitSrc({ id: draggedPlayer.sourceCardId ?? draggedPlayer.id, name: draggedPlayer.realName, position: draggedPlayer.position }) : null;
   const managerPortrait = managerPortraitSrc('control');
   const stagedFreshPlayerIds = revealPhase?.activeBeat?.cardId ? [revealPhase.activeBeat.cardId] : [];
+  const placementImpacts = useMemo(() => {
+    if (!selectedPlayer || selectedPlayerUnaffordable || revealPhase || finished) return [];
+    return ZONES.flatMap((zone) => {
+      if (occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return [];
+      try {
+        return [previewPlayerPlacement(state, pending, selectedPlayer, zone)];
+      } catch {
+        return [];
+      }
+    });
+  }, [finished, pending, revealPhase, selectedPlayer, selectedPlayerUnaffordable, state]);
+  const focusedPlacementZone = handDrag?.kind === 'player' && handDrag.overZone
+    ? handDrag.overZone
+    : selectedPlayer?.naturalZones.find((zone) => placementImpacts.some((impact) => impact.zone === zone))
+      ?? placementImpacts[0]?.zone
+      ?? null;
+  const focusedPlacementImpact = focusedPlacementZone
+    ? placementImpacts.find((impact) => impact.zone === focusedPlacementZone) ?? null
+    : null;
   const interactionLabel = handDrag?.moved
     ? handDrag.overZone
       ? isHandDragZoneLegal(handDrag, handDrag.overZone)
@@ -1165,6 +1302,7 @@ export default function V8CalibrationLab() {
             : [];
           const queuedPlayers = pending.filter((play) => play.side === 'home' && play.zone === zone && play.kind === 'player');
           const queuedManager = pending.find((play) => play.side === 'home' && play.zone === zone && play.kind === 'manager');
+          const placementImpact = placementImpacts.find((impact) => impact.zone === zone);
           const playerOccupancy = homeZone.length + queuedPlayers.length + (queuedManager ? 1 : 0);
           let guide = `${playerOccupancy}/4`;
           if (playerOccupancy >= 4) guide = 'FULL';
@@ -1172,6 +1310,7 @@ export default function V8CalibrationLab() {
             const penalty = outOfPositionPenalty(selectedPlayer, zone);
             guide = selectedPlayerUnaffordable ? 'NO ENERGY' : penalty === 0 ? 'NATURAL' : `−${penalty} OOP`;
           }
+          if (placementImpact) guide = compactPlacementLabel(placementImpact);
           if (selectedTactical) {
             const eligible = tacticalDefinition(selectedTactical.type).eligibleZones.includes(zone);
             const tacticalCost = eligible ? previewCalibrationTacticalCost(state, 'home', selectedTactical, zone) : Number.POSITIVE_INFINITY;
@@ -1185,10 +1324,10 @@ export default function V8CalibrationLab() {
               key={zone}
               type="button"
               data-v8-zone={zone}
-              className={`v8-zone${revealPhase?.activeBeat?.zone === zone ? ' is-resolving-zone' : ''}${handDrag ? isHandDragZoneLegal(handDrag, zone) ? ' is-drag-target' : ' is-drag-disabled' : ''}${handDrag?.overZone === zone && isHandDragZoneLegal(handDrag, zone) ? ' is-drag-over' : ''}`}
+              className={`v8-zone${revealPhase?.activeBeat?.zone === zone ? ' is-resolving-zone' : ''}${placementImpact ? ' has-placement-preview' : ''}${focusedPlacementImpact?.zone === zone ? ' is-placement-focus' : ''}${handDrag ? isHandDragZoneLegal(handDrag, zone) ? ' is-drag-target' : ' is-drag-disabled' : ''}${handDrag?.overZone === zone && isHandDragZoneLegal(handDrag, zone) ? ' is-drag-over' : ''}`}
               onClick={() => queueToZone(zone)}
             >
-              <div className="v8-zone__heading"><strong>{zone}</strong><span>{guide}</span></div>
+              <div className="v8-zone__heading"><strong>{zone}</strong><span data-testid={placementImpact ? `v8-placement-zone-${zone}` : undefined} data-penalty={placementImpact?.effectivePenalty}>{guide}</span></div>
               <div className="v8-zone__side v8-zone__side--away">
                 {awayZone.map((player) => <DeployedChip key={player.runtimeId} state={state} side="away" runtimeId={player.runtimeId} fresh={stagedFreshPlayerIds.includes(player.cardId) || resolutionMoment?.revealedPlayerIds.includes(player.cardId) === true} />)}
                 {Array.from({ length: Math.max(0, 4 - awayZone.length) }).map((_, index) => <i key={`away-${zone}-${index}`} />)}
@@ -1285,9 +1424,15 @@ export default function V8CalibrationLab() {
       <section className="v8-commit">
         <EnergyMeter current={state.teams.home.energy} maximum={periodEnergy} />
         <div className="v8-commit__decision">
-          <strong>{revealPhase ? revealPhase.stage === 'commitment' ? 'OPPONENT COMMITTED' : 'REVEALING' : interactionLabel}</strong>
-          <span>{currentPriority.first === 'home' ? 'YOU REVEAL FIRST' : 'CPU REVEALS FIRST'} · {currentPriority.reason} · Tacticals use no player slot.</span>
-          {pending.filter((play) => play.kind === 'tactical').map((play) => play.kind === 'tactical' ? <span key={play.card.id}>{play.card.name} → {play.zone} · {tacticalLabel(play.card, play.zone)}</span> : null)}
+          {selectedPlayer && focusedPlacementImpact ? (
+            <PlacementPreview card={selectedPlayer} impact={focusedPlacementImpact} />
+          ) : (
+            <>
+              <strong>{revealPhase ? revealPhase.stage === 'commitment' ? 'OPPONENT COMMITTED' : 'REVEALING' : interactionLabel}</strong>
+              <span>{currentPriority.first === 'home' ? 'YOU REVEAL FIRST' : 'CPU REVEALS FIRST'} · {currentPriority.reason} · Tacticals use no player slot.</span>
+              {pending.filter((play) => play.kind === 'tactical').map((play) => play.kind === 'tactical' ? <span key={play.card.id}>{play.card.name} → {play.zone} · {tacticalLabel(play.card, play.zone)}</span> : null)}
+            </>
+          )}
         </div>
         <button onClick={undo} disabled={!undoStack.length || Boolean(revealPhase)}>UNDO</button>
         <button className="v8-primary" onClick={endPeriod} disabled={finished || Boolean(revealPhase)}>{revealPhase ? 'LOCKED' : 'END PERIOD'}</button>
@@ -1347,7 +1492,18 @@ export default function V8CalibrationLab() {
       )}
 
       <section className="v8-hand-wrap">
-        <div className="v8-hand-heading"><strong>HAND</strong><span>DRAG CARD TO PITCH · {state.teams.home.drawPile.length} UNSEEN</span></div>
+        {selectedPlayer && focusedPlacementImpact ? (
+          <div
+            className="v8-hand-heading is-placement-preview"
+            data-testid="v8-placement-action-effect"
+            title={`${selectedPlayer.actionName}: ${focusedPlacementImpact.actionEffect}`}
+          >
+            <strong>{selectedPlayer.actionName}</strong>
+            <span>{focusedPlacementImpact.actionEffect}</span>
+          </div>
+        ) : (
+          <div className="v8-hand-heading"><strong>HAND</strong><span>DRAG CARD TO PITCH · {state.teams.home.drawPile.length} UNSEEN</span></div>
+        )}
         <div className="v8-hand">
           {homePlayers.map((card) => (
             <PlayerHandCard

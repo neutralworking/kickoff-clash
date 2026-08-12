@@ -2877,3 +2877,83 @@
   .v8-match-intro__team,
   .v8-match-intro__versus { animation-duration: .01ms !important; animation-delay: 0ms !important; }
 }
+
+/* Placement preview: use the existing zone/decision rails without adding vertical UI. */
+.v8-zone.has-placement-preview .v8-zone__heading {
+  border-color: rgba(255, 218, 122, .42);
+  background: linear-gradient(180deg, rgba(39, 34, 23, .96), rgba(12, 15, 14, .94));
+}
+.v8-zone.has-placement-preview .v8-zone__heading span {
+  max-width: none;
+  color: rgba(255, 230, 164, .9);
+  font-size: 4.35px;
+  font-weight: 1000;
+  letter-spacing: 0;
+  opacity: 1;
+}
+.v8-zone.is-placement-focus .v8-zone__heading {
+  border-color: #ffd877;
+  box-shadow: 0 0 0 1px rgba(255, 216, 119, .18), 0 0 14px rgba(255, 190, 65, .18);
+}
+.v8-placement-preview {
+  min-width: 0;
+  height: 49px;
+  display: grid;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  align-content: center;
+  gap: 0;
+  overflow: hidden;
+  text-transform: uppercase;
+}
+.v8-commit__decision .v8-placement-preview strong,
+.v8-commit__decision .v8-placement-preview span,
+.v8-commit__decision .v8-placement-preview em {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.v8-commit__decision .v8-placement-preview strong {
+  color: #ffe09a;
+  font-size: 7.3px;
+}
+.v8-placement-preview strong i {
+  color: #a9ebc0;
+  font-size: 4.6px;
+  font-style: normal;
+  letter-spacing: .02em;
+}
+.v8-commit__decision .v8-placement-preview span {
+  color: #d7d2c6;
+  font-size: 6.1px;
+  opacity: 1;
+}
+.v8-placement-preview span b { color: #fff0bd; }
+.v8-commit__decision .v8-placement-preview em {
+  color: #9fdcb0;
+  font-size: 5.3px;
+  font-style: normal;
+  font-weight: 1000;
+  letter-spacing: .02em;
+}
+.v8-placement-preview em b { color: #ffd778; }
+.v8-hand-heading.is-placement-preview {
+  gap: 7px;
+  color: rgba(255, 232, 177, .82);
+}
+.v8-hand-heading.is-placement-preview strong {
+  flex: 0 0 auto;
+  color: #ffd778;
+  font-size: 7px;
+}
+.v8-hand-heading.is-placement-preview span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 6.2px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

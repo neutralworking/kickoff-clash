@@ -271,6 +271,72 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
+  test('previews placement contribution, Action, OOP and goal thresholds before commitment', async ({ page }) => {
+    await page.goto('/lab/match-v8');
+
+    const bremner = page.getByTestId('player-card-bremner');
+    await bremner.click();
+
+    const preview = page.getByTestId('v8-placement-preview');
+    await expect(preview).toBeVisible();
+    await expect(preview).toHaveAttribute('data-zone', 'MID');
+    await expect(preview).toContainText(/BRAHMA → MID/i);
+    await expect(preview).toContainText(/ATT \d+→\d+ [+-]\d+/);
+    await expect(preview).toContainText(/DEF \d+→\d+ [+-]\d+/);
+    await expect(preview).toContainText('CRUNCHING TACKLE');
+    await expect(page.getByTestId('v8-placement-action-effect')).toContainText(/highest-ATT opposing player/i);
+    await expect(preview).toContainText(/NATURAL/);
+    await expect(preview).toContainText(/NO GOAL CHANGE|[+-]\d+G/);
+
+    await expect(page.getByTestId('v8-placement-zone-DEF')).toHaveAttribute('data-penalty', '2');
+    await expect(page.getByTestId('v8-placement-zone-MID')).toHaveAttribute('data-penalty', '0');
+    await expect(page.getByTestId('v8-placement-zone-ATT')).toHaveAttribute('data-penalty', '2');
+
+    const cardBox = await bremner.boundingBox();
+    const pitchBox = await page.locator('.v8-pitch').boundingBox();
+    expect(cardBox).not.toBeNull();
+    expect(pitchBox).not.toBeNull();
+    const pointer = { pointerId: 17, pointerType: 'touch', isPrimary: true, bubbles: true };
+    const startX = cardBox!.x + cardBox!.width / 2;
+    const startY = cardBox!.y + cardBox!.height / 2;
+    const endX = pitchBox!.x + pitchBox!.width * 5 / 6;
+    const endY = pitchBox!.y + pitchBox!.height * .78;
+    await bremner.dispatchEvent('pointerdown', { ...pointer, clientX: startX, clientY: startY, buttons: 1 });
+    await page.locator('body').dispatchEvent('pointermove', { ...pointer, clientX: endX, clientY: endY, buttons: 1 });
+    await expect(preview).toHaveAttribute('data-zone', 'ATT');
+    await expect(page.locator('[data-v8-zone="ATT"]')).toHaveClass(/is-placement-focus/);
+    await page.locator('body').dispatchEvent('pointercancel', { ...pointer, clientX: endX, clientY: endY, buttons: 0 });
+
+    await expectMobileFit(page);
+  });
+
+  test('keeps placement evidence readable on a 375 × 667 phone', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/lab/match-v8');
+
+    await page.getByTestId('player-card-bremner').click();
+    const preview = page.getByTestId('v8-placement-preview');
+    const actionEffect = page.getByTestId('v8-placement-action-effect');
+    await expect(preview).toBeVisible();
+    await expect(actionEffect).toBeVisible();
+    const layout = await preview.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const heading = element.querySelector('strong');
+      const stats = element.querySelector('span');
+      return {
+        top: box.top,
+        bottom: box.bottom,
+        headingSize: heading ? Number.parseFloat(getComputedStyle(heading).fontSize) : 0,
+        statsSize: stats ? Number.parseFloat(getComputedStyle(stats).fontSize) : 0,
+      };
+    });
+    expect(layout.top).toBeGreaterThanOrEqual(0);
+    expect(layout.bottom).toBeLessThanOrEqual(667);
+    expect(layout.headingSize).toBeGreaterThanOrEqual(7);
+    expect(layout.statsSize).toBeGreaterThanOrEqual(6);
+    await expectMobileFit(page);
+  });
+
   test('keeps unaffordable players in-hand and explains the Energy constraint in the decision strip', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
