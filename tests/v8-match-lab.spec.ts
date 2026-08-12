@@ -82,11 +82,12 @@ test.describe('V8 real-card calibration lab', () => {
     await page.goto('/lab/match-v8');
 
     const intro = page.getByTestId('v8-match-intro');
-    await expect(intro).toBeVisible();
-    await expect(intro).toContainText('YOU');
-    await expect(intro).toContainText('VS');
-    await expect(intro).toContainText('CPU');
-    await intro.click();
+    await expect(intro).toHaveCount(1);
+    const introText = await intro.textContent();
+    expect(introText).toContain('YOU');
+    expect(introText).toContain('VS');
+    expect(introText).toContain('CPU');
+    if (await intro.isVisible()) await intro.click();
     await expect(intro).toHaveCount(0);
 
     await expect(page.getByText('PERIOD 1/4', { exact: true }).first()).toBeVisible();
@@ -107,8 +108,15 @@ test.describe('V8 real-card calibration lab', () => {
       expect(location.headingBottom).toBeLessThanOrEqual(location.homeTop);
     }
 
-    await expect(page.locator('.v8-scoreteam--home')).toContainText(/\d+ ATT \d+ DEF/);
-    await expect(page.locator('.v8-scoreteam--away')).toContainText(/\d+ ATT \d+ DEF/);
+    const liveContests = page.getByTestId('v8-live-contests');
+    await expect(liveContests).toBeVisible();
+    await expect(liveContests.locator('.v8-contest-comparison').nth(0)).toContainText(/YOU\s*\d+\s*ATT\s*VS\s*CPU\s*\d+\s*DEF\s*[+-]?\d+\s*\d+G/);
+    await expect(liveContests.locator('.v8-contest-comparison').nth(1)).toContainText(/CPU\s*\d+\s*ATT\s*VS\s*YOU\s*\d+\s*DEF\s*[+-]?\d+\s*\d+G/);
+    const comparisonPositions = await liveContests.locator('.v8-contest-comparison').first().evaluate((contest) => {
+      const numbers = Array.from(contest.querySelectorAll('span > b')).map((node) => node.getBoundingClientRect());
+      return { attackRight: numbers[0]!.right, defenceLeft: numbers[1]!.left };
+    });
+    expect(comparisonPositions.attackRight).toBeLessThan(comparisonPositions.defenceLeft);
     await expectMobileFit(page);
   });
 
@@ -136,7 +144,8 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(moment).toContainText(/ATT/);
     await expect(moment).toContainText(/FULL \+7 ATT MARGINS CONVERT/);
     await expect(midfieldZone.locator('.v8-chip').filter({ hasText: 'Billy Bremner' })).toHaveClass(/is-fresh/);
-    await expect(page.locator('.v8-recap')).not.toHaveAttribute('open', '');
+    await expect(page.getByTestId('v8-period-result')).toBeVisible();
+    await expect(page.getByTestId('v8-period-result')).toContainText(/MATCH \d+–\d+/);
     await expectMobileFit(page);
   });
 
@@ -302,7 +311,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
-  test('generates a literal Cross, keeps it slotless, explains the score and records period telemetry', async ({ page }) => {
+  test('generates a literal Cross for the next period, keeps it slotless and records useful period evidence', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
     // P1 passes so P2 can afford Di María at her accepted printed 3-Energy calibration Cost.
@@ -318,22 +327,17 @@ test.describe('V8 real-card calibration lab', () => {
     await expectEnergy(page, 1, 4);
     await page.getByRole('button', { name: 'END PERIOD' }).click();
 
-    const window = page.getByTestId('v8-window');
-    await expect(window).toContainText('TACTICAL WINDOW');
-    const crossChoice = window.locator('.v8-window__choices button').filter({ hasText: 'Cross → MID' });
-    await expect(crossChoice).toBeVisible();
-    await crossChoice.click();
-    await expect(midfieldZone.locator('.v8-zone__heading span')).toHaveText('1/4');
-    await page.getByRole('button', { name: 'RESOLVE WINDOW' }).click();
-
     await expect(page.getByText('PERIOD 3/4', { exact: true }).first()).toBeVisible();
+    await expect(page.getByTestId('v8-window')).toHaveCount(0);
     await expectEnergy(page, 6, 6);
-    const recap = page.locator('.v8-recap');
-    await expect(recap).toBeVisible();
-    await expect(recap).toContainText('PERIOD RECAP');
-    await expect(recap).toContainText(/YOU: \d+ ATT vs \d+ DEF → \d+ goals/);
-    await expect(recap).toContainText(/CPU: \d+ ATT vs \d+ DEF → \d+ goals/);
-    await expect(recap).toContainText('Post-reveal: Cross (1, RABONA) → MID.');
+    const crossCard = page.locator('.v8-card--chance').filter({ hasText: 'Cross' });
+    await expect(crossCard).toBeVisible();
+    const periodResult = page.getByTestId('v8-period-result');
+    await expect(periodResult).toBeVisible();
+    await expect(periodResult).toContainText('LAST PERIOD');
+    await expect(periodResult.locator('.v8-contest-comparison')).toHaveCount(2);
+    await expect(periodResult).toContainText(/\d+\s*ATT\s*VS\s*\w+\s*\d+\s*DEF\s*[+-]?\d+\s*\d+G/);
+    await expect(periodResult).toContainText('generates Cross');
 
     await openLabTools(page);
     const telemetry = page.getByTestId('v8-telemetry');
@@ -346,7 +350,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
-  test('opens the post-reveal window for a Tactical generated this period and recaps it as its own step', async ({ page }) => {
+  test('does not reopen a post-reveal decision window for a Tactical generated this period', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
     // P1 passes so P2 can afford Di María (3) and still retain 1 Energy for the Cross window.
@@ -357,17 +361,13 @@ test.describe('V8 real-card calibration lab', () => {
     await page.locator('.v8-zone').nth(1).click();
     await page.getByRole('button', { name: 'END PERIOD' }).click();
 
-    const window = page.getByTestId('v8-window');
-    await expect(window).toContainText('TACTICAL WINDOW');
-    await expectMobileFit(page);
-
+    await expect(page.getByText('PERIOD 3/4', { exact: true }).first()).toBeVisible();
+    await expect(page.getByTestId('v8-window')).toHaveCount(0);
     const crossCard = page.locator('.v8-card--chance').filter({ hasText: 'Cross' });
     await expect(crossCard).toBeVisible();
     await dragCardToZone(page, crossCard, page.locator('.v8-zone').nth(2), 9);
-    await expect(window).toContainText('Post-reveal: Cross (1) → ATT');
-    await page.getByRole('button', { name: 'RESOLVE WINDOW' }).click();
-
-    await expect(page.locator('.v8-recap')).toContainText('Post-reveal: Cross (1, RABONA) → ATT.');
+    await expect(page.locator('.v8-commit')).toContainText('Cross → ATT');
+    await expectEnergy(page, 5, 6);
     await expect(page.locator('.v8-card--chance').filter({ hasText: 'Cross' })).toHaveCount(0);
     await expectMobileFit(page);
   });
@@ -380,10 +380,8 @@ test.describe('V8 real-card calibration lab', () => {
     await page.locator('.v8-zone').nth(1).click();
     await page.getByRole('button', { name: 'END PERIOD' }).click();
 
-    const window = page.getByTestId('v8-window');
-    await expect(window).toContainText('TACTICAL WINDOW');
-    await page.getByRole('button', { name: 'SKIP WINDOW' }).click();
     await expect(page.getByText('PERIOD 3/4', { exact: true }).first()).toBeVisible();
+    await expect(page.getByTestId('v8-window')).toHaveCount(0);
 
     const crossCard = page.locator('.v8-card--chance').filter({ hasText: 'Cross' });
     const midfieldZone = page.locator('.v8-zone').nth(1);
@@ -413,6 +411,8 @@ test.describe('V8 real-card calibration lab', () => {
 
     const deployed = attackZone.locator('.v8-chip').filter({ hasText: 'Christine Sinclair' });
     await expect(deployed).toContainText('13/1');
+    await expect(deployed.locator('.v8-chip__modifier')).toHaveText('+3A');
+    await expect(deployed.locator('.v8-chip__modifier')).toHaveClass(/is-positive/);
     await expect(page.locator('.v8-log')).toContainText('ARRIVE UNMARKED fades: +4 ATT → +3 ATT');
     await expectMobileFit(page);
   });
