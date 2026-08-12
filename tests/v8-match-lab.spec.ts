@@ -110,8 +110,12 @@ test.describe('V8 real-card calibration lab', () => {
 
     const liveContests = page.getByTestId('v8-live-contests');
     await expect(liveContests).toBeVisible();
-    await expect(liveContests.locator('.v8-contest-comparison').nth(0)).toContainText(/YOU\s*\d+\s*ATT\s*VS\s*CPU\s*\d+\s*DEF\s*[+-]?\d+\s*\d+G/);
-    await expect(liveContests.locator('.v8-contest-comparison').nth(1)).toContainText(/CPU\s*\d+\s*ATT\s*VS\s*YOU\s*\d+\s*DEF\s*[+-]?\d+\s*\d+G/);
+    const attackContest = liveContests.locator('.v8-contest-comparison').nth(0);
+    const defenceContest = liveContests.locator('.v8-contest-comparison').nth(1);
+    await expect(attackContest.locator('header')).toHaveText('ATT');
+    await expect(defenceContest.locator('header')).toHaveText('DEF');
+    await expect(attackContest).toContainText(/ATT\s*YOU\s*\d+\s*ATT\s*VS\s*CPU\s*\d+\s*DEF\s*[+-]?\d+\s*\d+G/);
+    await expect(defenceContest).toContainText(/DEF\s*YOU\s*\d+\s*DEF\s*VS\s*CPU\s*\d+\s*ATT\s*[+-]?\d+\s*\d+GA/);
     const comparisonPositions = await liveContests.locator('.v8-contest-comparison').first().evaluate((contest) => {
       const numbers = Array.from(contest.querySelectorAll('span > b')).map((node) => node.getBoundingClientRect());
       return { attackRight: numbers[0]!.right, defenceLeft: numbers[1]!.left };
@@ -336,7 +340,8 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(periodResult).toBeVisible();
     await expect(periodResult).toContainText('LAST PERIOD');
     await expect(periodResult.locator('.v8-contest-comparison')).toHaveCount(2);
-    await expect(periodResult).toContainText(/\d+\s*ATT\s*VS\s*\w+\s*\d+\s*DEF\s*[+-]?\d+\s*\d+G/);
+    await expect(periodResult).toContainText(/ATT\s*YOU\s*\d+\s*ATT\s*VS\s*CPU\s*\d+\s*DEF\s*[+-]?\d+\s*\d+G/);
+    await expect(periodResult).toContainText(/DEF\s*YOU\s*\d+\s*DEF\s*VS\s*CPU\s*\d+\s*ATT\s*[+-]?\d+\s*\d+GA/);
     await expect(periodResult).toContainText('generates Cross');
 
     await openLabTools(page);
