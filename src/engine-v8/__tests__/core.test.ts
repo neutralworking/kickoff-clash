@@ -36,14 +36,15 @@ describe('V8 three-zone prototype foundations', () => {
 
   it.each([
     [0, 0, 0],
-    [6, 0, 0],
-    [7, 0, 1],
-    [13, 0, 1],
-    [14, 0, 2],
-    [16, 9, 1],
-    [23, 9, 2],
-    [-1, -8, 1],
-  ])('scores one goal for every complete +7 ATT band: %i vs %i', (attack, defence, expected) => {
+    [4, 0, 0],
+    [5, 0, 1],
+    [6, 0, 1],
+    [9, 0, 1],
+    [10, 0, 2],
+    [14, 9, 1],
+    [19, 9, 2],
+    [-2, -8, 1],
+  ])('scores one goal for every complete +5 ATT band: %i vs %i', (attack, defence, expected) => {
     expect(goalsFromAttackDefence(attack, defence)).toBe(expected);
   });
 
