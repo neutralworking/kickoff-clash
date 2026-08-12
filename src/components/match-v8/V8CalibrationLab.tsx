@@ -99,6 +99,17 @@ type PeriodRecap = {
 
 type RevealOrder = { first: V8CalibrationSide; reason: string };
 
+type RevealBeat = {
+  index: number;
+  total: number;
+  side: V8CalibrationSide;
+  zone: V8Zone;
+  cardId: string | null;
+  name: string;
+  action: string;
+  effect: string;
+};
+
 type ResolutionMoment = {
   id: number;
   period: number;
@@ -122,11 +133,12 @@ type ResolutionMoment = {
 
 type RevealPhase = {
   id: number;
-  stage: 'commitment' | 'first' | 'second';
-  plannedState: V8CalibrationState;
-  stateAfterFirst: V8CalibrationState | null;
-  postReveal: V8CalibrationState | null;
+  stage: 'commitment' | 'cards';
+  resolvedState: V8CalibrationState;
   allPending: PendingPlay[];
+  orderedPlays: PendingPlay[];
+  nextIndex: number;
+  activeBeat: RevealBeat | null;
   cpuManagerAvailable: boolean;
   reveal: RevealOrder;
 };
@@ -223,6 +235,54 @@ function resolveSequence(state: V8CalibrationState, plays: readonly PendingPlay[
     }
   }
   return next;
+}
+
+function pendingPlayKey(play: PendingPlay): string {
+  if (play.kind === 'player') return `player:${play.side}:${play.cardId}`;
+  if (play.kind === 'tactical') return `tactical:${play.side}:${play.card.id}`;
+  return `manager:${play.side}:${play.zone}`;
+}
+
+function resolveRevealBeat(
+  state: V8CalibrationState,
+  play: PendingPlay,
+  index: number,
+  total: number,
+): { state: V8CalibrationState; beat: RevealBeat } {
+  const beforeTotals = calibrationTeamTotals(state, play.side);
+  const eventCount = state.events.length;
+  const next = resolveSequence(state, [play]);
+  const afterTotals = calibrationTeamTotals(next, play.side);
+  const newEvents = next.events.slice(eventCount);
+
+  const card = play.kind === 'player' ? getV8CalibrationPlayer(play.cardId) : null;
+  const name = card?.matchName ?? (play.kind === 'tactical' ? play.card.name : MANAGER_NAME);
+  const action = card?.actionName ?? (play.kind === 'tactical' ? 'TACTICAL' : 'MANAGER');
+  const genericAction = card ? `${card.realName} · ${card.actionName}.` : null;
+  const specificEvent = [...newEvents].reverse().find((event) => (
+    event.type !== 'player_revealed'
+    && event.text !== genericAction
+  ));
+  const attackDelta = afterTotals.attack - beforeTotals.attack;
+  const defenceDelta = afterTotals.defence - beforeTotals.defence;
+  const statChange = [
+    attackDelta ? `${signed(attackDelta)} ATT` : null,
+    defenceDelta ? `${signed(defenceDelta)} DEF` : null,
+  ].filter(Boolean).join(' · ');
+
+  return {
+    state: next,
+    beat: {
+      index,
+      total,
+      side: play.side,
+      zone: play.zone,
+      cardId: card?.id ?? null,
+      name,
+      action,
+      effect: specificEvent?.text ?? (statChange || 'BOARD STATE UNCHANGED'),
+    },
+  };
 }
 
 function payCalibrationPlayer(state: V8CalibrationState, side: V8CalibrationSide, card: V8CalibrationPlayerCard): V8CalibrationState {
@@ -796,16 +856,22 @@ export default function V8CalibrationLab() {
     if (finished || windowPhase || revealPhase) return;
     const cpu = planCpu(state, awayManagerAvailable);
     const allPending = [...pending, ...cpu.pending];
-    const reveal = priority(cpu.state, homeScore, awayScore, seed + state.period * 101);
+    // The priority advertised before commitment is authoritative. Recomputing it from the
+    // CPU-planned state can make the reveal contradict the decision strip the player just saw.
+    const reveal = currentPriority;
+    const second = reveal.first === 'home' ? 'away' : 'home';
+    const orderedPlays = [reveal.first, second]
+      .flatMap((side) => allPending.filter((play) => play.side === side));
     setResolutionMoment(null);
     setSelection(null);
     setRevealPhase({
       id: revealSequence.current += 1,
       stage: 'commitment',
-      plannedState: cpu.state,
-      stateAfterFirst: null,
-      postReveal: null,
+      resolvedState: cpu.state,
       allPending,
+      orderedPlays,
+      nextIndex: 0,
+      activeBeat: null,
       cpuManagerAvailable: cpu.managerAvailable,
       reveal,
     });
@@ -924,76 +990,91 @@ export default function V8CalibrationLab() {
   const finishPeriodRef = useRef(finishPeriod);
   finishPeriodRef.current = finishPeriod;
 
+  const finishReveal = (phase: RevealPhase, resolved: V8CalibrationState) => {
+    const period = resolved.period;
+    const periodLabel = PERIOD_LABELS[period - 1];
+    resolved.events.push({
+      type: 'action_triggered',
+      period,
+      text: `${periodLabel} REVEAL: ${phase.reveal.first === 'home' ? 'YOU' : 'CPU'} first · ${phase.reveal.reason}.`,
+    });
+
+    // The Generated-Tactical Window remains after every committed card and Action has resolved,
+    // but before scoring. CPU choices are still made blind from the same post-reveal state.
+    const cpuWindowPlays = planV8CalibrationWindow(resolved, 'away');
+    const humanCanPlay = windowEligibleCalibrationTacticals(resolved, 'home').some((card) => (
+      tacticalDefinition(card.type).eligibleZones
+        .some((zone) => previewCalibrationTacticalCost(resolved, 'home', card, zone) <= resolved.teams.home.energy)
+    ));
+    setRevealPhase(null);
+    setUndoStack([]);
+    setSelection(null);
+    setPending([]);
+    if (humanCanPlay) {
+      setState(resolved);
+      setWindowPhase({
+        resolved,
+        allPending: phase.allPending,
+        cpuPlays: cpuWindowPlays,
+        cpuManagerAvailable: phase.cpuManagerAvailable,
+        reveal: phase.reveal,
+        queued: [],
+      });
+      return;
+    }
+    finishPeriodRef.current(
+      resolved,
+      phase.allPending,
+      cpuWindowPlays,
+      [],
+      phase.cpuManagerAvailable,
+      phase.reveal,
+    );
+  };
+
+  const finishRevealRef = useRef(finishReveal);
+  finishRevealRef.current = finishReveal;
+
+  const skipReveal = () => {
+    if (!revealPhase) return;
+    const resolved = resolveSequence(
+      revealPhase.resolvedState,
+      revealPhase.orderedPlays.slice(revealPhase.nextIndex),
+    );
+    setState(resolved);
+    setPending([]);
+    finishRevealRef.current(revealPhase, resolved);
+  };
+
   useEffect(() => {
     if (!revealPhase) return;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const delay = reducedMotion
-      ? 60
-      : revealPhase.stage === 'commitment'
-        ? 520
-        : revealPhase.stage === 'first'
-          ? 460
-          : 320;
+    const delay = reducedMotion ? 60 : revealPhase.stage === 'commitment' ? 520 : 620;
 
     const timeout = window.setTimeout(() => {
-      if (revealPhase.stage === 'commitment') {
-        const firstPlays = revealPhase.allPending.filter((play) => play.side === revealPhase.reveal.first);
-        const stateAfterFirst = resolveSequence(revealPhase.plannedState, firstPlays);
-        setState(stateAfterFirst);
-        if (revealPhase.reveal.first === 'home') setPending([]);
-        setRevealPhase({ ...revealPhase, stage: 'first', stateAfterFirst });
-        return;
-      }
-
-      if (revealPhase.stage === 'first' && revealPhase.stateAfterFirst) {
-        const secondPlays = revealPhase.allPending.filter((play) => play.side !== revealPhase.reveal.first);
-        const postReveal = resolveSequence(revealPhase.stateAfterFirst, secondPlays);
-        setState(postReveal);
-        setPending([]);
-        setRevealPhase({ ...revealPhase, stage: 'second', postReveal });
-        return;
-      }
-
-      if (!revealPhase.postReveal) return;
-      const resolved = revealPhase.postReveal;
-      const period = resolved.period;
-      const periodLabel = PERIOD_LABELS[period - 1];
-      resolved.events.push({
-        type: 'action_triggered',
-        period,
-        text: `${periodLabel} REVEAL: ${revealPhase.reveal.first === 'home' ? 'YOU' : 'CPU'} first · ${revealPhase.reveal.reason}.`,
-      });
-
-      // The Generated-Tactical Window remains after both reveals and Actions, before scoring.
-      // CPU choices are still made blind from the same post-reveal state.
-      const cpuWindowPlays = planV8CalibrationWindow(resolved, 'away');
-      const humanCanPlay = windowEligibleCalibrationTacticals(resolved, 'home').some((card) => (
-        tacticalDefinition(card.type).eligibleZones
-          .some((zone) => previewCalibrationTacticalCost(resolved, 'home', card, zone) <= resolved.teams.home.energy)
-      ));
-      setRevealPhase(null);
-      setUndoStack([]);
-      setSelection(null);
-      if (humanCanPlay) {
-        setState(resolved);
-        setWindowPhase({
-          resolved,
-          allPending: revealPhase.allPending,
-          cpuPlays: cpuWindowPlays,
-          cpuManagerAvailable: revealPhase.cpuManagerAvailable,
-          reveal: revealPhase.reveal,
-          queued: [],
+      if (revealPhase.nextIndex < revealPhase.orderedPlays.length) {
+        const play = revealPhase.orderedPlays[revealPhase.nextIndex]!;
+        const next = resolveRevealBeat(
+          revealPhase.resolvedState,
+          play,
+          revealPhase.nextIndex + 1,
+          revealPhase.orderedPlays.length,
+        );
+        setState(next.state);
+        if (play.side === 'home') {
+          const key = pendingPlayKey(play);
+          setPending((plays) => plays.filter((candidate) => pendingPlayKey(candidate) !== key));
+        }
+        setRevealPhase({
+          ...revealPhase,
+          stage: 'cards',
+          resolvedState: next.state,
+          nextIndex: revealPhase.nextIndex + 1,
+          activeBeat: next.beat,
         });
         return;
       }
-      finishPeriodRef.current(
-        resolved,
-        revealPhase.allPending,
-        cpuWindowPlays,
-        [],
-        revealPhase.cpuManagerAvailable,
-        revealPhase.reveal,
-      );
+      finishRevealRef.current(revealPhase, revealPhase.resolvedState);
     }, delay);
 
     return () => window.clearTimeout(timeout);
@@ -1044,17 +1125,7 @@ export default function V8CalibrationLab() {
   const draggedTactical = handDrag?.kind === 'tactical' ? calibrationHandTacticals(windowPhase?.resolved ?? state, 'home').find((card) => card.id === handDrag.cardId) ?? null : null;
   const draggedPlayerPortrait = draggedPlayer ? portraitSrc({ id: draggedPlayer.sourceCardId ?? draggedPlayer.id, name: draggedPlayer.realName, position: draggedPlayer.position }) : null;
   const managerPortrait = managerPortraitSrc('control');
-  const activeRevealSide = revealPhase?.stage === 'first'
-    ? revealPhase.reveal.first
-    : revealPhase?.stage === 'second'
-      ? revealPhase.reveal.first === 'home' ? 'away' : 'home'
-      : null;
-  const stagedFreshPlayerIds = activeRevealSide && revealPhase
-    ? revealPhase.allPending.flatMap((play) => play.kind === 'player' && play.side === activeRevealSide ? [play.cardId] : [])
-    : [];
-  const activeRevealCount = activeRevealSide && revealPhase
-    ? revealPhase.allPending.filter((play) => play.side === activeRevealSide).length
-    : 0;
+  const stagedFreshPlayerIds = revealPhase?.activeBeat?.cardId ? [revealPhase.activeBeat.cardId] : [];
   const interactionLabel = handDrag?.moved
     ? handDrag.overZone
       ? isHandDragZoneLegal(handDrag, handDrag.overZone)
@@ -1145,8 +1216,10 @@ export default function V8CalibrationLab() {
           const homeZone = calibrationPlayersInZone(state, 'home', zone);
           const awayZone = calibrationPlayersInZone(state, 'away', zone);
           const hiddenCpuCommitments = revealPhase
-            && (revealPhase.stage === 'commitment' || (revealPhase.stage === 'first' && revealPhase.reveal.first === 'home'))
-            ? revealPhase.allPending.filter((play) => play.side === 'away' && play.zone === zone)
+            ? (revealPhase.stage === 'commitment'
+                ? revealPhase.orderedPlays
+                : revealPhase.orderedPlays.slice(revealPhase.nextIndex))
+              .filter((play) => play.side === 'away' && play.zone === zone)
             : [];
           const queuedPlayers = pending.filter((play) => play.side === 'home' && play.zone === zone && play.kind === 'player');
           const queuedManager = pending.find((play) => play.side === 'home' && play.zone === zone && play.kind === 'manager');
@@ -1174,7 +1247,7 @@ export default function V8CalibrationLab() {
               key={zone}
               type="button"
               data-v8-zone={zone}
-              className={`v8-zone${handDrag ? isHandDragZoneLegal(handDrag, zone) ? ' is-drag-target' : ' is-drag-disabled' : ''}${handDrag?.overZone === zone && isHandDragZoneLegal(handDrag, zone) ? ' is-drag-over' : ''}`}
+              className={`v8-zone${revealPhase?.activeBeat?.zone === zone ? ' is-resolving-zone' : ''}${handDrag ? isHandDragZoneLegal(handDrag, zone) ? ' is-drag-target' : ' is-drag-disabled' : ''}${handDrag?.overZone === zone && isHandDragZoneLegal(handDrag, zone) ? ' is-drag-over' : ''}`}
               onClick={() => queueToZone(zone)}
             >
               <div className="v8-zone__heading"><strong>{zone}</strong><span>{guide}</span></div>
@@ -1205,7 +1278,10 @@ export default function V8CalibrationLab() {
           <aside
             className={`v8-reveal-stage v8-reveal-stage--${revealPhase.stage}`}
             data-testid={revealPhase.stage === 'commitment' ? 'v8-opponent-commitment' : 'v8-reveal-stage'}
-            key={`${revealPhase.id}-${revealPhase.stage}`}
+            data-reveal-index={revealPhase.activeBeat?.index}
+            data-reveal-total={revealPhase.activeBeat?.total}
+            data-reveal-zone={revealPhase.activeBeat?.zone}
+            key={`${revealPhase.id}-${revealPhase.stage}-${revealPhase.nextIndex}`}
             aria-live="polite"
           >
             {revealPhase.stage === 'commitment' ? (
@@ -1216,12 +1292,18 @@ export default function V8CalibrationLab() {
               </>
             ) : (
               <>
-                <small>REVEAL {revealPhase.stage === 'first' ? '1' : '2'}/2</small>
-                <strong>{activeRevealSide === 'home' ? 'YOU' : 'CPU'} {activeRevealCount ? 'REVEAL' : 'PASS'}</strong>
-                <span>{activeRevealCount} CARD{activeRevealCount === 1 ? '' : 'S'} · {revealPhase.stage === 'first' ? revealPhase.reveal.reason : 'SECOND'}</span>
+                <small>REVEAL {revealPhase.activeBeat?.index}/{revealPhase.activeBeat?.total} · {revealPhase.activeBeat?.side === 'home' ? 'YOU' : 'CPU'}</small>
+                <strong>{revealPhase.activeBeat?.name}</strong>
+                <span>{revealPhase.activeBeat?.action}</span>
+                <em>{revealPhase.activeBeat?.effect}</em>
               </>
             )}
           </aside>
+        )}
+        {revealPhase && (
+          <button className="v8-reveal-skip" type="button" onClick={skipReveal} aria-label="Skip reveal sequence">
+            SKIP
+          </button>
         )}
         {resolutionMoment && (
           <aside className="v8-resolution" data-testid="v8-resolution" key={resolutionMoment.id} aria-live="polite">
