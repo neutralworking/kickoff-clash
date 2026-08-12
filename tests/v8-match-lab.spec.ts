@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { V8_GOAL_BAND } from '../src/engine-v8/core';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -146,7 +147,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(moment).toBeVisible();
     await expect(moment).toContainText(/REVEAL FIRST/);
     await expect(moment).toContainText(/ATT/);
-    await expect(moment).toContainText(/FULL \+7 ATT MARGINS CONVERT/);
+    await expect(moment).toContainText(`FULL +${V8_GOAL_BAND} ATT MARGINS CONVERT`);
     await expect(midfieldZone.locator('.v8-chip').filter({ hasText: 'Billy Bremner' })).toHaveClass(/is-fresh/);
     await expect(page.getByTestId('v8-period-result')).toBeVisible();
     await expect(page.getByTestId('v8-period-result')).toContainText(/MATCH \d+–\d+/);
@@ -206,7 +207,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
-  test('turns real full +7 margins into chained goal payoff without inventing a scorer', async ({ page }) => {
+  test(`turns real full +${V8_GOAL_BAND} margins into chained goal payoff without inventing a scorer`, async ({ page }) => {
     await page.goto('/lab/match-v8');
 
     let foundGoal = false;
@@ -226,7 +227,7 @@ test.describe('V8 real-card calibration lab', () => {
           const contest = converted.nth(index);
           const margin = Number(await contest.getAttribute('data-margin'));
           const goals = Number(await contest.getAttribute('data-goals'));
-          expect(margin).toBeGreaterThanOrEqual(goals * 7);
+          expect(margin).toBeGreaterThanOrEqual(goals * V8_GOAL_BAND);
         }
         expect(await page.locator('.v8-goal-burst > span').count()).toBeGreaterThanOrEqual(1);
         await expectMobileFit(page);

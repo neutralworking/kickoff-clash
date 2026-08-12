@@ -1445,7 +1445,7 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
                   <GoalBurst side="CPU" goals={resolutionMoment.awayGoals} />
                 </div>
               )}
-              <span>FULL +7 ATT MARGINS CONVERT · TEAM ATT</span>
+              <span>FULL +{V8_GOAL_BAND} ATT MARGINS CONVERT · TEAM ATT</span>
             </div>
             <div className="v8-resolution__beat v8-resolution__beat--next">
               <small>{resolutionMoment.final ? 'FULL TIME' : 'NEXT PERIOD'}</small>
