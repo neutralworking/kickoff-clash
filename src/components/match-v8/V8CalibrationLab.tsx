@@ -499,29 +499,31 @@ function signed(value: number): string {
 }
 
 function ContestComparison({
-  side,
-  attack,
-  defenceSide,
-  defence,
+  axis,
+  user,
+  cpu,
   compact = false,
 }: {
-  side: 'YOU' | 'CPU';
-  attack: number;
-  defenceSide: 'YOU' | 'CPU';
-  defence: number;
+  axis: 'ATT' | 'DEF';
+  user: number;
+  cpu: number;
   compact?: boolean;
 }) {
-  const margin = attack - defence;
+  const attack = axis === 'ATT' ? user : cpu;
+  const defence = axis === 'ATT' ? cpu : user;
+  const margin = user - cpu;
   const goals = goalsFromAttackDefence(attack, defence);
   return (
     <div
-      className={`v8-contest-comparison${margin >= V8_GOAL_BAND ? ' is-converting' : ''}${margin < 0 ? ' is-behind' : ''}${compact ? ' is-compact' : ''}`}
+      className={`v8-contest-comparison is-${axis.toLowerCase()}${axis === 'ATT' && goals ? ' is-converting' : ''}${axis === 'DEF' && !goals && margin >= 0 ? ' is-holding' : ''}${margin < 0 ? ' is-behind' : ''}${compact ? ' is-compact' : ''}`}
+      data-axis={axis}
       data-margin={margin}
     >
-      <span><small>{side}</small><b>{attack}</b><i>ATT</i></span>
+      <header>{axis}</header>
+      <span><small>YOU</small><b>{user}</b><i>{axis}</i></span>
       <em>VS</em>
-      <span><small>{defenceSide}</small><b>{defence}</b><i>DEF</i></span>
-      <strong>{signed(margin)} <small>{goals}G</small></strong>
+      <span><small>CPU</small><b>{cpu}</b><i>{axis === 'ATT' ? 'DEF' : 'ATT'}</i></span>
+      <strong>{signed(margin)} <small>{goals}{axis === 'ATT' ? 'G' : 'GA'}</small></strong>
     </div>
   );
 }
@@ -1115,8 +1117,8 @@ export default function V8CalibrationLab() {
       </header>
 
       <section className="v8-live-contests" aria-label="Current scoring contests" data-testid="v8-live-contests">
-        <ContestComparison side="YOU" attack={totalsHome.attack} defenceSide="CPU" defence={totalsAway.defence} />
-        <ContestComparison side="CPU" attack={totalsAway.attack} defenceSide="YOU" defence={totalsHome.defence} />
+        <ContestComparison axis="ATT" user={totalsHome.attack} cpu={totalsAway.defence} />
+        <ContestComparison axis="DEF" user={totalsHome.defence} cpu={totalsAway.attack} />
       </section>
 
       <div className="v8-condition" hidden={!debugOpen}>
@@ -1299,8 +1301,8 @@ export default function V8CalibrationLab() {
             <em>MATCH {latestRecap.scoreAfter}</em>
           </header>
           <div className="v8-period-result__contests">
-            <ContestComparison side="YOU" attack={latestRecap.homeAttack} defenceSide="CPU" defence={latestRecap.awayDefence} compact />
-            <ContestComparison side="CPU" attack={latestRecap.awayAttack} defenceSide="YOU" defence={latestRecap.homeDefence} compact />
+            <ContestComparison axis="ATT" user={latestRecap.homeAttack} cpu={latestRecap.awayDefence} compact />
+            <ContestComparison axis="DEF" user={latestRecap.homeDefence} cpu={latestRecap.awayAttack} compact />
           </div>
           {latestRecap.highlights.length > 0 && (
             <div className="v8-period-result__changes">
