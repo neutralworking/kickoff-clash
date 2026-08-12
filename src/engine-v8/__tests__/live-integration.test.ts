@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { V8_CALIBRATION_PLAYER_BY_ID } from '@/engine-v8/calibration-cards';
 import { buildLiveV8Fixture } from '@/game-v8';
 import { ripStarterPacks } from '@/lib/packs';
-import { createRun } from '@/lib/run';
+import { addCardToDeck, createRun, getShopCards } from '@/lib/run';
 
 function starterRun(seed = 8082026) {
   const contents = ripStarterPacks(seed);
@@ -30,6 +30,27 @@ describe('live V8 fixture bridge', () => {
     expect(fixture.contextLabel).toBe('CUP 1 · TIE 1');
     expect(fixture.homePlayerIds.every((id) => V8_CALIBRATION_PLAYER_BY_ID.has(id))).toBe(true);
     expect(fixture.awayPlayerIds.every((id) => V8_CALIBRATION_PLAYER_BY_ID.has(id))).toBe(true);
+  });
+
+  it('carries a shop signing into the next fixture with its authored V8 Action', () => {
+    const run = starterRun(8082028);
+    const starterPlayerIds = new Set(run.deck.map((card) => card.v8PlayerId));
+    const shopCard = getShopCards(run.seed + run.round * 999)
+      .find((card) => card.v8PlayerId && !starterPlayerIds.has(card.v8PlayerId));
+
+    expect(shopCard).toBeDefined();
+    const signedRun = addCardToDeck(run, shopCard!);
+    const signing = signedRun.deck.at(-1)!;
+    const withSigningSelected = {
+      ...signedRun,
+      startingXI: [signing.id, ...(signedRun.startingXI ?? []).slice(1)],
+    };
+    const fixture = buildLiveV8Fixture(withSigningSelected);
+    const playerId = fixture.homePlayerIds[0]!;
+
+    expect(playerId).toBe(shopCard!.v8PlayerId);
+    expect(V8_CALIBRATION_PLAYER_BY_ID.get(playerId)?.actionName).toBe(shopCard!.abilityName);
+    expect(V8_CALIBRATION_PLAYER_BY_ID.get(playerId)?.actionName).not.toBe('V8 ADAPTER');
   });
 
   it('adapts a later legacy signing instead of blocking the next match', () => {

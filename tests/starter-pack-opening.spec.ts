@@ -37,17 +37,15 @@ test.describe('390 × 844 opening', () => {
     await openChosenSquad(page);
 
     await page.getByRole('button', { name: /build your xi/i }).click();
-    await expect(page.getByText(/name your squad/i).first()).toBeVisible();
+    await expect(page.getByText(/team selection v fc warm-up/i).first()).toBeVisible();
   });
 
-  test('keeps the manager limit and player-card hierarchy legible', async ({ page }) => {
+  test('keeps the simplified manager face and player-card hierarchy legible', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /new season/i }).click();
     await page.getByRole('button', { name: /choose manager pack/i }).nth(1).click();
 
-    const xiLimit = page.getByTestId('manager-xi-limit');
-    await expect(xiLimit).toBeVisible();
-    await expect(xiLimit).toContainText('XI LIMIT');
+    await expect(page.getByTestId('manager-xi-limit')).toHaveCount(0);
 
     await page.getByRole('button', { name: /choose player pack/i }).click();
     await page.getByRole('button', { name: /choose player pack/i }).nth(2).click();

@@ -32,6 +32,7 @@ import { getFormation, ALL_FORMATIONS } from './formations';
 import { generateOpponentXI, cupMatchPower } from './opponent';
 import type { CoAppearance } from './chem';
 import { pruneCard } from './chem';
+import { V8_RUN_PLAYER_POOL } from '../game-v8/roster';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -967,17 +968,17 @@ export function advanceToNextMatch(state: RunState): RunState {
  */
 export function getShopCards(seed: number, rareOnly: boolean = false): Card[] {
   const pool = rareOnly
-    ? ALL_CARDS.filter(c => c.rarity !== 'Common')
-    : ALL_CARDS;
-  return seededShuffle(pool, seed).slice(0, 3);
+    ? V8_RUN_PLAYER_POOL.filter(c => c.rarity !== 'Common')
+    : V8_RUN_PLAYER_POOL;
+  return seededShuffle([...pool], seed).slice(0, 3);
 }
 
 /** The Player Pick draw: 3 seeded Common/Rare candidates to choose ONE from —
  *  the cheap depth buy (elite acquisitions stay behind the pricier picks).
  *  Deterministic per seed. */
 export function getPlayerPickCards(seed: number): Card[] {
-  const pool = ALL_CARDS.filter(c => c.rarity === 'Common' || c.rarity === 'Rare');
-  return seededShuffle(pool, seed).slice(0, 3);
+  const pool = V8_RUN_PLAYER_POOL.filter(c => c.rarity === 'Common' || c.rarity === 'Rare');
+  return seededShuffle([...pool], seed).slice(0, 3);
 }
 
 /**

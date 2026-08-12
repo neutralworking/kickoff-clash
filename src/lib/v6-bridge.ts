@@ -263,16 +263,12 @@ export function assignSlots(
   return slots;
 }
 
-/** The XI cost budget: a fielded XI's total V6 cost may not exceed this (tune in balance-lab). */
-export const MAX_XI_COST = 45;
-
-/** The team-selection readout for a chosen XI: total damped ATT, total DEF, total cost
- *  — the same V6 numbers the match plays with, so selection and match never disagree. */
-export function xiV6Totals(xi: Card[], formation: Formation): { att: number; def: number; cost: number } {
+/** The team-selection readout for a chosen XI: total damped ATT and total DEF —
+ *  the same V6 numbers the match plays with, so selection and match never disagree. */
+export function xiV6Totals(xi: Card[], formation: Formation): { att: number; def: number } {
   const squad = bridgePlayerSquad('', xi, [], formation);
   return {
     att: squad.xi.reduce((n, c) => n + c.attack, 0),
     def: squad.xi.reduce((n, c) => n + c.defence, 0),
-    cost: xi.reduce((n, c) => n + v6Cost(c), 0),
   };
 }

@@ -1,8 +1,8 @@
 # Kickoff Clash — Current State
 
-**Last updated:** 2026-08-11
-**Canonical branch for the integrated work in progress:** `agent/v8-starter-roster-swipe`  
-**Canonical review PR:** [#111 — V8 starter roster packs and swipe reveal](https://github.com/neutralworking/kickoff-clash/pull/111)
+**Last updated:** 2026-08-12
+**Canonical branch for the integrated work in progress:** `agent/v8-production-run`
+**Canonical review PR:** [#117 — V8 production run](https://github.com/neutralworking/kickoff-clash/pull/117)
 
 This document is the first read for anyone joining the repository. It describes the current product direction, the active branch stack, the boundaries between UI and engine work, and the decisions that supersede older design documents.
 
@@ -13,17 +13,17 @@ Kickoff Clash is a mobile-first football card battler and roguelike. The player 
 The current implementation direction combines:
 
 - the established live run shell for packs, squad selection, cups, rewards, shops, economy and persistence;
-- the V7 match controller, rules and presentation for the match itself;
+- the V8 match controller, rules and presentation for the match itself;
 - the newly groomed player- and manager-card family across the live flow.
 
-The implementation version name `V7` is not the product release number. The product scope discussed below is V1.
+The implementation version name `V8` is not the product release number. The product scope discussed below is V1.
 
 ## Current source of truth
 
 For current work, use sources in this order:
 
 1. this document;
-2. the current code on `agent/manager-production-integration`;
+2. the current code on `agent/v8-production-run`;
 3. the active PR descriptions in the stack below;
 4. dated decision documents in `docs/player-card-decisions/`;
 5. older root and `design/` documents only as historical context.
@@ -47,6 +47,7 @@ The UI/run-flow work is stacked. The latest branch contains the preceding card a
 | [#109](https://github.com/neutralworking/kickoff-clash/pull/109) | `agent/v8-snap-layout-intro` | Snap-style match layout and match intro | Draft, unmerged |
 | [#110](https://github.com/neutralworking/kickoff-clash/pull/110) | `agent/starter-pack-choice-reveal` | Choice-of-three starter packs and reveal flow | Draft, unmerged |
 | [#111](https://github.com/neutralworking/kickoff-clash/pull/111) | `agent/v8-starter-roster-swipe` | V8 roster packs, two-page squad reveal and XI-only match handoff | Active draft, unmerged |
+| [#117](https://github.com/neutralworking/kickoff-clash/pull/117) | `agent/v8-production-run` | V8 production match, authored shop roster and end-to-end run integration | Active draft, unmerged |
 
 ### Rejected branch
 
@@ -60,7 +61,7 @@ A fresh V1 run should move through:
 2. a new blind choice of three sealed player packs drawn from the implemented V8 historical-player roster;
 3. a grouped 18-player reveal presented as two swipeable, complete 3×3 pages;
 4. squad/team selection;
-5. V7 match;
+5. V8 match;
 6. existing post-match, shop, cup and economy flow.
 
 Tactic cards are out of scope for V1. Older tactic-card, tactic-pack and charged-action code remains in the repository as implementation residue. Do not restore it to the starter flow or treat it as the current requirement.
@@ -102,18 +103,16 @@ Each manager has:
 
 - a named action and readable effect;
 - a pool of one, two or three available formations;
-- a maximum starting-XI cost;
 - a portrait and rarity frame treatment.
 
-Managers do not have V1 styles, archetypes or class identities. Do not show a generic `MGR` label, written rarity, ATT, DEF, player cost, tactic charges, class crest or adherence percentage.
+Managers do not have V1 styles, archetypes or class identities. Do not show a generic `MGR` label, written rarity, ATT, DEF, player cost, starting-XI cost/max, tactic charges, class crest or adherence percentage.
 
 The production metadata contract is in `src/lib/manager-v1.ts`. Current migration defaults are intentionally conservative:
 
 - the action name is derived from existing roster data until every manager has a dedicated authored value;
-- the formation pool begins with the single existing formation;
-- the XI cap begins at the current global value of 45.
+- the formation pool begins with the single existing formation.
 
-These are migration defaults, not final balance decisions.
+Match Energy replaces the former pre-match starting-XI cost cap.
 
 ## Mobile layout baseline
 
@@ -141,10 +140,10 @@ Do not approve phone layouts from desktop screenshots or width arithmetic alone.
 
 The current match integration uses:
 
-- `src/engine-v7/` — headless deterministic match rules and receipts;
-- `src/game-v7/` — controller and presentation translation;
-- `src/components/match-v7/` — match UI;
-- the live-to-V7 adapter/integration introduced by PR #85;
+- `src/engine-v8/` — headless deterministic match rules and receipts;
+- `src/game-v8/` — controller, authored run roster and live fixture translation;
+- `src/components/match-v8/` — match UI;
+- the live-to-V8 integration on the active branch;
 - `GameShell` as the owner of the complete roguelike run lifecycle.
 
 The match must return a result that the existing live shell can use for score, rewards, records, squad state and progression.
@@ -212,14 +211,12 @@ Do not make opportunistic UI restyles inside an engine branch, and do not change
 ### Run and manager integration
 
 - replace the legacy manager/tactic callback with a V1 manager selection contract;
-- persist manager formation pools and maximum starting-XI cost in run state;
 - restrict the team-selection formation selector to the active manager's formations;
-- enforce the manager-owned XI cap instead of the global constant;
 - support future formation-unlock consumables without building the full store treatment yet.
 
 ### Engine work
 
-- continue rule work in the V7 engine/controller path;
+- continue rule work in the V8 engine/controller path;
 - keep resolution deterministic and receipt-driven;
 - preserve the eleven-player match handoff and keep the seven alternatives in pre-match squad selection only;
 - add or update tests before changing presentation assumptions;
@@ -229,7 +226,6 @@ Do not make opportunistic UI restyles inside an engine branch, and do not change
 
 - author final manager action names;
 - assign final one-to-three formation pools;
-- assign manager-specific XI caps;
 - revisit portrait crops with the curated portrait set;
 - tune starter player counts and rarity distribution only after the grouped reveal and squad requirements are settled.
 

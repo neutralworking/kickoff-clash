@@ -7,7 +7,7 @@ import type { V6Card } from '../../lib/match-v6';
 import { competenceOf, type Competence } from '../../lib/team-select';
 import { pitchAxis } from '../../lib/pitch-layout';
 import { PIXEL, POSITION_COLOR, lastName } from '../cards/cardTokens';
-import { fitnessColor as fitnessColorForPct, HERO } from '../cards/portrait';
+import { fitnessColor as fitnessColorForPct } from '../cards/portrait';
 import TeamSelectionPlayerCard from '../player-cards/TeamSelectionPlayerCard';
 
 // iPhone-first token geometry. The previous 72×96 pitch cards were too large
@@ -108,7 +108,6 @@ export function LineupSlot({
   v6card,
   justPlaced,
   onClick,
-  onInspect,
   competence,
   stats: _stats,
   misfitReveal = false,
@@ -124,7 +123,6 @@ export function LineupSlot({
   v6card?: V6Card;
   justPlaced: boolean;
   onClick?: () => void;
-  onInspect?: () => void;
   competence?: Competence;
   stats?: { atk: number; def: number; baseAtk: number; baseDef: number };
   misfitReveal?: boolean;
@@ -167,34 +165,6 @@ export function LineupSlot({
             highlighted={dropHint}
             showMisfitReceipt={resolvedCompetence === 'incompetent' && misfitReveal}
           />
-          {onInspect && (
-            <span
-              role="button"
-              aria-label={`Inspect ${lastName(card.name)}`}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                onInspect();
-              }}
-              className="absolute flex items-center justify-center"
-              style={{
-                right: -4,
-                bottom: -4,
-                zIndex: 40,
-                width: 14,
-                height: 14,
-                color: 'var(--line-white)',
-                background: HERO.ink,
-                border: '1.5px solid var(--line-white)',
-                borderRadius: '50%',
-                fontFamily: PIXEL,
-                fontSize: 7,
-                lineHeight: 1,
-              }}
-            >
-              i
-            </span>
-          )}
         </div>
       ) : (
         <>

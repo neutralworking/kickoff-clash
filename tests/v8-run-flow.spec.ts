@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createRun, type RunState } from '../src/lib/run';
+import { lastName } from '../src/components/cards/cardTokens';
+import { createRun, getPlayerPickCards, type RunState } from '../src/lib/run';
 import { ripStarterPacks } from '../src/lib/packs';
 
 const STORAGE_KEY = 'kickoff-clash-v4-run';
@@ -78,7 +79,13 @@ test.describe('V8 production run handoff', () => {
     await page.getByRole('button', { name: /choose player pack/i }).click();
     await page.getByRole('button', { name: /choose player pack/i }).nth(2).click();
     await page.getByRole('button', { name: /build your xi/i }).click();
+
+    await expect(page.getByText('TEAM SELECTION v FC Warm-Up', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'HOME', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^(DEF|BAL|ATT)$/ })).toHaveCount(0);
+    await expect(page.getByText('COST / MAX', { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'AUTO', exact: true }).click();
+    await expect(page.locator('[aria-label^="Inspect "]')).toHaveCount(0);
     await page.getByRole('button', { name: /kick off/i }).click();
 
     await expect(page.getByTestId('v8-match-intro')).toBeVisible();
@@ -105,5 +112,29 @@ test.describe('V8 production run handoff', () => {
     await playFourPeriods(page);
     await expectPhoneWidth(page);
     await expect(page.getByRole('button', { name: 'CONTINUE', exact: true })).toBeInViewport();
+  });
+
+  test('offers authored V8 players in the between-match shop', async ({ page }) => {
+    const starter = seededStarterRun(8082029);
+    const run: RunState = { ...starter, status: 'shop', cash: 100_000 };
+    const shopSeed = run.seed + run.round * 999;
+    const expectedCards = getPlayerPickCards(shopSeed + 77);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(({ key, value }) => {
+      window.localStorage.clear();
+      window.localStorage.setItem(key, value);
+    }, { key: STORAGE_KEY, value: serializeRun(run) });
+    await page.goto('/');
+    await page.getByRole('button', { name: /continue run/i }).click();
+
+    await expect(page.locator('.phase-shop')).toBeVisible();
+    await page.getByRole('button', { name: /^Player Pick/ }).click();
+    const picker = page.getByRole('dialog');
+    await expect(picker.getByRole('button', { name: /^Sign/ })).toHaveCount(3);
+    for (const card of expectedCards) {
+      await expect(picker.getByText(lastName(card.name), { exact: false }).first()).toBeVisible();
+    }
+    await expectPhoneWidth(page);
   });
 });

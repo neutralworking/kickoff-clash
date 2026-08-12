@@ -3,8 +3,10 @@ import {
   RIP_COUNTS,
   STARTER_CHOICE_COUNT,
   V8_STARTER_PLAYER_POOL,
+  ripCardPack,
   ripStarterPackChoices,
 } from '../packs';
+import { getPlayerPickCards, getShopCards } from '../run';
 
 describe('starter pack choice offers', () => {
   it('creates three distinct manager choices and three complete legal player packs', () => {
@@ -43,5 +45,27 @@ describe('starter pack choice offers', () => {
     expect(V8_STARTER_PLAYER_POOL.some((card) => card.realName === 'David Beckham')).toBe(true);
     expect(V8_STARTER_PLAYER_POOL.some((card) => card.realName === 'Lev Yashin')).toBe(true);
     expect(V8_STARTER_PLAYER_POOL.every((card) => card.v8PlayerId)).toBe(true);
+  });
+
+  it('uses the same implemented V8 roster for every between-match player offer', () => {
+    const offers = [
+      ...getPlayerPickCards(901),
+      ...getShopCards(902),
+      ...getShopCards(903, true),
+      ...ripCardPack('scout', 904),
+      ...ripCardPack('elite', 905),
+    ];
+    const rosterIds = new Set(V8_STARTER_PLAYER_POOL.map((card) => card.v8PlayerId));
+
+    expect(offers).toHaveLength(15);
+    expect(offers.every((card) => card.v8PlayerId && rosterIds.has(card.v8PlayerId))).toBe(true);
+    expect(offers.every((card) => (
+      card.realName
+      && card.printedCost != null
+      && card.printedAttack != null
+      && card.printedDefence != null
+      && card.abilityName
+      && card.abilityText
+    ))).toBe(true);
   });
 });
