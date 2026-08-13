@@ -128,11 +128,11 @@
 
 .nameplate {
   position: absolute;
-  top: 38%;
+  top: 35%;
   left: 3px;
   right: 3px;
   z-index: 10;
-  height: 14%;
+  height: 13%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -151,18 +151,16 @@
 
 .actionPanel {
   position: absolute;
-  top: 52%;
-  left: 3px;
-  right: 3px;
+  top: 48%;
+  left: 2px;
+  right: 2px;
   z-index: 9;
-  height: 31%;
+  height: 35%;
   display: -webkit-box;
   overflow: hidden;
-  padding: 3px 2px 1px;
+  padding: 4px 1px 1px;
   color: #fff8e6;
   background: linear-gradient(180deg, #21190f, #0d0905);
-  border: 1px solid color-mix(in srgb, var(--pc-edge) 56%, #211506);
-  border-radius: 2px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   font: 8px/1.08 var(--font-pixel, monospace);
