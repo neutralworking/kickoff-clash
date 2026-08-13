@@ -29,16 +29,16 @@
  */
 
 import { useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { cardNaturalPositions, cardPositionLabels, type Card } from '../lib/scoring';
 import type { Formation } from '../lib/formations';
-import { getFormation, positionFitsSlot } from '../lib/formations';
+import { getFormation } from '../lib/formations';
 import type { TeamIntent, OpponentBuild } from '../lib/run';
 import { getOpponent } from '../lib/run';
 import { xiV6Totals, toDisplayV6Card } from '../lib/v6-bridge';
-import { portraitSrc } from './cards/portrait';
+import { managerPortraitSrc, portraitSrc } from './cards/portrait';
 import type { JokerCard } from '../lib/jokers';
-import { managerFormationsV1 } from '../lib/manager-v1';
+import { managerActionNameV1, managerFormationsV1 } from '../lib/manager-v1';
 import { SCOUT_COST } from '../lib/economy';
 import {
   type XISelection,
@@ -56,10 +56,7 @@ import { contestPanel } from '../lib/contest-panel';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import SquadGallery from './SquadGallery';
-import { ContestBreakdown } from './ContestBreakdown';
-import { ClassGem } from './cards/ContestIcons';
-import { classOfCard } from '../lib/contest-map';
-import { PIXEL, RARITY_COLOR, POSITION_COLOR, lastName } from './cards/cardTokens';
+import { PIXEL, RARITY_COLOR, POSITION_COLOR, lastName, playerActions } from './cards/cardTokens';
 import { COMPETENCE_COLOR } from '../lib/team-select';
 import { PosTag, FitnessBar, BenchTile, BenchCover, LineupSlot, fitnessOf, SLOT_INSET_X, SLOT_INSET_Y } from './lineup';
 import { deriveStats } from '../lib/funnel';
@@ -228,6 +225,48 @@ function seedSelection(
   return autoFill(pool, formation, { starters, bench }, 'empty');
 }
 
+function selectionAction(card: Card): { name: string; text: string } {
+  const legacyAction = playerActions(card)[0];
+  return {
+    name: card.abilityName ?? legacyAction?.label ?? 'No Action',
+    text: card.abilityText ?? legacyAction?.text ?? 'No printed effect.',
+  };
+}
+
+function SelectionPositionChips({ card }: { card: Card }) {
+  const positions = cardPositionLabels(card);
+  const naturalPositions = cardNaturalPositions(card);
+
+  return (
+    <span className="flex flex-wrap items-center gap-1" aria-label={`Positions ${positions.join(' and ')}`}>
+      {positions.map((position, index) => {
+        const color = POSITION_COLOR[naturalPositions[index] ?? card.position] ?? 'var(--dust)';
+        return (
+          <span
+            key={`${position}-${index}`}
+            data-position-chip={position}
+            style={{
+              minWidth: 25,
+              padding: '3px 5px',
+              color: index === 0 ? 'var(--ink-black)' : 'var(--cream)',
+              background: index === 0 ? color : 'rgba(5,8,6,0.75)',
+              border: `1px solid ${color}`,
+              borderRadius: 4,
+              fontFamily: PIXEL,
+              fontSize: 8,
+              lineHeight: 1,
+              textAlign: 'center',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {position}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // SquadScreen
 // ---------------------------------------------------------------------------
@@ -298,14 +337,15 @@ export default function SquadScreen({
   const filled = startersFilled(sel);
   const slotCount = formation.slots.length;
   const manager = managers?.find((m) => m.id === managerId) ?? null;
+  const activeManager = mode === 'draft' ? manager : jokers?.[0] ?? null;
   const selectableFormations = useMemo(() => {
-    if (mode !== 'draft' || !manager) return formations;
-    const allowed = new Set(managerFormationsV1(manager));
+    if (!activeManager) return formations;
+    const allowed = new Set(managerFormationsV1(activeManager));
     const candidates = formations.filter((candidate) => allowed.has(candidate.id));
     return candidates.length > 0
       ? candidates
-      : managerFormationsV1(manager).map(getFormation);
-  }, [mode, manager, formations]);
+      : managerFormationsV1(activeManager).map(getFormation);
+  }, [activeManager, formations]);
 
   const xiCards = useMemo(
     () => sel.starters.filter((x): x is number => x != null).map((id) => byId.get(id)).filter((c): c is Card => !!c),
@@ -315,8 +355,14 @@ export default function SquadScreen({
   // V6 readout (the numbers the match plays with). Match Energy replaces the
   // old pre-match total-cost budget.
   const v6Totals = useMemo(() => xiV6Totals(xiCards, formation), [xiCards, formation]);
-  const managerAllowsFormation = mode !== 'draft'
-    || (manager !== null && managerFormationsV1(manager).includes(formationId));
+  const averageCost = useMemo(() => {
+    if (xiCards.length === 0) return '—';
+    const total = xiCards.reduce((sum, card) => sum + toDisplayV6Card(card).cost, 0);
+    return (total / xiCards.length).toFixed(1);
+  }, [xiCards]);
+  const managerAllowsFormation = activeManager
+    ? managerFormationsV1(activeManager).includes(formationId)
+    : mode !== 'draft';
   const ready = filled === slotCount && managerAllowsFormation;
 
   // Live card → the unified V6 token (damped ATT to match the match) + its portrait.
@@ -420,16 +466,17 @@ export default function SquadScreen({
   }
 
   function placeInOverlay(cardId: number) {
+    const targetOverlay = overlay;
     setSel((prev) => {
-      const next: XISelection = {
-        starters: prev.starters.map((id) => (id === cardId ? null : id)),
-        bench: prev.bench.filter((id) => id !== cardId),
-      };
-      if (overlay?.kind === 'slot') next.starters[overlay.index] = cardId;
-      else if (overlay?.kind === 'bench' && next.bench.length < BENCH_SIZE) next.bench.push(cardId);
-      return next;
+      if (targetOverlay?.kind === 'slot') {
+        return moveCard(prev, cardId, { kind: 'slot', index: targetOverlay.index });
+      }
+      if (targetOverlay?.kind === 'bench') {
+        return moveCard(prev, cardId, { kind: 'bench', index: Math.min(prev.bench.length, BENCH_SIZE - 1) });
+      }
+      return prev;
     });
-    if (overlay?.kind === 'slot') flashSlot(overlay.index);
+    if (targetOverlay?.kind === 'slot') flashSlot(targetOverlay.index);
     setOverlay(null);
   }
 
@@ -558,6 +605,13 @@ export default function SquadScreen({
 
   const dragCard = drag ? byId.get(drag.id) ?? null : null;
   const activeSlot = overlay?.kind === 'slot' ? formation.slots[overlay.index] : null;
+  const activeSlotCard = overlay?.kind === 'slot'
+    ? byId.get(sel.starters[overlay.index] as number)
+    : undefined;
+  const playerSheetAvailable = overlay?.kind === 'slot' && activeSlotCard
+    ? pool.filter((card) => card.id !== activeSlotCard.id)
+    : reserves;
+  const activeManagerPortrait = activeManager ? managerPortraitSrc(activeManager.id) : null;
 
   return (
     <div
@@ -607,70 +661,125 @@ export default function SquadScreen({
 
       </div>
 
-      {/* ── Squad readout — total ATT/DEF (the match numbers) ───────────── */}
+      {/* ── Squad readout — keep the match totals useful, not dominant. ─── */}
       <div className="shrink-0 px-3 mt-1.5">
         <div
           className="flex items-stretch"
           style={{ borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'rgba(0,0,0,0.28)', boxShadow: 'inset 0 1px 0 0 var(--glass-highlight)', overflow: 'hidden' }}
         >
-          <div className="flex-1 flex flex-col items-center justify-center py-2">
+          <div className="flex-1 flex flex-col items-center justify-center py-1.5" style={{ borderRight: '1px solid var(--border)' }}>
             <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)' }}>ATT</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 18, color: 'var(--att, #ff9a54)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{v6Totals.att}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 15, color: 'var(--att, #ff9a54)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{v6Totals.att}</span>
           </div>
-          <div className="flex-1 flex flex-col items-center justify-center py-2" style={{ borderRight: '1px solid var(--border)' }}>
+          <div className="flex-1 flex flex-col items-center justify-center py-1.5" style={{ borderRight: '1px solid var(--border)' }}>
             <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)' }}>DEF</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 18, color: 'var(--def, #72c9f2)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{v6Totals.def}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 15, color: 'var(--def, #72c9f2)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{v6Totals.def}</span>
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center py-1.5">
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)' }}>AVG COST</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 15, color: 'var(--gold)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{averageCost}</span>
           </div>
         </div>
       </div>
 
-      {/* ── Control bar: shape · manager (draft) ─────────────────────────── */}
-      <div className="shrink-0 flex items-stretch gap-1.5 px-3 mt-1.5" style={{ height: 40 }}>
+      {/* ── Manager owns the formation: identity/action first, then formation. */}
+      <div className="shrink-0 flex items-stretch gap-1.5 px-3 mt-1.5" style={{ height: 48 }}>
+        <button
+          onClick={() => {
+            if (mode === 'draft') setOverlay({ kind: 'manager' });
+            else if (activeManager) setModal({ variant: 'manager', manager: activeManager });
+          }}
+          className="glass-surface sheen flex-1 flex items-center gap-2 px-2 min-w-0 active:scale-[0.98] relative overflow-hidden"
+          style={{
+            borderRadius: 'var(--radius-sm)',
+            border: activeManager ? '1px solid var(--kit-red)' : undefined,
+            boxShadow: activeManager
+              ? 'inset 0 1px 0 0 var(--glass-highlight), 0 0 12px rgba(232,54,47,0.22), var(--depth-1)'
+              : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
+            transition: 'transform 0.12s ease',
+          }}
+        >
+          <span
+            aria-hidden="true"
+            className="relative shrink-0"
+            style={{
+              zIndex: 2,
+              width: 34,
+              height: 38,
+              borderRadius: 5,
+              border: '1px solid var(--border)',
+              background: activeManagerPortrait
+                ? `center 16% / cover no-repeat url("${activeManagerPortrait}")`
+                : 'linear-gradient(145deg, var(--surface-raised), var(--surface))',
+            }}
+          />
+          <span className="flex flex-col items-start min-w-0 relative" style={{ zIndex: 2 }}>
+            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: activeManager ? 'var(--kit-red)' : 'var(--dust)' }}>
+              {activeManager ? 'MANAGER' : 'PICK MANAGER'}
+            </span>
+            <span className="truncate w-full" style={{ fontSize: 10.5, lineHeight: 1.15, fontWeight: 800, color: activeManager ? 'var(--cream)' : 'var(--dust)' }}>
+              {activeManager?.name ?? 'Tap to choose'}
+            </span>
+            <span className="truncate w-full" style={{ fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1.3, color: activeManager ? 'var(--gold)' : 'var(--dust)' }}>
+              {activeManager ? managerActionNameV1(activeManager).toUpperCase() : 'ACTION —'}
+            </span>
+          </span>
+        </button>
+
         <button
           onClick={() => setOverlay({ kind: 'formation' })}
           className="glass-surface sheen flex flex-col items-start justify-center px-2.5 active:scale-95 relative overflow-hidden"
           style={{
+            width: 108,
             borderRadius: 'var(--radius-sm)',
             boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
             transition: 'transform 0.12s ease',
-            minWidth: 62,
           }}
         >
-          <span className="relative" style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: 'var(--dust)', zIndex: 2 }}>SHAPE</span>
-          <span className="relative" style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1.1, color: 'var(--cream)', zIndex: 2 }}>{formation.name}</span>
+          <span className="relative" style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)', zIndex: 2 }}>FORMATION</span>
+          <span className="relative" style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1.15, color: 'var(--cream)', zIndex: 2 }}>{formation.name}</span>
+          <span className="relative truncate w-full" style={{ fontSize: 7.5, lineHeight: 1.2, color: 'var(--dust)', zIndex: 2 }}>
+            {activeManager ? `${managerFormationsV1(activeManager).length} manager option${managerFormationsV1(activeManager).length === 1 ? '' : 's'}` : `${selectableFormations.length} options`}
+          </span>
         </button>
-
-        {mode === 'draft' ? (
-          <button
-            onClick={() => setOverlay({ kind: 'manager' })}
-            className="glass-surface sheen flex-1 flex items-center gap-1.5 px-2 min-w-0 active:scale-[0.98] relative overflow-hidden"
-            style={{
-              borderRadius: 'var(--radius-sm)',
-              border: manager ? '1px solid var(--kit-red)' : undefined,
-              boxShadow: manager
-                ? 'inset 0 1px 0 0 var(--glass-highlight), 0 0 12px rgba(232,54,47,0.30), var(--depth-1)'
-                : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
-              transition: 'transform 0.12s ease',
-            }}
-          >
-            <span className="relative" style={{ fontSize: 16, flexShrink: 0, zIndex: 2 }}>{'\u{1F454}'}</span>
-            <span className="flex flex-col items-start min-w-0 relative" style={{ zIndex: 2 }}>
-              <span style={{ fontFamily: PIXEL, fontSize: 6, letterSpacing: 1, color: manager ? 'var(--kit-red)' : 'var(--dust)' }}>
-                {manager ? 'MANAGER' : 'PICK MANAGER'}
-              </span>
-              <span className="truncate" style={{ fontSize: 11, fontWeight: 700, color: manager ? 'var(--cream)' : 'var(--dust)', maxWidth: 86 }}>
-                {manager ? manager.name : 'Tap to choose'}
-              </span>
-            </span>
-          </button>
-        ) : (
-          <div className="flex-1" />
-        )}
       </div>
 
-      {/* ── Meta line — scout + manager collapsed to names (▾ report), MISFIT
-          tap-to-reveal, plus any talk-mode status chips. ─────────────────── */}
+      {/* ── Auto Select is the dominant utility; manual editing remains direct. */}
       <div className="shrink-0 px-3 mt-1.5 flex items-center gap-1.5">
+        <button
+          onClick={autoPick}
+          className="active:scale-95 relative overflow-hidden"
+          style={{
+            height: 30,
+            padding: '0 12px',
+            color: 'var(--ink-black)',
+            background: 'linear-gradient(180deg, #ffe69a, var(--gold))',
+            border: '1px solid var(--ink-black)',
+            borderRadius: 'var(--radius-sm)',
+            boxShadow: '0 2px 0 var(--ink-black)',
+            fontFamily: PIXEL,
+            fontSize: 9,
+            letterSpacing: 0.4,
+            fontWeight: 800,
+          }}
+        >
+          AUTO SELECT
+        </button>
+        <button
+          onClick={() => setSel(mode === 'draft' ? emptySelection(formation) : seedSelection(pool, formation, initialSelection))}
+          className="glass-surface active:scale-95"
+          style={{
+            height: 30,
+            padding: '0 9px',
+            color: 'var(--dust)',
+            borderRadius: 'var(--radius-sm)',
+            fontFamily: PIXEL,
+            fontSize: 8,
+            letterSpacing: 0.4,
+          }}
+        >
+          {mode === 'draft' ? 'CLEAR' : 'RESET'}
+        </button>
         <button
           onClick={() => setMisfitReveal((v) => !v)}
           className="active:scale-95 shrink-0 ml-auto"
@@ -756,25 +865,6 @@ export default function SquadScreen({
             BENCH {sel.bench.length}/{BENCH_SIZE} <span style={{ fontSize: 9 }}>{'▸'} EDIT</span>
           </button>
           <BenchCover benchCards={benchCards} />
-          <div className="flex items-center gap-1 ml-auto">
-            <ActionBtn label="AUTO" accent="var(--gold)" onClick={autoPick} />
-            {mode === 'draft' ? (
-              <>
-                <ActionBtn
-                  label="FILL"
-                  accent="var(--cream-soft)"
-                  onClick={() => setSel((prev) => autoFill(pool, formation, prev, 'empty'))}
-                />
-                <ActionBtn label="CLEAR" accent="var(--dust)" onClick={() => setSel(emptySelection(formation))} />
-              </>
-            ) : (
-              <ActionBtn
-                label="RESET"
-                accent="var(--dust)"
-                onClick={() => setSel(seedSelection(pool, formation, initialSelection))}
-              />
-            )}
-          </div>
         </div>
         <div ref={benchRef} data-kc="bench" className="grid gap-1" style={{ gridTemplateColumns: `repeat(${BENCH_SIZE}, minmax(0, 1fr))` }}>
           {Array.from({ length: BENCH_SIZE }).map((_, i) => {
@@ -887,7 +977,7 @@ export default function SquadScreen({
                 {overlay.kind === 'manager'
                   ? 'PICK MANAGER'
                   : overlay.kind === 'formation'
-                    ? 'PICK SHAPE'
+                    ? 'PICK FORMATION'
                     : overlay.kind === 'bench'
                       ? 'ADD TO BENCH'
                       : `FILL ${(activeSlot?.label ?? '').toUpperCase()}`}
@@ -935,8 +1025,9 @@ export default function SquadScreen({
               <FormationSheet formations={selectableFormations} current={formationId} onPick={switchFormation} />
             ) : (
               <PlayerSheet
-                available={reserves}
+                available={playerSheetAvailable}
                 activeSlot={activeSlot}
+                currentCard={activeSlotCard}
                 showFitness={showFitness}
                 onPick={placeInOverlay}
                 onInspect={(c) => setModal({ variant: 'player', card: c })}
@@ -1052,7 +1143,7 @@ function GhostTile({ card }: { card: Card }) {
 }
 
 // ---------------------------------------------------------------------------
-// StatBadge / StatusChip / ActionBtn — compact glass readouts & buttons.
+// StatusChip — compact status readout.
 // ---------------------------------------------------------------------------
 
 function StatusChip({ label, color }: { label: string; color: string }) {
@@ -1072,27 +1163,6 @@ function StatusChip({ label, color }: { label: string; color: string }) {
     >
       {label}
     </span>
-  );
-}
-
-function ActionBtn({ label, accent, onClick }: { label: string; accent: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="glass-surface sheen active:scale-95 relative overflow-hidden"
-      style={{
-        fontFamily: PIXEL,
-        fontSize: 9,
-        letterSpacing: 0.5,
-        color: accent,
-        padding: '5px 8px',
-        borderRadius: 'var(--radius-sm)',
-        boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
-        transition: 'transform 0.12s ease',
-      }}
-    >
-      <span className="relative" style={{ zIndex: 2 }}>{label}</span>
-    </button>
   );
 }
 
@@ -1248,37 +1318,41 @@ function ScoutSheet({
 }
 
 // ---------------------------------------------------------------------------
-// PlayerSheet — eligible-first grid; tap places, info pip inspects.
+// PlayerSheet — comparison first: current player stays visible while the
+// alternatives scroll. Positions, printed Action, cost and match stats are all
+// readable without opening a separate dossier.
 // ---------------------------------------------------------------------------
 
 function PlayerSheet({
   available,
   activeSlot,
+  currentCard,
   showFitness,
   onPick,
   onInspect,
 }: {
   available: Card[];
   activeSlot: Formation['slots'][number] | null;
+  currentCard?: Card;
   showFitness: boolean;
   onPick: (id: number) => void;
   onInspect: (c: Card) => void;
 }) {
   const sorted = useMemo(() => {
     if (!activeSlot) return available;
+    const rank: Record<Competence, number> = { primary: 0, secondary: 1, incompetent: 2 };
     return [...available].sort((a, b) => {
-      const ea = positionFitsSlot(cardNaturalPositions(a), activeSlot) ? 0 : 1;
-      const eb = positionFitsSlot(cardNaturalPositions(b), activeSlot) ? 0 : 1;
+      const ea = rank[competenceOf(cardNaturalPositions(a), activeSlot)];
+      const eb = rank[competenceOf(cardNaturalPositions(b), activeSlot)];
       if (ea !== eb) return ea - eb;
       return effectiveStrength(b) - effectiveStrength(a);
     });
   }, [available, activeSlot]);
 
   return (
-    <div className="flex flex-col gap-1.5 overflow-y-auto px-3 pt-1 pb-2 relative" style={{ overscrollBehavior: 'contain', zIndex: 2 }}>
-      {/* Competence legend (v4 handoff): the pill colour shows fit in the slot. */}
+    <div className="flex min-h-0 flex-col overflow-hidden relative" style={{ zIndex: 2 }}>
       {activeSlot && (
-        <div className="flex items-center gap-3 pb-1">
+        <div className="flex items-center gap-3 px-3 pb-1.5 shrink-0">
           {(['primary', 'secondary', 'incompetent'] as const).map((k) => (
             <span key={k} className="flex items-center gap-1" style={{ fontSize: 8, color: 'var(--dust)', fontFamily: PIXEL }}>
               <span style={{ width: 9, height: 9, borderRadius: 2, background: COMPETENCE_COLOR[k].bg, display: 'inline-block' }} />
@@ -1287,62 +1361,205 @@ function PlayerSheet({
           ))}
         </div>
       )}
-      {sorted.map((c) => {
-        const comp = activeSlot ? competenceOf(cardNaturalPositions(c), activeSlot) : 'primary';
-        const pillBg = activeSlot ? COMPETENCE_COLOR[comp].bg : POSITION_COLOR[c.position] ?? 'var(--dust)';
-        const pillText = activeSlot ? COMPETENCE_COLOR[comp].text : 'var(--ink-black)';
-        const st = toDisplayV6Card(c);
-        const positions = cardPositionLabels(c);
-        return (
-          <div
-            key={c.id}
-            data-testid="team-selection-player-option"
-            data-player-id={c.id}
-            data-player-positions={positions.join('/')}
-            data-player-attack={st.attack}
-            data-player-defence={st.defence}
-            className="flex items-center gap-2 active:scale-[0.99]"
+      {currentCard && activeSlot && (
+        <div className="shrink-0 px-3 pb-2">
+          <div style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: 'var(--gold)', marginBottom: 4 }}>CURRENT PLAYER</div>
+          <PlayerSelectionRow
+            card={currentCard}
+            competence={competenceOf(cardNaturalPositions(currentCard), activeSlot)}
+            showFitness={showFitness}
+            current
+            onInspect={onInspect}
+          />
+        </div>
+      )}
+      <div className="shrink-0 px-3 pb-1" style={{ fontFamily: PIXEL, fontSize: 7, letterSpacing: 1, color: 'var(--dust)' }}>
+        {currentCard ? 'SWAP WITH' : 'AVAILABLE PLAYERS'}
+      </div>
+      <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto px-3 pb-2" style={{ overscrollBehavior: 'contain' }}>
+        {sorted.map((card) => (
+          <PlayerSelectionRow
+            key={card.id}
+            card={card}
+            competence={activeSlot ? competenceOf(cardNaturalPositions(card), activeSlot) : 'primary'}
+            showFitness={showFitness}
+            actionLabel={activeSlot ? 'SWAP' : 'ADD'}
+            onPick={() => onPick(card.id)}
+            onInspect={onInspect}
+          />
+        ))}
+        {sorted.length === 0 && (
+          <div style={{ fontSize: 11, color: 'var(--dust)', padding: '8px 0' }}>No players available — every card is named.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlayerSelectionRow({
+  card,
+  competence,
+  showFitness,
+  current = false,
+  actionLabel,
+  onPick,
+  onInspect,
+}: {
+  card: Card;
+  competence: Competence;
+  showFitness: boolean;
+  current?: boolean;
+  actionLabel?: 'SWAP' | 'ADD';
+  onPick?: () => void;
+  onInspect: (card: Card) => void;
+}) {
+  const stats = toDisplayV6Card(card);
+  const action = selectionAction(card);
+  const positions = cardPositionLabels(card);
+  const portrait = portraitSrc(card);
+  const fit = COMPETENCE_COLOR[competence];
+
+  return (
+    <div
+      data-testid={current ? 'team-selection-current-player' : 'team-selection-player-option'}
+      data-player-id={card.id}
+      data-player-positions={positions.join('/')}
+      data-player-action={action.name}
+      data-player-attack={stats.attack}
+      data-player-defence={stats.defence}
+      className="grid items-stretch gap-2"
+      style={{
+        gridTemplateColumns: '42px minmax(0, 1fr) 66px',
+        minHeight: 78,
+        background: current
+          ? 'linear-gradient(180deg, rgba(92,66,24,0.52), rgba(24,17,8,0.96))'
+          : 'linear-gradient(180deg, #1c1610, #100c07)',
+        border: `1px solid ${current ? 'var(--gold)' : fit.bg}`,
+        borderRadius: 'var(--radius-sm)',
+        padding: 6,
+        boxShadow: current ? '0 0 0 1px rgba(232,178,60,0.18)' : undefined,
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => onInspect(card)}
+        aria-label={`Inspect ${card.name}`}
+        className="active:scale-95 overflow-hidden"
+        style={{
+          width: 42,
+          minHeight: 64,
+          padding: 0,
+          border: '1px solid var(--border)',
+          borderRadius: 5,
+          background: portrait
+            ? `center 18% / cover no-repeat url("${portrait}")`
+            : 'linear-gradient(145deg, #31583a, #142719)',
+        }}
+      >
+        {!portrait && (
+          <span style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)' }}>{lastName(card.name).slice(0, 2).toUpperCase()}</span>
+        )}
+      </button>
+
+      <button
+        type="button"
+        onClick={() => onInspect(card)}
+        aria-label={`Inspect ${card.name} Action`}
+        className="flex min-w-0 flex-col items-start text-left active:scale-[0.99]"
+        style={{ padding: 0, border: 0, background: 'transparent' }}
+      >
+        <span className="flex w-full items-center gap-1.5 min-w-0">
+          <strong className="truncate" style={{ fontFamily: PIXEL, fontSize: 9.5, lineHeight: 1.15, color: 'var(--cream)' }}>
+            {lastName(card.name).toUpperCase()}
+          </strong>
+          <span
             style={{
-              background: 'linear-gradient(180deg, #1c1610, #120d07)',
-              border: '1px solid rgba(154,139,115,0.15)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '6px 9px',
+              marginLeft: 'auto',
+              padding: '2px 4px',
+              color: fit.text,
+              background: fit.bg,
+              borderRadius: 3,
+              fontFamily: PIXEL,
+              fontSize: 6.5,
+              lineHeight: 1,
+              flexShrink: 0,
             }}
           >
-            <ClassGem cls={classOfCard(c)} size={22} />
-            <span
-              title={positions.join(' / ')}
-              style={{ fontFamily: PIXEL, fontSize: 6.5, lineHeight: 1, color: pillText, background: pillBg, padding: '3px 5px', borderRadius: 3, flexShrink: 0, whiteSpace: 'nowrap' }}
-            >
-              {positions.join('/')}
-            </span>
-            <button
-              onClick={() => onInspect(c)}
-              className="flex flex-col items-start min-w-0 flex-1 active:scale-[0.98]"
-              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', minWidth: 0, textAlign: 'left' }}
-              aria-label={`Inspect ${c.name}`}
-            >
-              <span className="truncate w-full" style={{ fontFamily: PIXEL, fontSize: 8.5, color: 'var(--cream)' }}>{lastName(c.name)}</span>
-              {showFitness && <FitnessBar card={c} width={64} />}
-            </button>
-            <span style={{ fontFamily: PIXEL, fontSize: 9, color: '#ff8f6a' }}>{st.attack}</span>
-            <span style={{ fontSize: 10, color: 'var(--dust)' }}>/</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 9, color: '#8fb6ff' }}>{st.defence}</span>
-            <button
-              onClick={() => onPick(c.id)}
-              className="active:scale-90"
-              aria-label={`Add ${c.name}`}
-              style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--ink-black)', background: 'var(--gold)', padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer', flexShrink: 0 }}
-            >
-              +
-            </button>
-          </div>
-        );
-      })}
-      {sorted.length === 0 && (
-        <div style={{ fontSize: 11, color: 'var(--dust)', padding: '8px 0' }}>No players available — every card is named.</div>
-      )}
+            {competence === 'primary' ? 'BEST' : competence === 'secondary' ? 'OK' : 'MISFIT'}
+          </span>
+        </span>
+        <span className="mt-1"><SelectionPositionChips card={card} /></span>
+        <strong className="mt-1 truncate w-full" style={{ fontFamily: PIXEL, fontSize: 8.5, lineHeight: 1.15, color: 'var(--gold)' }}>
+          {action.name.toUpperCase()}
+        </strong>
+        <span
+          style={{
+            display: '-webkit-box',
+            overflow: 'hidden',
+            marginTop: 2,
+            color: 'var(--cream-soft)',
+            fontSize: 8.5,
+            lineHeight: 1.2,
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: 2,
+          } as CSSProperties}
+        >
+          {action.text}
+        </span>
+        {showFitness && <span className="mt-1"><FitnessBar card={card} width={72} /></span>}
+      </button>
+
+      <div className="flex flex-col justify-between gap-1">
+        <div className="grid grid-cols-3 gap-1 text-center">
+          <SelectionMetric label="COST" value={stats.cost} color="var(--gold)" />
+          <SelectionMetric label="ATT" value={stats.attack} color="#ff8f6a" />
+          <SelectionMetric label="DEF" value={stats.defence} color="#8fb6ff" />
+        </div>
+        {current ? (
+          <span
+            style={{
+              padding: '5px 0',
+              color: 'var(--gold)',
+              border: '1px solid rgba(232,178,60,0.5)',
+              borderRadius: 4,
+              fontFamily: PIXEL,
+              fontSize: 7.5,
+              textAlign: 'center',
+            }}
+          >
+            CURRENT
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={onPick}
+            className="active:scale-90"
+            aria-label={`${actionLabel ?? 'Add'} ${card.name}`}
+            style={{
+              padding: '6px 0',
+              color: 'var(--ink-black)',
+              background: 'var(--gold)',
+              border: '1px solid var(--ink-black)',
+              borderRadius: 4,
+              fontFamily: PIXEL,
+              fontSize: 8,
+              fontWeight: 800,
+            }}
+          >
+            {actionLabel ?? 'ADD'}
+          </button>
+        )}
+      </div>
     </div>
+  );
+}
+
+function SelectionMetric({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <span className="flex flex-col items-center">
+      <small style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1, color: 'var(--dust)' }}>{label}</small>
+      <strong style={{ fontFamily: PIXEL, fontSize: 10, lineHeight: 1.35, color, fontVariantNumeric: 'tabular-nums' }}>{value}</strong>
+    </span>
   );
 }
 

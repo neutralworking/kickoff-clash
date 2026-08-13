@@ -105,7 +105,22 @@ function formatTarget(target: ActionTarget): string {
 
 export function collectionPlayerDossier(card: Card, supplied?: V6Card): PlayerDossierData {
   const v6 = supplied ?? toDisplayV6Card(card);
-  const actions = playerActions(card);
+  const legacyActions = playerActions(card);
+  const actions: PlayerDossierAction[] = card.abilityName
+    ? [{
+        name: card.abilityName,
+        trigger: 'Printed Action',
+        effect: card.abilityText ?? 'No printed effect.',
+        target: 'As printed on the card',
+        duration: 'As printed',
+      }]
+    : legacyActions.map((action) => ({
+        name: action.label,
+        trigger: 'Card trait',
+        effect: action.text,
+        target: 'This player or its contribution',
+        duration: 'Ongoing',
+      }));
 
   return {
     id: String(card.id),
@@ -118,13 +133,7 @@ export function collectionPlayerDossier(card: Card, supplied?: V6Card): PlayerDo
     cost: Math.max(1, Math.min(6, v6.cost)),
     printedAttack: clampStat(v6.attack),
     printedDefence: clampStat(v6.defence),
-    actions: actions.map((action) => ({
-      name: action.label,
-      trigger: 'Card trait',
-      effect: action.text,
-      target: 'This player or its contribution',
-      duration: 'Ongoing',
-    })),
+    actions,
     record: {
       appearances: card.matchesPlayed ?? 0,
       goals: card.goals ?? 0,

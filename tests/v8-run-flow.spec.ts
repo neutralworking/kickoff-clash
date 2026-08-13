@@ -94,12 +94,20 @@ test.describe('V8 production run handoff', () => {
     const option = page.locator(`[data-testid="team-selection-player-option"][data-player-id="${multiPositionCard.id}"]`);
     await expect(option).toBeVisible();
     await expect(option).toHaveAttribute('data-player-positions', multiPositionCard.positionLabels!.join('/'));
+    await expect(option).toHaveAttribute('data-player-action', multiPositionCard.abilityName!);
     await expect(option).toHaveAttribute('data-player-attack', String(multiPositionCard.printedAttack));
     await expect(option).toHaveAttribute('data-player-defence', String(multiPositionCard.printedDefence));
+    await expect(option.locator('[data-position-chip]')).toHaveCount(multiPositionCard.positionLabels!.length);
     await page.getByRole('button', { name: 'CLOSE', exact: true }).click();
 
-    await page.getByRole('button', { name: 'AUTO', exact: true }).click();
+    await page.getByRole('button', { name: 'AUTO SELECT', exact: true }).click();
     await expect(page.locator('[aria-label^="Inspect "]')).toHaveCount(0);
+    await page.locator('[data-kc="pitch"] [data-player-action]').first().click();
+    const currentPlayer = page.getByTestId('team-selection-current-player');
+    await expect(currentPlayer).toBeVisible();
+    await expect(currentPlayer.locator('[data-position-chip]')).toHaveCount(await currentPlayer.getAttribute('data-player-positions').then((positions) => positions?.split('/').length ?? 0));
+    await expect(currentPlayer).toHaveAttribute('data-player-action', /.+/);
+    await page.getByRole('button', { name: 'CLOSE', exact: true }).click();
     await page.getByRole('button', { name: /kick off/i }).click();
 
     await expect(page.getByTestId('v8-match-intro')).toBeVisible();
