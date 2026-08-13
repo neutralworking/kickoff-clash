@@ -129,7 +129,7 @@ test.describe('V8 real-card calibration lab', () => {
     await page.goto('/lab/match-v8');
     await expectEnergy(page, 2, 2);
     await expect(page.getByText('V8 SQUAD CALIBRATION', { exact: true })).not.toBeVisible();
-    await expect(page.locator('.v8-hand .v8-card__art img').first()).toBeVisible();
+    await expect(page.locator('.v8-hand .v8-card__art img')).toHaveCount(0);
     await expectTestingSurfaceAboveFold(page);
     await expectMobileFit(page);
   });
@@ -482,7 +482,7 @@ test.describe('V8 real-card calibration lab', () => {
     await page.getByRole('button', { name: 'END PERIOD' }).click();
 
     const deployed = attackZone.locator('.v8-chip').filter({ hasText: 'Christine Sinclair' });
-    await expect(deployed).toContainText('13/1');
+    await expect(deployed.locator('.v8-chip__stats > b')).toHaveText(['13', '1']);
     await expect(deployed.locator('.v8-chip__modifier')).toHaveText('+3A');
     await expect(deployed.locator('.v8-chip__modifier')).toHaveClass(/is-positive/);
     await expect(page.locator('.v8-log')).toContainText('ARRIVE UNMARKED fades: +4 ATT → +3 ATT');
