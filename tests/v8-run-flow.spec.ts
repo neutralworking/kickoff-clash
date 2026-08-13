@@ -120,7 +120,11 @@ test.describe('V8 production run handoff', () => {
     await page.getByRole('button', { name: /bench 7\/7.*edit/i }).click();
     const benchEditor = page.getByTestId('bench-editor');
     await expect(benchEditor).toBeVisible();
-    const editorBox = await page.getByTestId('bench-editor-sheet').boundingBox();
+    const benchEditorSheet = page.getByTestId('bench-editor-sheet');
+    await benchEditorSheet.evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    });
+    const editorBox = await benchEditorSheet.boundingBox();
     expect(editorBox?.height ?? 0).toBeGreaterThan(830);
     const currentBench = page.getByTestId('bench-editor-current');
     const reservePool = page.getByTestId('bench-editor-reserves');
