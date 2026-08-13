@@ -74,6 +74,9 @@ test.describe('V8 production run handoff', () => {
     });
     await page.goto('/');
 
+    await expect(page.getByText('BUILD AN XI. WIN THE CUP.', { exact: true })).toBeVisible();
+    await expect(page.getByText(/six-contest rebuild/i)).toHaveCount(0);
+
     await page.getByRole('button', { name: /new season/i }).click();
     await page.getByRole('button', { name: /choose manager pack/i }).nth(1).click();
     await page.getByRole('button', { name: /choose player pack/i }).click();
@@ -96,6 +99,7 @@ test.describe('V8 production run handoff', () => {
     await page.getByRole('button', { name: 'CONTINUE', exact: true }).click();
     await expect(page.locator('.phase-postmatch')).toBeVisible();
     await expect(page.locator('.phase-postmatch')).toContainText(/VICTORY|STALEMATE/);
+    await expect(page.locator('.phase-postmatch')).not.toContainText(/fitness|contests|durability/i);
   });
 
   test('keeps the production match playable on a 375 × 667 phone', async ({ page }) => {

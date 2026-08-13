@@ -3,6 +3,8 @@ import { V8_CALIBRATION_PLAYER_BY_ID } from '@/engine-v8/calibration-cards';
 import { buildLiveV8Fixture } from '@/game-v8';
 import { ripStarterPacks } from '@/lib/packs';
 import { addCardToDeck, createRun, getShopCards } from '@/lib/run';
+import { ALL_FORMATIONS } from '@/lib/formations';
+import { managerFormationsV1 } from '@/lib/manager-v1';
 
 function starterRun(seed = 8082026) {
   const contents = ripStarterPacks(seed);
@@ -18,6 +20,26 @@ function starterRun(seed = 8082026) {
 }
 
 describe('live V8 fixture bridge', () => {
+  it('limits a new run to its manager card formation pool', () => {
+    const contents = ripStarterPacks(8082030);
+    const manager = contents.managers[0]!;
+    const allowed = managerFormationsV1(manager);
+    const disallowed = ALL_FORMATIONS.find((formation) => !allowed.includes(formation.id))!;
+    const run = createRun({
+      players: contents.players,
+      startingXI: contents.players.slice(0, 11).map((card) => card.id),
+      benchIds: contents.players.slice(11).map((card) => card.id),
+      manager,
+      tactics: [],
+      formationId: disallowed.id,
+      intent: 'balanced',
+    }, 8082030);
+
+    expect(run.ownedFormations).toEqual(allowed);
+    expect(run.activeFormation).toBe(allowed[0]);
+    expect(run.ownedFormations).not.toContain(disallowed.id);
+  });
+
   it('carries the selected starter XI into a deterministic 11-v-11 V8 fixture', () => {
     const run = starterRun();
     const fixture = buildLiveV8Fixture(run);

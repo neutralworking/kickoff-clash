@@ -2,13 +2,11 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Card, SlottedCard } from '../lib/scoring';
-import type { RunState, MatchResult, DurabilityResult } from '../lib/run';
+import type { RunState, MatchResult } from '../lib/run';
 import {
   createRun,
   getOpponent,
   getOpponentBuild,
-  postMatchDurabilityCheck,
-  applyDurabilityResults,
   addCardToDeck,
   addCardsToDeck,
   sellCard,
@@ -23,8 +21,6 @@ import {
   isCupFinal,
   MAX_CUPS,
   interestOn,
-  applyMatchFitness,
-  applyMatchWear,
   applyMatchScoring,
   buildMatchSeed,
 } from '../lib/run';
@@ -36,6 +32,7 @@ import type { HandState } from '../lib/hand';
 import { INCREMENT_MINUTES } from '../lib/hand';
 import type { JokerCard } from '../lib/jokers';
 import { rehydrateJokers, payoutMult, refreshDiscount } from '../lib/jokers';
+import { managerFormationsV1 } from '../lib/manager-v1';
 import { ripStarterPackChoices, ripCardPack, type PackTier } from '../lib/packs';
 import { getTacticById } from '../lib/tactics';
 import { calculateAttendance, matchReward, JOKER_COST, SCOUT_PACK_COST, ELITE_PACK_COST } from '../lib/economy';
@@ -165,7 +162,6 @@ export default function GameShell() {
   const [runState, setRunState] = useState<RunState | null>(null);
   const [phase, setPhase] = useState<Phase>('title');
   const [hasExistingRun, setHasExistingRun] = useState(false);
-  const [durabilityResult, setDurabilityResult] = useState<DurabilityResult | null>(null);
   const [lastMatchResult, setLastMatchResult] = useState<MatchResult | null>(null);
   const [lastPOTM, setLastPOTM] = useState<{ card: Card; goals: number; assists: number; rating: number } | null>(null);
   const [pendingPackChoices, setPendingPackChoices] = useState<StarterPackChoices | null>(null);
@@ -247,9 +243,6 @@ export default function GameShell() {
       runState.playingStyle,
     );
 
-    // Durability check on the XI cards
-    const durResult = postMatchDurabilityCheck(slottedXI, runState.seed + runState.round * 999);
-
     // Option B reward: a flat per-result base by round × the purchased stadium payout
     // tier. A win earns the base, a draw DRAW_REWARD_FACTOR of it, a loss nothing (the
     // run is over). The gate (attendance.revenue) is now a flavour display only.
@@ -275,43 +268,18 @@ export default function GameShell() {
       revenue: reward,
       result: result.result,
       synergiesTriggered: connections.map(c => c.name),
-      shattered: durResult.shattered.map(c => c.name),
-      injured: durResult.injured.map(c => c.name),
-      promoted: durResult.promoted.map(c => c.name),
+      // Fitness and durability were removed from the V8 run. Keep the legacy
+      // history shape stable without inventing post-match card damage.
+      shattered: [],
+      injured: [],
+      promoted: [],
       // Why the match went the way it did — read by PostMatch, and by EndScreen
       // via matchHistory (the last entry is why the run ended).
       verdict: result.verdict,
     };
 
-    // Apply durability to deck, then fold in cross-match fitness (Phase 3B.2): the XI
-    // that played carries its drained fitness into the next cup tie (extra-time hit on a
-    // draw); rested players recover. Fitness resets to fresh between cups (handleShopNext).
-    const fitDeck = applyMatchFitness(
-      applyDurabilityResults(runState.deck, durResult),
-      result.handState.xi,
-      result.result,
-    );
-    // Card WEAR (Pixel Hero): every card that featured wears a grade; a TORN card
-    // retires from the deck. Unlike fitness, wear is permanent and shows on the card
-    // face, so a heavily-rotated squad ages visibly and over-used stars eventually go.
-    // The strain roll reads END-OF-MATCH fitness (result.handState.xi is the drained XI):
-    // a player who finished under 50% risks an extra wear tick, so heavy legs age faster.
-    const wear = applyMatchWear(
-      fitDeck,
-      result.handState.xi,
-      buildMatchSeed(runState.seed, runState.round, runState.matchInCup),
-    );
     // Accrue this match's goals/assists onto the surviving deck (the inspector RECORD).
-    const updatedDeck = applyMatchScoring(wear.deck, result.scored ?? {});
-    const tornIds = new Set(wear.torn.map((c) => c.id));
-    for (const c of wear.torn) {
-      durResult.worn.push(c);
-      durResult.commentary.push(`${c.name} is worn out after ${c.matchesPlayed} matches — retires from the squad.`);
-    }
-    for (const c of wear.strained) {
-      if (tornIds.has(c.id)) continue; // already reported as retired
-      durResult.commentary.push(`${c.name} was run into the ground and shows the strain — the card wears faster.`);
-    }
+    const updatedDeck = applyMatchScoring(runState.deck, result.scored ?? {});
 
     // Update wins/losses
     const wins = runState.wins + (result.result === 'win' ? 1 : 0);
@@ -347,7 +315,6 @@ export default function GameShell() {
 
     setLastMatchResult(matchResult);
     setLastPOTM(result.playerOfMatch);
-    setDurabilityResult(durResult);
 
     if (result.result === 'loss') {
       // v1 permadeath — a single defeat ends the run; go straight to the run-over screen.
@@ -365,9 +332,8 @@ export default function GameShell() {
 
   // --- Post Match (cup flow) ---
   // A loss already routed to 'end' (permadeath). A win/draw here means we advance:
-  //  - won the cup FINAL → the run is complete if it was cup 5, else open the shop (the
-  //    only between-cups gate); fitness resets and the cup advances on shop → next.
-  //  - won a mid-cup tie → straight to the next tie (no shop), carrying fitness forward.
+  //  - won the cup FINAL → the run is complete if it was cup 5, else open the shop.
+  //  - won a mid-cup tie → continue through the same between-match shop gate.
   const handlePostMatchContinue = useCallback(() => {
     if (!runState) return;
 
@@ -524,10 +490,8 @@ export default function GameShell() {
     // The shop now follows EVERY match, so this is where the run advances to the next one.
     // Two cases, by whether the match just played closed out a cup:
     //   • cup final (never the last cup — that already routed to 'end') → roll into the
-    //     next cup: matchInCup resets to 1, fitness resets fresh + in-cup injuries clear,
-    //     one tactic is drawn (deck 5 → 9 over five cups), and interest is banked.
-    //   • mid-cup tie → the next tie of the same cup: fitness carries (already applied
-    //     post-match), no tactic draw, no interest; matchInCup advances by one.
+    //     next cup: matchInCup resets to 1, one tactic is drawn, and interest is banked.
+    //   • mid-cup tie → the next tie of the same cup; matchInCup advances by one.
     // Either way we open the Team Talk so the player sets the XI/shape for the next match.
     const finishedCup = isCupFinal(runState.round, runState.matchInCup);
     let next: RunState;
@@ -542,9 +506,7 @@ export default function GameShell() {
         round: nextCup,
         matchInCup: 1,
         cash: runState.cash + interestOn(runState.cash),
-        // Between cups everyone starts fresh: fitness reset and in-cup injuries cleared, so
-        // each cup is a self-contained puzzle. (Permanent durability shatter still sticks.)
-        deck: runState.deck.map(c => ({ ...c, fitness: 100, injured: false })),
+        deck: runState.deck,
         tacticsDeck,
         tacticCharges: { ...(runState.tacticCharges ?? {}), ...Object.fromEntries(drawn.map((t) => [t.id, 1])) },
         status: 'teamTalk',
@@ -562,7 +524,6 @@ export default function GameShell() {
   const handleEndNewRun = useCallback(() => {
     clearRun();
     setRunState(null);
-    setDurabilityResult(null);
     setLastMatchResult(null);
     setLastPOTM(null);
     setHasExistingRun(false);
@@ -611,12 +572,16 @@ export default function GameShell() {
         const chosenManagers = pickedManagerId
           ? contents.managers.filter((m) => m.id === pickedManagerId)
           : contents.managers;
+        const chosenManager = chosenManagers[0] ?? null;
+        const allowedFormations = chosenManager
+          ? managerFormationsV1(chosenManager).map(getFormation)
+          : contents.formations;
         return (
           <SquadScreen
             mode="draft"
             pool={contents.players}
             formations={contents.formations}
-            initialFormationId={contents.formations[0]?.id ?? '4-3-3'}
+            initialFormationId={allowedFormations[0]?.id ?? '4-3-3'}
             initialIntent="balanced"
             managers={chosenManagers}
             initialManagerId={pickedManagerId}
@@ -701,16 +666,13 @@ export default function GameShell() {
       }
 
       case 'postmatch': {
-        if (!lastMatchResult || !durabilityResult || !runState) return null;
+        if (!lastMatchResult || !runState) return null;
         return (
           <PostMatch
             matchResult={lastMatchResult}
-            durabilityResult={durabilityResult}
             round={lastMatchResult.round}
             matchInCup={runState.matchInCup}
             totalRounds={MAX_CUPS}
-            wins={runState.wins}
-            matchHistory={runState.matchHistory}
             playerOfMatch={lastPOTM}
             onContinue={handlePostMatchContinue}
           />

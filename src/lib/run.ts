@@ -28,11 +28,12 @@ import type { MatchVerdict } from './match-v5';
 import type { JokerCard } from './jokers';
 import { getExtraDiscards } from './jokers';
 import { ALL_TACTICS, tacticCapacity, type TacticCard } from './tactics';
-import { getFormation, ALL_FORMATIONS } from './formations';
+import { getFormation } from './formations';
 import { generateOpponentXI, cupMatchPower } from './opponent';
 import type { CoAppearance } from './chem';
 import { pruneCard } from './chem';
 import { V8_RUN_PLAYER_POOL } from '../game-v8/roster';
+import { managerFormationsV1 } from './manager-v1';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -873,13 +874,18 @@ export interface TeamSelection {
  */
 export function createRun(sel: TeamSelection, seed?: number): RunState {
   const runSeed = seed ?? Math.floor(Math.random() * 1000000);
-  const ownedFormations = ALL_FORMATIONS.map(f => f.id);
+  const ownedFormations = sel.manager
+    ? managerFormationsV1(sel.manager)
+    : [sel.formationId];
+  const activeFormation = ownedFormations.includes(sel.formationId)
+    ? sel.formationId
+    : (ownedFormations[0] ?? sel.formationId);
   const benchCards = sel.benchIds
     .map(id => sel.players.find(c => c.id === id))
     .filter((c): c is Card => Boolean(c));
 
   return {
-    formation: sel.formationId,
+    formation: activeFormation,
     playingStyle: DEFAULT_STYLE,
     intent: sel.intent,
     startingXI: sel.startingXI,
@@ -892,7 +898,7 @@ export function createRun(sel: TeamSelection, seed?: number): RunState {
     // Pack-opened → each starts on a single charge; refills to capacity after
     // the first fixture (see refillTacticCharges).
     tacticCharges: Object.fromEntries(sel.tactics.map((t) => [t.id, 1])),
-    activeFormation: sel.formationId,
+    activeFormation,
     trainingApplied: {},
     cash: 0,
     stadiumTier: 1,

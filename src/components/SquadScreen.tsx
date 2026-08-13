@@ -38,6 +38,7 @@ import { getOpponent } from '../lib/run';
 import { xiV6Totals, toDisplayV6Card } from '../lib/v6-bridge';
 import { portraitSrc } from './cards/portrait';
 import type { JokerCard } from '../lib/jokers';
+import { managerFormationsV1 } from '../lib/manager-v1';
 import { SCOUT_COST } from '../lib/economy';
 import {
   type XISelection,
@@ -297,6 +298,14 @@ export default function SquadScreen({
   const filled = startersFilled(sel);
   const slotCount = formation.slots.length;
   const manager = managers?.find((m) => m.id === managerId) ?? null;
+  const selectableFormations = useMemo(() => {
+    if (mode !== 'draft' || !manager) return formations;
+    const allowed = new Set(managerFormationsV1(manager));
+    const candidates = formations.filter((candidate) => allowed.has(candidate.id));
+    return candidates.length > 0
+      ? candidates
+      : managerFormationsV1(manager).map(getFormation);
+  }, [mode, manager, formations]);
 
   const xiCards = useMemo(
     () => sel.starters.filter((x): x is number => x != null).map((id) => byId.get(id)).filter((c): c is Card => !!c),
@@ -306,7 +315,9 @@ export default function SquadScreen({
   // V6 readout (the numbers the match plays with). Match Energy replaces the
   // old pre-match total-cost budget.
   const v6Totals = useMemo(() => xiV6Totals(xiCards, formation), [xiCards, formation]);
-  const ready = filled === slotCount && (mode === 'draft' ? manager !== null : true);
+  const managerAllowsFormation = mode !== 'draft'
+    || (manager !== null && managerFormationsV1(manager).includes(formationId));
+  const ready = filled === slotCount && managerAllowsFormation;
 
   // Live card → the unified V6 token (damped ATT to match the match) + its portrait.
   const v6Of = (card: Card) => ({ ...toDisplayV6Card(card), portrait: portraitSrc(card) ?? undefined });
@@ -909,13 +920,19 @@ export default function SquadScreen({
                 managers={managers}
                 managerId={managerId}
                 onPick={(id) => {
+                  const nextManager = managers.find((candidate) => candidate.id === id);
+                  const nextFormationIds = nextManager ? managerFormationsV1(nextManager) : [];
                   setManagerId(id);
-                  setOverlay(null);
+                  if (nextFormationIds.length > 0 && !nextFormationIds.includes(formationId)) {
+                    switchFormation(nextFormationIds[0]);
+                  } else {
+                    setOverlay(null);
+                  }
                 }}
                 onInspect={(m) => setModal({ variant: 'manager', manager: m })}
               />
             ) : overlay.kind === 'formation' ? (
-              <FormationSheet formations={formations} current={formationId} onPick={switchFormation} />
+              <FormationSheet formations={selectableFormations} current={formationId} onPick={switchFormation} />
             ) : (
               <PlayerSheet
                 available={reserves}

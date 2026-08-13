@@ -10,24 +10,17 @@
  * House style: near-black felt, gold chrome + green (win) / gold (draw) result
  * accent, Silkscreen pixel headers (PIXEL), DM Sans body, crisp pixel content.
  * The page NEVER scrolls: a fixed result header + tab bar + fixed CONTINUE
- * footer bracket ONE tab body that fills the slack and scrolls internally.
- *
- *   • SUMMARY  — the hero: pixel trophy + result word + narrative (the engine's
- *     verdict headline), the decisive tactical insight (top verdict factor),
- *     the player of the match, and a reward / fitness / cup stat strip.
- *   • CONTESTS — the full ranked verdict factors, each with a signed swing chip.
- *   • SQUAD    — the durability aftermath (shattered / injured / promoted / worn)
- *     as real GameCards, or the SQUAD INTACT empty state.
+ * footer bracket one summary body that fills the slack and scrolls internally.
+ * Fitness, durability and the legacy Contest report do not belong to V8.
  *
  * Everything is driven by the real engine props — no example copy.
  */
 
 import { useState } from 'react';
 import type { Card } from '../lib/scoring';
-import type { MatchResult } from '../lib/run';
 import type { MatchVerdict, VerdictFactor } from '../lib/match-v5';
 import { cupSize } from '../lib/run';
-import GameCard, { type GameCardModel } from './cards/GameCard';
+import type { GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import { PIXEL, formatCash } from './cards/cardTokens';
 import { portraitSrc, portraitDataUri } from './cards/portrait';
@@ -46,19 +39,10 @@ interface PostMatchProps {
      *  saves recorded before the verdict existed; render nothing then. */
     verdict?: MatchVerdict;
   };
-  durabilityResult: {
-    shattered: Card[];
-    injured: Card[];
-    promoted: Card[];
-    worn: Card[];
-    commentary: string[];
-  };
   // --- Run context (one-life arc) — passed from GameShell ----------------------
   round: number;          // the CUP just played in (1–5)
   matchInCup: number;     // the tie within the cup that was just played
   totalRounds: number;    // number of cups in a run (5)
-  wins: number;           // wins so far this run (incl. this one)
-  matchHistory: MatchResult[]; // results so far this run (incl. this one)
   /** Player of the match — top-rated XI card + its match line (engine
    *  playerMatchStats). Null if unavailable (old save / 0-increment edge). */
   playerOfMatch?: { card: Card; goals: number; assists: number; rating: number } | null;
@@ -73,43 +57,17 @@ const RESULT_META: Record<ResultKey, { label: string; word: string; color: strin
   loss: { label: 'LOSS', word: 'DEFEAT', color: 'var(--danger)' },
 };
 
-// Aftermath groups: shattered (gone) → worn → injured → promoted.
-// `badgeFg` is the foreground over the solid `color` fill (contrast law: white on
-// the red/amber fates, ink on the bright gold one).
-type GroupTone = { key: string; title: string; color: string; bg: string; marker: string; badgeFg: string };
-const GROUP_META: Record<'shattered' | 'worn' | 'injured' | 'promoted', GroupTone> = {
-  shattered: { key: 'shattered', title: 'Shattered', color: 'var(--danger)', bg: 'rgba(232,54,47,0.12)', marker: '✕', badgeFg: 'var(--line-white)' },
-  worn: { key: 'worn', title: 'Worn Out', color: 'var(--danger)', bg: 'rgba(232,54,47,0.12)', marker: '◤', badgeFg: 'var(--line-white)' },
-  injured: { key: 'injured', title: 'Injured', color: 'var(--amber)', bg: 'rgba(255,122,31,0.12)', marker: '+', badgeFg: 'var(--line-white)' },
-  promoted: { key: 'promoted', title: 'Promoted', color: 'var(--gold)', bg: 'rgba(245,197,66,0.12)', marker: '★', badgeFg: 'var(--ink-black)' },
-};
-
-type Tab = 'summary' | 'contests' | 'squad';
-
 export default function PostMatch({
   matchResult,
-  durabilityResult,
   round,
   matchInCup,
   totalRounds,
   playerOfMatch,
   onContinue,
 }: PostMatchProps) {
-  const [tab, setTab] = useState<Tab>('summary');
   const [modal, setModal] = useState<GameCardModel | null>(null);
 
   const meta = RESULT_META[matchResult.result];
-  const { shattered, injured, promoted, worn, commentary } = durabilityResult;
-
-  const groups: { tone: GroupTone; cards: Card[] }[] = [
-    { tone: GROUP_META.shattered, cards: shattered },
-    { tone: GROUP_META.worn, cards: worn },
-    { tone: GROUP_META.injured, cards: injured },
-    { tone: GROUP_META.promoted, cards: promoted },
-  ].filter((g) => g.cards.length > 0);
-
-  const affected = groups.reduce((n, g) => n + g.cards.length, 0);
-  const fitnessAffected = shattered.length + injured.length;
 
   const ties = cupSize(round);
   const verdict = matchResult.verdict;
@@ -117,15 +75,6 @@ export default function PostMatch({
   const rankedFactors = verdict
     ? [...verdict.factors].sort((a, b) => Math.abs(b.swing) - Math.abs(a.swing))
     : [];
-
-  // Find which group a commentary line refers to (for its accent tint).
-  const lineTone = (line: string): GroupTone | null => {
-    if (shattered.some((c) => line.includes(c.name))) return GROUP_META.shattered;
-    if (worn.some((c) => line.includes(c.name))) return GROUP_META.worn;
-    if (injured.some((c) => line.includes(c.name))) return GROUP_META.injured;
-    if (promoted.some((c) => line.includes(c.name))) return GROUP_META.promoted;
-    return null;
-  };
 
   return (
     <div
@@ -192,39 +141,18 @@ export default function PostMatch({
         </div>
       </div>
 
-      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
-      <div className="shrink-0 flex gap-1.5 px-3" style={{ marginTop: 10 }}>
-        <TabButton label="Summary" active={tab === 'summary'} accent={meta.color} onClick={() => setTab('summary')} />
-        <TabButton label="Contests" active={tab === 'contests'} accent={meta.color} onClick={() => setTab('contests')} />
-        <TabButton
-          label="Squad"
-          active={tab === 'squad'}
-          accent={meta.color}
-          badge={affected > 0 ? affected : undefined}
-          badgeColor={shattered.length > 0 ? 'var(--danger)' : injured.length > 0 ? 'var(--amber)' : 'var(--gold)'}
-          onClick={() => setTab('squad')}
-        />
-      </div>
-
-      {/* ── Active tab body — the ONLY region that may scroll ─────────────── */}
+      {/* ── V8 summary — the ONLY region that may scroll ─────────────────── */}
       <div className="flex-1 min-h-0 px-3" style={{ marginTop: 10 }}>
-        {tab === 'summary' && (
-          <SummaryTab
-            matchResult={matchResult}
-            meta={meta}
-            round={round}
-            matchInCup={matchInCup}
-            ties={ties}
-            topFactor={rankedFactors[0] ?? null}
-            fitnessAffected={fitnessAffected}
-            playerOfMatch={playerOfMatch ?? null}
-            onOpen={(card) => setModal({ variant: 'player', card })}
-          />
-        )}
-        {tab === 'contests' && <ContestsTab meta={meta} factors={rankedFactors} />}
-        {tab === 'squad' && (
-          <SquadTab groups={groups} commentary={commentary} lineTone={lineTone} onOpen={(card) => setModal({ variant: 'player', card })} />
-        )}
+        <SummaryTab
+          matchResult={matchResult}
+          meta={meta}
+          round={round}
+          matchInCup={matchInCup}
+          ties={ties}
+          topFactor={rankedFactors[0] ?? null}
+          playerOfMatch={playerOfMatch ?? null}
+          onOpen={(card) => setModal({ variant: 'player', card })}
+        />
       </div>
 
       {/* ── Continue CTA ─────────────────────────────────────────────────── */}
@@ -261,7 +189,7 @@ export default function PostMatch({
 
 // ===========================================================================
 // SUMMARY TAB — the hero: trophy + result word + narrative, the decisive
-// tactical insight, the player of the match, and a reward / fitness / cup strip.
+// tactical insight, the player of the match, and a reward / cup strip.
 // ===========================================================================
 
 function SummaryTab({
@@ -271,7 +199,6 @@ function SummaryTab({
   matchInCup,
   ties,
   topFactor,
-  fitnessAffected,
   playerOfMatch,
   onOpen,
 }: {
@@ -281,7 +208,6 @@ function SummaryTab({
   matchInCup: number;
   ties: number;
   topFactor: VerdictFactor | null;
-  fitnessAffected: number;
   playerOfMatch: { card: Card; goals: number; assists: number; rating: number } | null;
   onOpen: (card: Card) => void;
 }) {
@@ -366,11 +292,11 @@ function SummaryTab({
         {/* (3) Player of the match. */}
         {playerOfMatch && <PlayerOfMatch pom={playerOfMatch} accent={meta.color} onOpen={onOpen} />}
 
-        {/* (4) Reward / fitness / cup progress strip. */}
+        {/* (4) Reward / cup progress strip. */}
         <div
           className="glass-raised sheen relative overflow-hidden grid"
           style={{
-            gridTemplateColumns: 'repeat(3, minmax(0,1fr))',
+            gridTemplateColumns: 'repeat(2, minmax(0,1fr))',
             borderRadius: 'var(--radius)',
             border: '1px solid var(--glass-border)',
             boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
@@ -381,17 +307,6 @@ function SummaryTab({
             label="Reward"
             divider={false}
             value={<span style={{ fontFamily: PIXEL, fontSize: 17, color: 'var(--gold)' }}>{formatCash(matchResult.revenue)}</span>}
-          />
-          <StripCell
-            label="Fitness"
-            divider
-            value={
-              fitnessAffected === 0 ? (
-                <span style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--success)' }}>No issues</span>
-              ) : (
-                <span style={{ fontFamily: PIXEL, fontSize: 11, color: 'var(--amber)' }}>{fitnessAffected} affected</span>
-              )
-            }
           />
           <StripCell
             label="Cup Progress"
@@ -541,69 +456,6 @@ function Portrait64({ card, accent }: { card: Card; accent: string }) {
   );
 }
 
-// ===========================================================================
-// CONTESTS TAB — the full ranked verdict factors, each with a signed swing chip.
-// ===========================================================================
-
-function ContestsTab({ meta, factors }: { meta: { color: string }; factors: VerdictFactor[] }) {
-  return (
-    <div
-      key="contests"
-      className="glass-raised sheen h-full flex flex-col overflow-hidden stats-rise relative"
-      style={{
-        borderRadius: 'var(--radius)',
-        border: '1px solid var(--glass-border)',
-        boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-2)',
-      }}
-    >
-      <PanelHeader accent={meta.color} title="Match Breakdown" />
-      <div
-        className="flex-1 min-h-0 overflow-y-auto relative"
-        style={{ overscrollBehavior: 'contain', padding: '0 11px 11px', zIndex: 2 }}
-      >
-        {factors.length === 0 ? (
-          <div className="flex flex-col items-center justify-center text-center h-full" style={{ minHeight: 200, padding: 20 }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 12, color: 'var(--cream-soft)', letterSpacing: 0.6 }}>NO BREAKDOWN</span>
-            <span style={{ fontSize: 11.5, color: 'var(--dust)', marginTop: 8, lineHeight: 1.5, maxWidth: 240 }}>
-              The engine did not record a verdict for this fixture.
-            </span>
-          </div>
-        ) : (
-          <div className="flex flex-col" style={{ gap: 8 }}>
-            {factors.map((f) => (
-              <FactorRow key={f.key} factor={f} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** One verdict factor — label · detail · signed swing chip. */
-function FactorRow({ factor }: { factor: VerdictFactor }) {
-  const tone = factorTone(factor.swing);
-  return (
-    <div
-      className="glass-surface relative overflow-hidden"
-      style={{
-        borderRadius: 'var(--radius-sm)',
-        boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
-        padding: '9px 10px 9px 12px',
-      }}
-    >
-      <span style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, background: tone, opacity: 0.75 }} />
-      <div className="flex items-center" style={{ gap: 6 }}>
-        <span className="mr-auto truncate" style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.6, color: 'var(--cream)', textTransform: 'uppercase' }}>
-          {factor.label}
-        </span>
-        <SwingChip factor={factor} />
-      </div>
-      <p style={{ marginTop: 5, fontSize: 11, lineHeight: 1.45, color: 'var(--cream-soft)' }}>{factor.detail}</p>
-    </div>
-  );
-}
-
 /** The signed-swing chip: `KEY ±N`, colour-coded for/against. */
 function SwingChip({ factor }: { factor: VerdictFactor }) {
   const tone = factorTone(factor.swing);
@@ -634,209 +486,14 @@ function SwingChip({ factor }: { factor: VerdictFactor }) {
 }
 
 // ===========================================================================
-// SQUAD TAB — durability aftermath (shattered / worn / injured / promoted)
-// ===========================================================================
-
-function SquadTab({
-  groups,
-  commentary,
-  lineTone,
-  onOpen,
-}: {
-  groups: { tone: GroupTone; cards: Card[] }[];
-  commentary: string[];
-  lineTone: (line: string) => GroupTone | null;
-  onOpen: (card: Card) => void;
-}) {
-  const hasAftermath = groups.length > 0;
-  const affected = groups.reduce((n, g) => n + g.cards.length, 0);
-
-  return (
-    <div
-      key="squad"
-      className="glass-raised sheen h-full flex flex-col overflow-hidden stats-rise relative"
-      style={{
-        borderRadius: 'var(--radius)',
-        border: '1px solid var(--glass-border)',
-        boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-2)',
-      }}
-    >
-      <PanelHeader
-        accent="var(--amber)"
-        title="Durability Check"
-        right={
-          hasAftermath ? (
-            <span style={{ fontFamily: PIXEL, fontSize: 7.5, color: 'var(--dust)', letterSpacing: 0.4 }}>
-              {affected} AFFECTED
-            </span>
-          ) : undefined
-        }
-      />
-
-      {/* Compact fate legend — only the fates that actually occurred. */}
-      {hasAftermath && (
-        <div className="shrink-0 flex flex-wrap items-center relative" style={{ gap: 6, padding: '0 11px 9px', zIndex: 2 }}>
-          {groups.map(({ tone, cards }) => (
-            <span
-              key={tone.key}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                fontFamily: PIXEL,
-                fontSize: 8,
-                letterSpacing: 0.5,
-                color: tone.color,
-                background: tone.bg,
-                border: `1px solid ${tone.color}`,
-                borderRadius: 'var(--radius-sm)',
-                padding: '4px 7px',
-                lineHeight: 1,
-              }}
-            >
-              <span style={{ fontSize: 9 }}>{tone.marker}</span>
-              {tone.title.toUpperCase()}
-              <span style={{ color: 'var(--dust)' }}>×{cards.length}</span>
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div
-        className="flex-1 min-h-0 overflow-y-auto relative"
-        style={{ overscrollBehavior: 'contain', padding: '0 11px 11px', zIndex: 2 }}
-      >
-        {!hasAftermath ? (
-          <div
-            className="flex flex-col items-center justify-center text-center h-full"
-            style={{ minHeight: 200, padding: 20 }}
-          >
-            <span style={{ fontSize: 30, lineHeight: 1, marginBottom: 10 }}>{'🛡️'}</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 13, color: 'var(--success)', letterSpacing: 0.6 }}>
-              SQUAD INTACT
-            </span>
-            <span style={{ fontSize: 11.5, color: 'var(--cream-soft)', marginTop: 8, lineHeight: 1.5, maxWidth: 240 }}>
-              No shatters, no injuries — everyone came through ninety minutes unscathed and ready for the next fixture.
-            </span>
-          </div>
-        ) : (
-          <div className="flex flex-col" style={{ gap: 11 }}>
-            <div className="grid grid-cols-3" style={{ gap: 8 }}>
-              {groups.flatMap(({ tone, cards }) =>
-                cards.map((card, i) => (
-                  <FateCard key={card.id} tone={tone} card={card} delay={i * 40} onOpen={onOpen} />
-                )),
-              )}
-            </div>
-
-            {commentary.length > 0 && (
-              <div className="flex flex-col" style={{ gap: 6, marginTop: 1 }}>
-                <span style={{ fontFamily: PIXEL, fontSize: 7.5, letterSpacing: 1, color: 'var(--dust)' }}>
-                  REPORT
-                </span>
-                {commentary.map((line, i) => (
-                  <ReportLine key={i} line={line} tone={lineTone(line)} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ===========================================================================
 // Pieces
 // ===========================================================================
-
-/** A tab toggle: accent outline + underline when active (ShopPhase family). */
-function TabButton({
-  label,
-  active,
-  accent,
-  badge,
-  badgeColor = 'var(--amber)',
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  accent: string;
-  badge?: number;
-  badgeColor?: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex-1 active:scale-[0.98] relative overflow-hidden ${active ? 'sheen-strong' : 'glass-surface sheen'}`}
-      style={{
-        height: 38,
-        borderRadius: 'var(--radius-sm)',
-        border: active ? `1px solid ${accent}` : '1px solid var(--glass-border)',
-        borderBottom: active ? `3px solid ${accent}` : '1px solid var(--glass-border)',
-        background: active ? `${accent}1c` : undefined,
-        boxShadow: active
-          ? `inset 0 1px 0 0 var(--glass-highlight), 0 0 12px ${accent}33, var(--depth-1)`
-          : 'var(--depth-1)',
-        fontFamily: PIXEL,
-        fontSize: 10,
-        letterSpacing: 0.6,
-        color: active ? accent : 'var(--cream-soft)',
-        textTransform: 'uppercase',
-      }}
-    >
-      <span className="relative" style={{ zIndex: 2 }}>{label}</span>
-      {badge != null && (
-        <span
-          style={{
-            position: 'absolute',
-            top: 3,
-            right: 4,
-            minWidth: 16,
-            height: 16,
-            padding: '0 3px',
-            borderRadius: 8,
-            border: '1.5px solid var(--ink-black)',
-            background: badgeColor,
-            color: 'var(--line-white)',
-            fontFamily: PIXEL,
-            fontSize: 8,
-            lineHeight: '13px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 3,
-          }}
-        >
-          {badge}
-        </span>
-      )}
-    </button>
-  );
-}
 
 /** For/against tone from a verdict factor's signed swing. Colour only. */
 function factorTone(swing: number): string {
   if (swing > 0.05) return 'var(--success)';
   if (swing < -0.05) return 'var(--danger)';
   return 'var(--dust)';
-}
-
-/** Shared panel header chip: accent bar · pixel title · optional right slot. */
-function PanelHeader({ accent, title, right }: { accent: string; title: string; right?: React.ReactNode }) {
-  return (
-    <div className="shrink-0 flex items-center relative" style={{ gap: 8, padding: '9px 11px', zIndex: 2 }}>
-      <span style={{ width: 4, height: 12, background: accent, borderRadius: 1, flexShrink: 0, boxShadow: `0 0 8px ${accent}` }} />
-      <span
-        className="mr-auto truncate"
-        style={{ fontFamily: PIXEL, fontSize: 9.5, letterSpacing: 0.8, color: 'var(--cream)', textTransform: 'uppercase' }}
-      >
-        {title}
-      </span>
-      {right}
-    </div>
-  );
 }
 
 /** One stat-strip cell (label over a value), with an optional left divider. */
@@ -866,83 +523,6 @@ function ScoreNum({ value, lit }: { value: number; lit: boolean }) {
     >
       {value}
     </span>
-  );
-}
-
-/** A tinted commentary line; tone-coloured when it names an affected player. */
-function ReportLine({ line, tone }: { line: string; tone: GroupTone | null }) {
-  return (
-    <div
-      className={tone ? '' : 'glass-surface'}
-      style={{
-        fontSize: 11,
-        lineHeight: 1.4,
-        color: tone ? tone.color : 'var(--cream-soft)',
-        background: tone ? tone.bg : undefined,
-        border: tone ? `1px solid ${tone.color}` : undefined,
-        boxShadow: tone ? undefined : 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
-        borderRadius: 'var(--radius-sm)',
-        padding: '7px 9px',
-        display: 'flex',
-        gap: 7,
-        alignItems: 'flex-start',
-      }}
-    >
-      {tone && (
-        <span style={{ fontFamily: PIXEL, fontSize: 10, color: tone.color, lineHeight: 1.2, flexShrink: 0 }}>
-          {tone.marker}
-        </span>
-      )}
-      <span>{line}</span>
-    </div>
-  );
-}
-
-/** A tappable GameCard tagged with a corner badge for its post-match fate. */
-function FateCard({
-  tone,
-  card,
-  delay,
-  onOpen,
-}: {
-  tone: GroupTone;
-  card: Card;
-  delay: number;
-  onOpen: (card: Card) => void;
-}) {
-  return (
-    <div className="relative">
-      <GameCard
-        model={{ variant: 'player', card }}
-        onClick={() => onOpen(card)}
-        delay={delay}
-        ariaLabel={`${card.name} — ${tone.title}`}
-      />
-      <span
-        style={{
-          position: 'absolute',
-          top: -5,
-          right: -5,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 3,
-          fontFamily: PIXEL,
-          fontSize: 7,
-          letterSpacing: 0.3,
-          color: tone.badgeFg,
-          background: tone.color,
-          border: '1.5px solid var(--ink-black)',
-          borderRadius: 3,
-          padding: '3px 5px',
-          lineHeight: 1,
-          boxShadow: '0 1px 0 0 var(--ink-black)',
-          pointerEvents: 'none',
-        }}
-      >
-        <span style={{ fontSize: 8 }}>{tone.marker}</span>
-        {tone.title.toUpperCase()}
-      </span>
-    </div>
   );
 }
 
