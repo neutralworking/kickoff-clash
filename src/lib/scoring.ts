@@ -27,6 +27,10 @@ export interface Card {
   realName?: string;
   v8PlayerId?: string;
   position: string;       // GK/CD/WD/DM/CM/WM/AM/WF/CF
+  /** Authored position labels shown on V8 cards, e.g. `['CB', 'RB']`. */
+  positionLabels?: string[];
+  /** Live team-selection position families for every authored natural position. */
+  naturalPositions?: string[];
   archetype: string;       // primary (Engine, Creator, etc.)
   secondaryArchetype?: string;
   tacticalRole?: string;   // Regista, Volante, etc.
@@ -67,6 +71,16 @@ export interface Card {
   // V3.1 data port (Chief Scout): evocative cross-role identity + 4-pillar stat block.
   nickname?: string;
   pillars?: { technical: number; tactical: number; mental: number; physical: number };
+}
+
+/** The position labels the authored card should show, primary first. */
+export function cardPositionLabels(card: Card): string[] {
+  return card.positionLabels?.length ? card.positionLabels : [card.position];
+}
+
+/** Every natural position family considered by team selection and autoselect. */
+export function cardNaturalPositions(card: Card): string[] {
+  return card.naturalPositions?.length ? card.naturalPositions : [card.position];
 }
 
 export interface SlottedCard {

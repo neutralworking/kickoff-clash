@@ -30,7 +30,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import type { Card } from '../lib/scoring';
+import { cardNaturalPositions, cardPositionLabels, type Card } from '../lib/scoring';
 import type { Formation } from '../lib/formations';
 import { getFormation, positionFitsSlot } from '../lib/formations';
 import type { TeamIntent, OpponentBuild } from '../lib/run';
@@ -337,7 +337,7 @@ export default function SquadScreen({
     () =>
       sel.starters.map((id, i) => {
         const c = id != null ? byId.get(id) : undefined;
-        return c ? competenceOf(c.position, formation.slots[i]) : 'primary';
+        return c ? competenceOf(cardNaturalPositions(c), formation.slots[i]) : 'primary';
       }),
     [sel.starters, byId, formation],
   );
@@ -996,6 +996,7 @@ function PitchMarkings() {
 function GhostTile({ card }: { card: Card }) {
   const accent = RARITY_COLOR[card.rarity] ?? 'var(--dust)';
   const stats = toDisplayV6Card(card);
+  const positions = cardPositionLabels(card).join('/');
   return (
     <div
       style={{
@@ -1011,7 +1012,23 @@ function GhostTile({ card }: { card: Card }) {
       <div style={{ height: 3, background: accent }} />
       <div style={{ padding: '4px 5px 5px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 3 }}>
-          <PosTag position={card.position} />
+          <span
+            title={positions}
+            style={{
+              maxWidth: 34,
+              overflow: 'hidden',
+              color: 'var(--ink-black)',
+              background: POSITION_COLOR[card.position] ?? 'var(--dust)',
+              borderRadius: 3,
+              padding: '2px 3px',
+              fontFamily: PIXEL,
+              fontSize: positions.length > 2 ? 5.5 : 7,
+              lineHeight: 1,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {positions}
+          </span>
           <span style={{ fontFamily: PIXEL, fontSize: 10, lineHeight: 1, color: 'var(--cream)', fontVariantNumeric: 'tabular-nums' }}>
             {stats.attack}/{stats.defence}
           </span>
@@ -1250,8 +1267,8 @@ function PlayerSheet({
   const sorted = useMemo(() => {
     if (!activeSlot) return available;
     return [...available].sort((a, b) => {
-      const ea = positionFitsSlot(a.position, activeSlot) ? 0 : 1;
-      const eb = positionFitsSlot(b.position, activeSlot) ? 0 : 1;
+      const ea = positionFitsSlot(cardNaturalPositions(a), activeSlot) ? 0 : 1;
+      const eb = positionFitsSlot(cardNaturalPositions(b), activeSlot) ? 0 : 1;
       if (ea !== eb) return ea - eb;
       return effectiveStrength(b) - effectiveStrength(a);
     });
@@ -1271,13 +1288,19 @@ function PlayerSheet({
         </div>
       )}
       {sorted.map((c) => {
-        const comp = activeSlot ? competenceOf(c.position, activeSlot) : 'primary';
+        const comp = activeSlot ? competenceOf(cardNaturalPositions(c), activeSlot) : 'primary';
         const pillBg = activeSlot ? COMPETENCE_COLOR[comp].bg : POSITION_COLOR[c.position] ?? 'var(--dust)';
         const pillText = activeSlot ? COMPETENCE_COLOR[comp].text : 'var(--ink-black)';
-        const st = deriveStats(c);
+        const st = toDisplayV6Card(c);
+        const positions = cardPositionLabels(c);
         return (
           <div
             key={c.id}
+            data-testid="team-selection-player-option"
+            data-player-id={c.id}
+            data-player-positions={positions.join('/')}
+            data-player-attack={st.attack}
+            data-player-defence={st.defence}
             className="flex items-center gap-2 active:scale-[0.99]"
             style={{
               background: 'linear-gradient(180deg, #1c1610, #120d07)',
@@ -1287,7 +1310,12 @@ function PlayerSheet({
             }}
           >
             <ClassGem cls={classOfCard(c)} size={22} />
-            <span style={{ fontFamily: PIXEL, fontSize: 7, lineHeight: 1, color: pillText, background: pillBg, padding: '3px 5px', borderRadius: 3, flexShrink: 0 }}>{c.position}</span>
+            <span
+              title={positions.join(' / ')}
+              style={{ fontFamily: PIXEL, fontSize: 6.5, lineHeight: 1, color: pillText, background: pillBg, padding: '3px 5px', borderRadius: 3, flexShrink: 0, whiteSpace: 'nowrap' }}
+            >
+              {positions.join('/')}
+            </span>
             <button
               onClick={() => onInspect(c)}
               className="flex flex-col items-start min-w-0 flex-1 active:scale-[0.98]"
@@ -1297,9 +1325,9 @@ function PlayerSheet({
               <span className="truncate w-full" style={{ fontFamily: PIXEL, fontSize: 8.5, color: 'var(--cream)' }}>{lastName(c.name)}</span>
               {showFitness && <FitnessBar card={c} width={64} />}
             </button>
-            <span style={{ fontFamily: PIXEL, fontSize: 9, color: '#ff8f6a' }}>{st.atk}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 9, color: '#ff8f6a' }}>{st.attack}</span>
             <span style={{ fontSize: 10, color: 'var(--dust)' }}>/</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 9, color: '#8fb6ff' }}>{st.def}</span>
+            <span style={{ fontFamily: PIXEL, fontSize: 9, color: '#8fb6ff' }}>{st.defence}</span>
             <button
               onClick={() => onPick(c.id)}
               className="active:scale-90"

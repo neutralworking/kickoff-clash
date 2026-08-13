@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, type CSSProperties } from 'react';
-import type { Card } from '../../lib/scoring';
+import { cardPositionLabels, type Card } from '../../lib/scoring';
 import type { V6Card } from '../../lib/match-v6';
 import { toDisplayV6Card } from '../../lib/v6-bridge';
 import type { UiPlayerView } from '@/game-v7';
@@ -11,7 +11,6 @@ import type {
   V7PlayerCard as V7PlayerDefinition,
 } from '@/engine-v7';
 import {
-  eligiblePositions,
   handoffTier,
   lastName,
   playerActions,
@@ -112,8 +111,8 @@ export function collectionPlayerDossier(card: Card, supplied?: V6Card): PlayerDo
     id: String(card.id),
     name: card.name,
     portrait: v6.portrait ?? portraitSrc(card) ?? undefined,
-    primaryPosition: card.position,
-    secondaryPositions: eligiblePositions(card.position).slice(1),
+    primaryPosition: cardPositionLabels(card)[0] ?? card.position,
+    secondaryPositions: cardPositionLabels(card).slice(1),
     role: card.tacticalRole ?? card.archetype,
     rarity: normaliseRarity(card.rarity),
     cost: Math.max(1, Math.min(6, v6.cost)),
@@ -198,7 +197,10 @@ export default function PlayerDossier({
   onClose: () => void;
 }) {
   const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     const oldOverflow = document.body.style.overflow;

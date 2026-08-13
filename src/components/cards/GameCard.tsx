@@ -28,7 +28,7 @@
  */
 
 import { useState } from 'react';
-import type { Card } from '../../lib/scoring';
+import { cardPositionLabels, type Card } from '../../lib/scoring';
 import { deriveStats } from '../../lib/funnel';
 import type { JokerCard } from '../../lib/jokers';
 import { type TacticCard, tacticCapacity } from '../../lib/tactics';
@@ -41,7 +41,6 @@ import {
   INVESTMENT_META,
   formatCash,
   lastName,
-  eligiblePositions,
   tacticMedallion,
   playerActions,
   ACTION_BONUS_GOLD,
@@ -607,8 +606,8 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
   const src = portraitSrc(card);
   const [imgOk, setImgOk] = useState(true);
 
-  // full shows every eligible slot (capped at 2); grid shows the primary only.
-  const positions = full ? eligiblePositions(card.position).slice(0, 2) : [card.position];
+  // Show the authored natural positions on every card surface, capped at two.
+  const positions = cardPositionLabels(card).slice(0, 2);
 
   const cfg = full
     ? { disc: 44, glyph: 24, badgeFs: 9, badgePad: '3px 7px', discR: 50, nameBase: 19, arche: 11, winPad: '8px 8px 0', winRadius: 8 }

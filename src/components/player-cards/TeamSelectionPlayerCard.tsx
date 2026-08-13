@@ -1,7 +1,7 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import type { Card } from '../../lib/scoring';
+import { cardPositionLabels, type Card } from '../../lib/scoring';
 import type { V6Card } from '../../lib/match-v6';
 import type { Competence } from '../../lib/team-select';
 import { v6Cost } from '../../lib/v6-bridge';
@@ -57,6 +57,8 @@ export default function TeamSelectionPlayerCard({
   const defence = clampStat(v6card?.defence ?? fallback.def);
   const cost = Math.max(1, Math.min(6, v6card?.cost ?? v6Cost(card)));
   const actionName = playerActions(card)[0]?.label ?? card.abilityName ?? 'NO ACTION';
+  const positions = cardPositionLabels(card);
+  const positionLabel = positions.join('/');
   const fitClass = competence === 'incompetent'
     ? styles.fitMisfit
     : competence === 'secondary'
@@ -77,9 +79,10 @@ export default function TeamSelectionPlayerCard({
         fitClass,
         dimmed ? styles.dimmed : '',
         highlighted ? styles.highlighted : '',
+        positions.length > 1 ? styles.multiPosition : '',
       ].filter(Boolean).join(' ')}
       style={style}
-      aria-label={`${card.name}, ${card.position}, cost ${cost}, ${attack} attack, ${defence} defence, ${actionName}`}
+      aria-label={`${card.name}, ${positions.join(' or ')}, cost ${cost}, ${attack} attack, ${defence} defence, ${actionName}`}
     >
       <div className={styles.frameMaterial} />
       <div className={styles.interior}>
@@ -95,7 +98,7 @@ export default function TeamSelectionPlayerCard({
           </span>
         </div>
 
-        <div className={styles.positionCorner}>{card.position}</div>
+        <div className={styles.positionCorner} title={positions.join(' / ')}>{positionLabel}</div>
 
         <div className={styles.nameplate} title={card.name}>{lastName(card.name).toUpperCase()}</div>
         <div className={styles.actionPanel} title={actionName}>{actionName.toUpperCase()}</div>

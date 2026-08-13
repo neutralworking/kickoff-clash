@@ -36,11 +36,16 @@ const RUN_POSITION: Record<string, Card['position']> = {
 
 const POWER_BY_COST = [0, 56, 64, 72, 80, 86, 92] as const;
 
-function runPosition(position: string): Card['position'] {
-  for (const code of position.split('/').map((value) => value.trim())) {
-    if (RUN_POSITION[code]) return RUN_POSITION[code];
-  }
-  return 'CM';
+function authoredPositionLabels(position: string): string[] {
+  return position.split('/').map((value) => value.trim()).filter(Boolean);
+}
+
+function runPositions(position: string): string[] {
+  return Array.from(new Set(
+    authoredPositionLabels(position)
+      .map((code) => RUN_POSITION[code])
+      .filter((code): code is string => Boolean(code)),
+  ));
 }
 
 function runArchetype(card: V8CalibrationPlayerCard, position: Card['position']): string {
@@ -60,13 +65,17 @@ function runRarity(cost: number): Card['rarity'] {
 }
 
 function runCard(card: V8CalibrationPlayerCard): Card {
-  const position = runPosition(card.position);
+  const positionLabels = authoredPositionLabels(card.position);
+  const naturalPositions = runPositions(card.position);
+  const position = naturalPositions[0] ?? 'CM';
   return {
     id: 100000 + card.trackerRow,
     name: card.matchName,
     realName: card.realName,
     v8PlayerId: card.id,
     position,
+    positionLabels,
+    naturalPositions,
     archetype: runArchetype(card, position),
     power: POWER_BY_COST[card.cost] ?? 72,
     rarity: runRarity(card.cost),

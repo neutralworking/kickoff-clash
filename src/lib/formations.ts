@@ -215,8 +215,9 @@ export function getDefaultFormation(): Formation {
 }
 
 export function positionFitsSlot(
-  cardPosition: string,
+  cardPosition: string | readonly string[],
   slotDef: FormationSlot
 ): boolean {
-  return slotDef.accepts.includes(cardPosition);
+  const positions = typeof cardPosition === 'string' ? [cardPosition] : cardPosition;
+  return positions.some((position) => slotDef.accepts.includes(position));
 }

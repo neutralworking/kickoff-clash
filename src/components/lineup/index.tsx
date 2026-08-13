@@ -1,7 +1,7 @@
 'use client';
 
 import type { PointerEventHandler } from 'react';
-import type { Card } from '../../lib/scoring';
+import { cardNaturalPositions, type Card } from '../../lib/scoring';
 import type { Formation } from '../../lib/formations';
 import type { V6Card } from '../../lib/match-v6';
 import { competenceOf, type Competence } from '../../lib/team-select';
@@ -129,7 +129,7 @@ export function LineupSlot({
   dim?: boolean;
   dropHint?: boolean;
 } & DragPointerHandlers) {
-  const resolvedCompetence = competence ?? (card ? competenceOf(card.position, slot) : 'primary');
+  const resolvedCompetence = competence ?? (card ? competenceOf(cardNaturalPositions(card), slot) : 'primary');
 
   return (
     <button

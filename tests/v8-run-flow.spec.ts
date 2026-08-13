@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { lastName } from '../src/components/cards/cardTokens';
 import { createRun, getPlayerPickCards, type RunState } from '../src/lib/run';
-import { ripStarterPacks } from '../src/lib/packs';
+import { ripStarterPackChoices, ripStarterPacks } from '../src/lib/packs';
 
 const STORAGE_KEY = 'kickoff-clash-v4-run';
 
@@ -87,6 +87,17 @@ test.describe('V8 production run handoff', () => {
     await expect(page.getByRole('button', { name: 'HOME', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^(DEF|BAL|ATT)$/ })).toHaveCount(0);
     await expect(page.getByText('COST / MAX', { exact: true })).toHaveCount(0);
+
+    const selectedPack = ripStarterPackChoices(8082026).playerPacks[2];
+    const multiPositionCard = selectedPack.find((card) => (card.positionLabels?.length ?? 0) > 1)!;
+    await page.locator('.slot-pulse').first().click();
+    const option = page.locator(`[data-testid="team-selection-player-option"][data-player-id="${multiPositionCard.id}"]`);
+    await expect(option).toBeVisible();
+    await expect(option).toHaveAttribute('data-player-positions', multiPositionCard.positionLabels!.join('/'));
+    await expect(option).toHaveAttribute('data-player-attack', String(multiPositionCard.printedAttack));
+    await expect(option).toHaveAttribute('data-player-defence', String(multiPositionCard.printedDefence));
+    await page.getByRole('button', { name: 'CLOSE', exact: true }).click();
+
     await page.getByRole('button', { name: 'AUTO', exact: true }).click();
     await expect(page.locator('[aria-label^="Inspect "]')).toHaveCount(0);
     await page.getByRole('button', { name: /kick off/i }).click();

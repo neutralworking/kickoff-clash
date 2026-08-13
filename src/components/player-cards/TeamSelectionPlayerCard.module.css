@@ -126,6 +126,12 @@
   line-height: 1;
 }
 
+.multiPosition .positionCorner {
+  width: 37%;
+  font-size: 7.25cqw;
+  letter-spacing: -0.25cqw;
+}
+
 .fitSecondary .positionCorner {
   color: #171005;
   background: linear-gradient(160deg, #ffe2a0, #e6a72d 74%);
