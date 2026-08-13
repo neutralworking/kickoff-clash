@@ -1518,6 +1518,9 @@ function BenchEditor({
   const [target, setTarget] = useState<BenchEditTarget | null>(null);
   const pointer = useRef<{ card: Card; x: number; y: number; moved: boolean } | null>(null);
   const targetRef = useRef<BenchEditTarget | null>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const seatRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const reservesRef = useRef<HTMLDivElement | null>(null);
 
   function updateTarget(next: BenchEditTarget | null) {
     targetRef.current = next;
@@ -1525,21 +1528,34 @@ function BenchEditor({
   }
 
   function targetAt(x: number, y: number): BenchEditTarget | null {
-    const element = document.elementFromPoint(x, y) as HTMLElement | null;
-    const seat = element?.closest<HTMLElement>('[data-bench-seat]');
-    if (seat?.dataset.benchSeat !== undefined) {
-      return { kind: 'seat', index: Number(seat.dataset.benchSeat) };
+    const seatIndex = seatRefs.current.findIndex((seat) => {
+      if (!seat) return false;
+      const rect = seat.getBoundingClientRect();
+      return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+    });
+    if (seatIndex >= 0) {
+      return { kind: 'seat', index: seatIndex };
     }
-    if (element?.closest('[data-bench-reserves]')) return { kind: 'reserves' };
+    const reservesRect = reservesRef.current?.getBoundingClientRect();
+    if (
+      reservesRect
+      && x >= reservesRect.left
+      && x <= reservesRect.right
+      && y >= reservesRect.top
+      && y <= reservesRect.bottom
+    ) {
+      return { kind: 'reserves' };
+    }
     return null;
   }
 
   function begin(card: Card, event: ReactPointerEvent<HTMLButtonElement>) {
     pointer.current = { card, x: event.clientX, y: event.clientY, moved: false };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    editorRef.current?.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
   }
 
-  function move(event: ReactPointerEvent<HTMLButtonElement>) {
+  function move(event: ReactPointerEvent<HTMLDivElement>) {
     const current = pointer.current;
     if (!current) return;
     if (!current.moved && Math.hypot(event.clientX - current.x, event.clientY - current.y) > 7) {
@@ -1550,7 +1566,7 @@ function BenchEditor({
     updateTarget(targetAt(event.clientX, event.clientY));
   }
 
-  function end(event: ReactPointerEvent<HTMLButtonElement>) {
+  function end(event: ReactPointerEvent<HTMLDivElement>) {
     const current = pointer.current;
     pointer.current = null;
     if (!current) return;
@@ -1572,7 +1588,15 @@ function BenchEditor({
   }
 
   return (
-    <div data-testid="bench-editor" className="flex min-h-0 flex-1 flex-col overflow-hidden relative" style={{ zIndex: 2 }}>
+    <div
+      ref={editorRef}
+      data-testid="bench-editor"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden relative"
+      style={{ zIndex: 2 }}
+      onPointerMove={move}
+      onPointerUp={end}
+      onPointerCancel={cancel}
+    >
       <section className="shrink-0 px-3 pb-2">
         <div className="flex items-center justify-between pb-1.5">
           <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--gold)' }}>
@@ -1591,6 +1615,7 @@ function BenchEditor({
             return (
               <div
                 key={index}
+                ref={(node) => { seatRefs.current[index] = node; }}
                 data-bench-seat={index}
                 className="shrink-0 flex items-center justify-center"
                 style={{
@@ -1603,7 +1628,7 @@ function BenchEditor({
                 }}
               >
                 {card ? (
-                  <BenchEditorCard card={card} dim={drag?.card.id === card.id} onBegin={begin} onMove={move} onEnd={end} onCancel={cancel} />
+                  <BenchEditorCard card={card} dim={drag?.card.id === card.id} onBegin={begin} />
                 ) : (
                   <span style={{ fontFamily: PIXEL, fontSize: 16, color: 'var(--ink)' }}>+</span>
                 )}
@@ -1619,6 +1644,7 @@ function BenchEditor({
           <span style={{ fontFamily: PIXEL, fontSize: 6.5, color: 'var(--dust)' }}>DRAG UP TO ADD · DRAG HERE TO REMOVE</span>
         </div>
         <div
+          ref={reservesRef}
           data-testid="bench-editor-reserves"
           data-bench-reserves
           className="min-h-0 flex-1 overflow-y-auto pb-4"
@@ -1635,9 +1661,6 @@ function BenchEditor({
                 card={card}
                 dim={drag?.card.id === card.id}
                 onBegin={begin}
-                onMove={move}
-                onEnd={end}
-                onCancel={cancel}
               />
             ))}
           </div>
@@ -1670,25 +1693,16 @@ function BenchEditorCard({
   card,
   dim,
   onBegin,
-  onMove,
-  onEnd,
-  onCancel,
 }: {
   card: Card;
   dim: boolean;
   onBegin: (card: Card, event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onEnd: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onCancel: () => void;
 }) {
   return (
     <button
       type="button"
       aria-label={`Drag ${card.name}`}
       onPointerDown={(event) => onBegin(card, event)}
-      onPointerMove={onMove}
-      onPointerUp={onEnd}
-      onPointerCancel={onCancel}
       style={{ padding: 0, border: 0, background: 'transparent', touchAction: 'none', opacity: dim ? 0.25 : 1 }}
     >
       <TeamSelectionPlayerCard card={card} v6card={toDisplayV6Card(card)} size="bench" />
