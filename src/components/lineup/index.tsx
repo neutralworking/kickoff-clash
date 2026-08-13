@@ -6,6 +6,7 @@ import type { Formation } from '../../lib/formations';
 import type { V6Card } from '../../lib/match-v6';
 import { competenceOf, type Competence } from '../../lib/team-select';
 import { pitchAxis } from '../../lib/pitch-layout';
+import { lineupPitchPosition } from '../../lib/lineup-layout';
 import { PIXEL, POSITION_COLOR, lastName } from '../cards/cardTokens';
 import { fitnessColor as fitnessColorForPct } from '../cards/portrait';
 import TeamSelectionPlayerCard from '../player-cards/TeamSelectionPlayerCard';
@@ -17,22 +18,6 @@ const SLOT_CARD_W = 64;
 const SLOT_CARD_H = 92;
 export const SLOT_INSET_X = SLOT_CARD_W / 2 + 6;
 export const SLOT_INSET_Y = SLOT_CARD_H / 2 + 4;
-
-/**
- * Collapse the authored coordinates onto readable mobile lines while preserving
- * a dedicated holding-midfield line. In particular, 4-2-3-1 must read as four
- * outfield bands (striker, attacking midfield, pivots, defence) plus goalkeeper.
- *
- * This is presentation only. Slot identity, eligibility and match geometry stay
- * unchanged, while every supported shape still reads correctly at a glance.
- */
-export function lineupPitchY(y: number): number {
-  if (y >= 88) return 98; // goalkeeper
-  if (y >= 68) return 78; // back line, moved towards the goalkeeper
-  if (y >= 54) return 57; // pivots / holding midfielders
-  if (y >= 30) return 34; // central and attacking midfielders
-  return 8; // forwards and wide forwards
-}
 
 export interface DragPointerHandlers {
   onPointerDown?: PointerEventHandler<HTMLButtonElement>;
@@ -102,6 +87,8 @@ export function FitnessBar({ card, width = '100%' }: { card: Card; width?: numbe
 }
 
 export function LineupSlot({
+  formation,
+  slotIndex,
   slot,
   card,
   v6card,
@@ -117,6 +104,8 @@ export function LineupSlot({
   onPointerUp,
   onPointerCancel,
 }: {
+  formation: Pick<Formation, 'id'>;
+  slotIndex: number;
   slot: Formation['slots'][number];
   card: Card | undefined;
   v6card?: V6Card;
@@ -129,11 +118,15 @@ export function LineupSlot({
   dropHint?: boolean;
 } & DragPointerHandlers) {
   const resolvedCompetence = competence ?? (card ? competenceOf(cardNaturalPositions(card), slot) : 'primary');
+  const pitchPosition = lineupPitchPosition(formation, slot, slotIndex);
 
   return (
     <button
       type="button"
       data-slot-type={slot.type}
+      data-slot-index={slotIndex}
+      data-pitch-x={pitchPosition.x}
+      data-pitch-y={pitchPosition.y}
       onClick={onClick}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -141,8 +134,8 @@ export function LineupSlot({
       onPointerCancel={onPointerCancel}
       className="absolute flex flex-col items-center active:scale-95"
       style={{
-        left: pitchAxis(slot.x, SLOT_INSET_X),
-        top: pitchAxis(lineupPitchY(slot.y), SLOT_INSET_Y),
+        left: pitchAxis(pitchPosition.x, SLOT_INSET_X),
+        top: pitchAxis(pitchPosition.y, SLOT_INSET_Y),
         width: SLOT_CARD_W,
         padding: 0,
         border: 0,
