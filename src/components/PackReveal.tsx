@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { PackContents, StarterPackChoices } from '../lib/packs';
 import type { Card } from '../lib/scoring';
 import type { JokerCard } from '../lib/jokers';
-import { managerFormationsV1 } from '../lib/manager-v1';
+import { managerFormationsV8 } from '../lib/manager-v8';
 import GameCard, { type GameCardModel } from './cards/GameCard';
 import CardModal from './cards/CardModal';
 import ManagerCard from './manager-cards/ManagerCard';
@@ -261,7 +261,7 @@ export default function PackReveal({ choices, onContinue }: PackRevealProps) {
             <div className={styles.managerCardReveal}>
               <ManagerCard
                 manager={selectedManager}
-                formations={managerFormationsV1(selectedManager)}
+                formations={managerFormationsV8(selectedManager)}
                 size="hero"
                 onClick={() => setManagerModal(selectedManager)}
               />
@@ -291,7 +291,7 @@ export default function PackReveal({ choices, onContinue }: PackRevealProps) {
       {managerModal && (
         <ManagerDossier
           manager={managerModal}
-          formations={managerFormationsV1(managerModal)}
+          formations={managerFormationsV8(managerModal)}
           onClose={() => setManagerModal(null)}
         />
       )}

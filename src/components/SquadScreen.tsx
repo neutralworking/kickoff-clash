@@ -37,7 +37,7 @@ import type { TeamIntent, OpponentBuild } from '../lib/run';
 import { getOpponent } from '../lib/run';
 import { xiV6Totals, toDisplayV6Card } from '../lib/v6-bridge';
 import type { JokerCard } from '../lib/jokers';
-import { managerActionNameV1, managerFormationsV1 } from '../lib/manager-v1';
+import { managerActionNameV8, managerFormationsV8 } from '../lib/manager-v8';
 import { SCOUT_COST } from '../lib/economy';
 import {
   type XISelection,
@@ -336,11 +336,11 @@ export default function SquadScreen({
   const activeManager = mode === 'draft' ? manager : jokers?.[0] ?? null;
   const selectableFormations = useMemo(() => {
     if (!activeManager) return formations;
-    const allowed = new Set(managerFormationsV1(activeManager));
+    const allowed = new Set(managerFormationsV8(activeManager));
     const candidates = formations.filter((candidate) => allowed.has(candidate.id));
     return candidates.length > 0
       ? candidates
-      : managerFormationsV1(activeManager).map(getFormation);
+      : managerFormationsV8(activeManager).map(getFormation);
   }, [activeManager, formations]);
 
   const xiCards = useMemo(
@@ -352,7 +352,7 @@ export default function SquadScreen({
   // old pre-match total-cost budget.
   const v6Totals = useMemo(() => xiV6Totals(xiCards, formation), [xiCards, formation]);
   const managerAllowsFormation = activeManager
-    ? managerFormationsV1(activeManager).includes(formationId)
+    ? managerFormationsV8(activeManager).includes(formationId)
     : mode !== 'draft';
   const ready = filled === slotCount && managerAllowsFormation;
 
@@ -692,7 +692,7 @@ export default function SquadScreen({
               {activeManager?.name ?? 'Pick manager'}
             </span>
             <span className="truncate w-full" style={{ fontFamily: PIXEL, fontSize: 6, lineHeight: 1.2, color: activeManager ? 'var(--gold)' : 'var(--dust)' }}>
-              {activeManager ? managerActionNameV1(activeManager).toUpperCase() : 'ACTION —'}
+              {activeManager ? managerActionNameV8(activeManager).toUpperCase() : 'ACTION —'}
             </span>
           </span>
         </button>
@@ -959,7 +959,7 @@ export default function SquadScreen({
                 managerId={managerId}
                 onPick={(id) => {
                   const nextManager = managers.find((candidate) => candidate.id === id);
-                  const nextFormationIds = nextManager ? managerFormationsV1(nextManager) : [];
+                  const nextFormationIds = nextManager ? managerFormationsV8(nextManager) : [];
                   setManagerId(id);
                   if (nextFormationIds.length > 0 && !nextFormationIds.includes(formationId)) {
                     switchFormation(nextFormationIds[0]);

@@ -79,6 +79,7 @@ export default function V8LiveMatchPhase({
       fixture={{
         homePlayerIds: init.fixture.homePlayerIds,
         awayPlayerIds: init.fixture.awayPlayerIds,
+        homeManager: init.fixture.homeManager ?? undefined,
         seed: init.fixture.seed,
         homeLabel: 'YOU',
         awayLabel: init.fixture.awayLabel,

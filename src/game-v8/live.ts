@@ -5,6 +5,7 @@ import {
 } from '@/engine-v8/calibration-cards';
 import type { V8Zone } from '@/engine-v8/core';
 import type { Card } from '@/lib/scoring';
+import { managerV8Profile, type ManagerV8Profile } from '@/lib/manager-v8';
 import {
   buildMatchSeed,
   getOpponentBuild,
@@ -16,6 +17,7 @@ export type LiveV8Fixture = {
   seed: number;
   homeCards: Card[];
   homePlayerIds: string[];
+  homeManager: ManagerV8Profile | null;
   awayPlayerIds: string[];
   awayLabel: string;
   contextLabel: string;
@@ -177,6 +179,7 @@ export function buildLiveV8Fixture(runState: RunState): LiveV8Fixture {
     seed,
     homeCards,
     homePlayerIds,
+    homeManager: runState.jokers[0] ? managerV8Profile(runState.jokers[0]) : null,
     awayPlayerIds,
     awayLabel: opponent.name,
     contextLabel: `CUP ${runState.round} · TIE ${runState.matchInCup}`,

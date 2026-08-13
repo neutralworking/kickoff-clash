@@ -145,6 +145,10 @@ test.describe('V8 production run handoff', () => {
 
     await expect(page.getByTestId('v8-match-intro')).toBeVisible();
     await expect(page.getByRole('button', { name: /open lab tools/i })).toHaveCount(0);
+    const matchManager = page.getByTestId('manager-card');
+    await expect(matchManager).toHaveAttribute('data-manager-id', /^(?!control$).+/);
+    await expect(matchManager).toHaveAttribute('data-manager-action', /.+/);
+    await expect(matchManager).not.toContainText('CONTROL');
     await playFourPeriods(page);
     await expectPhoneWidth(page);
 

@@ -32,7 +32,7 @@ import type { HandState } from '../lib/hand';
 import { INCREMENT_MINUTES } from '../lib/hand';
 import type { JokerCard } from '../lib/jokers';
 import { rehydrateJokers, payoutMult, refreshDiscount } from '../lib/jokers';
-import { managerFormationsV1 } from '../lib/manager-v1';
+import { managerFormationsV8 } from '../lib/manager-v8';
 import { ripStarterPackChoices, ripCardPack, type PackTier } from '../lib/packs';
 import { getTacticById } from '../lib/tactics';
 import { calculateAttendance, matchReward, JOKER_COST, SCOUT_PACK_COST, ELITE_PACK_COST } from '../lib/economy';
@@ -574,7 +574,7 @@ export default function GameShell() {
           : contents.managers;
         const chosenManager = chosenManagers[0] ?? null;
         const allowedFormations = chosenManager
-          ? managerFormationsV1(chosenManager).map(getFormation)
+          ? managerFormationsV8(chosenManager).map(getFormation)
           : contents.formations;
         return (
           <SquadScreen

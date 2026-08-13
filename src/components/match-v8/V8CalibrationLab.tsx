@@ -40,15 +40,21 @@ import {
   type V8Zone,
 } from '@/engine-v8';
 import { calibrationEnergyForPeriod, calibrationPlayCost } from '@/engine-v8/calibration-balance';
+import {
+  CONTROL_MANAGER_V8,
+  resolveManagerV8Action,
+  type ManagerV8Profile,
+} from '@/lib/manager-v8';
 import './v8lab.css';
 import './v8recap.css';
 
 const ZONES: readonly V8Zone[] = ['DEF', 'MID', 'ATT'];
 const PERIOD_LABELS = ['PERIOD 1/4', 'PERIOD 2/4', 'PERIOD 3/4', 'PERIOD 4/4'] as const;
-const MANAGER_COST = 3;
-const MANAGER_NAME = 'CONTROL';
 const DEFAULT_HOME_SQUAD: V8CalibrationSquadKey = 'cross';
 const DEFAULT_AWAY_SQUAD: V8CalibrationSquadKey = 'balanced_midrange';
+
+type ManagerProfiles = Record<V8CalibrationSide, ManagerV8Profile>;
+type MatchScore = { home: number; away: number };
 
 type PendingPlay =
   | { kind: 'player'; side: V8CalibrationSide; cardId: string; zone: V8Zone; cost: number }
@@ -159,6 +165,7 @@ export type V8LiveFixture = {
   homePlayerIds: readonly string[];
   awayPlayerIds: readonly string[];
   seed: number;
+  homeManager?: ManagerV8Profile;
   homeLabel?: string;
   awayLabel?: string;
   contextLabel?: string;
@@ -231,24 +238,12 @@ function priority(state: V8CalibrationState, homeScore: number, awayScore: numbe
   return { first: mixed % 2 === 0 ? 'home' : 'away', reason: 'seeded tiebreak' };
 }
 
-function applyManager(state: V8CalibrationState, side: V8CalibrationSide, zone: V8Zone): V8CalibrationState {
-  const next = JSON.parse(JSON.stringify(state)) as V8CalibrationState;
-  const count = calibrationPlayersInZone(next, side, zone).length;
-  if (zone === 'ATT') next.tacticalAttack[side].ATT += count * 2;
-  if (zone === 'DEF') next.zoneDefenceBonus[side].DEF += count * 2;
-  if (zone === 'MID') {
-    next.tacticalAttack[side].MID += count;
-    next.zoneDefenceBonus[side].MID += count;
-  }
-  next.events.push({
-    type: 'action_triggered',
-    period: next.period,
-    text: `${side === 'home' ? 'YOU' : 'CPU'} reveal ${MANAGER_NAME} → ${zone}: resolves on ${count} player${count === 1 ? '' : 's'}, then leaves the slot.`,
-  });
-  return next;
-}
-
-function resolveSequence(state: V8CalibrationState, plays: readonly PendingPlay[]): V8CalibrationState {
+function resolveSequence(
+  state: V8CalibrationState,
+  plays: readonly PendingPlay[],
+  managers: ManagerProfiles,
+  score: MatchScore,
+): V8CalibrationState {
   let next = state;
   for (const play of plays) {
     if (play.kind === 'player') {
@@ -256,7 +251,7 @@ function resolveSequence(state: V8CalibrationState, plays: readonly PendingPlay[
     } else if (play.kind === 'tactical') {
       next = resolveCommittedCalibrationTactical(next, play.side, play.card, play.zone, play.cost);
     } else {
-      next = applyManager(next, play.side, play.zone);
+      next = resolveManagerV8Action(next, managers[play.side], play.side, play.zone, score);
     }
   }
   return next;
@@ -276,9 +271,11 @@ function previewPlayerPlacement(
   pending: readonly PendingPlay[],
   card: V8CalibrationPlayerCard,
   zone: V8Zone,
+  managers: ManagerProfiles,
+  score: MatchScore,
 ): PlacementImpact {
   const committedHomePlays = pending.filter((play) => play.side === 'home');
-  const before = resolveSequence(state, committedHomePlays);
+  const before = resolveSequence(state, committedHomePlays, managers, score);
   const homeBefore = calibrationTeamTotals(before, 'home');
   const awayBefore = calibrationTeamTotals(before, 'away');
   const eventCount = before.events.length;
@@ -288,7 +285,7 @@ function previewPlayerPlacement(
     cardId: card.id,
     zone,
     cost: calibrationPlayCost(card),
-  }]);
+  }], managers, score);
   const homeAfter = calibrationTeamTotals(after, 'home');
   const awayAfter = calibrationTeamTotals(after, 'away');
   const genericAction = `${card.realName} · ${card.actionName}.`;
@@ -374,16 +371,19 @@ function resolveRevealBeat(
   play: PendingPlay,
   index: number,
   total: number,
+  managers: ManagerProfiles,
+  score: MatchScore,
 ): { state: V8CalibrationState; beat: RevealBeat } {
   const beforeTotals = calibrationTeamTotals(state, play.side);
   const eventCount = state.events.length;
-  const next = resolveSequence(state, [play]);
+  const next = resolveSequence(state, [play], managers, score);
   const afterTotals = calibrationTeamTotals(next, play.side);
   const newEvents = next.events.slice(eventCount);
 
   const card = play.kind === 'player' ? getV8CalibrationPlayer(play.cardId) : null;
-  const name = card?.matchName ?? (play.kind === 'tactical' ? play.card.name : MANAGER_NAME);
-  const action = card?.actionName ?? (play.kind === 'tactical' ? 'TACTICAL' : 'MANAGER');
+  const manager = managers[play.side];
+  const name = card?.matchName ?? (play.kind === 'tactical' ? play.card.name : manager.name);
+  const action = card?.actionName ?? (play.kind === 'tactical' ? 'TACTICAL' : manager.actionName);
   const genericAction = card ? `${card.realName} · ${card.actionName}.` : null;
   const specificEvent = [...newEvents].reverse().find((event) => (
     event.type !== 'player_revealed'
@@ -430,7 +430,11 @@ function chooseCpuZone(state: V8CalibrationState, card: V8CalibrationPlayerCard,
   return ZONES.find((zone) => occupiedPlayerSlots(state, 'away', zone, pending) < 4) ?? null;
 }
 
-function planCpu(state: V8CalibrationState, managerAvailable: boolean): { state: V8CalibrationState; pending: PendingPlay[]; managerAvailable: boolean } {
+function planCpu(
+  state: V8CalibrationState,
+  managerAvailable: boolean,
+  manager: ManagerV8Profile,
+): { state: V8CalibrationState; pending: PendingPlay[]; managerAvailable: boolean } {
   let next = state;
   const pending: PendingPlay[] = [];
   let nextManagerAvailable = managerAvailable;
@@ -465,7 +469,7 @@ function planCpu(state: V8CalibrationState, managerAvailable: boolean): { state:
       continue;
     }
 
-    if (nextManagerAvailable && next.teams.away.energy >= MANAGER_COST && next.period >= 3) {
+    if (nextManagerAvailable && next.teams.away.energy >= manager.cost && next.period >= 3) {
       const zone = [...ZONES]
         .filter((candidate) => occupiedPlayerSlots(next, 'away', candidate, pending) < 4)
         .sort((a, b) => calibrationPlayersInZone(next, 'away', b).length - calibrationPlayersInZone(next, 'away', a).length)[0];
@@ -474,10 +478,10 @@ function planCpu(state: V8CalibrationState, managerAvailable: boolean): { state:
           ...next,
           teams: {
             ...next.teams,
-            away: { ...next.teams.away, energy: next.teams.away.energy - MANAGER_COST },
+            away: { ...next.teams.away, energy: next.teams.away.energy - manager.cost },
           },
         };
-        pending.push({ kind: 'manager', side: 'away', zone, cost: MANAGER_COST });
+        pending.push({ kind: 'manager', side: 'away', zone, cost: manager.cost });
         nextManagerAvailable = false;
         continue;
       }
@@ -758,6 +762,13 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
   const homeLabel = fixture?.homeLabel ?? 'YOU';
   const awayLabel = fixture?.awayLabel ?? 'CPU';
   const contextLabel = fixture?.contextLabel ?? 'MATCH 01';
+  const managerProfiles = useMemo<ManagerProfiles>(() => ({
+    home: fixture?.homeManager ?? CONTROL_MANAGER_V8,
+    away: CONTROL_MANAGER_V8,
+  }), [fixture?.homeManager]);
+  const homeManager = managerProfiles.home;
+  const managerActionFont = homeManager.actionName.length > 22 ? '4.5px' : homeManager.actionName.length > 17 ? '5px' : '5.75px';
+  const matchScore = useMemo<MatchScore>(() => ({ home: homeScore, away: awayScore }), [awayScore, homeScore]);
 
   const homePlayers = calibrationHandPlayers(state, 'home');
   const homeTacticals = calibrationHandTacticals(state, 'home');
@@ -829,14 +840,14 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
   };
 
   const queueManagerToZone = (zone: V8Zone): boolean => {
-    if (finished || revealPhase || !homeManagerAvailable || state.teams.home.energy < MANAGER_COST) return false;
+    if (finished || revealPhase || !homeManagerAvailable || state.teams.home.energy < homeManager.cost) return false;
     if (occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return false;
     rememberUndo();
     setState({
       ...state,
-      teams: { ...state.teams, home: { ...state.teams.home, energy: state.teams.home.energy - MANAGER_COST } },
+      teams: { ...state.teams, home: { ...state.teams.home, energy: state.teams.home.energy - homeManager.cost } },
     });
-    setPending((plays) => [...plays, { kind: 'manager', side: 'home', zone, cost: MANAGER_COST }]);
+    setPending((plays) => [...plays, { kind: 'manager', side: 'home', zone, cost: homeManager.cost }]);
     setHomeManagerAvailable(false);
     setSelection(null);
     return true;
@@ -915,7 +926,7 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
 
     if (drag.kind === 'manager') {
       return homeManagerAvailable
-        && state.teams.home.energy >= MANAGER_COST
+        && state.teams.home.energy >= homeManager.cost
         && occupiedPlayerSlots(state, 'home', zone, pending) < 4;
     }
 
@@ -1013,7 +1024,7 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
 
   const endPeriod = () => {
     if (finished || revealPhase) return;
-    const cpu = planCpu(state, awayManagerAvailable);
+    const cpu = planCpu(state, awayManagerAvailable, managerProfiles.away);
     const allPending = [...pending, ...cpu.pending];
     // The priority advertised before commitment is authoritative. Recomputing it from the
     // CPU-planned state can make the reveal contradict the decision strip the player just saw.
@@ -1172,6 +1183,8 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
     const resolved = resolveSequence(
       revealPhase.resolvedState,
       revealPhase.orderedPlays.slice(revealPhase.nextIndex),
+      managerProfiles,
+      matchScore,
     );
     setState(resolved);
     setPending([]);
@@ -1191,6 +1204,8 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
           play,
           revealPhase.nextIndex + 1,
           revealPhase.orderedPlays.length,
+          managerProfiles,
+          matchScore,
         );
         setState(next.state);
         if (play.side === 'home') {
@@ -1210,7 +1225,7 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
     }, delay);
 
     return () => window.clearTimeout(timeout);
-  }, [revealPhase]);
+  }, [managerProfiles, matchScore, revealPhase]);
 
   const selectedPlayer = selection?.kind === 'player' ? getV8CalibrationPlayer(selection.cardId) : null;
   const selectedPlayerCost = selectedPlayer ? calibrationPlayCost(selectedPlayer) : null;
@@ -1224,12 +1239,12 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
     return ZONES.flatMap((zone) => {
       if (occupiedPlayerSlots(state, 'home', zone, pending) >= 4) return [];
       try {
-        return [previewPlayerPlacement(state, pending, selectedPlayer, zone)];
+        return [previewPlayerPlacement(state, pending, selectedPlayer, zone, managerProfiles, matchScore)];
       } catch {
         return [];
       }
     });
-  }, [finished, pending, revealPhase, selectedPlayer, selectedPlayerUnaffordable, state]);
+  }, [finished, managerProfiles, matchScore, pending, revealPhase, selectedPlayer, selectedPlayerUnaffordable, state]);
   const focusedPlacementZone = handDrag?.kind === 'player' && handDrag.overZone
     ? handDrag.overZone
     : selectedPlayer?.naturalZones.find((zone) => placementImpacts.some((impact) => impact.zone === zone))
@@ -1251,9 +1266,9 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
         : selectedPlayerUnaffordable
           ? `${selectedPlayerCost} ENERGY REQUIRED · ${state.teams.home.energy} AVAILABLE`
           : selection?.kind === 'manager'
-            ? state.teams.home.energy < MANAGER_COST
-              ? `${MANAGER_COST} ENERGY REQUIRED · ${state.teams.home.energy} AVAILABLE`
-              : 'DRAG MANAGER SKILL TO A ZONE'
+            ? state.teams.home.energy < homeManager.cost
+              ? `${homeManager.cost} ENERGY REQUIRED · ${state.teams.home.energy} AVAILABLE`
+              : `DRAG ${homeManager.actionName.toUpperCase()} TO A ZONE`
             : selectedTactical
               ? `DRAG ${selectedTactical.name.toUpperCase()} TO A HIGHLIGHTED ZONE`
               : selectedPlayer
@@ -1352,7 +1367,7 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
             const tacticalCost = eligible ? previewCalibrationTacticalCost(state, 'home', selectedTactical, zone) : Number.POSITIVE_INFINITY;
             guide = !eligible ? 'NO' : tacticalCost > state.teams.home.energy ? 'NO ENERGY' : `TACTICAL · ${tacticalLabel(selectedTactical, zone)}`;
           }
-          if (selection?.kind === 'manager') guide = playerOccupancy >= 4 ? 'FULL' : state.teams.home.energy < MANAGER_COST ? 'NO ENERGY' : 'MANAGER';
+          if (selection?.kind === 'manager') guide = playerOccupancy >= 4 ? 'FULL' : state.teams.home.energy < homeManager.cost ? 'NO ENERGY' : homeManager.actionName.toUpperCase();
           if (selection?.kind === 'move') guide = 'MOVE';
 
           return (
@@ -1381,7 +1396,7 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
                 {queuedPlayers.map((play) => play.kind === 'player' ? (
                   <span key={`queued-${play.cardId}`} className="v8-chip v8-chip--transient"><span className="v8-card__sr">{getV8CalibrationPlayer(play.cardId).realName}</span>{getV8CalibrationPlayer(play.cardId).matchName}<b>PLAYER · QUEUED</b></span>
                 ) : null)}
-                {queuedManager && <span className="v8-chip v8-chip--transient">{MANAGER_NAME}<b>MANAGER · QUEUED</b></span>}
+                {queuedManager && <span className="v8-chip v8-chip--transient">{homeManager.actionName.toUpperCase()}<b>MANAGER · QUEUED</b></span>}
                 {Array.from({ length: Math.max(0, 4 - playerOccupancy) }).map((_, index) => <i key={`home-${zone}-${index}`} />)}
               </div>
             </button>
@@ -1579,19 +1594,23 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
             <button
               type="button"
               data-testid="manager-card"
-              className={`v8-card v8-card--manager${selection?.kind === 'manager' ? ' is-selected' : ''}${state.teams.home.energy >= MANAGER_COST ? '' : ' is-unaffordable'}`}
+              data-manager-id={homeManager.id}
+              data-manager-action={homeManager.actionName}
+              className={`v8-card v8-card--manager${selection?.kind === 'manager' ? ' is-selected' : ''}${state.teams.home.energy >= homeManager.cost ? '' : ' is-unaffordable'}`}
+              style={{ '--v8-action-font': managerActionFont } as CSSProperties}
               aria-pressed={selection?.kind === 'manager'}
+              aria-label={`${homeManager.name}, Manager, ${homeManager.cost} Energy, ${homeManager.actionName}: ${homeManager.actionText}`}
               onClick={() => {
                 if (consumeSuppressedClick('manager', 'manager')) return;
                 setSelection({ kind: 'manager' });
               }}
-              onPointerDown={(event) => startHandDrag(event, { kind: 'manager', cardId: 'manager', label: 'MANAGER SKILL' })}
+              onPointerDown={(event) => startHandDrag(event, { kind: 'manager', cardId: 'manager', label: homeManager.actionName.toUpperCase() })}
             >
-              <span className="v8-card__art v8-card__art--manager" aria-hidden="true"><i>CO</i></span>
-              <span className="v8-card__cost">{MANAGER_COST}</span>
+              <span className="v8-card__art v8-card__art--manager" aria-hidden="true"><i>{homeManager.name.slice(0, 2).toUpperCase()}</i></span>
+              <span className="v8-card__cost">{homeManager.cost}</span>
               <span className="v8-card__position">MANAGER</span>
-              <strong>{MANAGER_NAME}</strong>
-              <small>Occupies a player slot while committed. On reveal: DEF +2 DEF/player · MID +1/+1 · ATT +2 ATT/player. Then disappears.</small>
+              <strong>{homeManager.name.toUpperCase()}</strong>
+              <small><b>{homeManager.actionName.toUpperCase()}</b><span className="v8-card__sr">{homeManager.actionText}</span></small>
             </button>
           )}
         </div>
@@ -1620,10 +1639,10 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
             ? calibrationPlayCost(draggedPlayer)
             : handDrag.kind === 'tactical' && draggedTactical
               ? Math.min(...tacticalDefinition(draggedTactical.type).eligibleZones.map((zone) => previewCalibrationTacticalCost(state, 'home', draggedTactical, zone)))
-              : MANAGER_COST}</span>
+              : homeManager.cost}</span>
           <span className="v8-card__position">{handDrag.kind === 'player' ? draggedPlayer?.position : handDrag.kind === 'tactical' ? 'TACTICAL' : 'MANAGER'}</span>
-          <strong>{handDrag.kind === 'player' ? draggedPlayer?.matchName : handDrag.kind === 'tactical' ? draggedTactical?.name : MANAGER_NAME}</strong>
-          <small><b>{handDrag.kind === 'player' ? draggedPlayer?.actionName : handDrag.kind === 'tactical' ? draggedTactical ? tacticalLabel(draggedTactical) : '' : 'MANAGER SKILL'}</b></small>
+          <strong>{handDrag.kind === 'player' ? draggedPlayer?.matchName : handDrag.kind === 'tactical' ? draggedTactical?.name : homeManager.name.toUpperCase()}</strong>
+          <small><b>{handDrag.kind === 'player' ? draggedPlayer?.actionName : handDrag.kind === 'tactical' ? draggedTactical ? tacticalLabel(draggedTactical) : '' : homeManager.actionName.toUpperCase()}</b></small>
           {handDrag.kind === 'player' && draggedPlayer && (
             <>
               <span className="v8-card__att">{draggedPlayer.printedAttack}<i>ATT</i></span>

@@ -4,7 +4,7 @@ import { buildLiveV8Fixture } from '@/game-v8';
 import { ripStarterPacks } from '@/lib/packs';
 import { addCardToDeck, createRun, getShopCards } from '@/lib/run';
 import { ALL_FORMATIONS } from '@/lib/formations';
-import { managerFormationsV1 } from '@/lib/manager-v1';
+import { managerFormationsV8, managerV8Profile } from '@/lib/manager-v8';
 
 function starterRun(seed = 8082026) {
   const contents = ripStarterPacks(seed);
@@ -23,7 +23,7 @@ describe('live V8 fixture bridge', () => {
   it('limits a new run to its manager card formation pool', () => {
     const contents = ripStarterPacks(8082030);
     const manager = contents.managers[0]!;
-    const allowed = managerFormationsV1(manager);
+    const allowed = managerFormationsV8(manager);
     const disallowed = ALL_FORMATIONS.find((formation) => !allowed.includes(formation.id))!;
     const run = createRun({
       players: contents.players,
@@ -52,6 +52,23 @@ describe('live V8 fixture bridge', () => {
     expect(fixture.contextLabel).toBe('CUP 1 · TIE 1');
     expect(fixture.homePlayerIds.every((id) => V8_CALIBRATION_PLAYER_BY_ID.has(id))).toBe(true);
     expect(fixture.awayPlayerIds.every((id) => V8_CALIBRATION_PLAYER_BY_ID.has(id))).toBe(true);
+  });
+
+  it('carries the selected manager identity, formations and V8 Action into the fixture', () => {
+    const contents = ripStarterPacks(8082031);
+    const manager = contents.managers.find((candidate) => candidate.id === 'set_pieces_fc') ?? contents.managers[0]!;
+    const run = createRun({
+      players: contents.players,
+      startingXI: contents.players.slice(0, 11).map((card) => card.id),
+      benchIds: contents.players.slice(11).map((card) => card.id),
+      manager,
+      tactics: [],
+      formationId: managerFormationsV8(manager)[0]!,
+      intent: 'balanced',
+    }, 8082031);
+
+    expect(buildLiveV8Fixture(run).homeManager).toEqual(managerV8Profile(manager));
+    expect(buildLiveV8Fixture(run).homeManager?.actionName).not.toBe('Control');
   });
 
   it('carries a shop signing into the next fixture with its authored V8 Action', () => {

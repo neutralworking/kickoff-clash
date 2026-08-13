@@ -3,22 +3,9 @@ import { seededRandom } from './scoring';
 import type { Connection } from './chemistry';
 
 /**
- * The manager roster — MANAGER_ROSTER_V2 (design/handoff/manager-roster-v2.md,
- * NW-140 rewrite): 14 famous-style archetypes, replacing the old 8. Managers
- * are DATA; their match effects are flat, ledgered PointMods applied in
- * points.ts managerMods (scope × gate, per the roster's decided resolution
- * model — per-player buffs sum at lineup time, recomputed every round).
- *
- * THE LAW: every buff pays only behind its gate — contest COMMITMENT for most
- * (the engine's own T1 feeder thresholds via contestTotals().commit),
- * buildCount(aerial) for Set Pieces FC, results for Wheeler-Dealer.
- *
- * ADHERENCE: each manager has a preferred formation; his buffs pay in full
- * only when you play it. Adjacent shapes halve the package, foreign shapes
- * quarter it (rounded — small buffs die entirely in foreign shapes). The
- * Wheeler-Dealer treats every formation as native (his perk).
- *
- * Fictional names are placeholders (real-manager refs never ship).
+ * Authored 14-manager roster. The selected manager owns the available formation
+ * pool and a once-per-match, 3-Energy V8 Action. Older gate and adherence fields
+ * remain below only for compatibility with legacy run code; V8 does not use them.
  */
 
 export type ManagerGate =
@@ -29,14 +16,17 @@ export type ManagerGate =
 export interface JokerCard {
   id: string;
   name: string;            // the manager (fictional placeholder)
+  /** Real-life source used to ground identity and Action design. */
+  realManagerSource?: string;
+  sourceUrl?: string;
   archetype: string;       // the famous-style archetype label
   philosophy: string;      // one-line persona
   traits: string[];        // readable trait tags
   nation?: string;
-  effect: string;          // what the manager actually does (matches managerMods)
+  effect: string;          // printed V8 Action text
   flavour: string;
   rarity: 'common' | 'uncommon' | 'rare';
-  /** Adherence anchor; null = all formations count native (Wheeler-Dealer). */
+  /** Legacy adherence anchor; V8 uses manager-v8.ts formation pools. */
   preferredFormation: string | null;
   gate: ManagerGate;
   /** Economy hooks (post-match / shop). */
@@ -51,11 +41,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'pomo',
     name: 'Dean Prowse',
+    realManagerSource: 'Sam Allardyce',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Sam_Allardyce',
     archetype: 'POMO',
     philosophy: 'Direct, physical, relentless. Fewer chances — better ones.',
     traits: ['Direct Play', 'Set-Piece Threat'],
     nation: 'England',
-    effect: 'Everyone +1 DEF; your shots convert better (+3 goal threshold). Needs a STOP-committed XI. Prefers 4-4-2.',
+    effect: 'Players here add +2 ATT each this period. A DEF play feeds that bonus into MID.',
     flavour: 'Straight lines. No frills.',
     rarity: 'common',
     preferredFormation: '4-4-2',
@@ -65,11 +57,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'anti_football',
     name: 'Vittorio Scudieri',
+    realManagerSource: 'Helenio Herrera',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Helenio_Herrera',
     archetype: 'Anti-Football',
     philosophy: 'Concede nothing. Ever.',
-    traits: ['The Wall', 'Dark Arts'],
-    nation: 'Italy',
-    effect: 'Everyone +1 DEF; your back line a further +1 DEF (STOP). Needs a STOP-committed XI. Prefers 5-3-2.',
+    traits: ['Catenaccio', 'Dark Arts'],
+    nation: 'Argentina / France',
+    effect: 'Players here add +2 DEF each this period, or +3 DEF each when played in DEF.',
     flavour: 'A 0–0 is a work of art.',
     rarity: 'common',
     preferredFormation: '5-3-2',
@@ -79,11 +73,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'tiki_taka',
     name: 'Oriol Casals',
+    realManagerSource: 'Pep Guardiola',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Pep_Guardiola',
     archetype: 'Tiki-Taka',
     philosophy: 'Keep the ball; the game cannot hurt you.',
-    traits: ['Possession', 'Positional Play'],
+    traits: ['Positional Play', 'Possession'],
     nation: 'Spain',
-    effect: 'Your ball-players +2 ATK (KEEP). Needs a KEEP-committed XI. Prefers 4-3-3.',
+    effect: 'Players here add +1 ATT and +1 DEF each this period.',
     flavour: 'The ball is the best defender.',
     rarity: 'common',
     preferredFormation: '4-3-3',
@@ -93,11 +89,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'gegenpress',
     name: 'Falko Rehberg',
+    realManagerSource: 'Jürgen Klopp',
+    sourceUrl: 'https://en.wikipedia.org/wiki/J%C3%BCrgen_Klopp',
     archetype: 'Gegenpress',
     philosophy: 'Win it high, score in five seconds.',
     traits: ['Counter-Press', 'Heavy Metal'],
     nation: 'Germany',
-    effect: 'Your forwards +1 ATK/+1 DEF, finishers a further +1 ATK. Needs a PRESS-committed XI. Prefers 4-3-3.',
+    effect: 'Players here add +1 ATT and +1 DEF each; add another +2 ATT if the facing opponent zone is occupied.',
     flavour: 'The press is the playmaker.',
     rarity: 'uncommon',
     preferredFormation: '4-3-3',
@@ -107,11 +105,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'box_office',
     name: 'Duarte Vilaça',
+    realManagerSource: 'José Mourinho',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Jos%C3%A9_Mourinho',
     archetype: 'Box Office',
     philosophy: 'Big games, big moments, big money.',
-    traits: ['Showman', 'Special One'],
+    traits: ['Park the Bus', 'Special One'],
     nation: 'Portugal',
-    effect: 'Your finishers +1 ATK (FINISH); wins pay 25% more. Needs a FINISH-committed XI. Prefers 4-2-3-1.',
+    effect: 'Players here add +3 DEF each this period, but your team loses 2 ATT.',
     flavour: 'Please, do not call me arrogant.',
     rarity: 'rare',
     preferredFormation: '4-2-3-1',
@@ -122,11 +122,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'tinkerman',
     name: 'Aurelio Benti',
+    realManagerSource: 'Claudio Ranieri',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Claudio_Ranieri',
     archetype: 'Tinkerman',
     philosophy: 'Rotate, surprise, repeat.',
     traits: ['Rotation', 'Fresh Ideas'],
     nation: 'Italy',
-    effect: 'Every substitute you bring on plays at +2 ATK/+2 DEF. Needs a CREATE-committed XI. Prefers 4-4-2.',
+    effect: 'Players here add +1 ATT and +1 DEF each this period. Draw the next player from your deck.',
     flavour: 'Dilly ding, dilly dong.',
     rarity: 'uncommon',
     preferredFormation: '4-4-2',
@@ -136,11 +138,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'cholismo',
     name: 'Emiliano Roldán',
+    realManagerSource: 'Diego Simeone',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Diego_Simeone',
     archetype: 'Cholismo',
     philosophy: 'Suffer together, win together.',
-    traits: ['The Grind', 'Partido a Partido'],
+    traits: ['Low Block', 'Partido a Partido'],
     nation: 'Argentina',
-    effect: 'Your midfield +1 DEF (BREAK); your back line +1 DEF (STOP). Needs a BREAK-committed XI. Prefers 4-4-2.',
+    effect: 'Players here add +3 DEF each while level or behind, or +2 DEF each while ahead.',
     flavour: 'Effort is non-negotiable.',
     rarity: 'common',
     preferredFormation: '4-4-2',
@@ -150,11 +154,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'murderball',
     name: 'Aníbal Cornejo',
+    realManagerSource: 'Marcelo Bielsa',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Marcelo_Bielsa',
     archetype: 'Murderball',
     philosophy: 'Run more than the opponent thinks is possible.',
-    traits: ['All-Out Press', 'Attrition'],
+    traits: ['Murderball', 'Attrition'],
     nation: 'Argentina',
-    effect: 'Your pressers +1 DEF and creators +1 ATK — but the whole XI burns fitness every period. Needs a PRESS-committed XI. Prefers 3-4-3.',
+    effect: 'Players here add +2 ATT and +2 DEF each this period. Facing opponents add +1 ATT each.',
     flavour: 'Murderball. Nobody rests.',
     rarity: 'uncommon',
     preferredFormation: '3-4-3',
@@ -164,11 +170,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'fergie_time',
     name: 'Alistair Craddock',
+    realManagerSource: 'Alex Ferguson',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Alex_Ferguson',
     archetype: 'Fergie Time',
     philosophy: 'Never beaten before the whistle.',
-    traits: ['Late Show', 'Winner'],
+    traits: ['Fergie Time', 'Winner'],
     nation: 'Scotland',
-    effect: 'Your finishers +1 ATK — DOUBLED in the final periods. Needs a FINISH-committed XI. Prefers 4-4-2.',
+    effect: 'Players here add +1 ATT each this period, or +3 ATT each in Period 4.',
     flavour: 'Football, bloody hell.',
     rarity: 'rare',
     preferredFormation: '4-4-2',
@@ -178,11 +186,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'entertainers',
     name: 'Ronnie Fairweather',
+    realManagerSource: 'Kevin Keegan',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Kevin_Keegan',
     archetype: 'The Entertainers',
     philosophy: "We'll score more than you.",
     traits: ['All-Out Attack', 'No Brakes'],
     nation: 'England',
-    effect: 'Your attackers +2 ATK — but your back line −1 DEF. Needs a FINISH-committed XI. Prefers 4-3-3.',
+    effect: 'Players here add +3 ATT each and lose 1 DEF each this period.',
     flavour: 'I would love it if we beat them.',
     rarity: 'uncommon',
     preferredFormation: '4-3-3',
@@ -192,11 +202,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'total_football',
     name: 'Maarten Roos',
+    realManagerSource: 'Rinus Michels',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Rinus_Michels',
     archetype: 'Total Football',
     philosophy: 'Everyone attacks, everyone defends.',
     traits: ['Fluidity', 'Universality'],
     nation: 'Netherlands',
-    effect: 'Ball-players and creators +1 ATK; ALL position and flank penalties waived. Needs a KEEP-committed XI. Prefers 3-4-3.',
+    effect: 'Every deployed player adds +1 ATT and +1 DEF this period.',
     flavour: 'Position is a state of mind.',
     rarity: 'rare',
     preferredFormation: '3-4-3',
@@ -206,11 +218,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'set_pieces_fc',
     name: 'Gordon Blackwood',
+    realManagerSource: 'Tony Pulis',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Tony_Pulis',
     archetype: 'Set Pieces FC',
     philosophy: 'The corner flag is a weapon.',
     traits: ['Aerial Bombardment', 'Long Throw'],
-    nation: 'Scotland',
-    effect: 'Your aerial threats +1 ATK; corners convert far better (+8 threshold). Needs 3+ aerial cards (Target/Powerhouse). Prefers 5-4-1.',
+    nation: 'Wales',
+    effect: 'Create a Corner this period: +3 ATT, plus +1 ATT for every player here.',
     flavour: 'Get it in the mixer.',
     rarity: 'uncommon',
     preferredFormation: '5-4-1',
@@ -220,11 +234,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'wheeler_dealer',
     name: 'Les Hornby',
+    realManagerSource: 'Harry Redknapp',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Harry_Redknapp',
     archetype: 'Wheeler-Dealer',
     philosophy: 'Triffic. Pay peanuts, sell for millions.',
-    traits: ['Market Genius', 'Motivator'],
+    traits: ['Arm Around the Shoulder', 'Motivator'],
     nation: 'England',
-    effect: 'No match buffs — every result pays 20% more and shop refreshes are half price. At home in ANY formation.',
+    effect: 'The highest-Cost player here gets +3 ATT and +3 DEF this period.',
     flavour: 'No mugs here, son.',
     rarity: 'rare',
     preferredFormation: null,
@@ -236,11 +252,13 @@ export const ALL_JOKERS: JokerCard[] = [
   {
     id: 'joga_bonito',
     name: 'Otávio Bragança',
+    realManagerSource: 'Telê Santana',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Tel%C3%AA_Santana',
     archetype: 'Joga Bonito',
     philosophy: 'Play beautifully or not at all.',
-    traits: ['Flair', 'No Handbrake'],
+    traits: ['Joga Bonito', 'No Handbrake'],
     nation: 'Brazil',
-    effect: 'Your midfield and attack creators +1 ATK; the first goal from a CREATOR unlocks +1 ATK for every creator, rest of match. No defensive help, anywhere. Needs a CREATE-committed XI. Prefers 4-3-3.',
+    effect: 'Players here add +2 ATT each this period; an ATT play adds another +2 ATT.',
     flavour: 'The beautiful game, or nothing.',
     rarity: 'uncommon',
     preferredFormation: '4-3-3',

@@ -33,7 +33,7 @@ import { generateOpponentXI, cupMatchPower } from './opponent';
 import type { CoAppearance } from './chem';
 import { pruneCard } from './chem';
 import { V8_RUN_PLAYER_POOL } from '../game-v8/roster';
-import { managerFormationsV1 } from './manager-v1';
+import { managerFormationsV8 } from './manager-v8';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -875,7 +875,7 @@ export interface TeamSelection {
 export function createRun(sel: TeamSelection, seed?: number): RunState {
   const runSeed = seed ?? Math.floor(Math.random() * 1000000);
   const ownedFormations = sel.manager
-    ? managerFormationsV1(sel.manager)
+    ? managerFormationsV8(sel.manager)
     : [sel.formationId];
   const activeFormation = ownedFormations.includes(sel.formationId)
     ? sel.formationId
