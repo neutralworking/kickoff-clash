@@ -102,7 +102,10 @@ test.describe('V8 production run handoff', () => {
 
     await page.getByRole('button', { name: 'AUTO SELECT', exact: true }).click();
     await expect(page.locator('[aria-label^="Inspect "]')).toHaveCount(0);
-    await page.locator('[data-kc="pitch"] [data-player-action]').first().click();
+    const pitchCard = page.locator('[data-kc="pitch"] [data-player-action]').first();
+    await expect(pitchCard.locator('[data-position-chip]')).toHaveCount(1);
+    await expect(pitchCard.locator('small')).toHaveCount(0);
+    await pitchCard.click();
     const currentPlayer = page.getByTestId('team-selection-current-player');
     await expect(currentPlayer).toBeVisible();
     await expect(currentPlayer.locator('[data-position-chip]')).toHaveCount(await currentPlayer.getAttribute('data-player-positions').then((positions) => positions?.split('/').length ?? 0));

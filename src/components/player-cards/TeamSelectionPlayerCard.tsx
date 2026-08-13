@@ -43,6 +43,8 @@ export default function TeamSelectionPlayerCard({
   const actionName = card.abilityName ?? legacyAction?.label ?? 'NO ACTION';
   const positions = cardPositionLabels(card);
   const naturalPositions = cardNaturalPositions(card);
+  const primaryPosition = positions[0] ?? card.position;
+  const primaryPositionColor = POSITION_COLOR[naturalPositions[0] ?? card.position] ?? 'var(--dust)';
   const fitClass = competence === 'incompetent'
     ? styles.fitMisfit
     : competence === 'secondary'
@@ -80,19 +82,14 @@ export default function TeamSelectionPlayerCard({
 
         <div className={styles.topMeta}>
           <span className={styles.costCorner} aria-label={`Cost ${cost}`}>{cost}</span>
-          <span className={styles.positions} aria-label={`Positions ${positions.join(' and ')}`}>
-            {positions.slice(0, 2).map((position, index) => {
-              const color = POSITION_COLOR[naturalPositions[index] ?? card.position] ?? 'var(--dust)';
-              return (
-                <span
-                  key={`${position}-${index}`}
-                  className={`${styles.positionChip} ${index === 0 ? styles.primaryPosition : styles.secondaryPosition}`}
-                  style={{ '--position-color': color } as CSSProperties}
-                >
-                  {position}
-                </span>
-              );
-            })}
+          <span className={styles.positions} aria-label={`Primary position ${primaryPosition}`}>
+            <span
+              data-position-chip={primaryPosition}
+              className={`${styles.positionChip} ${styles.primaryPosition}`}
+              style={{ '--position-color': primaryPositionColor } as CSSProperties}
+            >
+              {primaryPosition}
+            </span>
           </span>
         </div>
 
@@ -101,10 +98,10 @@ export default function TeamSelectionPlayerCard({
 
         <div className={styles.statRow}>
           <div className={`${styles.statBadge} ${styles.statLeft}`} aria-label={`${attack} attack`}>
-            <small>ATT</small><b>{attack}</b>
+            <b>{attack}</b>
           </div>
           <div className={`${styles.statBadge} ${styles.statRight}`} aria-label={`${defence} defence`}>
-            <small>DEF</small><b>{defence}</b>
+            <b>{defence}</b>
           </div>
         </div>
       </div>

@@ -7,13 +7,13 @@
 }
 
 .pitch {
-  width: 60px;
-  height: 80px;
+  width: 64px;
+  height: 92px;
 }
 
 .bench {
-  width: 64px;
-  height: 91px;
+  width: 66px;
+  height: 96px;
 }
 
 .frameMaterial {
@@ -109,13 +109,13 @@
 }
 
 .positionChip {
-  min-width: 18px;
-  height: 14px;
+  min-width: 20px;
+  height: 15px;
   display: grid;
   place-items: center;
   padding: 0 3px;
   border-radius: 3px;
-  font: 7.5px/1 var(--font-heavy, sans-serif);
+  font: 8px/1 var(--font-heavy, sans-serif);
   letter-spacing: -0.12px;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.72);
 }
@@ -124,12 +124,6 @@
   color: #0c0904;
   background: var(--position-color);
   border: 1px solid #100b04;
-}
-
-.secondaryPosition {
-  color: #fff8e6;
-  background: rgba(8, 6, 3, 0.82);
-  border: 1px solid var(--position-color);
 }
 
 .nameplate {
@@ -148,7 +142,7 @@
   background: linear-gradient(90deg, #805c24, #f0c863 26%, #f6dc86 50%, #d6a443 77%, #704b18);
   border: 1px solid #1b1105;
   border-radius: 2px;
-  font: 8px/1 var(--font-heavy, sans-serif);
+  font: 8.5px/1 var(--font-heavy, sans-serif);
   letter-spacing: -0.1px;
   text-align: center;
   text-overflow: ellipsis;
@@ -161,7 +155,7 @@
   left: 3px;
   right: 3px;
   z-index: 9;
-  height: 27%;
+  height: 31%;
   display: -webkit-box;
   overflow: hidden;
   padding: 3px 2px 1px;
@@ -170,9 +164,9 @@
   border: 1px solid color-mix(in srgb, var(--pc-edge) 56%, #211506);
   border-radius: 2px;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  font: 7.5px/1.08 var(--font-pixel, monospace);
-  letter-spacing: -0.16px;
+  -webkit-line-clamp: 3;
+  font: 8px/1.08 var(--font-pixel, monospace);
+  letter-spacing: -0.12px;
   text-align: center;
   white-space: normal;
 }
@@ -183,7 +177,7 @@
   right: 3px;
   bottom: 2px;
   z-index: 11;
-  height: 18%;
+  height: 15%;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 3px;
@@ -208,16 +202,10 @@
   background: linear-gradient(180deg, #244f7a, #11263d);
 }
 
-.statBadge small {
-  color: rgba(255, 248, 229, 0.66);
-  font: 4.5px/1 var(--font-pixel, monospace);
-  letter-spacing: -0.2px;
-}
-
 .statBadge b {
   min-width: 0;
   color: #fff9e9;
-  font: 12px/0.9 var(--font-heavy, sans-serif);
+  font: 13px/0.9 var(--font-heavy, sans-serif);
   letter-spacing: -0.5px;
   text-shadow: 0 1px 0 #060301;
 }
@@ -286,25 +274,25 @@
 }
 
 :global([data-kc="bench"] > button) {
-  flex: 0 0 64px;
-  width: 64px !important;
-  min-width: 64px !important;
+  flex: 0 0 66px;
+  width: 66px !important;
+  min-width: 66px !important;
   scroll-snap-align: start;
 }
 
 :global([data-kc="bench"] > button:not(:has(.card))) {
-  height: 91px !important;
+  height: 96px !important;
 }
 
 @media (max-width: 374px), (max-height: 720px) {
   .pitch {
-    width: 52px;
-    height: 69px;
+    width: 58px;
+    height: 82px;
   }
 
   .bench {
-    width: 61px;
-    height: 86px;
+    width: 64px;
+    height: 92px;
   }
 
   .positionChip {
@@ -325,11 +313,7 @@
 
   .actionPanel {
     padding-top: 2px;
-    font-size: 7px;
-  }
-
-  .statBadge small {
-    display: none;
+    font-size: 7.5px;
   }
 
   .statBadge b {
@@ -342,12 +326,12 @@
   }
 
   :global([data-kc="bench"] > button) {
-    flex-basis: 61px;
-    width: 61px !important;
-    min-width: 61px !important;
+    flex-basis: 64px;
+    width: 64px !important;
+    min-width: 64px !important;
   }
 
   :global([data-kc="bench"] > button:not(:has(.card))) {
-    height: 86px !important;
+    height: 92px !important;
   }
 }

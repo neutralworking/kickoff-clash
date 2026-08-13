@@ -10,12 +10,11 @@ import { PIXEL, POSITION_COLOR, lastName } from '../cards/cardTokens';
 import { fitnessColor as fitnessColorForPct } from '../cards/portrait';
 import TeamSelectionPlayerCard from '../player-cards/TeamSelectionPlayerCard';
 
-// iPhone-first token geometry. The previous 72×96 pitch cards were too large
-// for a 375–390px screen and used only a 12px vertical inset, so the goalkeeper
-// and forward rows were visibly clipped by the pitch. These dimensions preserve
-// the card anatomy while leaving enough green between lines.
-const SLOT_CARD_W = 60;
-const SLOT_CARD_H = 80;
+// The selection token is deliberately taller than the previous 60×80 version:
+// the extra height belongs to the printed Action, while the modest width change
+// still keeps the supported four- and five-player lines readable on phones.
+const SLOT_CARD_W = 64;
+const SLOT_CARD_H = 92;
 export const SLOT_INSET_X = SLOT_CARD_W / 2 + 6;
 export const SLOT_INSET_Y = SLOT_CARD_H / 2 + 4;
 
@@ -232,9 +231,9 @@ export function BenchTile({
       onPointerCancel={onPointerCancel}
       className="relative flex active:scale-95"
       style={{
-        flex: '0 0 64px',
-        width: 64,
-        minWidth: 64,
+        flex: '0 0 66px',
+        width: 66,
+        minWidth: 66,
         padding: 0,
         border: 0,
         background: 'transparent',
