@@ -87,6 +87,9 @@ test.describe('V8 production run handoff', () => {
     await expect(page.getByRole('button', { name: 'HOME', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^(DEF|BAL|ATT)$/ })).toHaveCount(0);
     await expect(page.getByText('COST / MAX', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('AVG COST', { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/XI \d+\/11 · BENCH \d+\/7/)).toHaveCount(0);
+    await expect(page.getByTestId('team-selection-controls').locator(':scope > button')).toHaveCount(4);
 
     const selectedPack = ripStarterPackChoices(8082026).playerPacks[2];
     const multiPositionCard = selectedPack.find((card) => (card.positionLabels?.length ?? 0) > 1)!;
@@ -105,11 +108,34 @@ test.describe('V8 production run handoff', () => {
     const pitchCard = page.locator('[data-kc="pitch"] [data-player-action]').first();
     await expect(pitchCard.locator('[data-position-chip]')).toHaveCount(1);
     await expect(pitchCard.locator('small')).toHaveCount(0);
+    await expect(page.locator('[data-kc="pitch"] img, [data-kc="bench"] img')).toHaveCount(0);
     await pitchCard.click();
     const currentPlayer = page.getByTestId('team-selection-current-player');
     await expect(currentPlayer).toBeVisible();
     await expect(currentPlayer.locator('[data-position-chip]')).toHaveCount(await currentPlayer.getAttribute('data-player-positions').then((positions) => positions?.split('/').length ?? 0));
     await expect(currentPlayer).toHaveAttribute('data-player-action', /.+/);
+    await page.getByRole('button', { name: 'CLOSE', exact: true }).click();
+
+    await expect(page.getByRole('button', { name: /remove .* from bench/i })).toHaveCount(0);
+    await page.getByRole('button', { name: /bench 7\/7.*edit/i }).click();
+    const benchEditor = page.getByTestId('bench-editor');
+    await expect(benchEditor).toBeVisible();
+    const editorBox = await page.getByTestId('bench-editor-sheet').boundingBox();
+    expect(editorBox?.height ?? 0).toBeGreaterThan(830);
+    const currentBench = page.getByTestId('bench-editor-current');
+    const reservePool = page.getByTestId('bench-editor-reserves');
+    await expect(currentBench).toBeVisible();
+    await expect(reservePool).toBeVisible();
+    const draggedBenchCard = currentBench.getByRole('button', { name: /^Drag / }).first();
+    const from = await draggedBenchCard.boundingBox();
+    const to = await reservePool.boundingBox();
+    if (!from || !to) throw new Error('Bench editor drag targets were not laid out');
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + to.width / 2, to.y + 40, { steps: 8 });
+    await page.mouse.up();
+    await expect(currentBench.getByRole('button', { name: /^Drag / })).toHaveCount(6);
+    await expect(reservePool.getByRole('button', { name: /^Drag / })).toHaveCount(1);
     await page.getByRole('button', { name: 'CLOSE', exact: true }).click();
     await page.getByRole('button', { name: /kick off/i }).click();
 

@@ -19,19 +19,19 @@ export const SLOT_INSET_X = SLOT_CARD_W / 2 + 6;
 export const SLOT_INSET_Y = SLOT_CARD_H / 2 + 4;
 
 /**
- * Collapse the authored formation coordinates onto four readable mobile lines:
- * forwards, midfield, defence and goalkeeper. The previous six-line treatment
- * separated strikers from wingers and holding midfielders from central mids;
- * with 11 portrait cards inside a 342px iPhone-SE pitch that guaranteed overlap.
+ * Collapse the authored coordinates onto readable mobile lines while preserving
+ * a dedicated holding-midfield line. In particular, 4-2-3-1 must read as four
+ * outfield bands (striker, attacking midfield, pivots, defence) plus goalkeeper.
  *
  * This is presentation only. Slot identity, eligibility and match geometry stay
  * unchanged, while every supported shape still reads correctly at a glance.
  */
 export function lineupPitchY(y: number): number {
   if (y >= 88) return 98; // goalkeeper
-  if (y >= 68) return 70; // back line, including wing-backs
-  if (y >= 30) return 42; // midfield line, including pivots and attacking mids
-  return 10; // forwards and wide forwards
+  if (y >= 68) return 78; // back line, moved towards the goalkeeper
+  if (y >= 54) return 57; // pivots / holding midfielders
+  if (y >= 30) return 34; // central and attacking midfielders
+  return 8; // forwards and wide forwards
 }
 
 export interface DragPointerHandlers {
@@ -133,6 +133,7 @@ export function LineupSlot({
   return (
     <button
       type="button"
+      data-slot-type={slot.type}
       onClick={onClick}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

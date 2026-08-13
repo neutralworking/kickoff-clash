@@ -36,7 +36,6 @@ import { getFormation } from '../lib/formations';
 import type { TeamIntent, OpponentBuild } from '../lib/run';
 import { getOpponent } from '../lib/run';
 import { xiV6Totals, toDisplayV6Card } from '../lib/v6-bridge';
-import { managerPortraitSrc, portraitSrc } from './cards/portrait';
 import type { JokerCard } from '../lib/jokers';
 import { managerActionNameV1, managerFormationsV1 } from '../lib/manager-v1';
 import { SCOUT_COST } from '../lib/economy';
@@ -60,6 +59,7 @@ import { PIXEL, RARITY_COLOR, POSITION_COLOR, lastName, playerActions } from './
 import { COMPETENCE_COLOR } from '../lib/team-select';
 import { PosTag, FitnessBar, BenchTile, BenchCover, LineupSlot, fitnessOf, SLOT_INSET_X, SLOT_INSET_Y } from './lineup';
 import { deriveStats } from '../lib/funnel';
+import TeamSelectionPlayerCard from './player-cards/TeamSelectionPlayerCard';
 
 // ---------------------------------------------------------------------------
 // Props & result
@@ -305,9 +305,6 @@ export default function SquadScreen({
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [showScout, setShowScout] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
-  // v4: the MISFIT chip is tap-to-reveal — toggles an amber outline on the
-  // incompetent tokens on the pitch.
-  const [misfitReveal, setMisfitReveal] = useState(false);
   const [placedSlot, setPlacedSlot] = useState<number | null>(null);
   const [modal, setModal] = useState<GameCardModel | null>(null);
 
@@ -320,7 +317,6 @@ export default function SquadScreen({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const pitchRef = useRef<HTMLDivElement | null>(null);
   const benchRef = useRef<HTMLDivElement | null>(null);
-  const reservesRef = useRef<HTMLDivElement | null>(null);
 
   const showFitness = mode === 'talk';
 
@@ -355,18 +351,13 @@ export default function SquadScreen({
   // V6 readout (the numbers the match plays with). Match Energy replaces the
   // old pre-match total-cost budget.
   const v6Totals = useMemo(() => xiV6Totals(xiCards, formation), [xiCards, formation]);
-  const averageCost = useMemo(() => {
-    if (xiCards.length === 0) return '—';
-    const total = xiCards.reduce((sum, card) => sum + toDisplayV6Card(card).cost, 0);
-    return (total / xiCards.length).toFixed(1);
-  }, [xiCards]);
   const managerAllowsFormation = activeManager
     ? managerFormationsV1(activeManager).includes(formationId)
     : mode !== 'draft';
   const ready = filled === slotCount && managerAllowsFormation;
 
-  // Live card → the unified V6 token (damped ATT to match the match) + its portrait.
-  const v6Of = (card: Card) => ({ ...toDisplayV6Card(card), portrait: portraitSrc(card) ?? undefined });
+  // Live card → the unified V6 token (the same numbers used by the match).
+  const v6Of = (card: Card) => toDisplayV6Card(card);
   const benchCards = useMemo(
     () => sel.bench.map((id) => byId.get(id)).filter((c): c is Card => !!c),
     [sel.bench, byId],
@@ -376,9 +367,7 @@ export default function SquadScreen({
   const injuredCount = xiCards.filter((c) => c.injured).length;
   const tiredCount = xiCards.filter((c) => !c.injured && fitnessOf(c) < 50).length;
 
-  // Competence per starter slot — primary/secondary/incompetent (team-select v4:
-  // the token's competence-coloured pill). MISFIT = the incompetent count, the
-  // real "can't actually play there" number (not the looser positionFitsSlot).
+  // Competence per starter slot — primary/secondary/incompetent.
   const competenceByIndex = useMemo<Competence[]>(
     () =>
       sel.starters.map((id, i) => {
@@ -387,7 +376,6 @@ export default function SquadScreen({
       }),
     [sel.starters, byId, formation],
   );
-  const misfitCount = competenceByIndex.filter((c) => c === 'incompetent').length;
 
   // ── Projected Contest preview (v4 hero) — the real match forecast (evaluateSplit),
   // not a reimplemented weight table. Only computed once the XI is full (a real
@@ -492,10 +480,14 @@ export default function SquadScreen({
       return { ...prev, starters: s };
     });
   }
-  function removeBench(cardId: number) {
-    setSel((prev) => ({ ...prev, bench: prev.bench.filter((id) => id !== cardId) }));
-  }
 
+  function moveBenchCard(cardId: number, targetIndex: number | null) {
+    setSel((prev) => moveCard(
+      prev,
+      cardId,
+      targetIndex === null ? { kind: 'reserves' } : { kind: 'bench', index: targetIndex },
+    ));
+  }
   function confirm() {
     if (!ready) return;
     onConfirm({
@@ -537,10 +529,6 @@ export default function SquadScreen({
       const index = Math.max(0, Math.min(BENCH_SIZE - 1, Math.floor(((cx - br.left) / br.width) * BENCH_SIZE)));
       if (src.from === 'bench' && src.index === index) return null;
       return { kind: 'bench', index };
-    }
-    const rr = reservesRef.current?.getBoundingClientRect();
-    if (rr && src.from !== 'reserve' && cx >= rr.left && cx <= rr.right && cy >= rr.top - 6 && cy <= rr.bottom + 6) {
-      return { kind: 'reserves' };
     }
     return null;
   }
@@ -611,7 +599,6 @@ export default function SquadScreen({
   const playerSheetAvailable = overlay?.kind === 'slot' && activeSlotCard
     ? pool.filter((card) => card.id !== activeSlotCard.id)
     : reserves;
-  const activeManagerPortrait = activeManager ? managerPortraitSrc(activeManager.id) : null;
 
   return (
     <div
@@ -635,9 +622,11 @@ export default function SquadScreen({
           >
             TEAM SELECTION v {opponent.name}
           </span>
-          <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)', marginTop: 2 }}>
-            {mode === 'talk' && contextLabel ? contextLabel : `XI ${filled}/${slotCount} · BENCH ${sel.bench.length}/${BENCH_SIZE}`}
-          </span>
+          {mode === 'talk' && contextLabel && (
+            <span className="truncate" style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--dust)', marginTop: 2 }}>
+              {contextLabel}
+            </span>
+          )}
         </div>
 
         {mode === 'talk' && (
@@ -661,7 +650,7 @@ export default function SquadScreen({
 
       </div>
 
-      {/* ── Squad readout — keep the match totals useful, not dominant. ─── */}
+      {/* ── Squad readout — the two match totals only. ──────────────────── */}
       <div className="shrink-0 px-3 mt-1.5">
         <div
           className="flex items-stretch"
@@ -671,25 +660,21 @@ export default function SquadScreen({
             <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)' }}>ATT</span>
             <span style={{ fontFamily: PIXEL, fontSize: 15, color: 'var(--att, #ff9a54)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{v6Totals.att}</span>
           </div>
-          <div className="flex-1 flex flex-col items-center justify-center py-1.5" style={{ borderRight: '1px solid var(--border)' }}>
+          <div className="flex-1 flex flex-col items-center justify-center py-1.5">
             <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)' }}>DEF</span>
             <span style={{ fontFamily: PIXEL, fontSize: 15, color: 'var(--def, #72c9f2)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{v6Totals.def}</span>
-          </div>
-          <div className="flex-1 flex flex-col items-center justify-center py-1.5">
-            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)' }}>AVG COST</span>
-            <span style={{ fontFamily: PIXEL, fontSize: 15, color: 'var(--gold)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{averageCost}</span>
           </div>
         </div>
       </div>
 
-      {/* ── Manager owns the formation: identity/action first, then formation. */}
-      <div className="shrink-0 flex items-stretch gap-1.5 px-3 mt-1.5" style={{ height: 48 }}>
+      {/* ── Manager, formation and lineup utilities share one compact row. ── */}
+      <div data-testid="team-selection-controls" className="shrink-0 flex items-stretch gap-1 px-3 mt-1.5" style={{ height: 42 }}>
         <button
           onClick={() => {
             if (mode === 'draft') setOverlay({ kind: 'manager' });
             else if (activeManager) setModal({ variant: 'manager', manager: activeManager });
           }}
-          className="glass-surface sheen flex-1 flex items-center gap-2 px-2 min-w-0 active:scale-[0.98] relative overflow-hidden"
+          className="glass-surface sheen flex-1 flex items-center px-2 min-w-0 active:scale-[0.98] relative overflow-hidden"
           style={{
             borderRadius: 'var(--radius-sm)',
             border: activeManager ? '1px solid var(--kit-red)' : undefined,
@@ -699,28 +684,14 @@ export default function SquadScreen({
             transition: 'transform 0.12s ease',
           }}
         >
-          <span
-            aria-hidden="true"
-            className="relative shrink-0"
-            style={{
-              zIndex: 2,
-              width: 34,
-              height: 38,
-              borderRadius: 5,
-              border: '1px solid var(--border)',
-              background: activeManagerPortrait
-                ? `center 16% / cover no-repeat url("${activeManagerPortrait}")`
-                : 'linear-gradient(145deg, var(--surface-raised), var(--surface))',
-            }}
-          />
           <span className="flex flex-col items-start min-w-0 relative" style={{ zIndex: 2 }}>
-            <span style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: activeManager ? 'var(--kit-red)' : 'var(--dust)' }}>
-              {activeManager ? 'MANAGER' : 'PICK MANAGER'}
+            <span style={{ fontFamily: PIXEL, fontSize: 5.5, letterSpacing: 0.8, color: activeManager ? 'var(--kit-red)' : 'var(--dust)' }}>
+              MANAGER
             </span>
-            <span className="truncate w-full" style={{ fontSize: 10.5, lineHeight: 1.15, fontWeight: 800, color: activeManager ? 'var(--cream)' : 'var(--dust)' }}>
-              {activeManager?.name ?? 'Tap to choose'}
+            <span className="truncate w-full" style={{ fontSize: 9, lineHeight: 1.15, fontWeight: 800, color: activeManager ? 'var(--cream)' : 'var(--dust)' }}>
+              {activeManager?.name ?? 'Pick manager'}
             </span>
-            <span className="truncate w-full" style={{ fontFamily: PIXEL, fontSize: 7.5, lineHeight: 1.3, color: activeManager ? 'var(--gold)' : 'var(--dust)' }}>
+            <span className="truncate w-full" style={{ fontFamily: PIXEL, fontSize: 6, lineHeight: 1.2, color: activeManager ? 'var(--gold)' : 'var(--dust)' }}>
               {activeManager ? managerActionNameV1(activeManager).toUpperCase() : 'ACTION —'}
             </span>
           </span>
@@ -728,38 +699,30 @@ export default function SquadScreen({
 
         <button
           onClick={() => setOverlay({ kind: 'formation' })}
-          className="glass-surface sheen flex flex-col items-start justify-center px-2.5 active:scale-95 relative overflow-hidden"
+          className="glass-surface sheen flex flex-col items-start justify-center px-2 active:scale-95 relative overflow-hidden"
           style={{
-            width: 108,
+            width: 72,
             borderRadius: 'var(--radius-sm)',
             boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-1)',
             transition: 'transform 0.12s ease',
           }}
         >
-          <span className="relative" style={{ fontFamily: PIXEL, fontSize: 6.5, letterSpacing: 1, color: 'var(--dust)', zIndex: 2 }}>FORMATION</span>
-          <span className="relative" style={{ fontFamily: PIXEL, fontSize: 13, lineHeight: 1.15, color: 'var(--cream)', zIndex: 2 }}>{formation.name}</span>
-          <span className="relative truncate w-full" style={{ fontSize: 7.5, lineHeight: 1.2, color: 'var(--dust)', zIndex: 2 }}>
-            {activeManager ? `${managerFormationsV1(activeManager).length} manager option${managerFormationsV1(activeManager).length === 1 ? '' : 's'}` : `${selectableFormations.length} options`}
-          </span>
+          <span className="relative" style={{ fontFamily: PIXEL, fontSize: 5.5, letterSpacing: 0.7, color: 'var(--dust)', zIndex: 2 }}>FORMATION</span>
+          <span className="relative" style={{ fontFamily: PIXEL, fontSize: 11, lineHeight: 1.2, color: 'var(--cream)', zIndex: 2 }}>{formation.name}</span>
         </button>
-      </div>
-
-      {/* ── Auto Select is the dominant utility; manual editing remains direct. */}
-      <div className="shrink-0 px-3 mt-1.5 flex items-center gap-1.5">
         <button
           onClick={autoPick}
-          className="active:scale-95 relative overflow-hidden"
+          className="active:scale-95 relative overflow-hidden shrink-0"
           style={{
-            height: 30,
-            padding: '0 12px',
+            width: 76,
             color: 'var(--ink-black)',
             background: 'linear-gradient(180deg, #ffe69a, var(--gold))',
             border: '1px solid var(--ink-black)',
             borderRadius: 'var(--radius-sm)',
             boxShadow: '0 2px 0 var(--ink-black)',
             fontFamily: PIXEL,
-            fontSize: 9,
-            letterSpacing: 0.4,
+            fontSize: 7.5,
+            letterSpacing: 0.2,
             fontWeight: 800,
           }}
         >
@@ -767,35 +730,17 @@ export default function SquadScreen({
         </button>
         <button
           onClick={() => setSel(mode === 'draft' ? emptySelection(formation) : seedSelection(pool, formation, initialSelection))}
-          className="glass-surface active:scale-95"
+          className="glass-surface active:scale-95 shrink-0"
           style={{
-            height: 30,
-            padding: '0 9px',
+            width: 48,
             color: 'var(--dust)',
             borderRadius: 'var(--radius-sm)',
             fontFamily: PIXEL,
-            fontSize: 8,
-            letterSpacing: 0.4,
+            fontSize: 7,
+            letterSpacing: 0.2,
           }}
         >
           {mode === 'draft' ? 'CLEAR' : 'RESET'}
-        </button>
-        <button
-          onClick={() => setMisfitReveal((v) => !v)}
-          className="active:scale-95 shrink-0 ml-auto"
-          style={{
-            fontFamily: PIXEL,
-            fontSize: 8,
-            letterSpacing: 0.3,
-            color: misfitCount === 0 ? 'var(--dust)' : misfitReveal ? 'var(--ink-black)' : 'var(--amber)',
-            background: misfitCount === 0 ? 'transparent' : misfitReveal ? 'var(--amber)' : 'rgba(245,158,11,0.12)',
-            border: `1px solid ${misfitCount === 0 ? 'var(--border)' : 'rgba(245,158,11,0.5)'}`,
-            padding: '4px 7px',
-            borderRadius: 'var(--radius-sm)',
-            cursor: 'pointer',
-          }}
-        >
-          {'⚠'} {misfitCount} MISFIT
         </button>
       </div>
 
@@ -839,7 +784,6 @@ export default function SquadScreen({
                 v6card={card ? v6Of(card) : undefined}
                 competence={competenceByIndex[i]}
                 stats={card ? statsFor(card.id) : undefined}
-                misfitReveal={misfitReveal}
                 justPlaced={placedSlot === i}
                 dim={drag?.from === 'slot' && drag.index === i}
                 dropHint={dropTarget?.kind === 'slot' && dropTarget.index === i}
@@ -876,7 +820,6 @@ export default function SquadScreen({
                 key={i}
                 card={card}
                 v6card={v6Of(card)}
-                onRemove={() => removeBench(card.id)}
                 dim={drag?.from === 'bench' && drag.id === card.id}
                 dropHint={hint}
                 onPointerDown={(e) => beginPointer({ from: 'bench', index: i, id: card.id }, e)}
@@ -955,22 +898,27 @@ export default function SquadScreen({
           onClick={() => setOverlay(null)}
         >
           <div
+            data-testid={overlay.kind === 'bench' ? 'bench-editor-sheet' : undefined}
             className="glass-raised sheen sheet-rise flex flex-col relative overflow-hidden"
             style={{
-              borderTopLeftRadius: 'var(--radius-lg)',
-              borderTopRightRadius: 'var(--radius-lg)',
+              height: overlay.kind === 'bench' ? '100%' : undefined,
+              borderTopLeftRadius: overlay.kind === 'bench' ? 0 : 'var(--radius-lg)',
+              borderTopRightRadius: overlay.kind === 'bench' ? 0 : 'var(--radius-lg)',
               borderTop: `3px solid ${
                 overlay.kind === 'manager' ? 'var(--kit-red)' : overlay.kind === 'formation' ? 'var(--kit-blue)' : 'var(--gold)'
               }`,
               boxShadow: 'inset 0 1px 0 0 var(--glass-highlight), var(--depth-3)',
-              maxHeight: '64%',
+              maxHeight: overlay.kind === 'bench' ? '100%' : '64%',
+              paddingTop: overlay.kind === 'bench' ? 'max(env(safe-area-inset-top), 8px)' : undefined,
               paddingBottom: 'max(env(safe-area-inset-bottom), 12px)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-center pt-2 pb-1 shrink-0 relative" style={{ zIndex: 2 }}>
-              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--glass-border)' }} />
-            </div>
+            {overlay.kind !== 'bench' && (
+              <div className="flex justify-center pt-2 pb-1 shrink-0 relative" style={{ zIndex: 2 }}>
+                <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--glass-border)' }} />
+              </div>
+            )}
 
             <div className="flex items-center justify-between px-3 pb-2 shrink-0 relative" style={{ zIndex: 2 }}>
               <span style={{ fontFamily: PIXEL, fontSize: 13, letterSpacing: 0.5, color: 'var(--cream)' }}>
@@ -979,7 +927,7 @@ export default function SquadScreen({
                   : overlay.kind === 'formation'
                     ? 'PICK FORMATION'
                     : overlay.kind === 'bench'
-                      ? 'ADD TO BENCH'
+                      ? 'EDIT BENCH'
                       : `FILL ${(activeSlot?.label ?? '').toUpperCase()}`}
               </span>
               <div className="flex items-center gap-1.5">
@@ -1023,6 +971,13 @@ export default function SquadScreen({
               />
             ) : overlay.kind === 'formation' ? (
               <FormationSheet formations={selectableFormations} current={formationId} onPick={switchFormation} />
+            ) : overlay.kind === 'bench' ? (
+              <BenchEditor
+                benchCards={benchCards}
+                reserves={reserves}
+                onMove={moveBenchCard}
+                onInspect={(card) => setModal({ variant: 'player', card })}
+              />
             ) : (
               <PlayerSheet
                 available={playerSheetAvailable}
@@ -1416,7 +1371,6 @@ function PlayerSelectionRow({
   const stats = toDisplayV6Card(card);
   const action = selectionAction(card);
   const positions = cardPositionLabels(card);
-  const portrait = portraitSrc(card);
   const fit = COMPETENCE_COLOR[competence];
 
   return (
@@ -1429,7 +1383,7 @@ function PlayerSelectionRow({
       data-player-defence={stats.defence}
       className="grid items-stretch gap-2"
       style={{
-        gridTemplateColumns: '42px minmax(0, 1fr) 66px',
+        gridTemplateColumns: 'minmax(0, 1fr) 66px',
         minHeight: 78,
         background: current
           ? 'linear-gradient(180deg, rgba(92,66,24,0.52), rgba(24,17,8,0.96))'
@@ -1440,27 +1394,6 @@ function PlayerSelectionRow({
         boxShadow: current ? '0 0 0 1px rgba(232,178,60,0.18)' : undefined,
       }}
     >
-      <button
-        type="button"
-        onClick={() => onInspect(card)}
-        aria-label={`Inspect ${card.name}`}
-        className="active:scale-95 overflow-hidden"
-        style={{
-          width: 42,
-          minHeight: 64,
-          padding: 0,
-          border: '1px solid var(--border)',
-          borderRadius: 5,
-          background: portrait
-            ? `center 18% / cover no-repeat url("${portrait}")`
-            : 'linear-gradient(145deg, #31583a, #142719)',
-        }}
-      >
-        {!portrait && (
-          <span style={{ fontFamily: PIXEL, fontSize: 10, color: 'var(--cream)' }}>{lastName(card.name).slice(0, 2).toUpperCase()}</span>
-        )}
-      </button>
-
       <button
         type="button"
         onClick={() => onInspect(card)}
@@ -1560,6 +1493,206 @@ function SelectionMetric({ label, value, color }: { label: string; value: number
       <small style={{ fontFamily: PIXEL, fontSize: 4.5, lineHeight: 1, color: 'var(--dust)' }}>{label}</small>
       <strong style={{ fontFamily: PIXEL, fontSize: 10, lineHeight: 1.35, color, fontVariantNumeric: 'tabular-nums' }}>{value}</strong>
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// BenchEditor — full-screen, touch-first drag and drop. The current seven seats
+// stay fixed at the top; the remaining squad scrolls beneath them.
+// ---------------------------------------------------------------------------
+
+type BenchEditTarget = { kind: 'seat'; index: number } | { kind: 'reserves' };
+
+function BenchEditor({
+  benchCards,
+  reserves,
+  onMove,
+  onInspect,
+}: {
+  benchCards: Card[];
+  reserves: Card[];
+  onMove: (cardId: number, targetIndex: number | null) => void;
+  onInspect: (card: Card) => void;
+}) {
+  const [drag, setDrag] = useState<{ card: Card; x: number; y: number } | null>(null);
+  const [target, setTarget] = useState<BenchEditTarget | null>(null);
+  const pointer = useRef<{ card: Card; x: number; y: number; moved: boolean } | null>(null);
+  const targetRef = useRef<BenchEditTarget | null>(null);
+
+  function updateTarget(next: BenchEditTarget | null) {
+    targetRef.current = next;
+    setTarget(next);
+  }
+
+  function targetAt(x: number, y: number): BenchEditTarget | null {
+    const element = document.elementFromPoint(x, y) as HTMLElement | null;
+    const seat = element?.closest<HTMLElement>('[data-bench-seat]');
+    if (seat?.dataset.benchSeat !== undefined) {
+      return { kind: 'seat', index: Number(seat.dataset.benchSeat) };
+    }
+    if (element?.closest('[data-bench-reserves]')) return { kind: 'reserves' };
+    return null;
+  }
+
+  function begin(card: Card, event: ReactPointerEvent<HTMLButtonElement>) {
+    pointer.current = { card, x: event.clientX, y: event.clientY, moved: false };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function move(event: ReactPointerEvent<HTMLButtonElement>) {
+    const current = pointer.current;
+    if (!current) return;
+    if (!current.moved && Math.hypot(event.clientX - current.x, event.clientY - current.y) > 7) {
+      current.moved = true;
+    }
+    if (!current.moved) return;
+    setDrag({ card: current.card, x: event.clientX, y: event.clientY });
+    updateTarget(targetAt(event.clientX, event.clientY));
+  }
+
+  function end(event: ReactPointerEvent<HTMLButtonElement>) {
+    const current = pointer.current;
+    pointer.current = null;
+    if (!current) return;
+    if (current.moved) {
+      if (targetRef.current?.kind === 'seat') onMove(current.card.id, targetRef.current.index);
+      else if (targetRef.current?.kind === 'reserves') onMove(current.card.id, null);
+    } else {
+      onInspect(current.card);
+    }
+    setDrag(null);
+    updateTarget(null);
+    event.stopPropagation();
+  }
+
+  function cancel() {
+    pointer.current = null;
+    setDrag(null);
+    updateTarget(null);
+  }
+
+  return (
+    <div data-testid="bench-editor" className="flex min-h-0 flex-1 flex-col overflow-hidden relative" style={{ zIndex: 2 }}>
+      <section className="shrink-0 px-3 pb-2">
+        <div className="flex items-center justify-between pb-1.5">
+          <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--gold)' }}>
+            CURRENT BENCH · {benchCards.length}/{BENCH_SIZE}
+          </span>
+          <span style={{ fontFamily: PIXEL, fontSize: 6.5, color: 'var(--dust)' }}>DRAG TO REORDER</span>
+        </div>
+        <div
+          data-testid="bench-editor-current"
+          className="flex gap-1.5 overflow-x-auto pb-2"
+          style={{ scrollbarWidth: 'none', overscrollBehaviorX: 'contain' }}
+        >
+          {Array.from({ length: BENCH_SIZE }).map((_, index) => {
+            const card = benchCards[index];
+            const selected = target?.kind === 'seat' && target.index === index;
+            return (
+              <div
+                key={index}
+                data-bench-seat={index}
+                className="shrink-0 flex items-center justify-center"
+                style={{
+                  width: 70,
+                  minHeight: 100,
+                  padding: 2,
+                  border: selected ? '2px dashed var(--gold)' : '1px dashed var(--border)',
+                  borderRadius: 7,
+                  background: selected ? 'rgba(232,178,60,0.14)' : 'rgba(0,0,0,0.22)',
+                }}
+              >
+                {card ? (
+                  <BenchEditorCard card={card} dim={drag?.card.id === card.id} onBegin={begin} onMove={move} onEnd={end} onCancel={cancel} />
+                ) : (
+                  <span style={{ fontFamily: PIXEL, fontSize: 16, color: 'var(--ink)' }}>+</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="flex min-h-0 flex-1 flex-col border-t px-3 pt-2" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center justify-between pb-1.5 shrink-0">
+          <span style={{ fontFamily: PIXEL, fontSize: 8, letterSpacing: 1, color: 'var(--cream)' }}>AVAILABLE PLAYERS</span>
+          <span style={{ fontFamily: PIXEL, fontSize: 6.5, color: 'var(--dust)' }}>DRAG UP TO ADD · DRAG HERE TO REMOVE</span>
+        </div>
+        <div
+          data-testid="bench-editor-reserves"
+          data-bench-reserves
+          className="min-h-0 flex-1 overflow-y-auto pb-4"
+          style={{
+            border: target?.kind === 'reserves' ? '2px dashed var(--gold)' : '2px solid transparent',
+            borderRadius: 7,
+            overscrollBehavior: 'contain',
+          }}
+        >
+          <div className="grid grid-cols-4 justify-items-center gap-x-2 gap-y-3 py-2">
+            {reserves.map((card) => (
+              <BenchEditorCard
+                key={card.id}
+                card={card}
+                dim={drag?.card.id === card.id}
+                onBegin={begin}
+                onMove={move}
+                onEnd={end}
+                onCancel={cancel}
+              />
+            ))}
+          </div>
+          {reserves.length === 0 && (
+            <p style={{ margin: '12px 0', textAlign: 'center', fontSize: 10, color: 'var(--dust)' }}>Every available player is on the bench.</p>
+          )}
+        </div>
+      </section>
+
+      {drag && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            left: drag.x,
+            top: drag.y,
+            zIndex: 80,
+            pointerEvents: 'none',
+            transform: 'translate(-50%, -70%) scale(1.04)',
+          }}
+        >
+          <TeamSelectionPlayerCard card={drag.card} v6card={toDisplayV6Card(drag.card)} size="bench" highlighted />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BenchEditorCard({
+  card,
+  dim,
+  onBegin,
+  onMove,
+  onEnd,
+  onCancel,
+}: {
+  card: Card;
+  dim: boolean;
+  onBegin: (card: Card, event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onEnd: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={`Drag ${card.name}`}
+      onPointerDown={(event) => onBegin(card, event)}
+      onPointerMove={onMove}
+      onPointerUp={onEnd}
+      onPointerCancel={onCancel}
+      style={{ padding: 0, border: 0, background: 'transparent', touchAction: 'none', opacity: dim ? 0.25 : 1 }}
+    >
+      <TeamSelectionPlayerCard card={card} v6card={toDisplayV6Card(card)} size="bench" />
+    </button>
   );
 }
 

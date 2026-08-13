@@ -7,7 +7,6 @@ import type { Competence } from '../../lib/team-select';
 import { v6Cost } from '../../lib/v6-bridge';
 import { deriveStats } from '../../lib/funnel';
 import { handoffTier, lastName, playerActions, POSITION_COLOR } from '../cards/cardTokens';
-import { portraitSrc } from '../cards/portrait';
 import styles from './TeamSelectionPlayerCard.module.css';
 
 export interface TeamSelectionPlayerCardProps {
@@ -34,7 +33,6 @@ export default function TeamSelectionPlayerCard({
   showMisfitReceipt = false,
 }: TeamSelectionPlayerCardProps) {
   const tier = handoffTier(card.rarity);
-  const portrait = v6card?.portrait ?? portraitSrc(card);
   const fallback = deriveStats(card);
   const attack = clampStat(v6card?.attack ?? fallback.atk);
   const defence = clampStat(v6card?.defence ?? fallback.def);
@@ -45,6 +43,7 @@ export default function TeamSelectionPlayerCard({
   const naturalPositions = cardNaturalPositions(card);
   const primaryPosition = positions[0] ?? card.position;
   const primaryPositionColor = POSITION_COLOR[naturalPositions[0] ?? card.position] ?? 'var(--dust)';
+  const actionFontSize = actionName.length > 20 ? '5px' : actionName.length > 15 ? '6px' : actionName.length > 11 ? '7px' : '8px';
   const fitClass = competence === 'incompetent'
     ? styles.fitMisfit
     : competence === 'secondary'
@@ -55,6 +54,7 @@ export default function TeamSelectionPlayerCard({
     '--pc-frame': tier.frame,
     '--pc-edge': tier.edge,
     '--pc-glow': tier.glow,
+    '--action-font': actionFontSize,
   } as CSSProperties;
 
   return (
@@ -76,10 +76,6 @@ export default function TeamSelectionPlayerCard({
     >
       <div className={styles.frameMaterial} />
       <div className={styles.interior}>
-        <div className={styles.portrait}>
-          {portrait ? <img src={portrait} alt="" draggable={false} /> : <span>{lastName(card.name).slice(0, 2).toUpperCase()}</span>}
-        </div>
-
         <div className={styles.topMeta}>
           <span className={styles.costCorner} aria-label={`Cost ${cost}`}>{cost}</span>
           <span className={styles.positions} aria-label={`Primary position ${primaryPosition}`}>

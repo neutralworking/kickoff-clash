@@ -38,42 +38,6 @@
   background: #100d09;
 }
 
-.portrait {
-  position: absolute;
-  inset: 0 0 59% 0;
-  z-index: 1;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(72% 78% at 50% 34%, color-mix(in srgb, var(--pc-edge) 26%, #285936), #102719 78%);
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 78%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 78%, transparent 100%);
-}
-
-.portrait::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 30%, rgba(4, 3, 2, 0.58));
-  pointer-events: none;
-}
-
-.portrait img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 20%;
-  transform: scale(1.04);
-  filter: contrast(1.06) saturate(0.94);
-  user-select: none;
-}
-
-.portrait > span {
-  color: rgba(244, 236, 216, 0.45);
-  font: 12px/1 var(--font-heavy, sans-serif);
-}
-
 .topMeta {
   position: absolute;
   top: 3px;
@@ -128,11 +92,11 @@
 
 .nameplate {
   position: absolute;
-  top: 35%;
+  top: 25%;
   left: 3px;
   right: 3px;
   z-index: 10;
-  height: 13%;
+  height: 16%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -151,22 +115,22 @@
 
 .actionPanel {
   position: absolute;
-  top: 48%;
+  top: 42%;
   left: 2px;
   right: 2px;
   z-index: 9;
-  height: 35%;
-  display: -webkit-box;
+  height: 36%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
-  padding: 4px 1px 1px;
+  padding: 0 1px;
   color: #fff8e6;
   background: linear-gradient(180deg, #21190f, #0d0905);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  font: 8px/1.08 var(--font-pixel, monospace);
+  font: var(--action-font, 8px)/1 var(--font-pixel, monospace);
   letter-spacing: -0.12px;
   text-align: center;
-  white-space: normal;
+  white-space: nowrap;
 }
 
 .statRow {
@@ -307,11 +271,6 @@
 
   .nameplate {
     font-size: 7px;
-  }
-
-  .actionPanel {
-    padding-top: 2px;
-    font-size: 7.5px;
   }
 
   .statBadge b {
