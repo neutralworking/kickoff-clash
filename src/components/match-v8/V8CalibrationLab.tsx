@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   buildV8CalibrationMatchTelemetry,
   calibrationHandPlayers,
@@ -40,7 +40,6 @@ import {
   type V8Zone,
 } from '@/engine-v8';
 import { calibrationEnergyForPeriod, calibrationPlayCost } from '@/engine-v8/calibration-balance';
-import { managerPortraitSrc, portraitSrc } from '../cards/portrait';
 import './v8lab.css';
 import './v8recap.css';
 
@@ -512,19 +511,20 @@ function PlayerHandCard({
   onClick: () => void;
   onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
-  const portrait = portraitSrc({ id: card.sourceCardId ?? card.id, name: card.realName, position: card.position });
+  const actionFont = card.actionName.length > 20 ? '5px' : card.actionName.length > 15 ? '5.5px' : '6.25px';
   return (
     <button
       type="button"
       data-testid={`player-card-${card.id}`}
       data-card-id={card.id}
       className={`v8-card${selected ? ' is-selected' : ''}${affordable ? '' : ' is-unaffordable'}`}
+      style={{ '--v8-action-font': actionFont } as CSSProperties}
       aria-pressed={selected}
       aria-label={`${card.realName}, ${card.position}, ${calibrationPlayCost(card)} Energy, ${card.printedAttack} ATT, ${card.printedDefence} DEF, ${card.actionName}`}
       onClick={onClick}
       onPointerDown={onPointerDown}
     >
-      <span className="v8-card__art" aria-hidden="true"><i>{card.matchName.slice(0, 2).toUpperCase()}</i>{portrait && <img src={portrait} alt="" draggable={false} />}</span>
+      <span className="v8-card__art" aria-hidden="true"><i>{card.matchName.slice(0, 2).toUpperCase()}</i></span>
       <span className="v8-card__cost">{calibrationPlayCost(card)}</span>
       <span className="v8-card__position">{card.position}</span>
       <strong>{card.matchName}</strong>
@@ -574,7 +574,6 @@ function TacticalHandCard({
 function DeployedChip({ state, side, runtimeId, fresh = false, onMove }: { state: V8CalibrationState; side: V8CalibrationSide; runtimeId: string; fresh?: boolean; onMove?: () => void }) {
   const player = state.players[runtimeId]!;
   const card = calibrationPlayerCard(player);
-  const portrait = portraitSrc({ id: card.sourceCardId ?? card.id, name: card.realName, position: card.position });
   const attack = currentCalibrationAttack(state, runtimeId);
   const defence = currentCalibrationDefence(state, runtimeId);
   const attackDelta = attack - card.printedAttack;
@@ -616,7 +615,8 @@ function DeployedChip({ state, side, runtimeId, fresh = false, onMove }: { state
       }}
     >
       <span className="v8-card__sr">{card.realName}</span>
-      <span className="v8-chip__portrait" aria-hidden="true"><i>{card.matchName.slice(0, 1)}</i>{portrait && <img src={portrait} alt="" draggable={false} />}</span>
+      <span className="v8-chip__portrait" aria-hidden="true"><i>{card.matchName.slice(0, 1)}</i></span>
+      <span className="v8-chip__position">{card.position}</span>
       {modifierText && (
         <span
           className={`v8-chip__modifier is-${modifierTone}`}
@@ -627,8 +627,11 @@ function DeployedChip({ state, side, runtimeId, fresh = false, onMove }: { state
         </span>
       )}
       <span className="v8-chip__name">{card.matchName}</span>
-      <b>{attack}/{defence}</b>
       <small>{suppressed ? 'NO ACTION' : moveable ? (moved ? 'MOVE USED' : 'MOVEABLE') : card.actionName}</small>
+      <span className="v8-chip__stats" aria-label={`${attack} attack, ${defence} defence`}>
+        <b>{attack}</b>
+        <b>{defence}</b>
+      </span>
     </span>
   );
 }
@@ -1215,8 +1218,6 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
   const selectedTactical = selection?.kind === 'tactical' ? calibrationHandTacticals(state, 'home').find((card) => card.id === selection.cardId) ?? null : null;
   const draggedPlayer = handDrag?.kind === 'player' ? getV8CalibrationPlayer(handDrag.cardId) : null;
   const draggedTactical = handDrag?.kind === 'tactical' ? calibrationHandTacticals(state, 'home').find((card) => card.id === handDrag.cardId) ?? null : null;
-  const draggedPlayerPortrait = draggedPlayer ? portraitSrc({ id: draggedPlayer.sourceCardId ?? draggedPlayer.id, name: draggedPlayer.realName, position: draggedPlayer.position }) : null;
-  const managerPortrait = managerPortraitSrc('control');
   const stagedFreshPlayerIds = revealPhase?.activeBeat?.cardId ? [revealPhase.activeBeat.cardId] : [];
   const placementImpacts = useMemo(() => {
     if (!selectedPlayer || selectedPlayerUnaffordable || revealPhase || finished) return [];
@@ -1260,7 +1261,7 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
                 : 'DRAG A CARD TO THE PITCH';
 
   return (
-    <main className={`v8-shell${liveMode ? ' v8-shell--live' : ''}${handDrag ? ' is-dragging' : ''}${debugOpen ? ' is-debug-open' : ''}${revealPhase ? ' is-revealing' : ''}${resolutionMoment ? ' is-resolving' : ''}${resolutionMoment?.homeGoals ? ' has-home-goal' : ''}${resolutionMoment?.awayGoals ? ' has-away-goal' : ''}`}>
+    <main data-visual-family="team-selection" className={`v8-shell${liveMode ? ' v8-shell--live' : ''}${handDrag ? ' is-dragging' : ''}${debugOpen ? ' is-debug-open' : ''}${revealPhase ? ' is-revealing' : ''}${resolutionMoment ? ' is-resolving' : ''}${resolutionMoment?.homeGoals ? ' has-home-goal' : ''}${resolutionMoment?.awayGoals ? ' has-away-goal' : ''}`}>
       {introVisible && (
         <button className="v8-match-intro" type="button" onClick={() => setIntroVisible(false)} data-testid="v8-match-intro" aria-label="Kickoff Clash match introduction. Tap to skip.">
           <small>KICKOFF CLASH</small>
@@ -1586,7 +1587,7 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
               }}
               onPointerDown={(event) => startHandDrag(event, { kind: 'manager', cardId: 'manager', label: 'MANAGER SKILL' })}
             >
-              <span className="v8-card__art v8-card__art--manager" aria-hidden="true"><i>CO</i>{managerPortrait && <img src={managerPortrait} alt="" draggable={false} />}</span>
+              <span className="v8-card__art v8-card__art--manager" aria-hidden="true"><i>CO</i></span>
               <span className="v8-card__cost">{MANAGER_COST}</span>
               <span className="v8-card__position">MANAGER</span>
               <strong>{MANAGER_NAME}</strong>
@@ -1614,7 +1615,7 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
           style={{ left: handDrag.x, top: handDrag.y }}
           aria-hidden="true"
         >
-          <span className={`v8-card__art${handDrag.kind === 'tactical' ? ' v8-card__art--tactical' : handDrag.kind === 'manager' ? ' v8-card__art--manager' : ''}`}><i>{handDrag.kind === 'player' ? draggedPlayer?.matchName.slice(0, 2).toUpperCase() : handDrag.kind === 'tactical' ? 'TX' : 'CO'}</i>{handDrag.kind === 'player' && draggedPlayerPortrait && <img src={draggedPlayerPortrait} alt="" draggable={false} />}{handDrag.kind === 'manager' && managerPortrait && <img src={managerPortrait} alt="" draggable={false} />}</span>
+          <span className={`v8-card__art${handDrag.kind === 'tactical' ? ' v8-card__art--tactical' : handDrag.kind === 'manager' ? ' v8-card__art--manager' : ''}`}><i>{handDrag.kind === 'player' ? draggedPlayer?.matchName.slice(0, 2).toUpperCase() : handDrag.kind === 'tactical' ? 'TX' : 'CO'}</i></span>
           <span className="v8-card__cost">{handDrag.kind === 'player' && draggedPlayer
             ? calibrationPlayCost(draggedPlayer)
             : handDrag.kind === 'tactical' && draggedTactical

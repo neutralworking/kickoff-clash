@@ -16,4 +16,14 @@ describe('team-selection pitch lines', () => {
     expect(lineupPitchY(62)).toBeGreaterThan(lineupPitchY(38));
     expect(lineupPitchY(38)).toBeGreaterThan(lineupPitchY(12));
   });
+
+  it('pushes the 5-4-1 wide midfielders above its deeper central pair', () => {
+    const formation = getFormation('5-4-1');
+    const wideMidfielders = formation.slots.filter((slot) => slot.type === 'WM');
+    const centralMidfielders = formation.slots.filter((slot) => slot.type === 'CM');
+
+    expect(new Set(wideMidfielders.map((slot) => lineupPitchY(slot.y)))).toEqual(new Set([34]));
+    expect(new Set(centralMidfielders.map((slot) => lineupPitchY(slot.y)))).toEqual(new Set([57]));
+    expect(lineupPitchY(wideMidfielders[0]!.y)).toBeLessThan(lineupPitchY(centralMidfielders[0]!.y));
+  });
 });
