@@ -3413,3 +3413,113 @@
   .v8-shell[data-visual-family="team-selection"] .v8-card > small,
   .v8-shell[data-visual-family="team-selection"] .v8-card.is-selected > small { top: 54px; }
 }
+
+/* Marvel Snap direction: keep the board central and use the whole visible hand. */
+.v8-shell[data-visual-family="team-selection"] .v8-pitch {
+  width: 100%;
+  height: clamp(300px, 45dvh, 400px);
+  min-height: clamp(300px, 45dvh, 400px);
+  margin-inline: auto;
+}
+
+.v8-shell[data-visual-family="team-selection"] .v8-hand-wrap {
+  height: auto;
+  min-height: 0;
+  padding-top: 2px;
+}
+
+.v8-shell[data-visual-family="team-selection"] .v8-hand {
+  height: auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--v8-hand-columns), minmax(0, 90px));
+  grid-template-rows: repeat(2, 104px);
+  grid-auto-flow: row;
+  justify-content: center;
+  align-items: stretch;
+  gap: 5px;
+  padding: 24px 3px 6px;
+  overflow: visible;
+  touch-action: manipulation;
+  scroll-snap-type: none;
+}
+
+.v8-shell[data-visual-family="team-selection"] .v8-card,
+.v8-shell[data-visual-family="team-selection"] .v8-card:first-child,
+.v8-shell[data-visual-family="team-selection"] .v8-card.is-selected,
+.v8-shell[data-visual-family="team-selection"] .v8-card--manager,
+.v8-shell[data-visual-family="team-selection"] .v8-card--manager.is-selected {
+  width: 100%;
+  min-width: 0;
+  height: 104px;
+  min-height: 0;
+}
+
+.v8-shell[data-visual-family="team-selection"] .v8-card > strong {
+  top: 27px;
+  height: 17px;
+  font-size: clamp(6px, 2.05vw, 8px);
+}
+
+.v8-shell[data-visual-family="team-selection"] .v8-card > small,
+.v8-shell[data-visual-family="team-selection"] .v8-card.is-selected > small {
+  top: 48px;
+  bottom: 23px;
+}
+
+.v8-shell[data-visual-family="team-selection"] .v8-card__att,
+.v8-shell[data-visual-family="team-selection"] .v8-card__def {
+  width: calc(50% - 4px);
+  height: 17px;
+  font-size: clamp(9px, 3.1vw, 12px);
+}
+
+.v8-shell[data-visual-family="team-selection"] .v8-card__position {
+  max-width: calc(100% - 29px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v8-debug-toggle { margin-top: 8px; }
+
+@media (max-height: 760px) {
+  .v8-shell[data-visual-family="team-selection"] .v8-pitch {
+    height: 285px;
+    min-height: 285px;
+  }
+
+  .v8-shell[data-visual-family="team-selection"] .v8-hand {
+    grid-template-rows: repeat(2, 78px);
+  }
+
+  .v8-shell[data-visual-family="team-selection"] .v8-card,
+  .v8-shell[data-visual-family="team-selection"] .v8-card:first-child,
+  .v8-shell[data-visual-family="team-selection"] .v8-card.is-selected,
+  .v8-shell[data-visual-family="team-selection"] .v8-card--manager,
+  .v8-shell[data-visual-family="team-selection"] .v8-card--manager.is-selected {
+    height: 78px;
+  }
+
+  .v8-shell[data-visual-family="team-selection"] .v8-card > strong {
+    top: 24px;
+    height: 14px;
+    font-size: clamp(5.5px, 1.8vw, 7px);
+  }
+
+  .v8-shell[data-visual-family="team-selection"] .v8-card > small,
+  .v8-shell[data-visual-family="team-selection"] .v8-card.is-selected > small {
+    top: 41px;
+    bottom: 19px;
+  }
+
+  .v8-shell[data-visual-family="team-selection"] .v8-card > small > b,
+  .v8-shell[data-visual-family="team-selection"] .v8-card.is-selected > small > b {
+    font-size: min(var(--v8-action-font, 5.5px), 5.5px);
+  }
+
+  .v8-shell[data-visual-family="team-selection"] .v8-card__att,
+  .v8-shell[data-visual-family="team-selection"] .v8-card__def {
+    height: 14px;
+    font-size: 9px;
+  }
+}

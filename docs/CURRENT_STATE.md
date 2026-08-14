@@ -131,6 +131,9 @@ Current layout rules include:
 - short screens reduce pitch cards to 52 × 69;
 - five bench cards fit across a 375px viewport;
 - safe areas use `viewport-fit=cover` and environment insets.
+- the live V8 match pitch is centred and occupies roughly 40–50% of the phone viewport height;
+- the match hand uses two visible rows rather than a horizontal scroller, with the manager Action first;
+- the persistent last-period recap has been removed; resolution remains on the pitch and the live score contests remain above it.
 
 Do not approve phone layouts from desktop screenshots or width arithmetic alone. Render at both target viewports and inspect the full screen.
 

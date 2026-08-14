@@ -32,7 +32,9 @@ async function expectTestingSurfaceAboveFold(page: Page) {
 
   expect(positions.pitch.top).toBeGreaterThanOrEqual(0);
   expect(positions.pitch.bottom).toBeLessThan(positions.viewportHeight);
-  expect(positions.pitch.bottom - positions.pitch.top).toBeGreaterThanOrEqual(300);
+  const pitchHeight = positions.pitch.bottom - positions.pitch.top;
+  expect(pitchHeight).toBeGreaterThanOrEqual(positions.viewportHeight * .4);
+  expect(pitchHeight).toBeLessThanOrEqual(positions.viewportHeight * .5);
   expect(positions.commit.bottom).toBeLessThan(positions.viewportHeight);
   expect(positions.firstCard.top).toBeLessThan(positions.viewportHeight);
   expect(positions.firstCard.bottom).toBeLessThanOrEqual(positions.viewportHeight);
@@ -53,9 +55,8 @@ async function expectEnergy(page: Page, current: number, maximum: number) {
 }
 
 async function dragCardToZone(page: Page, card: Locator, zone: Locator, pointerId: number) {
-  // A real mobile user scrolls the horizontal hand until the card is on-screen before lifting it.
-  // Do the same here so the gesture vector tests lifting into the board rather than an
-  // artificial hundreds-of-pixels horizontal move from an off-screen card.
+  // Keep the gesture anchored to the rendered card so it exercises the same lift-and-drop
+  // path whether the card sits in the first or second hand row.
   await card.scrollIntoViewIfNeeded();
   const cardBox = await card.boundingBox();
   const pitchBox = await page.locator('.v8-pitch').boundingBox();
@@ -130,6 +131,17 @@ test.describe('V8 real-card calibration lab', () => {
     await expectEnergy(page, 2, 2);
     await expect(page.getByText('V8 SQUAD CALIBRATION', { exact: true })).not.toBeVisible();
     await expect(page.locator('.v8-hand .v8-card__art img')).toHaveCount(0);
+    const handLayout = await page.getByTestId('v8-hand').evaluate((hand) => {
+      const cards = Array.from(hand.querySelectorAll<HTMLElement>(':scope > .v8-card'));
+      return {
+        overflow: hand.scrollWidth - hand.clientWidth,
+        rows: new Set(cards.map((card) => Math.round(card.getBoundingClientRect().top))).size,
+        firstIsManager: cards[0]?.classList.contains('v8-card--manager') ?? false,
+      };
+    });
+    expect(handLayout.overflow).toBeLessThanOrEqual(1);
+    expect(handLayout.rows).toBe(2);
+    expect(handLayout.firstIsManager).toBe(true);
     await expectTestingSurfaceAboveFold(page);
     await expectMobileFit(page);
   });
@@ -149,8 +161,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(moment).toContainText(/ATT/);
     await expect(moment).toContainText(`FULL +${V8_GOAL_BAND} ATT MARGINS CONVERT`);
     await expect(midfieldZone.locator('.v8-chip').filter({ hasText: 'Billy Bremner' })).toHaveClass(/is-fresh/);
-    await expect(page.getByTestId('v8-period-result')).toBeVisible();
-    await expect(page.getByTestId('v8-period-result')).toContainText(/MATCH \d+–\d+/);
+    await expect(page.getByTestId('v8-period-result')).toHaveCount(0);
     await expectMobileFit(page);
   });
 
@@ -403,13 +414,8 @@ test.describe('V8 real-card calibration lab', () => {
     await expectEnergy(page, 6, 6);
     const crossCard = page.locator('.v8-card--chance').filter({ hasText: 'Cross' });
     await expect(crossCard).toBeVisible();
-    const periodResult = page.getByTestId('v8-period-result');
-    await expect(periodResult).toBeVisible();
-    await expect(periodResult).toContainText('LAST PERIOD');
-    await expect(periodResult.locator('.v8-contest-comparison')).toHaveCount(2);
-    await expect(periodResult).toContainText(/ATT\s*YOU\s*\d+\s*ATT\s*VS\s*CPU\s*\d+\s*DEF\s*[+-]?\d+\s*\d+G/);
-    await expect(periodResult).toContainText(/DEF\s*YOU\s*\d+\s*DEF\s*VS\s*CPU\s*\d+\s*ATT\s*[+-]?\d+\s*\d+GA/);
-    await expect(periodResult).toContainText('generates Cross');
+    await expect(page.getByTestId('v8-period-result')).toHaveCount(0);
+    await expect(page.getByText('LAST PERIOD', { exact: true })).toHaveCount(0);
 
     await openLabTools(page);
     const telemetry = page.getByTestId('v8-telemetry');

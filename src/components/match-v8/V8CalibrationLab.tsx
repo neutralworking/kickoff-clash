@@ -87,19 +87,6 @@ type UndoSnapshot = {
   pending: PendingPlay[];
 };
 
-type PeriodRecap = {
-  period: number;
-  label: string;
-  homeGoals: number;
-  awayGoals: number;
-  homeAttack: number;
-  awayDefence: number;
-  awayAttack: number;
-  homeDefence: number;
-  scoreAfter: string;
-  highlights: string[];
-};
-
 type RevealOrder = { first: V8CalibrationSide; reason: string };
 
 type RevealBeat = {
@@ -640,12 +627,6 @@ function DeployedChip({ state, side, runtimeId, fresh = false, onMove }: { state
   );
 }
 
-function recapHighlights(state: V8CalibrationState, period: number): string[] {
-  const useful = new Set(['player_moved', 'action_ignored', 'action_suppressed', 'modifier_changed', 'tactical_generated', 'tactical_modified', 'chance_resolved', 'chance_cancelled']);
-  const events = state.events.filter((event) => event.period === period && useful.has(event.type));
-  return events.slice(-3).map((event) => event.text);
-}
-
 function signed(value: number): string {
   return `${value > 0 ? '+' : ''}${value}`;
 }
@@ -654,12 +635,10 @@ function ContestComparison({
   axis,
   user,
   cpu,
-  compact = false,
 }: {
   axis: 'ATT' | 'DEF';
   user: number;
   cpu: number;
-  compact?: boolean;
 }) {
   const attack = axis === 'ATT' ? user : cpu;
   const defence = axis === 'ATT' ? cpu : user;
@@ -667,7 +646,7 @@ function ContestComparison({
   const goals = goalsFromAttackDefence(attack, defence);
   return (
     <div
-      className={`v8-contest-comparison is-${axis.toLowerCase()}${axis === 'ATT' && goals ? ' is-converting' : ''}${axis === 'DEF' && !goals && margin >= 0 ? ' is-holding' : ''}${margin < 0 ? ' is-behind' : ''}${compact ? ' is-compact' : ''}`}
+      className={`v8-contest-comparison is-${axis.toLowerCase()}${axis === 'ATT' && goals ? ' is-converting' : ''}${axis === 'DEF' && !goals && margin >= 0 ? ' is-holding' : ''}${margin < 0 ? ' is-behind' : ''}`}
       data-axis={axis}
       data-margin={margin}
     >
@@ -745,7 +724,6 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
   const [homeManagerAvailable, setHomeManagerAvailable] = useState(true);
   const [awayManagerAvailable, setAwayManagerAvailable] = useState(true);
   const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([]);
-  const [recaps, setRecaps] = useState<PeriodRecap[]>([]);
   const [telemetryPeriods, setTelemetryPeriods] = useState<V8CalibrationPeriodTelemetry[]>([]);
   const [matchTelemetry, setMatchTelemetry] = useState<V8CalibrationMatchTelemetry | null>(null);
   const [finished, setFinished] = useState(false);
@@ -777,9 +755,11 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
   const currentPriority = useMemo(() => priority(state, homeScore, awayScore, seed + state.period * 101), [state, homeScore, awayScore, seed]);
   const homeCostProfile = useMemo(() => calibrationSquadCostProfile(homeSquad), [homeSquad]);
   const awayCostProfile = useMemo(() => calibrationSquadCostProfile(awaySquad), [awaySquad]);
-  const latestRecap = recaps.at(-1);
   const latestTelemetry = telemetryPeriods.at(-1);
   const periodEnergy = calibrationEnergyForPeriod(state.period);
+  const handCardCount = homePlayers.length + homeTacticals.length + (homeManagerAvailable ? 1 : 0);
+  const handColumns = Math.max(1, Math.ceil(handCardCount / 2));
+  const handStyle = { '--v8-hand-columns': handColumns } as CSSProperties;
 
   useEffect(() => {
     if (!introVisible) return;
@@ -808,7 +788,6 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
     setHomeManagerAvailable(true);
     setAwayManagerAvailable(true);
     setUndoStack([]);
-    setRecaps([]);
     setTelemetryPeriods([]);
     setMatchTelemetry(null);
     setFinished(false);
@@ -1090,19 +1069,6 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
     });
     const nextTelemetryPeriods = [...telemetryPeriods, periodTelemetry];
     setTelemetryPeriods(nextTelemetryPeriods);
-
-    setRecaps((items) => [...items, {
-      period,
-      label: periodLabel,
-      homeGoals: scoredHome,
-      awayGoals: scoredAway,
-      homeAttack: home.attack,
-      awayDefence: away.defence,
-      awayAttack: away.attack,
-      homeDefence: home.defence,
-      scoreAfter: `${nextHomeScore}–${nextAwayScore}`,
-      highlights: recapHighlights(resolved, period),
-    }]);
 
     setResolutionMoment({
       id: resolutionSequence.current += 1,
@@ -1489,26 +1455,6 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
         <button className="v8-primary" onClick={endPeriod} disabled={finished || Boolean(revealPhase)}>{revealPhase ? 'LOCKED' : 'END PERIOD'}</button>
       </section>
 
-      {latestRecap && (
-        <aside className="v8-period-result" data-testid="v8-period-result" aria-label={`${latestRecap.label} result`}>
-          <header>
-            <span><small>LAST PERIOD</small><strong>{latestRecap.label}</strong></span>
-            <b>{latestRecap.homeGoals}–{latestRecap.awayGoals}</b>
-            <em>MATCH {latestRecap.scoreAfter}</em>
-          </header>
-          <div className="v8-period-result__contests">
-            <ContestComparison axis="ATT" user={latestRecap.homeAttack} cpu={latestRecap.awayDefence} compact />
-            <ContestComparison axis="DEF" user={latestRecap.homeDefence} cpu={latestRecap.awayAttack} compact />
-          </div>
-          {latestRecap.highlights.length > 0 && (
-            <div className="v8-period-result__changes">
-              <small>KEY CHANGES</small>
-              {latestRecap.highlights.slice(-2).map((text, index) => <span key={`${latestRecap.period}-${index}-${text}`}>{text}</span>)}
-            </div>
-          )}
-        </aside>
-      )}
-
       {latestTelemetry && (
         <details className="v8-telemetry" data-testid="v8-telemetry" open={finished} hidden={!debugOpen}>
           <summary>
@@ -1555,7 +1501,30 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
         ) : (
           <div className="v8-hand-heading"><strong>HAND</strong><span>DRAG CARD TO PITCH · {state.teams.home.drawPile.length} UNSEEN</span></div>
         )}
-        <div className="v8-hand">
+        <div className="v8-hand" style={handStyle} data-testid="v8-hand" data-columns={handColumns}>
+          {homeManagerAvailable && (
+            <button
+              type="button"
+              data-testid="manager-card"
+              data-manager-id={homeManager.id}
+              data-manager-action={homeManager.actionName}
+              className={`v8-card v8-card--manager${selection?.kind === 'manager' ? ' is-selected' : ''}${state.teams.home.energy >= homeManager.cost ? '' : ' is-unaffordable'}`}
+              style={{ '--v8-action-font': managerActionFont } as CSSProperties}
+              aria-pressed={selection?.kind === 'manager'}
+              aria-label={`${homeManager.name}, Manager, ${homeManager.cost} Energy, ${homeManager.actionName}: ${homeManager.actionText}`}
+              onClick={() => {
+                if (consumeSuppressedClick('manager', 'manager')) return;
+                setSelection({ kind: 'manager' });
+              }}
+              onPointerDown={(event) => startHandDrag(event, { kind: 'manager', cardId: 'manager', label: homeManager.actionName.toUpperCase() })}
+            >
+              <span className="v8-card__art v8-card__art--manager" aria-hidden="true"><i>{homeManager.name.slice(0, 2).toUpperCase()}</i></span>
+              <span className="v8-card__cost">{homeManager.cost}</span>
+              <span className="v8-card__position">MANAGER</span>
+              <strong>{homeManager.name.toUpperCase()}</strong>
+              <small><b>{homeManager.actionName.toUpperCase()}</b><span className="v8-card__sr">{homeManager.actionText}</span></small>
+            </button>
+          )}
           {homePlayers.map((card) => (
             <PlayerHandCard
               key={card.id}
@@ -1590,29 +1559,6 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
               />
             );
           })}
-          {homeManagerAvailable && (
-            <button
-              type="button"
-              data-testid="manager-card"
-              data-manager-id={homeManager.id}
-              data-manager-action={homeManager.actionName}
-              className={`v8-card v8-card--manager${selection?.kind === 'manager' ? ' is-selected' : ''}${state.teams.home.energy >= homeManager.cost ? '' : ' is-unaffordable'}`}
-              style={{ '--v8-action-font': managerActionFont } as CSSProperties}
-              aria-pressed={selection?.kind === 'manager'}
-              aria-label={`${homeManager.name}, Manager, ${homeManager.cost} Energy, ${homeManager.actionName}: ${homeManager.actionText}`}
-              onClick={() => {
-                if (consumeSuppressedClick('manager', 'manager')) return;
-                setSelection({ kind: 'manager' });
-              }}
-              onPointerDown={(event) => startHandDrag(event, { kind: 'manager', cardId: 'manager', label: homeManager.actionName.toUpperCase() })}
-            >
-              <span className="v8-card__art v8-card__art--manager" aria-hidden="true"><i>{homeManager.name.slice(0, 2).toUpperCase()}</i></span>
-              <span className="v8-card__cost">{homeManager.cost}</span>
-              <span className="v8-card__position">MANAGER</span>
-              <strong>{homeManager.name.toUpperCase()}</strong>
-              <small><b>{homeManager.actionName.toUpperCase()}</b><span className="v8-card__sr">{homeManager.actionText}</span></small>
-            </button>
-          )}
         </div>
       </section>
 
