@@ -134,6 +134,7 @@ Current layout rules include:
 - the live V8 match pitch is centred and occupies roughly 40–50% of the phone viewport height;
 - the match hand uses two visible rows rather than a horizontal scroller, with the manager Action first;
 - the persistent last-period recap has been removed; resolution remains on the pitch and the live score contests remain above it.
+- the period CTA is `CONFIRM`; priority is shown by a ball beside the relevant team score, committed cards flip without reveal narration, ATT/DEF totals update with each card, and converted goal balls travel into the match score.
 
 Do not approve phone layouts from desktop screenshots or width arithmetic alone. Render at both target viewports and inspect the full screen.
 

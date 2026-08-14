@@ -89,6 +89,7 @@ test.describe('V8 real-card calibration lab', () => {
     expect(introText).toContain('YOU');
     expect(introText).toContain('VS');
     expect(introText).toContain('CPU');
+    expect(introText).not.toContain('KICKOFF CLASH');
     if (await intro.isVisible()) await intro.click();
     await expect(intro).toHaveCount(0);
 
@@ -116,8 +117,12 @@ test.describe('V8 real-card calibration lab', () => {
     const defenceContest = liveContests.locator('.v8-contest-comparison').nth(1);
     await expect(attackContest.locator('header')).toHaveText('ATT');
     await expect(defenceContest.locator('header')).toHaveText('DEF');
-    await expect(attackContest).toContainText(/ATT\s*YOU\s*\d+\s*ATT\s*VS\s*CPU\s*\d+\s*DEF\s*[+-]?\d+\s*\d+G/);
-    await expect(defenceContest).toContainText(/DEF\s*YOU\s*\d+\s*DEF\s*VS\s*CPU\s*\d+\s*ATT\s*[+-]?\d+\s*\d+GA/);
+    await expect(attackContest.locator(':scope > strong')).toHaveText(/^[+-]?\d+$/);
+    await expect(defenceContest.locator(':scope > strong')).toHaveText(/^[+-]?\d+$/);
+    await expect(attackContest.locator(':scope > strong > small')).toHaveCount(0);
+    await expect(defenceContest.locator(':scope > strong > small')).toHaveCount(0);
+    await expect(page.locator('.v8-priority-ball')).toHaveCount(1);
+    await expect(page.locator('.v8-commit')).not.toContainText(/REVEAL FIRST/);
     const comparisonPositions = await liveContests.locator('.v8-contest-comparison').first().evaluate((contest) => {
       const numbers = Array.from(contest.querySelectorAll('span > b')).map((node) => node.getBoundingClientRect());
       return { attackRight: numbers[0]!.right, defenceLeft: numbers[1]!.left };
@@ -153,14 +158,18 @@ test.describe('V8 real-card calibration lab', () => {
     const midfieldZone = page.locator('.v8-zone').nth(1);
     await bremner.click();
     await midfieldZone.click();
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
+
+    const actionFlash = page.getByTestId('v8-action-flash');
+    await expect(actionFlash).toBeVisible();
+    await expect(actionFlash).not.toContainText(/REVEAL/i);
+    await expect(midfieldZone.locator('.v8-chip').filter({ hasText: 'Billy Bremner' })).toHaveClass(/is-fresh/);
 
     const moment = page.getByTestId('v8-resolution');
     await expect(moment).toBeVisible();
-    await expect(moment).toContainText(/REVEAL FIRST/);
+    await expect(moment).not.toContainText(/REVEAL FIRST/);
     await expect(moment).toContainText(/ATT/);
     await expect(moment).toContainText(`FULL +${V8_GOAL_BAND} ATT MARGINS CONVERT`);
-    await expect(midfieldZone.locator('.v8-chip').filter({ hasText: 'Billy Bremner' })).toHaveClass(/is-fresh/);
     await expect(page.getByTestId('v8-period-result')).toHaveCount(0);
     await expectMobileFit(page);
   });
@@ -172,13 +181,11 @@ test.describe('V8 real-card calibration lab', () => {
     await bremner.click();
     await page.locator('.v8-zone').nth(1).click();
 
-    const commitStrip = page.locator('.v8-commit');
-    const expectedFirst = (await commitStrip.textContent())?.includes('CPU REVEALS FIRST') ? 'CPU' : 'YOU';
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    const expectedFirst = await page.getByTestId('v8-priority-ball-home').count() ? 'home' : 'away';
+    await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
 
-    const locked = page.getByTestId('v8-opponent-commitment');
-    await expect(locked).toBeVisible();
-    await expect(locked).toContainText('OPPONENT LOCKED IN');
+    await expect(page.getByTestId('v8-opponent-commitment')).toHaveCount(0);
+    await expect(page.getByTestId('v8-reveal-stage')).toHaveCount(0);
     const cardBacks = page.getByTestId('v8-opponent-card-back');
     const initialCardBacks = await cardBacks.count();
     expect(initialCardBacks).toBeGreaterThan(0);
@@ -195,20 +202,22 @@ test.describe('V8 real-card calibration lab', () => {
       await expect(group.locator('xpath=ancestor::*[@data-v8-zone][1]')).toHaveAttribute('data-v8-zone', zone!);
     }
 
-    const firstReveal = page.getByTestId('v8-reveal-stage');
-    await expect(firstReveal).toHaveAttribute('data-reveal-index', '1');
-    const revealTotal = Number(await firstReveal.getAttribute('data-reveal-total'));
+    const pitch = page.locator('.v8-pitch');
+    await expect(pitch).toHaveAttribute('data-reveal-index', '1');
+    const revealTotal = Number(await pitch.getAttribute('data-reveal-total'));
+    const opponentCommitments = Number(await pitch.getAttribute('data-opponent-commitments'));
     expect(revealTotal).toBeGreaterThan(1);
-    await expect(firstReveal).toContainText(expectedFirst);
-    await expect(firstReveal).toContainText(/ATT|DEF|BOARD STATE|generates|resolves/i);
-    const firstZone = await firstReveal.getAttribute('data-reveal-zone');
+    await expect(pitch).toHaveAttribute('data-reveal-side', expectedFirst);
+    const firstZone = await pitch.getAttribute('data-reveal-zone');
     expect(firstZone).toMatch(/^(DEF|MID|ATT)$/);
     await expect(page.locator(`[data-v8-zone="${firstZone}"]`)).toHaveClass(/is-resolving-zone/);
-    await expect(page.getByTestId('v8-opponent-card-back')).toHaveCount(expectedFirst === 'CPU' ? initialCardBacks - 1 : initialCardBacks);
+    await expect(page.getByTestId('v8-action-flash')).toBeVisible();
+    await expect(page.getByTestId('v8-action-flash')).not.toContainText(/REVEAL/i);
+    await expect(page.getByTestId('v8-opponent-card-back')).toHaveCount(opponentCommitments - (expectedFirst === 'away' ? 1 : 0));
 
     const skip = page.getByRole('button', { name: 'Skip reveal sequence' });
     await expect(skip).toBeVisible();
-    await expect(firstReveal).toHaveAttribute('data-reveal-index', '2');
+    await expect(pitch).toHaveAttribute('data-reveal-index', '2');
     await expect(skip).toBeVisible();
     await skip.click();
 
@@ -223,13 +232,13 @@ test.describe('V8 real-card calibration lab', () => {
 
     let foundGoal = false;
     for (let period = 1; period <= 4; period += 1) {
-      await page.getByRole('button', { name: 'END PERIOD' }).click();
+      await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
       const payoff = page.getByTestId('v8-score-payoff');
       await expect(payoff).toBeVisible();
       const totalGoals = Number(await payoff.getAttribute('data-goals'));
       if (totalGoals > 0) {
         const goalPayoff = page.getByTestId('v8-goal-payoff');
-        await expect(goalPayoff).toContainText('GOAL');
+        await expect(goalPayoff).toContainText('⚽');
         await expect(goalPayoff).not.toContainText(/Bremner|Ramos|Jostle|scorer/i);
 
         const converted = page.locator('.v8-goal-contest.is-converted');
@@ -240,7 +249,11 @@ test.describe('V8 real-card calibration lab', () => {
           const goals = Number(await contest.getAttribute('data-goals'));
           expect(margin).toBeGreaterThanOrEqual(goals * V8_GOAL_BAND);
         }
-        expect(await page.locator('.v8-goal-burst > span').count()).toBeGreaterThanOrEqual(1);
+        await expect(page.locator('.v8-goal-burst > span')).toHaveCount(totalGoals);
+        const nextHomeScore = await payoff.getAttribute('data-next-home-score');
+        const nextAwayScore = await payoff.getAttribute('data-next-away-score');
+        await expect(page.locator('.v8-scoreteam--home > span > strong')).toHaveText(nextHomeScore!);
+        await expect(page.locator('.v8-scoreteam--away > span > strong')).toHaveText(nextAwayScore!);
         await expectMobileFit(page);
         foundGoal = true;
         break;
@@ -373,7 +386,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(page.locator('.v8-zone')).toHaveCount(3);
     await expect(page.locator('.v8-card').filter({ hasText: 'Ángel Di María' }).locator('.v8-card__cost')).toHaveText('3');
 
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
     await expect(page.getByText('PERIOD 2/4', { exact: true }).first()).toBeVisible();
     await expectEnergy(page, 4, 4);
 
@@ -384,7 +397,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(defenceZone.locator('.v8-chip--transient')).toContainText('CONTROL');
     await expect(defenceZone.locator('.v8-zone__heading span')).toHaveText('1/4');
 
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
     await expect(page.getByText('PERIOD 3/4', { exact: true }).first()).toBeVisible();
     await expectEnergy(page, 6, 6);
     await expect(page.locator('.v8-card--manager')).toHaveCount(0);
@@ -397,7 +410,7 @@ test.describe('V8 real-card calibration lab', () => {
     await page.goto('/lab/match-v8');
 
     // P1 passes so P2 can afford Di María at her accepted printed 3-Energy calibration Cost.
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
     await expect(page.getByText('PERIOD 2/4', { exact: true }).first()).toBeVisible();
     await expectEnergy(page, 4, 4);
 
@@ -407,7 +420,7 @@ test.describe('V8 real-card calibration lab', () => {
     await midfieldZone.click();
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
     await expectEnergy(page, 1, 4);
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
 
     await expect(page.getByText('PERIOD 3/4', { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId('v8-window')).toHaveCount(0);
@@ -432,12 +445,12 @@ test.describe('V8 real-card calibration lab', () => {
     await page.goto('/lab/match-v8');
 
     // P1 passes so P2 can afford Di María (3) and still retain 1 Energy for the Cross window.
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
     await expectEnergy(page, 4, 4);
 
     await page.locator('.v8-card').filter({ hasText: 'Ángel Di María' }).click();
     await page.locator('.v8-zone').nth(1).click();
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
 
     await expect(page.getByText('PERIOD 3/4', { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId('v8-window')).toHaveCount(0);
@@ -453,10 +466,10 @@ test.describe('V8 real-card calibration lab', () => {
   test('drags a held Tactical from the hand during normal commitment', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
     await page.locator('.v8-card').filter({ hasText: 'Ángel Di María' }).click();
     await page.locator('.v8-zone').nth(1).click();
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
 
     await expect(page.getByText('PERIOD 3/4', { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId('v8-window')).toHaveCount(0);
@@ -485,7 +498,7 @@ test.describe('V8 real-card calibration lab', () => {
     await sinclair.click();
     const attackZone = page.locator('.v8-zone').nth(2);
     await attackZone.click();
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
 
     const deployed = attackZone.locator('.v8-chip').filter({ hasText: 'Christine Sinclair' });
     await expect(deployed.locator('.v8-chip__stats > b')).toHaveText(['13', '1']);
@@ -502,7 +515,7 @@ test.describe('V8 real-card calibration lab', () => {
     await page.getByTestId('away-squad-select').selectOption('through_ball');
 
     for (let period = 1; period <= 4; period += 1) {
-      await page.getByRole('button', { name: 'END PERIOD' }).click();
+      await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
     }
 
     await expect(page.getByText('FULL TIME', { exact: true }).first()).toBeVisible();

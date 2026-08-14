@@ -3523,3 +3523,189 @@
     font-size: 9px;
   }
 }
+
+/* Match resolution: the pitch tells the story without reveal narration. */
+.v8-match-intro__fixture { grid-row: 2; }
+.v8-match-intro__whistle { grid-row: 3; }
+
+.v8-scoreteam > span > .v8-priority-ball,
+.v8-scoreteam--away > span > .v8-priority-ball {
+  order: initial;
+  width: 19px;
+  min-width: 19px;
+  height: 19px;
+  display: grid;
+  grid-template-columns: 1fr;
+  place-items: center;
+  align-self: center;
+  padding: 0;
+  border: 1px solid rgba(232, 178, 60, .55);
+  border-radius: 50%;
+  background: rgba(11, 7, 3, .72);
+  color: var(--cream);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1;
+  text-align: center;
+  animation: v8-priority-ball 1.15s ease-in-out infinite alternate;
+}
+.v8-scoreteam--away > span > .v8-priority-ball { order: -1; }
+.v8-priority-ball > span { display: block; margin: 0; }
+
+.v8-contest-comparison.is-updating > span > b,
+.v8-contest-comparison.is-updating > strong {
+  animation: v8-live-total .42s cubic-bezier(.16, .9, .22, 1.18) both;
+}
+
+.v8-shell.is-revealing .v8-chip--transient {
+  border-color: rgba(232, 178, 60, .72);
+  background:
+    linear-gradient(135deg, transparent 43%, rgba(232, 178, 60, .2) 44% 56%, transparent 57%),
+    repeating-linear-gradient(45deg, rgba(255,255,255,.035) 0 3px, transparent 3px 6px),
+    linear-gradient(155deg, #402d12, #191106 68%, #090603);
+  color: transparent;
+}
+.v8-shell.is-revealing .v8-chip--transient::before {
+  content: 'KC';
+  position: absolute;
+  inset: 4px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(232, 178, 60, .3);
+  border-radius: 4px;
+  color: rgba(244, 214, 123, .82);
+  font-family: var(--font-heavy, sans-serif);
+  font-size: 9px;
+  letter-spacing: -.04em;
+}
+.v8-shell.is-revealing .v8-chip--transient > * { visibility: hidden; }
+
+.v8-action-flash {
+  --v8-action-left: 50%;
+  position: absolute;
+  z-index: 38;
+  left: var(--v8-action-left);
+  top: 58%;
+  width: min(30%, 132px);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 5px 6px;
+  border: 1px solid rgba(232, 178, 60, .62);
+  border-radius: 5px;
+  background: rgba(18, 13, 7, .94);
+  box-shadow: 0 7px 18px rgba(0,0,0,.48), 0 0 18px rgba(232, 178, 60, .18);
+  color: var(--cream);
+  text-align: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: v8-action-fire .56s cubic-bezier(.16, .88, .2, 1.16) both;
+}
+.v8-action-flash--away {
+  top: 42%;
+  border-color: rgba(143, 182, 255, .68);
+  box-shadow: 0 7px 18px rgba(0,0,0,.48), 0 0 18px rgba(92, 166, 255, .2);
+}
+.v8-action-flash strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--gold);
+  font-family: var(--font-heavy, sans-serif);
+  font-size: 7px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.v8-action-flash--away strong { color: #b6e0f4; }
+.v8-action-flash span {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--cream-soft);
+  font-family: var(--font-pixel, monospace);
+  font-size: 4.5px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v8-pitch.is-resolving,
+.v8-resolution { overflow: visible; }
+.v8-shell[data-visual-family="team-selection"] .v8-pitch.is-resolving { overflow: visible; }
+.v8-shell.is-resolving .v8-hand-wrap,
+.v8-shell.is-resolving .v8-commit {
+  filter: saturate(.72) brightness(.82);
+  pointer-events: none;
+}
+.v8-resolution__beat--score { animation: v8-beat-score 2.8s ease both; }
+.v8-resolution__beat--next { animation: v8-beat-next 2.8s ease both; }
+.v8-goal-payoff,
+.v8-goal-burst { overflow: visible; }
+.v8-goal-burst > span {
+  min-width: 0;
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  box-shadow: 0 0 15px rgba(255, 218, 126, .42);
+  font-size: 19px;
+  line-height: 1;
+  opacity: 0;
+  animation-duration: .72s;
+  animation-timing-function: cubic-bezier(.2, .7, .2, 1);
+  animation-fill-mode: both;
+}
+.v8-goal-burst--you > span { animation-name: v8-goal-stream-home; }
+.v8-goal-burst--cpu > span { animation-name: v8-goal-stream-away; }
+.v8-scorebar > div.is-scoring strong {
+  animation: v8-score-pop .58s cubic-bezier(.16,.9,.22,1.2) both;
+}
+
+@keyframes v8-priority-ball {
+  from { transform: scale(.9); filter: brightness(.85); }
+  to { transform: scale(1.08); filter: brightness(1.18); box-shadow: 0 0 12px rgba(232, 178, 60, .4); }
+}
+@keyframes v8-live-total {
+  0% { transform: translateY(4px) scale(.82); opacity: .35; }
+  65% { transform: translateY(-1px) scale(1.12); color: #fff3bd; opacity: 1; }
+  100% { transform: none; opacity: 1; }
+}
+@keyframes v8-action-fire {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.68); filter: brightness(1.8); }
+  52% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: none; }
+}
+@keyframes v8-goal-stream-home {
+  0% { opacity: 0; transform: translate3d(0, 10px, 0) scale(.55); }
+  22% { opacity: 1; transform: translate3d(0, 0, 0) scale(1.12); }
+  82% { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(max(-270px, -38vw), -215px, 0) scale(.62) rotate(-360deg); }
+}
+@keyframes v8-goal-stream-away {
+  0% { opacity: 0; transform: translate3d(0, 10px, 0) scale(.55); }
+  22% { opacity: 1; transform: translate3d(0, 0, 0) scale(1.12); }
+  82% { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(clamp(125px, 38vw, 270px), -215px, 0) scale(.62) rotate(360deg); }
+}
+@keyframes v8-beat-score {
+  0% { opacity: 0; transform: translate(-50%,-45%) scale(.9); }
+  7%,68% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  75%,100% { opacity: 0; transform: translate(-50%,-54%) scale(.98); }
+}
+@keyframes v8-beat-next {
+  0%,69% { opacity: 0; transform: translate(-50%,-46%) scale(.9); }
+  77%,92% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%,-54%) scale(.98); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v8-priority-ball,
+  .v8-contest-comparison.is-updating > span > b,
+  .v8-contest-comparison.is-updating > strong,
+  .v8-action-flash,
+  .v8-goal-burst > span { animation-duration: .01ms !important; animation-delay: 0ms !important; }
+}

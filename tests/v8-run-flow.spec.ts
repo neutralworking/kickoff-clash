@@ -42,7 +42,7 @@ async function playFourPeriods(page: Page) {
       if (!zone) break;
       await page.locator(`[data-v8-zone="${zone}"]`).click();
     }
-    await page.getByRole('button', { name: 'END PERIOD' }).click();
+    await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
     const skip = page.getByRole('button', { name: 'Skip reveal sequence' });
     await expect(skip).toBeVisible();
     await skip.click();
