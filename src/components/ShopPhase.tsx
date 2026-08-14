@@ -1017,6 +1017,8 @@ function XIOverlay({
         {formation.slots.map((slot, i) => (
           <LineupSlot
             key={i}
+            formation={formation}
+            slotIndex={i}
             slot={slot}
             card={xi[i]}
             justPlaced={false}

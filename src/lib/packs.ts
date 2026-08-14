@@ -13,15 +13,7 @@ import type { Formation } from './formations';
 import { ALL_FORMATIONS } from './formations';
 import type { JokerCard } from './jokers';
 import { ALL_JOKERS } from './jokers';
-import { ALL_CARDS } from './run';
-import {
-  V8_CALIBRATION_PLAYERS,
-  type V8CalibrationPlayerCard,
-} from '../engine-v8/calibration-cards';
-import { V8_BATCH_04_PLAYERS } from '../engine-v8/calibration-expansion-batch-04-cards';
-import { V8_BATCH_05_PLAYERS } from '../engine-v8/calibration-expansion-batch-05-cards';
-import { V8_BATCH_06_PLAYERS } from '../engine-v8/calibration-expansion-batch-06-cards';
-import { V8_BATCH_07_PLAYERS } from '../engine-v8/calibration-expansion-batch-07-cards';
+import { V8_RUN_PLAYER_POOL } from '../game-v8/roster';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -71,99 +63,15 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 export const RIP_COUNTS = { players: 18, managers: 3, tactics: 3 } as const;
 export const STARTER_CHOICE_COUNT = 3;
 
-const LEGACY_POSITION: Record<string, Card['position']> = {
-  GK: 'GK',
-  CB: 'CD',
-  CD: 'CD',
-  SW: 'CD',
-  LB: 'WD',
-  RB: 'WD',
-  FB: 'WD',
-  LWB: 'WD',
-  RWB: 'WD',
-  WB: 'WD',
-  DM: 'DM',
-  CM: 'CM',
-  LM: 'WM',
-  RM: 'WM',
-  WM: 'WM',
-  AM: 'AM',
-  LW: 'WF',
-  RW: 'WF',
-  WF: 'WF',
-  LF: 'CF',
-  RF: 'CF',
-  SS: 'CF',
-  CF: 'CF',
-};
-
-const POWER_BY_COST = [0, 56, 64, 72, 80, 86, 92] as const;
-
-function legacyPosition(position: string): Card['position'] {
-  for (const code of position.split('/').map((value) => value.trim())) {
-    if (LEGACY_POSITION[code]) return LEGACY_POSITION[code];
-  }
-  return 'CM';
-}
-
-function legacyArchetype(card: V8CalibrationPlayerCard, position: Card['position']): string {
-  if (position === 'GK') return 'Shotstopper';
-  if (position === 'CD') return card.printedDefence >= 10 ? 'Cover' : 'Commander';
-  if (position === 'WD' || position === 'DM') return 'Powerhouse';
-  if (position === 'CM' || position === 'WM') return card.printedAttack > card.printedDefence ? 'Passer' : 'Engine';
-  if (position === 'AM' || position === 'WF') return 'Creator';
-  return card.actionName.includes('HEADER') ? 'Target' : 'Striker';
-}
-
-function legacyRarity(cost: number): Card['rarity'] {
-  if (cost >= 5) return 'Legendary';
-  if (cost === 4) return 'Epic';
-  if (cost === 3) return 'Rare';
-  return 'Common';
-}
-
-function starterCard(card: V8CalibrationPlayerCard): Card {
-  const position = legacyPosition(card.position);
-  return {
-    id: 100000 + card.trackerRow,
-    name: card.matchName,
-    realName: card.realName,
-    v8PlayerId: card.id,
-    position,
-    archetype: legacyArchetype(card, position),
-    power: POWER_BY_COST[card.cost] ?? 72,
-    rarity: legacyRarity(card.cost),
-    abilityName: card.actionName,
-    abilityText: card.actionText,
-    printedCost: card.cost,
-    printedAttack: card.printedAttack,
-    printedDefence: card.printedDefence,
-    gatePull: 0,
-    durability: 'standard',
-    bio: card.realName,
-    tags: ['V8 roster'],
-  };
-}
-
-/** Later expansion registrations replace duplicated early calibration aliases. */
-const V8_STARTER_SOURCE = [
-  ...V8_CALIBRATION_PLAYERS,
-  ...V8_BATCH_04_PLAYERS,
-  ...V8_BATCH_05_PLAYERS,
-  ...V8_BATCH_06_PLAYERS,
-  ...V8_BATCH_07_PLAYERS,
-];
-
-export const V8_STARTER_PLAYER_POOL: readonly Card[] = [
-  ...new Map(V8_STARTER_SOURCE.map((card) => [card.realName, card])).values(),
-].map(starterCard);
+/** Compatibility name retained for opening-pack callers and tests. */
+export const V8_STARTER_PLAYER_POOL = V8_RUN_PLAYER_POOL;
 
 // ---------------------------------------------------------------------------
 // Shop card packs — the SEALED acquisition (economy.ts SCOUT_PACK / ELITE_PACK).
 // A pack rips PACK_SIZE cards from the pool by a per-tier rarity weighting; the
 // Elite tier floors slot 0 to Rare+ so the guarantee always holds. Deterministic
-// per seed. The cards come straight from ALL_CARDS (deduped ids are assigned by
-// run.ts addCardToDeck when they enter the deck).
+// per seed. The cards come from the same implemented V8 roster as the opening
+// pack (deduped owned ids are assigned by run.ts when they enter the deck).
 // ---------------------------------------------------------------------------
 
 export type PackTier = 'scout' | 'elite';
@@ -191,10 +99,10 @@ function drawByWeight(weights: Record<string, number>, seed: number): Card | nul
   }
   // Walk down the ladder until a non-empty bucket is found.
   for (let i = RARITIES.indexOf(chosen as typeof RARITIES[number]); i >= 0; i--) {
-    const pool = ALL_CARDS.filter((c) => c.rarity === RARITIES[i]);
+    const pool = V8_RUN_PLAYER_POOL.filter((c) => c.rarity === RARITIES[i]);
     if (pool.length) return pool[Math.floor(seededRandom(seed + 31) * pool.length)];
   }
-  return ALL_CARDS[Math.floor(seededRandom(seed + 53) * ALL_CARDS.length)] ?? null;
+  return V8_RUN_PLAYER_POOL[Math.floor(seededRandom(seed + 53) * V8_RUN_PLAYER_POOL.length)] ?? null;
 }
 
 /** Rip a shop card pack — PACK_SIZE cards by the tier weighting. The Elite tier

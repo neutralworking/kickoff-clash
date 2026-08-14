@@ -176,10 +176,10 @@ export const ALL_FORMATIONS: Formation[] = [
       slot('CB', 'Centre-Back',     50, 82),
       slot('CB', 'Centre-Back',     72, 80),
       slot('FB', 'Right Wing-Back', 92, 70),
-      slot('WM', 'Left Mid',        10, 55),
-      slot('CM', 'Central Mid',     35, 52),
-      slot('CM', 'Central Mid',     65, 52),
-      slot('WM', 'Right Mid',       90, 55),
+      slot('WM', 'Left Mid',        10, 42),
+      slot('CM', 'Central Mid',     35, 55),
+      slot('CM', 'Central Mid',     65, 55),
+      slot('WM', 'Right Mid',       90, 42),
       slot('CF', 'Striker',         50, 15),
     ],
   },
@@ -215,8 +215,9 @@ export function getDefaultFormation(): Formation {
 }
 
 export function positionFitsSlot(
-  cardPosition: string,
+  cardPosition: string | readonly string[],
   slotDef: FormationSlot
 ): boolean {
-  return slotDef.accepts.includes(cardPosition);
+  const positions = typeof cardPosition === 'string' ? [cardPosition] : cardPosition;
+  return positions.some((position) => slotDef.accepts.includes(position));
 }

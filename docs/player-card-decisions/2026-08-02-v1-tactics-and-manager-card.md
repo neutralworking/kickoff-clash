@@ -1,5 +1,7 @@
 # V1 tactics and manager-card direction
 
+> Superseded on 2026-08-12: match Energy replaces the pre-match starting-XI cost cap. Manager cards and team selection no longer show or enforce cost/max.
+
 Date: 2026-08-02
 
 ## V1 tactics

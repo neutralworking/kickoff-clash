@@ -1,23 +1,13 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import type { Card } from '../../lib/scoring';
+import { cardNaturalPositions, cardPositionLabels, type Card } from '../../lib/scoring';
 import type { V6Card } from '../../lib/match-v6';
 import type { Competence } from '../../lib/team-select';
 import { v6Cost } from '../../lib/v6-bridge';
 import { deriveStats } from '../../lib/funnel';
-import { handoffTier, lastName, playerActions } from '../cards/cardTokens';
-import { portraitSrc } from '../cards/portrait';
+import { handoffTier, lastName, playerActions, POSITION_COLOR } from '../cards/cardTokens';
 import styles from './TeamSelectionPlayerCard.module.css';
-
-const PIP_CELLS: Record<number, number[]> = {
-  1: [5],
-  2: [1, 9],
-  3: [1, 5, 9],
-  4: [1, 3, 7, 9],
-  5: [1, 3, 5, 7, 9],
-  6: [1, 3, 4, 6, 7, 9],
-};
 
 export interface TeamSelectionPlayerCardProps {
   card: Card;
@@ -27,14 +17,6 @@ export interface TeamSelectionPlayerCardProps {
   dimmed?: boolean;
   highlighted?: boolean;
   showMisfitReceipt?: boolean;
-}
-
-function pipStyle(cell: number): CSSProperties {
-  const index = cell - 1;
-  return {
-    gridColumn: (index % 3) + 1,
-    gridRow: Math.floor(index / 3) + 1,
-  };
 }
 
 function clampStat(value: number): number {
@@ -51,12 +33,17 @@ export default function TeamSelectionPlayerCard({
   showMisfitReceipt = false,
 }: TeamSelectionPlayerCardProps) {
   const tier = handoffTier(card.rarity);
-  const portrait = v6card?.portrait ?? portraitSrc(card);
   const fallback = deriveStats(card);
   const attack = clampStat(v6card?.attack ?? fallback.atk);
   const defence = clampStat(v6card?.defence ?? fallback.def);
   const cost = Math.max(1, Math.min(6, v6card?.cost ?? v6Cost(card)));
-  const actionName = playerActions(card)[0]?.label ?? card.abilityName ?? 'NO ACTION';
+  const legacyAction = playerActions(card)[0];
+  const actionName = card.abilityName ?? legacyAction?.label ?? 'NO ACTION';
+  const positions = cardPositionLabels(card);
+  const naturalPositions = cardNaturalPositions(card);
+  const primaryPosition = positions[0] ?? card.position;
+  const primaryPositionColor = POSITION_COLOR[naturalPositions[0] ?? card.position] ?? 'var(--dust)';
+  const actionFontSize = actionName.length > 20 ? '5px' : actionName.length > 15 ? '6px' : actionName.length > 11 ? '7px' : '8px';
   const fitClass = competence === 'incompetent'
     ? styles.fitMisfit
     : competence === 'secondary'
@@ -67,6 +54,7 @@ export default function TeamSelectionPlayerCard({
     '--pc-frame': tier.frame,
     '--pc-edge': tier.edge,
     '--pc-glow': tier.glow,
+    '--action-font': actionFontSize,
   } as CSSProperties;
 
   return (
@@ -79,32 +67,38 @@ export default function TeamSelectionPlayerCard({
         highlighted ? styles.highlighted : '',
       ].filter(Boolean).join(' ')}
       style={style}
-      aria-label={`${card.name}, ${card.position}, cost ${cost}, ${attack} attack, ${defence} defence, ${actionName}`}
+      data-player-id={card.id}
+      data-player-positions={positions.join('/')}
+      data-player-action={actionName}
+      data-player-attack={attack}
+      data-player-defence={defence}
+      aria-label={`${card.name}, ${positions.join(' or ')}, cost ${cost}, ${attack} attack, ${defence} defence, ${actionName}`}
     >
       <div className={styles.frameMaterial} />
       <div className={styles.interior}>
-        <div className={styles.kcMonogram} aria-hidden="true">KC</div>
-
-        <div className={styles.portrait}>
-          {portrait ? <img src={portrait} alt="" draggable={false} /> : <span>{lastName(card.name).slice(0, 2).toUpperCase()}</span>}
-        </div>
-
-        <div className={styles.costCorner} aria-label={`Cost ${cost}`}>
-          <span className={styles.pipCluster}>
-            {PIP_CELLS[cost].map((cell) => <i key={cell} style={pipStyle(cell)} />)}
+        <div className={styles.topMeta}>
+          <span className={styles.costCorner} aria-label={`Cost ${cost}`}>{cost}</span>
+          <span className={styles.positions} aria-label={`Primary position ${primaryPosition}`}>
+            <span
+              data-position-chip={primaryPosition}
+              className={`${styles.positionChip} ${styles.primaryPosition}`}
+              style={{ '--position-color': primaryPositionColor } as CSSProperties}
+            >
+              {primaryPosition}
+            </span>
           </span>
         </div>
-
-        <div className={styles.positionCorner}>{card.position}</div>
 
         <div className={styles.nameplate} title={card.name}>{lastName(card.name).toUpperCase()}</div>
         <div className={styles.actionPanel} title={actionName}>{actionName.toUpperCase()}</div>
 
-        <div className={`${styles.statBadge} ${styles.statLeft}`} aria-label={`${attack} attack`}>
-          <b>{attack}</b>
-        </div>
-        <div className={`${styles.statBadge} ${styles.statRight}`} aria-label={`${defence} defence`}>
-          <b>{defence}</b>
+        <div className={styles.statRow}>
+          <div className={`${styles.statBadge} ${styles.statLeft}`} aria-label={`${attack} attack`}>
+            <b>{attack}</b>
+          </div>
+          <div className={`${styles.statBadge} ${styles.statRight}`} aria-label={`${defence} defence`}>
+            <b>{defence}</b>
+          </div>
         </div>
       </div>
 

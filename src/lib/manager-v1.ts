@@ -1,51 +1,21 @@
 import type { JokerCard } from './jokers';
-import { MAX_XI_COST } from './v6-bridge';
+import { managerV8Profile } from './manager-v8';
 
 /**
- * V1 manager-owned setup rules.
+ * Compatibility surface for saves and callers that still use the V1 names.
  *
- * This is deliberately separate from the legacy adherence fields while the
- * roster is migrated. Formation pools start from the manager's existing single
- * authored shape; they can expand to a maximum of three through store
- * consumables. XI caps remain at the current live value until balance assigns
- * manager-specific numbers.
+ * The roster and manager-owned formation pools are now authored in V8.
  */
 export interface ManagerV1Profile {
   actionName: string;
   formations: string[];
-  maxStartingXiCost: number;
-}
-
-const PROFILE_BY_ID: Record<string, ManagerV1Profile> = {
-  pomo: { actionName: 'Direct Play', formations: ['4-4-2'], maxStartingXiCost: MAX_XI_COST },
-  anti_football: { actionName: 'The Wall', formations: ['5-3-2'], maxStartingXiCost: MAX_XI_COST },
-  tiki_taka: { actionName: 'Possession', formations: ['4-3-3'], maxStartingXiCost: MAX_XI_COST },
-  gegenpress: { actionName: 'Counter-Press', formations: ['4-3-3'], maxStartingXiCost: MAX_XI_COST },
-  box_office: { actionName: 'Showman', formations: ['4-2-3-1'], maxStartingXiCost: MAX_XI_COST },
-  tinkerman: { actionName: 'Rotation', formations: ['4-4-2'], maxStartingXiCost: MAX_XI_COST },
-  cholismo: { actionName: 'The Grind', formations: ['4-4-2'], maxStartingXiCost: MAX_XI_COST },
-  murderball: { actionName: 'All-Out Press', formations: ['3-4-3'], maxStartingXiCost: MAX_XI_COST },
-  fergie_time: { actionName: 'Late Show', formations: ['4-4-2'], maxStartingXiCost: MAX_XI_COST },
-  entertainers: { actionName: 'All-Out Attack', formations: ['4-3-3'], maxStartingXiCost: MAX_XI_COST },
-  total_football: { actionName: 'Fluidity', formations: ['3-4-3'], maxStartingXiCost: MAX_XI_COST },
-  set_pieces_fc: { actionName: 'Aerial Bombardment', formations: ['5-4-1'], maxStartingXiCost: MAX_XI_COST },
-  wheeler_dealer: { actionName: 'Market Genius', formations: ['4-3-3'], maxStartingXiCost: MAX_XI_COST },
-  joga_bonito: { actionName: 'Flair', formations: ['4-3-3'], maxStartingXiCost: MAX_XI_COST },
-};
-
-function legacyFallback(manager: JokerCard): ManagerV1Profile {
-  return {
-    actionName: manager.traits[0]?.trim() || 'Match Effect',
-    formations: manager.preferredFormation ? [manager.preferredFormation] : ['4-3-3'],
-    maxStartingXiCost: MAX_XI_COST,
-  };
 }
 
 export function managerV1Profile(manager: JokerCard): ManagerV1Profile {
-  const profile = PROFILE_BY_ID[manager.id] ?? legacyFallback(manager);
+  const profile = managerV8Profile(manager);
   return {
-    ...profile,
-    formations: Array.from(new Set(profile.formations)).slice(0, 3),
+    actionName: profile.actionName,
+    formations: profile.formations,
   };
 }
 
@@ -55,10 +25,6 @@ export function managerActionNameV1(manager: JokerCard): string {
 
 export function managerFormationsV1(manager: JokerCard): string[] {
   return managerV1Profile(manager).formations;
-}
-
-export function managerMaxStartingXiCost(manager: JokerCard): number {
-  return managerV1Profile(manager).maxStartingXiCost;
 }
 
 /**

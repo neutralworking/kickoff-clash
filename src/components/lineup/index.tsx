@@ -1,39 +1,23 @@
 'use client';
 
 import type { PointerEventHandler } from 'react';
-import type { Card } from '../../lib/scoring';
+import { cardNaturalPositions, type Card } from '../../lib/scoring';
 import type { Formation } from '../../lib/formations';
 import type { V6Card } from '../../lib/match-v6';
 import { competenceOf, type Competence } from '../../lib/team-select';
 import { pitchAxis } from '../../lib/pitch-layout';
+import { lineupPitchPosition } from '../../lib/lineup-layout';
 import { PIXEL, POSITION_COLOR, lastName } from '../cards/cardTokens';
-import { fitnessColor as fitnessColorForPct, HERO } from '../cards/portrait';
+import { fitnessColor as fitnessColorForPct } from '../cards/portrait';
 import TeamSelectionPlayerCard from '../player-cards/TeamSelectionPlayerCard';
 
-// iPhone-first token geometry. The previous 72×96 pitch cards were too large
-// for a 375–390px screen and used only a 12px vertical inset, so the goalkeeper
-// and forward rows were visibly clipped by the pitch. These dimensions preserve
-// the card anatomy while leaving enough green between lines.
-const SLOT_CARD_W = 60;
-const SLOT_CARD_H = 80;
+// The selection token is deliberately taller than the previous 60×80 version:
+// the extra height belongs to the printed Action, while the modest width change
+// still keeps the supported four- and five-player lines readable on phones.
+const SLOT_CARD_W = 64;
+const SLOT_CARD_H = 92;
 export const SLOT_INSET_X = SLOT_CARD_W / 2 + 6;
 export const SLOT_INSET_Y = SLOT_CARD_H / 2 + 4;
-
-/**
- * Collapse the authored formation coordinates onto four readable mobile lines:
- * forwards, midfield, defence and goalkeeper. The previous six-line treatment
- * separated strikers from wingers and holding midfielders from central mids;
- * with 11 portrait cards inside a 342px iPhone-SE pitch that guaranteed overlap.
- *
- * This is presentation only. Slot identity, eligibility and match geometry stay
- * unchanged, while every supported shape still reads correctly at a glance.
- */
-export function lineupPitchY(y: number): number {
-  if (y >= 88) return 98; // goalkeeper
-  if (y >= 68) return 70; // back line, including wing-backs
-  if (y >= 30) return 42; // midfield line, including pivots and attacking mids
-  return 10; // forwards and wide forwards
-}
 
 export interface DragPointerHandlers {
   onPointerDown?: PointerEventHandler<HTMLButtonElement>;
@@ -103,12 +87,13 @@ export function FitnessBar({ card, width = '100%' }: { card: Card; width?: numbe
 }
 
 export function LineupSlot({
+  formation,
+  slotIndex,
   slot,
   card,
   v6card,
   justPlaced,
   onClick,
-  onInspect,
   competence,
   stats: _stats,
   misfitReveal = false,
@@ -119,23 +104,29 @@ export function LineupSlot({
   onPointerUp,
   onPointerCancel,
 }: {
+  formation: Pick<Formation, 'id'>;
+  slotIndex: number;
   slot: Formation['slots'][number];
   card: Card | undefined;
   v6card?: V6Card;
   justPlaced: boolean;
   onClick?: () => void;
-  onInspect?: () => void;
   competence?: Competence;
   stats?: { atk: number; def: number; baseAtk: number; baseDef: number };
   misfitReveal?: boolean;
   dim?: boolean;
   dropHint?: boolean;
 } & DragPointerHandlers) {
-  const resolvedCompetence = competence ?? (card ? competenceOf(card.position, slot) : 'primary');
+  const resolvedCompetence = competence ?? (card ? competenceOf(cardNaturalPositions(card), slot) : 'primary');
+  const pitchPosition = lineupPitchPosition(formation, slot, slotIndex);
 
   return (
     <button
       type="button"
+      data-slot-type={slot.type}
+      data-slot-index={slotIndex}
+      data-pitch-x={pitchPosition.x}
+      data-pitch-y={pitchPosition.y}
       onClick={onClick}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -143,8 +134,8 @@ export function LineupSlot({
       onPointerCancel={onPointerCancel}
       className="absolute flex flex-col items-center active:scale-95"
       style={{
-        left: pitchAxis(slot.x, SLOT_INSET_X),
-        top: pitchAxis(lineupPitchY(slot.y), SLOT_INSET_Y),
+        left: pitchAxis(pitchPosition.x, SLOT_INSET_X),
+        top: pitchAxis(pitchPosition.y, SLOT_INSET_Y),
         width: SLOT_CARD_W,
         padding: 0,
         border: 0,
@@ -167,34 +158,6 @@ export function LineupSlot({
             highlighted={dropHint}
             showMisfitReceipt={resolvedCompetence === 'incompetent' && misfitReveal}
           />
-          {onInspect && (
-            <span
-              role="button"
-              aria-label={`Inspect ${lastName(card.name)}`}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                onInspect();
-              }}
-              className="absolute flex items-center justify-center"
-              style={{
-                right: -4,
-                bottom: -4,
-                zIndex: 40,
-                width: 14,
-                height: 14,
-                color: 'var(--line-white)',
-                background: HERO.ink,
-                border: '1.5px solid var(--line-white)',
-                borderRadius: '50%',
-                fontFamily: PIXEL,
-                fontSize: 7,
-                lineHeight: 1,
-              }}
-            >
-              i
-            </span>
-          )}
         </div>
       ) : (
         <>
@@ -262,9 +225,9 @@ export function BenchTile({
       onPointerCancel={onPointerCancel}
       className="relative flex active:scale-95"
       style={{
-        flex: '0 0 64px',
-        width: 64,
-        minWidth: 64,
+        flex: '0 0 66px',
+        width: 66,
+        minWidth: 66,
         padding: 0,
         border: 0,
         background: 'transparent',

@@ -2,7 +2,6 @@
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import type { JokerCard } from '../../lib/jokers';
-import { managerMaxStartingXiCost } from '../../lib/manager-v1';
 import {
   MANAGER_RARITY_TO_FRAME,
   handoffMgrTier,
@@ -21,8 +20,6 @@ export interface ManagerCardProps {
   manager: JokerCard;
   /** V1 manager-owned formation pool. One to three formations. */
   formations?: string[];
-  /** Manager-owned maximum total cost for the starting XI. */
-  maxStartingXiCost?: number;
   size?: ManagerCardSize;
   selected?: boolean;
   dimmed?: boolean;
@@ -37,7 +34,6 @@ function frameRarity(manager: JokerCard): string {
 function cardContents(
   manager: JokerCard,
   formations: string[] | undefined,
-  maxStartingXiCost: number,
   portraitOk: boolean,
   setPortraitOk: (ok: boolean) => void,
 ) {
@@ -81,15 +77,6 @@ function cardContents(
           </div>
         </div>
 
-        <span
-          className={styles.xiCostBadge}
-          data-testid="manager-xi-limit"
-          aria-label={`Starting XI cost limit ${maxStartingXiCost}`}
-        >
-          <small>XI LIMIT</small>
-          <strong>{maxStartingXiCost}</strong>
-        </span>
-
         <div className={styles.identityPlate}>
           <strong className={styles.name}>{manager.name.toUpperCase()}</strong>
           <span className={styles.actionLabel}>{actionName.toUpperCase()}</span>
@@ -105,7 +92,6 @@ function cardContents(
 export default function ManagerCard({
   manager,
   formations,
-  maxStartingXiCost,
   size = 'grid',
   selected = false,
   dimmed = false,
@@ -117,7 +103,6 @@ export default function ManagerCard({
   const tier = handoffMgrTier(rarity);
   const Component = onClick ? 'button' : 'div';
   const availableFormations = resolveManagerFormations(manager, formations);
-  const resolvedXiCost = maxStartingXiCost ?? managerMaxStartingXiCost(manager);
   const actionName = managerActionName(manager);
   const actionText = managerActionText(manager);
   const style = {
@@ -126,7 +111,7 @@ export default function ManagerCard({
     '--manager-glow': tier.glow,
     '--manager-inner': tier.inner,
   } as CSSProperties;
-  const contents = cardContents(manager, formations, resolvedXiCost, portraitOk, setPortraitOk);
+  const contents = cardContents(manager, formations, portraitOk, setPortraitOk);
   const classes = [
     styles.card,
     size === 'hero' ? styles.hero : styles.grid,
@@ -137,7 +122,7 @@ export default function ManagerCard({
   const commonProps = {
     className: classes,
     style,
-    'aria-label': `${manager.name}. Available formations: ${availableFormations.join(', ') || 'not assigned'}. Maximum starting XI cost ${resolvedXiCost}. ${actionName}: ${actionText}.`,
+    'aria-label': `${manager.name}. Available formations: ${availableFormations.join(', ') || 'not assigned'}. ${actionName}: ${actionText}.`,
   };
 
   if (Component === 'button') {

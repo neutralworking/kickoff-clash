@@ -173,7 +173,7 @@ export function refreshCalibrationScoreState(
 
 /**
  * Calibration runtime overrides for card-quality changes and the first expansion primitives.
- * Penalty ATT / Cost, global Energy and the +7 scoring band remain unchanged.
+ * Penalty ATT / Cost, global Energy and the core scoring band remain unchanged.
  */
 export function revealCalibrationPlayer(
   state: V8CalibrationState,

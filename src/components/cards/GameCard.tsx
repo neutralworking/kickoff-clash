@@ -28,7 +28,7 @@
  */
 
 import { useState } from 'react';
-import type { Card } from '../../lib/scoring';
+import { cardPositionLabels, type Card } from '../../lib/scoring';
 import { deriveStats } from '../../lib/funnel';
 import type { JokerCard } from '../../lib/jokers';
 import { type TacticCard, tacticCapacity } from '../../lib/tactics';
@@ -41,7 +41,6 @@ import {
   INVESTMENT_META,
   formatCash,
   lastName,
-  eligiblePositions,
   tacticMedallion,
   playerActions,
   ACTION_BONUS_GOLD,
@@ -57,6 +56,10 @@ import ClassGlyph from './ClassGlyph';
 import { ChargePips } from './ContestIcons';
 import { classOfCard } from '../../lib/contest-map';
 import { toDisplayV6Card, actionLabel } from '../../lib/v6-bridge';
+import {
+  managerActionName,
+  managerActionText,
+} from '../manager-cards/managerCardPresentation';
 import {
   portraitArtStyle,
   portraitSrc,
@@ -607,8 +610,8 @@ function PlayerFace({ card, full }: { card: Card; full: boolean }) {
   const src = portraitSrc(card);
   const [imgOk, setImgOk] = useState(true);
 
-  // full shows every eligible slot (capped at 2); grid shows the primary only.
-  const positions = full ? eligiblePositions(card.position).slice(0, 2) : [card.position];
+  // Show the authored natural positions on every card surface, capped at two.
+  const positions = cardPositionLabels(card).slice(0, 2);
 
   const cfg = full
     ? { disc: 44, glyph: 24, badgeFs: 9, badgePad: '3px 7px', discR: 50, nameBase: 19, arche: 11, winPad: '8px 8px 0', winRadius: 8 }
@@ -817,7 +820,8 @@ function ManagerFace({ manager, full }: { manager: JokerCard; full: boolean }) {
   const cc = handoffClassColor(cls);
   const iconInk = classIconInk(cls);
   const name = manager.name.toUpperCase();
-  const action = (manager.traits[0] ?? manager.archetype).toUpperCase();
+  const action = managerActionName(manager).toUpperCase();
+  const effect = managerActionText(manager);
   const flav = (manager.flavour || manager.philosophy || '').trim();
   const quoted = flav ? (/^["'“]/.test(flav) ? flav : `“${flav}”`) : '';
   const src = managerPortraitSrc(manager.id);
@@ -940,13 +944,25 @@ function ManagerFace({ manager, full }: { manager: JokerCard; full: boolean }) {
             <span style={{ fontFamily: HEAVY, fontSize: full ? 12 : 8.5, letterSpacing: '0.03em', color: 'var(--amber-hi, #fbbf24)' }}>{action}</span>
           </div>
 
-          {full && (
-            <>
-              <div style={{ height: 1, background: 'rgba(212,160,53,0.2)', margin: '11px 0 9px' }} />
-              <p style={{ margin: 0, fontFamily: BODY_FONT, fontSize: 11, lineHeight: 1.4, color: CREAM_SOFT }}>{manager.effect}</p>
-              {quoted && <p style={{ margin: '8px 0 0', fontFamily: FLAVOUR_FONT, fontStyle: 'italic', fontSize: 12, lineHeight: 1.25, color: DUST }}>{quoted}</p>}
-            </>
-          )}
+          <div style={{ height: 1, background: 'rgba(212,160,53,0.2)', margin: full ? '11px 0 9px' : '6px 0 5px' }} />
+          <p
+            data-manager-action-copy
+            style={{
+              margin: 0,
+              overflow: 'hidden',
+              color: CREAM_SOFT,
+              fontFamily: BODY_FONT,
+              fontSize: full ? 11 : 7.5,
+              fontWeight: 700,
+              lineHeight: full ? 1.4 : 1.24,
+              display: '-webkit-box',
+              WebkitBoxOrient: 'vertical',
+              WebkitLineClamp: full ? 4 : 3,
+            }}
+          >
+            {effect}
+          </p>
+          {full && quoted && <p style={{ margin: '8px 0 0', fontFamily: FLAVOUR_FONT, fontStyle: 'italic', fontSize: 12, lineHeight: 1.25, color: DUST }}>{quoted}</p>}
         </div>
       </div>
 

@@ -150,43 +150,6 @@ button.card:active { transform: translateY(2px) scale(0.985); }
   white-space: nowrap;
 }
 
-.xiCostBadge {
-  position: absolute;
-  top: 18%;
-  right: 4.5%;
-  z-index: 10;
-  min-height: 10cqw;
-  padding: 1.5cqw 2.2cqw 1.3cqw;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 1.8cqw;
-  color: #f5e6bd;
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.1), transparent 35%),
-    rgba(11, 7, 3, 0.94);
-  border: 0.65cqw solid color-mix(in srgb, var(--manager-edge) 76%, #2b1d0a);
-  border-radius: 2cqw;
-  box-shadow: 0 1.2cqw 0 rgba(0, 0, 0, 0.72), 0 0 4cqw color-mix(in srgb, var(--manager-edge) 22%, transparent);
-  white-space: nowrap;
-}
-
-.xiCostBadge small {
-  color: #d5c6a6;
-  font-family: var(--font-heavy, sans-serif);
-  font-size: 4.1cqw;
-  line-height: 1;
-  letter-spacing: 0.045em;
-}
-
-.xiCostBadge strong {
-  color: var(--manager-edge);
-  font-family: var(--font-heavy, sans-serif);
-  font-size: 8.7cqw;
-  line-height: 0.78;
-  letter-spacing: -0.04em;
-  text-shadow: 0 0.8cqw 0 #050301;
-}
-
 .identityPlate {
   position: absolute;
   left: 4.2%;

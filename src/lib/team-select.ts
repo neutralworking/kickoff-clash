@@ -7,7 +7,7 @@
  * best available player to each empty slot (eligible by position first).
  */
 
-import type { Card } from './scoring';
+import { cardNaturalPositions, type Card } from './scoring';
 import type { Formation } from './formations';
 import { positionFitsSlot } from './formations';
 
@@ -38,8 +38,12 @@ export function startersFilled(sel: XISelection): number {
 
 export type Competence = 'primary' | 'secondary' | 'incompetent';
 
-export function competenceOf(cardPosition: string, slot: { accepts: string[] }): Competence {
-  const idx = slot.accepts.indexOf(cardPosition);
+export function competenceOf(cardPosition: string | readonly string[], slot: { accepts: string[] }): Competence {
+  const positions = typeof cardPosition === 'string' ? [cardPosition] : cardPosition;
+  const idx = positions.reduce((best, position) => {
+    const candidate = slot.accepts.indexOf(position);
+    return candidate >= 0 && (best < 0 || candidate < best) ? candidate : best;
+  }, -1);
   if (idx === 0) return 'primary';
   if (idx > 0) return 'secondary';
   return 'incompetent';
@@ -81,7 +85,7 @@ export function autoFill(
   formation.slots.forEach((slot, i) => {
     if (next.starters[i] != null) return;
     const avail = remaining();
-    const pick = avail.find((c) => positionFitsSlot(c.position, slot)) ?? avail[0];
+    const pick = avail.find((c) => positionFitsSlot(cardNaturalPositions(c), slot)) ?? avail[0];
     if (pick) {
       next.starters[i] = pick.id;
       used.add(pick.id);
@@ -129,7 +133,7 @@ export function autoFillXI(
   const xi: Card[] = [];
   for (const slot of formation.slots) {
     const avail = remaining();
-    const pick = avail.find((c) => positionFitsSlot(c.position, slot)) ?? avail[0];
+    const pick = avail.find((c) => positionFitsSlot(cardNaturalPositions(c), slot)) ?? avail[0];
     if (pick) {
       xi.push(pick);
       used.add(pick.id);
