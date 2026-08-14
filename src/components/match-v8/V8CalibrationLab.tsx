@@ -106,6 +106,7 @@ type RevealSpecialOutcome = {
   label: string;
   side: V8CalibrationSide;
   zone: V8Zone;
+  cardIds: string[];
   destination: 'hand' | 'stay';
   tone: 'tactical' | 'blocked';
 };
@@ -419,21 +420,35 @@ function resolveRevealBeat(
     { side: 'away' as const, axis: 'ATT' as const, value: afterAway.attack - beforeAway.attack },
     { side: 'away' as const, axis: 'DEF' as const, value: afterAway.defence - beforeAway.defence },
   ].filter((delta) => delta.value !== 0);
-  const generatedEvents = newEvents.filter((event) => event.type === 'tactical_generated');
-  const tacticalNames = ['Through Ball', 'Long Shot', 'Offside Trap', 'Long Throw', 'Cross', 'Corner', 'Penalty', 'Dribble'];
-  const generatedLabels = generatedEvents.map((event) => (
-    tacticalNames.find((name) => event.text.toLowerCase().includes(name.toLowerCase()))?.toUpperCase() ?? 'TACTICAL'
-  ));
   const specialOutcomes: RevealSpecialOutcome[] = [];
-  if (generatedLabels.length > 0) {
-    const uniqueLabels = [...new Set(generatedLabels)];
-    for (const label of uniqueLabels) {
-      const count = generatedLabels.filter((candidate) => candidate === label).length;
+  for (const side of ['home', 'away'] as const) {
+    const beforeTacticals = new Map(calibrationHandTacticals(state, side).map((candidate) => [candidate.id, candidate]));
+    const afterTacticals = calibrationHandTacticals(next, side);
+    const generatedNames = [...new Set(afterTacticals
+      .filter((candidate) => !beforeTacticals.has(candidate.id))
+      .map((candidate) => candidate.name))];
+    for (const name of generatedNames) {
+      const generated = afterTacticals.filter((candidate) => candidate.name === name && !beforeTacticals.has(candidate.id));
       specialOutcomes.push({
-        id: `generated-${label}`,
-        label: `${count > 1 ? `${count}× ` : ''}${label} CREATED`,
-        side: play.side,
+        id: `generated-${side}-${name}`,
+        label: `${generated.length > 1 ? `${generated.length}× ` : ''}${name.toUpperCase()} CREATED`,
+        side,
         zone: play.zone,
+        cardIds: generated.map((candidate) => candidate.id),
+        destination: 'hand',
+        tone: 'tactical',
+      });
+    }
+
+    for (const candidate of afterTacticals) {
+      const before = beforeTacticals.get(candidate.id);
+      if (!before || before.attModifier === candidate.attModifier) continue;
+      specialOutcomes.push({
+        id: `modified-${side}-${candidate.id}`,
+        label: `${candidate.name.toUpperCase()} ${signed(candidate.attModifier - before.attModifier)} ATT`,
+        side,
+        zone: play.zone,
+        cardIds: [candidate.id],
         destination: 'hand',
         tone: 'tactical',
       });
@@ -447,6 +462,7 @@ function resolveRevealBeat(
       label: blockedEvent.type === 'action_suppressed' ? 'ACTION DISABLED' : 'ACTION BLOCKED',
       side: blockedTarget.side,
       zone: blockedTarget.zone,
+      cardIds: [],
       destination: 'stay',
       tone: 'blocked',
     });
@@ -902,7 +918,13 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
   const matchScore = useMemo<MatchScore>(() => ({ home: homeScore, away: awayScore }), [awayScore, homeScore]);
 
   const homePlayers = calibrationHandPlayers(state, 'home');
-  const homeTacticals = calibrationHandTacticals(state, 'home');
+  const arrivingHomeTacticalIds = revealPhase?.stage === 'consequence'
+    ? new Set(revealPhase.activeBeat?.specialOutcomes
+        .filter((outcome) => outcome.side === 'home' && outcome.destination === 'hand')
+        .flatMap((outcome) => outcome.cardIds) ?? [])
+    : new Set<string>();
+  const homeTacticals = calibrationHandTacticals(state, 'home')
+    .filter((card) => !arrivingHomeTacticalIds.has(card.id));
   const totalsHome = calibrationTeamTotals(state, 'home');
   const totalsAway = calibrationTeamTotals(state, 'away');
   const currentPriority = useMemo(() => priority(state, homeScore, awayScore, seed + state.period * 101), [state, homeScore, awayScore, seed]);
@@ -1334,10 +1356,10 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
       : revealPhase.stage === 'commitment'
         ? 240
         : revealPhase.stage === 'source'
-          ? 200
+          ? 360
           : revealPhase.stage === 'consequence'
-            ? 440
-            : 220;
+            ? 520
+            : 260;
 
     const timeout = window.setTimeout(() => {
       if (revealPhase.stage === 'source') {

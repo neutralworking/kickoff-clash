@@ -203,7 +203,20 @@ test.describe('V8 real-card calibration lab', () => {
     await page.locator('.v8-zone').nth(1).click();
 
     const expectedFirst = await page.getByTestId('v8-priority-ball-home').count() ? 'home' : 'away';
+    const pitch = page.locator('.v8-pitch');
     await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
+
+    const firstAction = page.getByTestId('v8-action-flash');
+    await expect(firstAction).toBeVisible();
+    await expect(firstAction).not.toContainText(/REVEAL/i);
+    await expect(pitch).toHaveAttribute('data-reveal-index', '1');
+    await expect(pitch).toHaveAttribute('data-reveal-side', expectedFirst);
+    const revealTotal = Number(await pitch.getAttribute('data-reveal-total'));
+    const opponentCommitments = Number(await pitch.getAttribute('data-opponent-commitments'));
+    expect(revealTotal).toBeGreaterThan(1);
+    const firstZone = await pitch.getAttribute('data-reveal-zone');
+    expect(firstZone).toMatch(/^(DEF|MID|ATT)$/);
+    await expect(page.locator(`[data-v8-zone="${firstZone}"]`)).toHaveClass(/is-resolving-zone/);
 
     await expect(page.getByTestId('v8-opponent-commitment')).toHaveCount(0);
     await expect(page.getByTestId('v8-reveal-stage')).toHaveCount(0);
@@ -223,17 +236,6 @@ test.describe('V8 real-card calibration lab', () => {
       await expect(group.locator('xpath=ancestor::*[@data-v8-zone][1]')).toHaveAttribute('data-v8-zone', zone!);
     }
 
-    const pitch = page.locator('.v8-pitch');
-    await expect(pitch).toHaveAttribute('data-reveal-index', '1');
-    const revealTotal = Number(await pitch.getAttribute('data-reveal-total'));
-    const opponentCommitments = Number(await pitch.getAttribute('data-opponent-commitments'));
-    expect(revealTotal).toBeGreaterThan(1);
-    await expect(pitch).toHaveAttribute('data-reveal-side', expectedFirst);
-    const firstZone = await pitch.getAttribute('data-reveal-zone');
-    expect(firstZone).toMatch(/^(DEF|MID|ATT)$/);
-    await expect(page.locator(`[data-v8-zone="${firstZone}"]`)).toHaveClass(/is-resolving-zone/);
-    await expect(page.getByTestId('v8-action-flash')).toBeVisible();
-    await expect(page.getByTestId('v8-action-flash')).not.toContainText(/REVEAL/i);
     await expect(page.getByTestId('v8-opponent-card-back')).toHaveCount(opponentCommitments - (expectedFirst === 'away' ? 1 : 0));
 
     const skip = page.getByRole('button', { name: 'Skip reveal sequence' });
