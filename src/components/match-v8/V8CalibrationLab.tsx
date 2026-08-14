@@ -101,6 +101,15 @@ type RevealStatDelta = {
   value: number;
 };
 
+type RevealSpecialOutcome = {
+  id: string;
+  label: string;
+  side: V8CalibrationSide;
+  zone: V8Zone;
+  destination: 'hand' | 'stay';
+  tone: 'tactical' | 'blocked';
+};
+
 type RevealBeat = {
   index: number;
   total: number;
@@ -110,9 +119,9 @@ type RevealBeat = {
   sourceRuntimeId: string | null;
   name: string;
   action: string;
-  effect: string;
   targets: RevealTarget[];
   statDeltas: RevealStatDelta[];
+  specialOutcomes: RevealSpecialOutcome[];
 };
 
 type ResolutionMoment = {
@@ -135,7 +144,7 @@ type ResolutionMoment = {
 
 type RevealPhase = {
   id: number;
-  stage: 'commitment' | 'source' | 'impact';
+  stage: 'commitment' | 'source' | 'consequence' | 'settle';
   resolvedState: V8CalibrationState;
   stagedState: V8CalibrationState | null;
   allPending: PendingPlay[];
@@ -386,11 +395,6 @@ function resolveRevealBeat(
   const manager = managers[play.side];
   const name = card?.matchName ?? (play.kind === 'tactical' ? 'TACTICAL' : manager.name);
   const action = card?.actionName ?? (play.kind === 'tactical' ? play.card.name : manager.actionName);
-  const genericAction = card ? `${card.realName} · ${card.actionName}.` : null;
-  const specificEvent = [...newEvents].reverse().find((event) => (
-    event.type !== 'player_revealed'
-    && event.text !== genericAction
-  ));
   const sourceRuntimeId = card
     ? Object.values(next.players).find((player) => player.side === play.side && player.cardId === card.id)?.runtimeId ?? null
     : null;
@@ -415,18 +419,38 @@ function resolveRevealBeat(
     { side: 'away' as const, axis: 'ATT' as const, value: afterAway.attack - beforeAway.attack },
     { side: 'away' as const, axis: 'DEF' as const, value: afterAway.defence - beforeAway.defence },
   ].filter((delta) => delta.value !== 0);
-  const statChange = statDeltas
-    .map((delta) => `${delta.side === 'home' ? 'YOU' : 'CPU'} ${signed(delta.value)} ${delta.axis}`)
-    .join(' · ');
-  const rawEffect = specificEvent?.text ?? (card?.actionText || (play.kind === 'tactical' ? tacticalDefinition(play.card.type).text : manager.actionText));
-  const effect = card
-    ? cleanPlacementEffect(card, rawEffect)
-    : rawEffect
-        .replace(`${manager.name} · ${manager.actionName}`, '')
-        .replace(`${manager.name} ·`, '')
-        .replace(/^\s*[:.→-]\s*/, '')
-        .trim() || statChange || 'BOARD STATE UNCHANGED';
-
+  const generatedEvents = newEvents.filter((event) => event.type === 'tactical_generated');
+  const tacticalNames = ['Through Ball', 'Long Shot', 'Offside Trap', 'Long Throw', 'Cross', 'Corner', 'Penalty', 'Dribble'];
+  const generatedLabels = generatedEvents.map((event) => (
+    tacticalNames.find((name) => event.text.toLowerCase().includes(name.toLowerCase()))?.toUpperCase() ?? 'TACTICAL'
+  ));
+  const specialOutcomes: RevealSpecialOutcome[] = [];
+  if (generatedLabels.length > 0) {
+    const uniqueLabels = [...new Set(generatedLabels)];
+    for (const label of uniqueLabels) {
+      const count = generatedLabels.filter((candidate) => candidate === label).length;
+      specialOutcomes.push({
+        id: `generated-${label}`,
+        label: `${count > 1 ? `${count}× ` : ''}${label} CREATED`,
+        side: play.side,
+        zone: play.zone,
+        destination: 'hand',
+        tone: 'tactical',
+      });
+    }
+  }
+  const blockedEvent = [...newEvents].reverse().find((event) => event.type === 'action_suppressed' || event.type === 'action_ignored');
+  if (blockedEvent) {
+    const blockedTarget = targets.find((target) => target.runtimeId !== sourceRuntimeId) ?? targets[0]!;
+    specialOutcomes.push({
+      id: `blocked-${blockedEvent.type}`,
+      label: blockedEvent.type === 'action_suppressed' ? 'ACTION DISABLED' : 'ACTION BLOCKED',
+      side: blockedTarget.side,
+      zone: blockedTarget.zone,
+      destination: 'stay',
+      tone: 'blocked',
+    });
+  }
   return {
     state: next,
     beat: {
@@ -438,9 +462,9 @@ function resolveRevealBeat(
       sourceRuntimeId,
       name,
       action,
-      effect: effect || statChange || 'BOARD STATE UNCHANGED',
       targets,
       statDeltas,
+      specialOutcomes,
     },
   };
 }
@@ -452,32 +476,57 @@ function actionPoint(zone: V8Zone, side: V8CalibrationSide): { x: number; y: num
   };
 }
 
-function ActionTrace({ beat }: { beat: RevealBeat }) {
-  const source = actionPoint(beat.zone, beat.side);
-  const uniqueTargets = beat.targets.filter((target, index, targets) => (
-    targets.findIndex((candidate) => candidate.side === target.side && candidate.zone === target.zone) === index
-  ));
+function statDestination(delta: RevealStatDelta): 'ATT' | 'DEF' {
+  return (delta.side === 'home' && delta.axis === 'ATT') || (delta.side === 'away' && delta.axis === 'DEF') ? 'ATT' : 'DEF';
+}
+
+function ActionConsequences({ beat }: { beat: RevealBeat }) {
   return (
-    <svg
-      className={`v8-action-trace v8-action-trace--${beat.side}`}
-      data-testid="v8-action-trace"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      {uniqueTargets.map((target) => {
+    <div className="v8-consequences" data-testid="v8-consequences" aria-live="polite">
+      {beat.statDeltas.map((delta, index) => {
+        const target = beat.targets.find((candidate) => candidate.side === delta.side) ?? beat.targets[0] ?? { side: beat.side, zone: beat.zone };
         const point = actionPoint(target.zone, target.side);
-        const samePoint = point.x === source.x && point.y === source.y;
-        const targetX = samePoint ? point.x + 3 : point.x;
-        const targetY = samePoint ? point.y + (beat.side === 'home' ? -9 : 9) : point.y;
+        const destination = statDestination(delta);
         return (
-          <g key={`${target.side}-${target.zone}`}>
-            <line x1={source.x} y1={source.y} x2={targetX} y2={targetY} />
-            <circle cx={targetX} cy={targetY} r="1.8" />
-          </g>
+          <strong
+            className={`v8-consequence v8-consequence--stat v8-consequence--${destination.toLowerCase()}`}
+            data-testid="v8-consequence"
+            data-destination={destination}
+            data-side={delta.side}
+            data-axis={delta.axis}
+            data-value={delta.value}
+            key={`${delta.side}-${delta.axis}`}
+            style={{
+              '--v8-consequence-from-x': `${point.x}%`,
+              '--v8-consequence-from-y': `${point.y}%`,
+              '--v8-consequence-to-x': destination === 'ATT' ? '25%' : '75%',
+              '--v8-consequence-delay': `${index * 45}ms`,
+            } as CSSProperties}
+          >
+            {delta.side === 'home' ? 'YOU' : 'CPU'} {signed(delta.value)} {delta.axis}
+          </strong>
         );
       })}
-    </svg>
+      {beat.specialOutcomes.map((outcome, index) => {
+        const point = actionPoint(outcome.zone, outcome.side);
+        return (
+          <strong
+            className={`v8-consequence v8-consequence--${outcome.tone} v8-consequence--${outcome.destination}`}
+            data-testid="v8-consequence"
+            data-destination={outcome.destination.toUpperCase()}
+            key={outcome.id}
+            style={{
+              '--v8-consequence-from-x': `${point.x}%`,
+              '--v8-consequence-from-y': `${point.y}%`,
+              '--v8-consequence-to-x': '50%',
+              '--v8-consequence-delay': `${(beat.statDeltas.length + index) * 45}ms`,
+            } as CSSProperties}
+          >
+            {outcome.label}
+          </strong>
+        );
+      })}
+    </div>
   );
 }
 
@@ -651,7 +700,7 @@ function DeployedChip({
   runtimeId,
   fresh = false,
   actionSource = false,
-  actionTarget = false,
+  consequenceTarget = false,
   onMove,
 }: {
   state: V8CalibrationState;
@@ -659,7 +708,7 @@ function DeployedChip({
   runtimeId: string;
   fresh?: boolean;
   actionSource?: boolean;
-  actionTarget?: boolean;
+  consequenceTarget?: boolean;
   onMove?: () => void;
 }) {
   const player = state.players[runtimeId]!;
@@ -689,9 +738,9 @@ function DeployedChip({
   const canMove = moveable && !moved && Boolean(onMove);
   return (
     <span
-      className={`v8-chip${side === 'away' ? ' v8-chip--away' : ''}${fresh ? ' is-fresh' : ''}${actionSource ? ' is-action-source' : ''}${actionTarget ? ' is-action-target' : ''}${suppressed ? ' is-suppressed' : ''}`}
+      className={`v8-chip${side === 'away' ? ' v8-chip--away' : ''}${fresh ? ' is-fresh' : ''}${actionSource ? ' is-action-source' : ''}${consequenceTarget ? ' has-consequence' : ''}${suppressed ? ' is-suppressed' : ''}`}
       data-action-source={actionSource || undefined}
-      data-action-target={actionTarget || undefined}
+      data-consequence-target={consequenceTarget || undefined}
       role={canMove ? 'button' : undefined}
       tabIndex={canMove ? 0 : undefined}
       onClick={(event) => {
@@ -1281,12 +1330,14 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
     if (!revealPhase) return;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const delay = reducedMotion
-      ? 40
+      ? 30
       : revealPhase.stage === 'commitment'
-        ? 280
+        ? 240
         : revealPhase.stage === 'source'
-          ? 260
-          : 420;
+          ? 200
+          : revealPhase.stage === 'consequence'
+            ? 440
+            : 220;
 
     const timeout = window.setTimeout(() => {
       if (revealPhase.stage === 'source') {
@@ -1299,11 +1350,16 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
         }
         setRevealPhase({
           ...revealPhase,
-          stage: 'impact',
+          stage: 'consequence',
           resolvedState: stagedState,
           stagedState: null,
           nextIndex: revealPhase.nextIndex + 1,
         });
+        return;
+      }
+
+      if (revealPhase.stage === 'consequence') {
+        setRevealPhase({ ...revealPhase, stage: 'settle' });
         return;
       }
 
@@ -1338,12 +1394,21 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
   const draggedPlayer = handDrag?.kind === 'player' ? getV8CalibrationPlayer(handDrag.cardId) : null;
   const draggedTactical = handDrag?.kind === 'tactical' ? calibrationHandTacticals(state, 'home').find((card) => card.id === handDrag.cardId) ?? null : null;
   const activeRevealBeat = revealPhase?.activeBeat ?? null;
-  const revealImpactActive = revealPhase?.stage === 'impact' && activeRevealBeat !== null;
-  const stagedFreshPlayerIds = revealImpactActive && activeRevealBeat.cardId ? [activeRevealBeat.cardId] : [];
-  const actionSourceRuntimeId = revealImpactActive ? activeRevealBeat.sourceRuntimeId : null;
-  const actionTargetRuntimeIds = revealImpactActive
+  const revealConsequenceActive = revealPhase?.stage === 'consequence' && activeRevealBeat !== null;
+  const revealSettleActive = revealPhase?.stage === 'settle' && activeRevealBeat !== null;
+  const revealCardActive = (revealConsequenceActive || revealSettleActive) && activeRevealBeat !== null;
+  const stagedFreshPlayerIds = revealConsequenceActive && activeRevealBeat.cardId ? [activeRevealBeat.cardId] : [];
+  const actionSourceRuntimeId = revealCardActive ? activeRevealBeat.sourceRuntimeId : null;
+  const consequenceTargetRuntimeIds = revealConsequenceActive
     ? new Set(activeRevealBeat.targets.flatMap((target) => target.runtimeId ? [target.runtimeId] : []))
     : new Set<string>();
+  const heldDelta = (side: V8CalibrationSide, axis: 'ATT' | 'DEF') => revealConsequenceActive
+    ? activeRevealBeat.statDeltas.find((delta) => delta.side === side && delta.axis === axis)?.value ?? 0
+    : 0;
+  const displayedHomeAttack = totalsHome.attack - heldDelta('home', 'ATT');
+  const displayedHomeDefence = totalsHome.defence - heldDelta('home', 'DEF');
+  const displayedAwayAttack = totalsAway.attack - heldDelta('away', 'ATT');
+  const displayedAwayDefence = totalsAway.defence - heldDelta('away', 'DEF');
   const revealActionLeft = revealPhase?.activeBeat
     ? `${(ZONES.indexOf(revealPhase.activeBeat.zone) + .5) * (100 / ZONES.length)}%`
     : '50%';
@@ -1429,8 +1494,8 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
       </header>
 
       <section className="v8-live-contests" aria-label="Current scoring contests" data-testid="v8-live-contests">
-        <ContestComparison key={`att-${revealPhase?.id ?? 0}-${revealPhase?.nextIndex ?? 0}`} axis="ATT" user={totalsHome.attack} cpu={totalsAway.defence} updating={revealImpactActive} />
-        <ContestComparison key={`def-${revealPhase?.id ?? 0}-${revealPhase?.nextIndex ?? 0}`} axis="DEF" user={totalsHome.defence} cpu={totalsAway.attack} updating={revealImpactActive} />
+        <ContestComparison key={`att-${revealPhase?.id ?? 0}-${revealPhase?.nextIndex ?? 0}-${revealPhase?.stage ?? 'idle'}`} axis="ATT" user={displayedHomeAttack} cpu={displayedAwayDefence} updating={revealSettleActive} />
+        <ContestComparison key={`def-${revealPhase?.id ?? 0}-${revealPhase?.nextIndex ?? 0}-${revealPhase?.stage ?? 'idle'}`} axis="DEF" user={displayedHomeDefence} cpu={displayedAwayAttack} updating={revealSettleActive} />
       </section>
 
       <div className="v8-condition" hidden={!debugOpen}>
@@ -1500,20 +1565,20 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
           }
           if (selection?.kind === 'manager') guide = playerOccupancy >= 4 ? 'FULL' : state.teams.home.energy < homeManager.cost ? 'NO ENERGY' : homeManager.actionName.toUpperCase();
           if (selection?.kind === 'move') guide = 'MOVE';
-          const actionTargetZone = revealImpactActive && activeRevealBeat.targets.some((target) => target.zone === zone);
+          const consequenceTargetZone = revealConsequenceActive && activeRevealBeat.targets.some((target) => target.zone === zone);
 
           return (
             <button
               key={zone}
               type="button"
               data-v8-zone={zone}
-              className={`v8-zone${revealPhase?.activeBeat?.zone === zone ? ' is-resolving-zone' : ''}${actionTargetZone ? ' is-action-target' : ''}${placementImpact ? ' has-placement-preview' : ''}${focusedPlacementImpact?.zone === zone ? ' is-placement-focus' : ''}${handDrag ? isHandDragZoneLegal(handDrag, zone) ? ' is-drag-target' : ' is-drag-disabled' : ''}${handDrag?.overZone === zone && isHandDragZoneLegal(handDrag, zone) ? ' is-drag-over' : ''}`}
-              data-action-target={actionTargetZone || undefined}
+              className={`v8-zone${revealPhase?.activeBeat?.zone === zone ? ' is-resolving-zone' : ''}${consequenceTargetZone ? ' has-consequence' : ''}${placementImpact ? ' has-placement-preview' : ''}${focusedPlacementImpact?.zone === zone ? ' is-placement-focus' : ''}${handDrag ? isHandDragZoneLegal(handDrag, zone) ? ' is-drag-target' : ' is-drag-disabled' : ''}${handDrag?.overZone === zone && isHandDragZoneLegal(handDrag, zone) ? ' is-drag-over' : ''}`}
+              data-consequence-target={consequenceTargetZone || undefined}
               onClick={() => queueToZone(zone)}
             >
               <div className="v8-zone__heading"><strong>{zone}</strong><span data-testid={placementImpact ? `v8-placement-zone-${zone}` : undefined} data-penalty={placementImpact?.effectivePenalty}>{guide}</span></div>
               <div className="v8-zone__side v8-zone__side--away">
-                {awayZone.map((player) => <DeployedChip key={player.runtimeId} state={state} side="away" runtimeId={player.runtimeId} fresh={stagedFreshPlayerIds.includes(player.cardId)} actionSource={player.runtimeId === actionSourceRuntimeId} actionTarget={actionTargetRuntimeIds.has(player.runtimeId)} />)}
+                {awayZone.map((player) => <DeployedChip key={player.runtimeId} state={state} side="away" runtimeId={player.runtimeId} fresh={stagedFreshPlayerIds.includes(player.cardId)} actionSource={player.runtimeId === actionSourceRuntimeId} consequenceTarget={consequenceTargetRuntimeIds.has(player.runtimeId)} />)}
                 {Array.from({ length: Math.max(0, 4 - awayZone.length) }).map((_, index) => <i key={`away-${zone}-${index}`} />)}
                 {hiddenCpuCommitments.length > 0 && (
                   <span className="v8-opponent-commitments" data-zone={zone} aria-label={`${hiddenCpuCommitments.length} hidden opponent commitment${hiddenCpuCommitments.length === 1 ? '' : 's'} in ${zone}`}>
@@ -1524,7 +1589,7 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
               </div>
               <div className="v8-zone__side">
                 {homeZone.map((player) => (
-                  <DeployedChip key={player.runtimeId} state={state} side="home" runtimeId={player.runtimeId} fresh={stagedFreshPlayerIds.includes(player.cardId)} actionSource={player.runtimeId === actionSourceRuntimeId} actionTarget={actionTargetRuntimeIds.has(player.runtimeId)} onMove={() => setSelection({ kind: 'move', runtimeId: player.runtimeId })} />
+                  <DeployedChip key={player.runtimeId} state={state} side="home" runtimeId={player.runtimeId} fresh={stagedFreshPlayerIds.includes(player.cardId)} actionSource={player.runtimeId === actionSourceRuntimeId} consequenceTarget={consequenceTargetRuntimeIds.has(player.runtimeId)} onMove={() => setSelection({ kind: 'move', runtimeId: player.runtimeId })} />
                 ))}
                 {queuedPlayers.map((play) => play.kind === 'player' ? (
                   <span key={`queued-${play.cardId}`} className="v8-chip v8-chip--transient"><span className="v8-card__sr">{getV8CalibrationPlayer(play.cardId).realName}</span>{getV8CalibrationPlayer(play.cardId).matchName}<b>PLAYER · QUEUED</b></span>
@@ -1535,7 +1600,7 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
             </button>
           );
         })}
-        {(revealPhase?.stage === 'source' || revealPhase?.stage === 'impact') && revealPhase.activeBeat && (
+        {revealPhase?.stage === 'source' && revealPhase.activeBeat && (
           <aside
             className={`v8-action-flash v8-action-flash--${revealPhase.activeBeat.side}`}
             data-testid="v8-action-flash"
@@ -1547,19 +1612,9 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
           >
             <small>{revealPhase.activeBeat.name}</small>
             <strong>{revealPhase.activeBeat.action}</strong>
-            {revealPhase.stage === 'impact' && <span>{revealPhase.activeBeat.effect}</span>}
-            {revealPhase.stage === 'impact' && revealPhase.activeBeat.statDeltas.length > 0 && (
-              <em className="v8-action-deltas" data-testid="v8-action-deltas">
-                {revealPhase.activeBeat.statDeltas.map((delta) => (
-                  <b key={`${delta.side}-${delta.axis}`} data-side={delta.side} data-axis={delta.axis} data-value={delta.value}>
-                    {delta.side === 'home' ? 'YOU' : 'CPU'} {signed(delta.value)} {delta.axis}
-                  </b>
-                ))}
-              </em>
-            )}
           </aside>
         )}
-        {revealImpactActive && activeRevealBeat && <ActionTrace beat={activeRevealBeat} />}
+        {revealConsequenceActive && activeRevealBeat && <ActionConsequences beat={activeRevealBeat} />}
         {revealPhase && (
           <button className="v8-reveal-skip" type="button" onClick={skipReveal} aria-label="Skip reveal sequence">
             SKIP

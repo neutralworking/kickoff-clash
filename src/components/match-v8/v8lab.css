@@ -3608,9 +3608,6 @@
   border-width: 2px;
   animation: v8-action-source-card .26s cubic-bezier(.16, .88, .2, 1.12) both;
 }
-.v8-action-flash[data-action-stage="impact"] {
-  animation: v8-action-impact-card .4s cubic-bezier(.16, .88, .2, 1.12) both;
-}
 .v8-action-flash--away {
   top: 42%;
   border-color: rgba(143, 182, 255, .68);
@@ -3641,69 +3638,55 @@
   white-space: nowrap;
 }
 .v8-action-flash--away strong { color: #b6e0f4; }
-.v8-action-flash span {
-  max-width: 100%;
-  color: var(--cream-soft);
-  font-family: var(--font-pixel, monospace);
-  font-size: 4.5px;
-  line-height: 1.2;
-  white-space: normal;
-}
-.v8-action-deltas {
-  max-width: 100%;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 2px;
-  margin-top: 2px;
-  font-style: normal;
-}
-.v8-action-deltas > b {
-  padding: 2px 3px;
-  border: 1px solid rgba(255, 219, 126, .28);
-  border-radius: 99px;
-  background: rgba(255,255,255,.055);
-  color: #fff1bd;
-  font-family: var(--font-pixel, monospace);
-  font-size: 4.25px;
-  line-height: 1;
-  white-space: nowrap;
-  animation: v8-action-delta .34s cubic-bezier(.16, .9, .22, 1.16) both;
-}
-.v8-action-deltas > b[data-side="away"] {
-  border-color: rgba(142, 198, 255, .3);
-  color: #c9e9ff;
-}
-.v8-action-trace {
+.v8-consequences {
   position: absolute;
-  z-index: 35;
+  z-index: 40;
   inset: 0;
-  width: 100%;
-  height: 100%;
   overflow: visible;
   pointer-events: none;
 }
-.v8-action-trace line {
-  fill: none;
-  stroke: rgba(255, 211, 105, .9);
-  stroke-width: 1.35;
-  stroke-linecap: round;
-  stroke-dasharray: 4 3;
-  vector-effect: non-scaling-stroke;
-  animation: v8-action-trace .42s ease-out both;
+.v8-consequence {
+  --v8-consequence-from-x: 50%;
+  --v8-consequence-from-y: 50%;
+  --v8-consequence-to-x: 50%;
+  --v8-consequence-delay: 0ms;
+  position: absolute;
+  left: var(--v8-consequence-from-x);
+  top: var(--v8-consequence-from-y);
+  min-width: max-content;
+  padding: 5px 7px;
+  border: 2px solid rgba(255, 221, 124, .88);
+  border-radius: 5px;
+  background: #161008;
+  box-shadow: 0 5px 16px rgba(0,0,0,.55), 0 0 18px rgba(239, 180, 47, .3);
+  color: #fff0b8;
+  font-family: var(--font-heavy, sans-serif);
+  font-size: 8px;
+  line-height: 1;
+  letter-spacing: .015em;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  animation: v8-consequence-to-contest .44s cubic-bezier(.2, .72, .18, 1) var(--v8-consequence-delay) both;
 }
-.v8-action-trace circle {
-  fill: rgba(255, 236, 178, .95);
-  stroke: rgba(85, 50, 6, .8);
-  stroke-width: .75;
-  vector-effect: non-scaling-stroke;
-  animation: v8-action-target-dot .42s ease-out both;
+.v8-consequence--def {
+  border-color: rgba(111, 193, 255, .9);
+  box-shadow: 0 5px 16px rgba(0,0,0,.55), 0 0 18px rgba(76, 167, 238, .3);
+  color: #d9f1ff;
 }
-.v8-action-trace--away line { stroke: rgba(133, 203, 255, .92); }
-.v8-action-trace--away circle { fill: #d5efff; stroke: rgba(12, 51, 82, .86); }
-.v8-zone.is-action-target {
+.v8-consequence--tactical {
+  border-color: rgba(112, 221, 255, .92);
+  background: #07141b;
+  color: #d9f8ff;
+  animation-name: v8-consequence-to-hand;
+}
+.v8-consequence--blocked {
+  border-color: rgba(255, 112, 102, .92);
+  background: #1d0908;
+  color: #ffd7d2;
+  animation-name: v8-consequence-stay;
+}
+.v8-zone.has-consequence {
   z-index: 5;
-  animation: v8-action-target-zone .42s ease-out both;
 }
 .v8-chip.is-action-source {
   z-index: 10;
@@ -3719,61 +3702,47 @@
   animation: v8-action-name .4s ease-out both;
 }
 .v8-chip--away.is-action-source > small { color: #cdeeff; }
-.v8-chip.is-action-target::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset: -5px;
-  border: 2px solid rgba(255, 221, 132, .82);
-  border-radius: 10px;
-  pointer-events: none;
-  animation: v8-action-target-ring .42s ease-out both;
+.v8-chip.has-consequence {
+  z-index: 9;
+  filter: brightness(1.22) saturate(1.14);
 }
-.v8-chip--away.is-action-target::before { border-color: rgba(132, 207, 255, .82); }
+.v8-chip.has-consequence .v8-chip__name { color: #fff0bd; }
+.v8-chip--away.has-consequence .v8-chip__name { color: #d8f2ff; }
 
 @keyframes v8-action-source-card {
   0% { opacity: 0; transform: translate(-50%, -50%) perspective(300px) rotateY(82deg) scale(.78); filter: brightness(1.8); }
   70% { opacity: 1; transform: translate(-50%, -50%) perspective(300px) rotateY(-5deg) scale(1.06); }
   100% { opacity: 1; transform: translate(-50%, -50%) perspective(300px) rotateY(0) scale(1); filter: none; }
 }
-@keyframes v8-action-impact-card {
-  0% { opacity: .25; transform: translate(-50%, -50%) scale(.9); filter: brightness(1.7); }
-  58% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
-  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: none; }
+@keyframes v8-consequence-to-contest {
+  0% { left: var(--v8-consequence-from-x); top: var(--v8-consequence-from-y); opacity: 0; transform: translate(-50%, -50%) scale(.7); }
+  25% { left: var(--v8-consequence-from-x); top: var(--v8-consequence-from-y); opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+  48% { left: var(--v8-consequence-from-x); top: var(--v8-consequence-from-y); opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  88% { opacity: 1; }
+  100% { left: var(--v8-consequence-to-x); top: -48px; opacity: 0; transform: translate(-50%, -50%) scale(.72); }
 }
-@keyframes v8-action-delta {
-  0% { opacity: 0; transform: translateY(5px) scale(.78); }
-  68% { opacity: 1; transform: translateY(-1px) scale(1.1); }
-  100% { opacity: 1; transform: none; }
+@keyframes v8-consequence-to-hand {
+  0% { left: var(--v8-consequence-from-x); top: var(--v8-consequence-from-y); opacity: 0; transform: translate(-50%, -50%) scale(.7); }
+  25% { left: var(--v8-consequence-from-x); top: var(--v8-consequence-from-y); opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+  52% { left: var(--v8-consequence-from-x); top: var(--v8-consequence-from-y); opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  90% { opacity: 1; }
+  100% { left: var(--v8-consequence-to-x); top: calc(100% + 40px); opacity: 0; transform: translate(-50%, -50%) scale(.72); }
 }
-@keyframes v8-action-trace {
-  0% { opacity: 0; stroke-dashoffset: 18; }
-  22% { opacity: 1; }
-  100% { opacity: .9; stroke-dashoffset: 0; }
-}
-@keyframes v8-action-target-dot {
-  0% { opacity: 0; transform: scale(.2); transform-box: fill-box; transform-origin: center; }
-  65% { opacity: 1; transform: scale(1.7); }
-  100% { opacity: 1; transform: scale(1); }
-}
-@keyframes v8-action-target-zone {
-  0% { box-shadow: inset 0 0 0 rgba(255, 218, 120, 0); }
-  55% { border-color: rgba(255, 222, 137, .82); box-shadow: inset 0 0 34px rgba(255, 193, 71, .2), 0 0 24px rgba(255, 184, 51, .2); }
-  100% { box-shadow: inset 0 0 18px rgba(255, 193, 71, .1); }
+@keyframes v8-consequence-stay {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.72); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+  75% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(.96); }
 }
 @keyframes v8-action-name {
   0% { opacity: .25; transform: translateY(3px) scale(.86); }
   65% { opacity: 1; transform: translateY(-1px) scale(1.08); }
   100% { opacity: 1; transform: none; }
 }
-@keyframes v8-action-target-ring {
-  0% { opacity: 0; transform: scale(.72); }
-  42% { opacity: 1; transform: scale(1.08); }
-  100% { opacity: 0; transform: scale(1.28); }
-}
 
 .v8-pitch.is-resolving,
 .v8-resolution { overflow: visible; }
+.v8-shell[data-visual-family="team-selection"] .v8-pitch.is-revealing,
 .v8-shell[data-visual-family="team-selection"] .v8-pitch.is-resolving { overflow: visible; }
 .v8-shell.is-resolving .v8-hand-wrap,
 .v8-shell.is-resolving .v8-commit {
@@ -3850,11 +3819,7 @@
   .v8-contest-comparison.is-updating > span > b,
   .v8-contest-comparison.is-updating > strong,
   .v8-action-flash,
-  .v8-action-deltas > b,
-  .v8-action-trace line,
-  .v8-action-trace circle,
-  .v8-zone.is-action-target,
+  .v8-consequence,
   .v8-chip.is-action-source > small,
-  .v8-chip.is-action-target::before,
   .v8-goal-burst > span { animation-duration: .01ms !important; animation-delay: 0ms !important; }
 }

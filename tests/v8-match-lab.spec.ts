@@ -163,14 +163,28 @@ test.describe('V8 real-card calibration lab', () => {
     const actionFlash = page.getByTestId('v8-action-flash');
     await expect(actionFlash).toBeVisible();
     await expect(actionFlash).not.toContainText(/REVEAL/i);
-    await expect(actionFlash).toHaveAttribute('data-action-stage', /^(source|impact)$/);
+    await expect(actionFlash).toHaveAttribute('data-action-stage', 'source');
     await expect(actionFlash.locator('strong')).not.toHaveText('');
+
+    const consequence = page.getByTestId('v8-consequence').filter({ hasText: /YOU [+-]\d+ (ATT|DEF)/ }).first();
+    await expect(consequence).toBeVisible();
+    const destination = await consequence.getAttribute('data-destination');
+    const side = await consequence.getAttribute('data-side');
+    const delta = Number(await consequence.getAttribute('data-value'));
+    expect(destination).toMatch(/^(ATT|DEF)$/);
+    expect(side).toBe('home');
+    expect(delta).not.toBe(0);
+
+    const destinationContest = page.locator(`.v8-contest-comparison[data-axis="${destination}"]`);
+    const destinationValue = destinationContest.locator(':scope > span > b').nth(side === 'home' ? 0 : 1);
+    const heldValue = Number(await destinationValue.textContent());
     await expect(midfieldZone.locator('.v8-chip').filter({ hasText: 'Billy Bremner' })).toHaveClass(/is-fresh/);
-    await expect(actionFlash).toHaveAttribute('data-action-stage', 'impact');
-    await expect(page.getByTestId('v8-action-trace')).toBeVisible();
-    await expect(page.getByTestId('v8-action-deltas').locator('b')).not.toHaveCount(0);
     await expect(midfieldZone.locator('[data-action-source="true"]').filter({ hasText: 'Billy Bremner' })).toBeVisible();
-    await expect(midfieldZone).toHaveAttribute('data-action-target', 'true');
+    await expect(midfieldZone).toHaveAttribute('data-consequence-target', 'true');
+    await expect(midfieldZone.locator('[data-consequence-target="true"]')).toBeVisible();
+
+    await expect(destinationContest).toHaveClass(/is-updating/);
+    await expect(destinationValue).toHaveText(String(heldValue + delta));
 
     const moment = page.getByTestId('v8-resolution');
     await expect(moment).toBeVisible();
@@ -428,6 +442,10 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
     await expectEnergy(page, 1, 4);
     await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
+
+    const createdCross = page.getByTestId('v8-consequence').filter({ hasText: 'CROSS CREATED' });
+    await expect(createdCross).toBeVisible({ timeout: 15_000 });
+    await expect(createdCross).toHaveAttribute('data-destination', 'HAND');
 
     await expect(page.getByText('PERIOD 3/4', { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId('v8-window')).toHaveCount(0);
