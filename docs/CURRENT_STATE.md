@@ -133,6 +133,7 @@ Current layout rules include:
 - safe areas use `viewport-fit=cover` and environment insets.
 - the live V8 match pitch is centred and occupies roughly 40–50% of the phone viewport height;
 - the match hand uses two visible rows rather than a horizontal scroller, with the manager Action first;
+- match-hand cards support real coarse-pointer drag and drop into a location while retaining tap-to-select and tap-to-place as the fallback;
 - the persistent last-period recap and separate resolution panel have been removed; the live score contests carry the scoring payoff above the pitch.
 - each committed play now reads literally: the source card flips with its Action, a large consequence badge appears on the affected card or zone, then travels into ATT/DEF before that number updates; generated Tacticals travel toward the hand while blocked Actions stay on their target.
 - the period CTA is `CONFIRM`; priority is shown by a ball beside the relevant team score, committed cards flip without reveal narration, ATT/DEF totals update with each card, and every full +5 attacking margin becomes a ball that travels from its contest into the match score before that score increments.

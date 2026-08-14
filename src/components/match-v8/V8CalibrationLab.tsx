@@ -1135,10 +1135,19 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
     event: ReactPointerEvent<HTMLButtonElement>,
     drag: Pick<HandDragState, 'kind' | 'cardId' | 'label'>,
   ) => {
+    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
     setSelection(drag.kind === 'manager' ? { kind: 'manager' } : { kind: drag.kind, cardId: drag.cardId });
     if (finished || revealPhase || resolutionMoment || !ZONES.some((zone) => isHandDragZoneLegal(drag, zone))) return;
 
     const pointerId = event.pointerId;
+    // Pointer capture keeps a real finger gesture alive after it leaves the compact hand card.
+    // Some test-generated pointer events are not capturable, so retain the window listeners as
+    // the cross-browser path and treat capture as a progressive enhancement.
+    try {
+      event.currentTarget.setPointerCapture(pointerId);
+    } catch {
+      // The global pointer listeners below still own the gesture.
+    }
     setDrag({
       ...drag,
       pointerId,

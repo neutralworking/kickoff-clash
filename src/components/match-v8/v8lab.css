@@ -3442,6 +3442,8 @@
   min-width: 0;
   height: 104px;
   min-height: 0;
+  touch-action: none;
+  -webkit-touch-callout: none;
 }
 
 .v8-shell[data-visual-family="team-selection"] .v8-card > strong {

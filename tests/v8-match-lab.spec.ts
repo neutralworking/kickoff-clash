@@ -79,6 +79,51 @@ async function dragCardToZone(page: Page, card: Locator, zone: Locator, pointerI
   await expect(page.getByTestId('v8-drag-ghost')).toHaveCount(0);
 }
 
+async function dragCardToZoneWithTouch(page: Page, card: Locator, zone: Locator) {
+  await card.scrollIntoViewIfNeeded();
+  const cardBox = await card.boundingBox();
+  const pitchBox = await page.locator('.v8-pitch').boundingBox();
+  const zoneName = await zone.getAttribute('data-v8-zone');
+  expect(cardBox).not.toBeNull();
+  expect(pitchBox).not.toBeNull();
+  expect(zoneName).toMatch(/^(DEF|MID|ATT)$/);
+
+  const startX = cardBox!.x + cardBox!.width / 2;
+  const startY = cardBox!.y + cardBox!.height / 2;
+  const depth = zoneName === 'DEF' ? 1 / 6 : zoneName === 'MID' ? 1 / 2 : 5 / 6;
+  const endX = pitchBox!.x + pitchBox!.width * depth;
+  const endY = pitchBox!.y + pitchBox!.height * .78;
+  const session = await page.context().newCDPSession(page);
+
+  try {
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x: startX, y: startY, id: 1, radiusX: 8, radiusY: 8, force: .7 }],
+    });
+    for (let step = 1; step <= 10; step += 1) {
+      const progress = step / 10;
+      await session.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{
+          x: startX + ((endX - startX) * progress),
+          y: startY + ((endY - startY) * progress),
+          id: 1,
+          radiusX: 8,
+          radiusY: 8,
+          force: .7,
+        }],
+      });
+    }
+    await expect(page.getByTestId('v8-drag-ghost')).toBeVisible();
+    await expect(zone).toHaveClass(/is-drag-over/);
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  } finally {
+    await session.detach();
+  }
+
+  await expect(page.getByTestId('v8-drag-ghost')).toHaveCount(0);
+}
+
 test.describe('V8 real-card calibration lab', () => {
   test('opens with a skippable versus card, then presents three left-to-right locations', async ({ page }) => {
     await page.goto('/lab/match-v8');
@@ -323,6 +368,43 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(midfieldZone.locator('.v8-chip--transient')).toContainText('Billy Bremner');
     await expect(bremner).toHaveCount(0);
     await expectMobileFit(page);
+  });
+
+  test('drags a hand card with a real mobile touch sequence while preserving tap placement', async ({ browser }) => {
+    const context = await browser.newContext({
+      baseURL: 'http://127.0.0.1:3001',
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.goto('/lab/match-v8');
+      const intro = page.getByTestId('v8-match-intro');
+      if (await intro.isVisible()) await intro.click();
+
+      const bremner = page.getByTestId('player-card-bremner');
+      const midfieldZone = page.locator('.v8-zone').nth(1);
+      await dragCardToZoneWithTouch(page, bremner, midfieldZone);
+
+      await expect(midfieldZone.locator('.v8-chip').filter({ hasText: 'Billy Bremner' })).toBeVisible();
+      await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
+      await expectEnergy(page, 1, 2);
+
+      await page.getByRole('button', { name: 'UNDO', exact: true }).click();
+      await expectEnergy(page, 2, 2);
+
+      const defenceZone = page.locator('.v8-zone').nth(0);
+      await bremner.click();
+      await defenceZone.click();
+      await expect(defenceZone.locator('.v8-chip').filter({ hasText: 'Billy Bremner' })).toBeVisible();
+      await expect(page.getByText('1 committed', { exact: true })).toBeVisible();
+      await expectEnergy(page, 1, 2);
+      await expectMobileFit(page);
+    } finally {
+      await context.close();
+    }
   });
 
   test('previews placement contribution, Action, OOP and goal thresholds before commitment', async ({ page }) => {
