@@ -52,6 +52,10 @@ const ZONES: readonly V8Zone[] = ['DEF', 'MID', 'ATT'];
 const PERIOD_LABELS = ['PERIOD 1/4', 'PERIOD 2/4', 'PERIOD 3/4', 'PERIOD 4/4'] as const;
 const DEFAULT_HOME_SQUAD: V8CalibrationSquadKey = 'cross';
 const DEFAULT_AWAY_SQUAD: V8CalibrationSquadKey = 'balanced_midrange';
+const GOAL_STREAM_START_MS = 560;
+const GOAL_STREAM_DURATION_MS = 760;
+const GOAL_STREAM_STEP_MS = 200;
+const GOAL_ARRIVAL_MS = GOAL_STREAM_START_MS + GOAL_STREAM_DURATION_MS;
 
 type ManagerProfiles = Record<V8CalibrationSide, ManagerV8Profile>;
 type MatchScore = { home: number; away: number };
@@ -138,9 +142,6 @@ type ResolutionMoment = {
   homeDefence: number;
   nextHomeScore: number;
   nextAwayScore: number;
-  nextLabel: string;
-  nextEnergy: number | null;
-  final: boolean;
 };
 
 type RevealPhase = {
@@ -802,19 +803,26 @@ function ContestComparison({
   user,
   cpu,
   updating = false,
+  resolution = null,
 }: {
   axis: 'ATT' | 'DEF';
   user: number;
   cpu: number;
   updating?: boolean;
+  resolution?: {
+    side: V8CalibrationSide;
+    goals: number;
+    attackingMargin: number;
+  } | null;
 }) {
   const attack = axis === 'ATT' ? user : cpu;
   const defence = axis === 'ATT' ? cpu : user;
   const margin = user - cpu;
   const goals = goalsFromAttackDefence(attack, defence);
+  const remainder = resolution ? resolution.attackingMargin - (resolution.goals * V8_GOAL_BAND) : 0;
   return (
     <div
-      className={`v8-contest-comparison is-${axis.toLowerCase()}${axis === 'ATT' && goals ? ' is-converting' : ''}${axis === 'DEF' && !goals && margin >= 0 ? ' is-holding' : ''}${margin < 0 ? ' is-behind' : ''}${updating ? ' is-updating' : ''}`}
+      className={`v8-contest-comparison is-${axis.toLowerCase()}${axis === 'ATT' && goals ? ' is-converting' : ''}${axis === 'DEF' && !goals && margin >= 0 ? ' is-holding' : ''}${margin < 0 ? ' is-behind' : ''}${updating ? ' is-updating' : ''}${resolution ? ' is-resolving' : ''}`}
       data-axis={axis}
       data-margin={margin}
     >
@@ -823,6 +831,34 @@ function ContestComparison({
       <em>VS</em>
       <span><small>CPU</small><b>{cpu}</b><i>{axis === 'ATT' ? 'DEF' : 'ATT'}</i></span>
       <strong aria-label={`${signed(margin)} margin`}>{signed(margin)}</strong>
+      {resolution && (
+        <div
+          className={`v8-contest-conversion is-${resolution.side}${resolution.goals ? ' is-scoring' : ' is-denied'}`}
+          data-testid="v8-contest-conversion"
+          data-side={resolution.side}
+          data-goals={resolution.goals}
+          data-margin={resolution.attackingMargin}
+          data-remainder={remainder}
+          aria-label={resolution.goals
+            ? `${resolution.attackingMargin} attacking margin converts to ${resolution.goals} goal${resolution.goals === 1 ? '' : 's'}`
+            : `${resolution.attackingMargin} attacking margin does not score`}
+        >
+          <span>+{resolution.attackingMargin}</span>
+          <i aria-hidden="true">→</i>
+          {resolution.goals ? (
+            <span className="v8-conversion-balls" aria-hidden="true">
+              {Array.from({ length: resolution.goals }, (_, index) => (
+                <b
+                  className="v8-conversion-ball"
+                  key={`${resolution.side}-goal-${index}`}
+                  style={{ '--v8-goal-delay': `${(GOAL_STREAM_START_MS + (index * GOAL_STREAM_STEP_MS)) / 1000}s` } as CSSProperties}
+                >⚽</b>
+              ))}
+            </span>
+          ) : <strong>NO GOAL</strong>}
+          <small>{resolution.goals && remainder ? `+${remainder} LEFT` : resolution.goals ? 'CONVERTED' : `NEEDS +${V8_GOAL_BAND}`}</small>
+        </div>
+      )}
     </div>
   );
 }
@@ -835,32 +871,6 @@ function TelemetryTeamPeriod({ label, telemetry }: { label: string; telemetry: V
       <span>Tactical ATT {telemetry.tacticalAttack} · Action Δ {signed(telemetry.actionAttackDelta)} ATT / {signed(telemetry.actionDefenceDelta)} DEF · Rule Δ {signed(telemetry.contributionRuleAttackDelta)} ATT / {signed(telemetry.contributionRuleDefenceDelta)} DEF</span>
       <span>{telemetry.playersDeployed} players · {telemetry.tacticalsPlayed} Tacticals · {telemetry.unusedEnergy} Energy unused · {telemetry.cancelledChances} cancelled</span>
       {telemetry.majorChains.map((chain) => <small key={chain}>{chain}</small>)}
-    </div>
-  );
-}
-
-function GoalContest({ side, attack, defence, goals }: { side: 'YOU' | 'CPU'; attack: number; defence: number; goals: number }) {
-  const margin = Math.max(0, attack - defence);
-  const thresholdFill = Math.min(100, Math.round((margin / V8_GOAL_BAND) * 100));
-  return (
-    <div className={`v8-goal-contest${goals ? ' is-converted' : ''}`} data-margin={margin} data-goals={goals}>
-      <span><b>{side}</b> {attack} ATT <i>vs</i> {defence} DEF</span>
-      <div className="v8-goal-meter" aria-label={`${side} attack margin ${margin} of ${V8_GOAL_BAND} needed for a goal`}>
-        <i style={{ width: `${thresholdFill}%` }} />
-        <b>+{V8_GOAL_BAND}</b>
-      </div>
-      <small>{goals ? `${goals} FULL THRESHOLD${goals === 1 ? '' : 'S'}` : `+${margin} / +${V8_GOAL_BAND}`}</small>
-    </div>
-  );
-}
-
-function GoalBurst({ side, goals }: { side: 'YOU' | 'CPU'; goals: number }) {
-  if (!goals) return null;
-  return (
-    <div className={`v8-goal-burst v8-goal-burst--${side.toLowerCase()}`} aria-label={`${side} score ${goals} goal${goals === 1 ? '' : 's'}`}>
-      {Array.from({ length: goals }, (_, index) => (
-        <span key={`${side}-goal-${index}`} style={{ animationDelay: `${.62 + index * .14}s` }} aria-hidden="true">⚽</span>
-      ))}
     </div>
   );
 }
@@ -948,7 +958,11 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
 
   useEffect(() => {
     if (!resolutionMoment) return;
-    const timeout = window.setTimeout(() => setResolutionMoment(null), 2800);
+    const longestGoalRun = Math.max(resolutionMoment.homeGoals, resolutionMoment.awayGoals);
+    const payoffDuration = longestGoalRun
+      ? GOAL_ARRIVAL_MS + ((longestGoalRun - 1) * GOAL_STREAM_STEP_MS) + 720
+      : 1800;
+    const timeout = window.setTimeout(() => setResolutionMoment(null), payoffDuration);
     return () => window.clearTimeout(timeout);
   }, [resolutionMoment]);
 
@@ -967,10 +981,10 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
 
     const timers: number[] = [];
     for (let index = 0; index < resolutionMoment.homeGoals; index += 1) {
-      timers.push(window.setTimeout(() => setDisplayHomeScore(homeBefore + index + 1), 1320 + index * 140));
+      timers.push(window.setTimeout(() => setDisplayHomeScore(homeBefore + index + 1), GOAL_ARRIVAL_MS + index * GOAL_STREAM_STEP_MS));
     }
     for (let index = 0; index < resolutionMoment.awayGoals; index += 1) {
-      timers.push(window.setTimeout(() => setDisplayAwayScore(awayBefore + index + 1), 1320 + index * 140));
+      timers.push(window.setTimeout(() => setDisplayAwayScore(awayBefore + index + 1), GOAL_ARRIVAL_MS + index * GOAL_STREAM_STEP_MS));
     }
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [resolutionMoment]);
@@ -1277,9 +1291,6 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
       homeDefence: home.defence,
       nextHomeScore,
       nextAwayScore,
-      nextLabel: wasFinal ? 'FULL TIME' : PERIOD_LABELS[period] ?? 'NEXT PERIOD',
-      nextEnergy: wasFinal ? null : calibrationEnergyForPeriod(period + 1),
-      final: wasFinal,
     });
 
     let ended = endV8CalibrationPeriod(resolved, { home: nextHomeScore, away: nextAwayScore });
@@ -1431,6 +1442,10 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
   const displayedHomeDefence = totalsHome.defence - heldDelta('home', 'DEF');
   const displayedAwayAttack = totalsAway.attack - heldDelta('away', 'ATT');
   const displayedAwayDefence = totalsAway.defence - heldDelta('away', 'DEF');
+  const liveHomeAttack = resolutionMoment?.homeAttack ?? displayedHomeAttack;
+  const liveHomeDefence = resolutionMoment?.homeDefence ?? displayedHomeDefence;
+  const liveAwayAttack = resolutionMoment?.awayAttack ?? displayedAwayAttack;
+  const liveAwayDefence = resolutionMoment?.awayDefence ?? displayedAwayDefence;
   const revealActionLeft = revealPhase?.activeBeat
     ? `${(ZONES.indexOf(revealPhase.activeBeat.zone) + .5) * (100 / ZONES.length)}%`
     : '50%';
@@ -1515,9 +1530,40 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
         </div>
       </header>
 
-      <section className="v8-live-contests" aria-label="Current scoring contests" data-testid="v8-live-contests">
-        <ContestComparison key={`att-${revealPhase?.id ?? 0}-${revealPhase?.nextIndex ?? 0}-${revealPhase?.stage ?? 'idle'}`} axis="ATT" user={displayedHomeAttack} cpu={displayedAwayDefence} updating={revealSettleActive} />
-        <ContestComparison key={`def-${revealPhase?.id ?? 0}-${revealPhase?.nextIndex ?? 0}-${revealPhase?.stage ?? 'idle'}`} axis="DEF" user={displayedHomeDefence} cpu={displayedAwayAttack} updating={revealSettleActive} />
+      <section
+        className="v8-live-contests"
+        aria-label="Current scoring contests"
+        aria-live="polite"
+        data-testid="v8-live-contests"
+        data-resolution-active={Boolean(resolutionMoment)}
+        data-goals={(resolutionMoment?.homeGoals ?? 0) + (resolutionMoment?.awayGoals ?? 0)}
+        data-next-home-score={resolutionMoment?.nextHomeScore ?? displayHomeScore}
+        data-next-away-score={resolutionMoment?.nextAwayScore ?? displayAwayScore}
+      >
+        <ContestComparison
+          key={`att-${revealPhase?.id ?? 0}-${revealPhase?.nextIndex ?? 0}-${revealPhase?.stage ?? 'idle'}-${resolutionMoment?.id ?? 0}`}
+          axis="ATT"
+          user={liveHomeAttack}
+          cpu={liveAwayDefence}
+          updating={revealSettleActive}
+          resolution={resolutionMoment ? {
+            side: 'home',
+            goals: resolutionMoment.homeGoals,
+            attackingMargin: Math.max(0, resolutionMoment.homeAttack - resolutionMoment.awayDefence),
+          } : null}
+        />
+        <ContestComparison
+          key={`def-${revealPhase?.id ?? 0}-${revealPhase?.nextIndex ?? 0}-${revealPhase?.stage ?? 'idle'}-${resolutionMoment?.id ?? 0}`}
+          axis="DEF"
+          user={liveHomeDefence}
+          cpu={liveAwayAttack}
+          updating={revealSettleActive}
+          resolution={resolutionMoment ? {
+            side: 'away',
+            goals: resolutionMoment.awayGoals,
+            attackingMargin: Math.max(0, resolutionMoment.awayAttack - resolutionMoment.homeDefence),
+          } : null}
+        />
       </section>
 
       <div className="v8-condition" hidden={!debugOpen}>
@@ -1641,33 +1687,6 @@ export default function V8CalibrationLab({ fixture, onComplete }: V8CalibrationL
           <button className="v8-reveal-skip" type="button" onClick={skipReveal} aria-label="Skip reveal sequence">
             SKIP
           </button>
-        )}
-        {resolutionMoment && (
-          <aside className="v8-resolution" data-testid="v8-resolution" key={resolutionMoment.id} aria-live="polite">
-            {resolutionMoment.homeGoals + resolutionMoment.awayGoals > 0 && (
-              <i className={`v8-goal-flash${resolutionMoment.homeGoals && resolutionMoment.awayGoals ? ' is-both' : resolutionMoment.homeGoals ? ' is-home' : ' is-away'}`} aria-hidden="true" />
-            )}
-            <div className="v8-resolution__beat v8-resolution__beat--score" data-testid="v8-score-payoff" data-goals={resolutionMoment.homeGoals + resolutionMoment.awayGoals} data-next-home-score={resolutionMoment.nextHomeScore} data-next-away-score={resolutionMoment.nextAwayScore}>
-              <div className="v8-resolution__matchups">
-                <GoalContest side="YOU" attack={resolutionMoment.homeAttack} defence={resolutionMoment.awayDefence} goals={resolutionMoment.homeGoals} />
-                <GoalContest side="CPU" attack={resolutionMoment.awayAttack} defence={resolutionMoment.homeDefence} goals={resolutionMoment.awayGoals} />
-              </div>
-              {resolutionMoment.homeGoals + resolutionMoment.awayGoals === 0 ? (
-                <strong className="v8-no-goals">NO GOALS</strong>
-              ) : (
-                <div className="v8-goal-payoff" data-testid="v8-goal-payoff">
-                  <GoalBurst side="YOU" goals={resolutionMoment.homeGoals} />
-                  <GoalBurst side="CPU" goals={resolutionMoment.awayGoals} />
-                </div>
-              )}
-              <span>FULL +{V8_GOAL_BAND} ATT MARGINS CONVERT · TEAM ATT</span>
-            </div>
-            <div className="v8-resolution__beat v8-resolution__beat--next">
-              <small>{resolutionMoment.final ? 'FULL TIME' : 'NEXT PERIOD'}</small>
-              <strong>{resolutionMoment.nextHomeScore}–{resolutionMoment.nextAwayScore}</strong>
-              <span>{resolutionMoment.nextLabel}{resolutionMoment.nextEnergy !== null ? ` · ${resolutionMoment.nextEnergy} ENERGY` : ''}</span>
-            </div>
-          </aside>
         )}
       </section>
 

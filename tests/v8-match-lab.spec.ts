@@ -151,7 +151,7 @@ test.describe('V8 real-card calibration lab', () => {
     await expectMobileFit(page);
   });
 
-  test('stages reveal, consequence and score directly on the pitch', async ({ page }) => {
+  test('stages reveal, consequence and score through the live match surface', async ({ page }) => {
     await page.goto('/lab/match-v8');
 
     const bremner = page.getByTestId('player-card-bremner');
@@ -186,11 +186,10 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(destinationContest).toHaveClass(/is-updating/);
     await expect(destinationValue).toHaveText(String(heldValue + delta));
 
-    const moment = page.getByTestId('v8-resolution');
-    await expect(moment).toBeVisible();
-    await expect(moment).not.toContainText(/REVEAL FIRST/);
-    await expect(moment).toContainText(/ATT/);
-    await expect(moment).toContainText(`FULL +${V8_GOAL_BAND} ATT MARGINS CONVERT`);
+    const liveContests = page.getByTestId('v8-live-contests');
+    await expect(liveContests).toHaveAttribute('data-resolution-active', 'true');
+    await expect(liveContests).not.toContainText(/REVEAL FIRST|FULL \+5 ATT MARGINS CONVERT/);
+    await expect(liveContests.getByTestId('v8-contest-conversion')).toHaveCount(2);
     await expect(page.getByTestId('v8-period-result')).toHaveCount(0);
     await expectMobileFit(page);
   });
@@ -244,44 +243,51 @@ test.describe('V8 real-card calibration lab', () => {
     await expect(skip).toBeVisible();
     await skip.click();
 
-    await expect(page.getByTestId('v8-resolution')).toBeVisible();
+    await expect(page.getByTestId('v8-live-contests')).toHaveAttribute('data-resolution-active', 'true');
     await expect(page.getByTestId('v8-opponent-card-back')).toHaveCount(0);
     expect(await page.locator('.v8-chip--away').count()).toBeGreaterThan(0);
     await expectMobileFit(page);
   });
 
-  test(`turns real full +${V8_GOAL_BAND} margins into chained goal payoff without inventing a scorer`, async ({ page }) => {
+  test(`streams every real full +${V8_GOAL_BAND} margin from its contest into the score without inventing a scorer`, async ({ page }) => {
     await page.goto('/lab/match-v8');
 
     let foundGoal = false;
     for (let period = 1; period <= 4; period += 1) {
+      const homeScore = page.locator('.v8-scoreteam--home > span > strong');
+      const awayScore = page.locator('.v8-scoreteam--away > span > strong');
+      const homeBefore = await homeScore.textContent();
+      const awayBefore = await awayScore.textContent();
       await page.getByRole('button', { name: 'CONFIRM', exact: true }).click();
-      const payoff = page.getByTestId('v8-score-payoff');
-      await expect(payoff).toBeVisible();
-      const totalGoals = Number(await payoff.getAttribute('data-goals'));
+      const contests = page.getByTestId('v8-live-contests');
+      await expect(contests).toHaveAttribute('data-resolution-active', 'true');
+      const totalGoals = Number(await contests.getAttribute('data-goals'));
       if (totalGoals > 0) {
-        const goalPayoff = page.getByTestId('v8-goal-payoff');
-        await expect(goalPayoff).toContainText('⚽');
-        await expect(goalPayoff).not.toContainText(/Bremner|Ramos|Jostle|scorer/i);
+        await expect(homeScore).toHaveText(homeBefore!);
+        await expect(awayScore).toHaveText(awayBefore!);
+        await expect(contests).toContainText('⚽');
+        await expect(contests).not.toContainText(/Bremner|Ramos|Jostle|scorer/i);
 
-        const converted = page.locator('.v8-goal-contest.is-converted');
+        const converted = contests.locator('.v8-contest-conversion.is-scoring');
         expect(await converted.count()).toBeGreaterThan(0);
         for (let index = 0; index < await converted.count(); index += 1) {
           const contest = converted.nth(index);
           const margin = Number(await contest.getAttribute('data-margin'));
           const goals = Number(await contest.getAttribute('data-goals'));
+          const remainder = Number(await contest.getAttribute('data-remainder'));
           expect(margin).toBeGreaterThanOrEqual(goals * V8_GOAL_BAND);
+          expect(remainder).toBe(margin - (goals * V8_GOAL_BAND));
         }
-        await expect(page.locator('.v8-goal-burst > span')).toHaveCount(totalGoals);
-        const nextHomeScore = await payoff.getAttribute('data-next-home-score');
-        const nextAwayScore = await payoff.getAttribute('data-next-away-score');
-        await expect(page.locator('.v8-scoreteam--home > span > strong')).toHaveText(nextHomeScore!);
-        await expect(page.locator('.v8-scoreteam--away > span > strong')).toHaveText(nextAwayScore!);
+        await expect(contests.locator('.v8-conversion-ball')).toHaveCount(totalGoals);
+        const nextHomeScore = await contests.getAttribute('data-next-home-score');
+        const nextAwayScore = await contests.getAttribute('data-next-away-score');
+        await expect(homeScore).toHaveText(nextHomeScore!);
+        await expect(awayScore).toHaveText(nextAwayScore!);
         await expectMobileFit(page);
         foundGoal = true;
         break;
       }
-      await expect(payoff).toBeHidden();
+      await expect(contests).toHaveAttribute('data-resolution-active', 'false');
     }
     expect(foundGoal).toBe(true);
   });
