@@ -3480,7 +3480,7 @@
   text-overflow: ellipsis;
 }
 
-.v8-debug-toggle { margin-top: 8px; }
+.v8-debug-toggle { margin-top: max(56px, 7dvh); }
 
 @media (max-height: 760px) {
   .v8-shell[data-visual-family="team-selection"] .v8-pitch {
