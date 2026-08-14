@@ -3587,7 +3587,7 @@
   z-index: 38;
   left: var(--v8-action-left);
   top: 58%;
-  width: min(30%, 132px);
+  width: min(36%, 150px);
   display: grid;
   justify-items: center;
   gap: 2px;
@@ -3602,10 +3602,33 @@
   pointer-events: none;
   animation: v8-action-fire .56s cubic-bezier(.16, .88, .2, 1.16) both;
 }
+.v8-action-flash[data-action-stage="source"] {
+  min-height: 48px;
+  align-content: center;
+  border-width: 2px;
+  animation: v8-action-source-card .26s cubic-bezier(.16, .88, .2, 1.12) both;
+}
+.v8-action-flash[data-action-stage="impact"] {
+  animation: v8-action-impact-card .4s cubic-bezier(.16, .88, .2, 1.12) both;
+}
 .v8-action-flash--away {
   top: 42%;
   border-color: rgba(143, 182, 255, .68);
   box-shadow: 0 7px 18px rgba(0,0,0,.48), 0 0 18px rgba(92, 166, 255, .2);
+}
+.v8-action-flash > small {
+  max-width: 100%;
+  overflow: hidden;
+  color: rgba(255, 244, 214, .7);
+  font-family: var(--font-pixel, monospace);
+  font-size: 4.5px;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: .08em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 .v8-action-flash strong {
   max-width: 100%;
@@ -3620,13 +3643,133 @@
 .v8-action-flash--away strong { color: #b6e0f4; }
 .v8-action-flash span {
   max-width: 100%;
-  overflow: hidden;
   color: var(--cream-soft);
   font-family: var(--font-pixel, monospace);
   font-size: 4.5px;
   line-height: 1.2;
-  text-overflow: ellipsis;
+  white-space: normal;
+}
+.v8-action-deltas {
+  max-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 2px;
+  font-style: normal;
+}
+.v8-action-deltas > b {
+  padding: 2px 3px;
+  border: 1px solid rgba(255, 219, 126, .28);
+  border-radius: 99px;
+  background: rgba(255,255,255,.055);
+  color: #fff1bd;
+  font-family: var(--font-pixel, monospace);
+  font-size: 4.25px;
+  line-height: 1;
   white-space: nowrap;
+  animation: v8-action-delta .34s cubic-bezier(.16, .9, .22, 1.16) both;
+}
+.v8-action-deltas > b[data-side="away"] {
+  border-color: rgba(142, 198, 255, .3);
+  color: #c9e9ff;
+}
+.v8-action-trace {
+  position: absolute;
+  z-index: 35;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.v8-action-trace line {
+  fill: none;
+  stroke: rgba(255, 211, 105, .9);
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+  animation: v8-action-trace .42s ease-out both;
+}
+.v8-action-trace circle {
+  fill: rgba(255, 236, 178, .95);
+  stroke: rgba(85, 50, 6, .8);
+  stroke-width: .75;
+  vector-effect: non-scaling-stroke;
+  animation: v8-action-target-dot .42s ease-out both;
+}
+.v8-action-trace--away line { stroke: rgba(133, 203, 255, .92); }
+.v8-action-trace--away circle { fill: #d5efff; stroke: rgba(12, 51, 82, .86); }
+.v8-zone.is-action-target {
+  z-index: 5;
+  animation: v8-action-target-zone .42s ease-out both;
+}
+.v8-chip.is-action-source {
+  z-index: 10;
+  border-color: rgba(255, 218, 118, .9);
+  box-shadow: 0 0 0 2px rgba(255, 208, 82, .16), 0 0 22px rgba(255, 187, 52, .38);
+}
+.v8-chip--away.is-action-source {
+  border-color: rgba(134, 208, 255, .9);
+  box-shadow: 0 0 0 2px rgba(101, 194, 255, .15), 0 0 22px rgba(72, 177, 255, .34);
+}
+.v8-chip.is-action-source > small {
+  color: #ffe8a8;
+  animation: v8-action-name .4s ease-out both;
+}
+.v8-chip--away.is-action-source > small { color: #cdeeff; }
+.v8-chip.is-action-target::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -5px;
+  border: 2px solid rgba(255, 221, 132, .82);
+  border-radius: 10px;
+  pointer-events: none;
+  animation: v8-action-target-ring .42s ease-out both;
+}
+.v8-chip--away.is-action-target::before { border-color: rgba(132, 207, 255, .82); }
+
+@keyframes v8-action-source-card {
+  0% { opacity: 0; transform: translate(-50%, -50%) perspective(300px) rotateY(82deg) scale(.78); filter: brightness(1.8); }
+  70% { opacity: 1; transform: translate(-50%, -50%) perspective(300px) rotateY(-5deg) scale(1.06); }
+  100% { opacity: 1; transform: translate(-50%, -50%) perspective(300px) rotateY(0) scale(1); filter: none; }
+}
+@keyframes v8-action-impact-card {
+  0% { opacity: .25; transform: translate(-50%, -50%) scale(.9); filter: brightness(1.7); }
+  58% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: none; }
+}
+@keyframes v8-action-delta {
+  0% { opacity: 0; transform: translateY(5px) scale(.78); }
+  68% { opacity: 1; transform: translateY(-1px) scale(1.1); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes v8-action-trace {
+  0% { opacity: 0; stroke-dashoffset: 18; }
+  22% { opacity: 1; }
+  100% { opacity: .9; stroke-dashoffset: 0; }
+}
+@keyframes v8-action-target-dot {
+  0% { opacity: 0; transform: scale(.2); transform-box: fill-box; transform-origin: center; }
+  65% { opacity: 1; transform: scale(1.7); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes v8-action-target-zone {
+  0% { box-shadow: inset 0 0 0 rgba(255, 218, 120, 0); }
+  55% { border-color: rgba(255, 222, 137, .82); box-shadow: inset 0 0 34px rgba(255, 193, 71, .2), 0 0 24px rgba(255, 184, 51, .2); }
+  100% { box-shadow: inset 0 0 18px rgba(255, 193, 71, .1); }
+}
+@keyframes v8-action-name {
+  0% { opacity: .25; transform: translateY(3px) scale(.86); }
+  65% { opacity: 1; transform: translateY(-1px) scale(1.08); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes v8-action-target-ring {
+  0% { opacity: 0; transform: scale(.72); }
+  42% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 0; transform: scale(1.28); }
 }
 
 .v8-pitch.is-resolving,
@@ -3707,5 +3850,11 @@
   .v8-contest-comparison.is-updating > span > b,
   .v8-contest-comparison.is-updating > strong,
   .v8-action-flash,
+  .v8-action-deltas > b,
+  .v8-action-trace line,
+  .v8-action-trace circle,
+  .v8-zone.is-action-target,
+  .v8-chip.is-action-source > small,
+  .v8-chip.is-action-target::before,
   .v8-goal-burst > span { animation-duration: .01ms !important; animation-delay: 0ms !important; }
 }

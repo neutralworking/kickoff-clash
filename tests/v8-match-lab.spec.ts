@@ -163,7 +163,14 @@ test.describe('V8 real-card calibration lab', () => {
     const actionFlash = page.getByTestId('v8-action-flash');
     await expect(actionFlash).toBeVisible();
     await expect(actionFlash).not.toContainText(/REVEAL/i);
+    await expect(actionFlash).toHaveAttribute('data-action-stage', /^(source|impact)$/);
+    await expect(actionFlash.locator('strong')).not.toHaveText('');
     await expect(midfieldZone.locator('.v8-chip').filter({ hasText: 'Billy Bremner' })).toHaveClass(/is-fresh/);
+    await expect(actionFlash).toHaveAttribute('data-action-stage', 'impact');
+    await expect(page.getByTestId('v8-action-trace')).toBeVisible();
+    await expect(page.getByTestId('v8-action-deltas').locator('b')).not.toHaveCount(0);
+    await expect(midfieldZone.locator('[data-action-source="true"]').filter({ hasText: 'Billy Bremner' })).toBeVisible();
+    await expect(midfieldZone).toHaveAttribute('data-action-target', 'true');
 
     const moment = page.getByTestId('v8-resolution');
     await expect(moment).toBeVisible();
